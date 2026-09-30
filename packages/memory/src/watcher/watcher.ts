@@ -1,6 +1,4 @@
-import { appendFileSync } from 'node:fs'
 import { matchesGlob, relative, resolve, sep } from 'node:path'
-const LOG = (m: string): void => appendFileSync('/tmp/wlog.txt', `${Date.now()} ${m}\n`)
 import { watch as chokidarWatch } from 'chokidar'
 
 import type { ResolvedConfig } from '../config/config.js'
@@ -97,13 +95,11 @@ export const watchSource = async (
 
   const dirty = (path: string): void => {
     const absolute = resolve(path)
-    LOG(`DIRTY? ${absolute} src=${isSourceFile(resolved, absolute)}`)
     if (absolute === resolved.ontologyPath || isSourceFile(resolved, absolute)) {
       debouncer.schedule(absolute)
     }
   }
 
-  watcher.on('all', (event, path) => LOG(`RAW ${event} ${path}`))
   for (const event of ['add', 'change', 'unlink'] as const) {
     watcher.on(event, dirty)
   }
@@ -112,7 +108,6 @@ export const watchSource = async (
   // Until the initial walk finishes chokidar has not registered the existing
   // tree, and a file created in that window is silently treated as pre-existing.
   await new Promise<void>((done) => watcher.once('ready', done))
-  LOG(`READY ${resolved.memoryRoot}`)
 
   return {
     async close() {
