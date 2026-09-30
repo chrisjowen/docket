@@ -21,17 +21,19 @@ a separate artifact.
 
 ## Installation
 
-Through the organization's Claude plugin distribution mechanism:
+The repository root is a plugin marketplace
+(`.claude-plugin/marketplace.json`) listing this plugin:
 
 ```text
-/plugin install team-memory@company
+/plugin marketplace add chrisjowen/team-memory
+/plugin install team-memory@team-memory
 ```
 
-For local development, point Claude Code at this unpacked directory:
+For local development, add a checkout instead:
 
 ```text
 /plugin marketplace add /path/to/team-memory
-/plugin install team-memory
+/plugin install team-memory@team-memory
 ```
 
 ## CLI

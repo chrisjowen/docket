@@ -1,0 +1,19 @@
+{
+  "name": "team-memory",
+  "owner": {
+    "name": "Platform Engineering"
+  },
+  "metadata": {
+    "description": "Local-first repository team memory for Claude Code",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "team-memory",
+      "description": "Local-first repository team memory: skills to capture and extend project knowledge as canonical Markdown, and hooks that inject it at session start and review it at session end",
+      "version": "0.1.0",
+      "source": "./packages/claude-plugin",
+      "category": "productivity"
+    }
+  ]
+}
