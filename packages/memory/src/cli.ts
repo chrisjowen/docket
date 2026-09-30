@@ -9,6 +9,7 @@ import {
 import { rebuild } from './commands/rebuild.js'
 import { sync } from './commands/sync.js'
 import { validate } from './commands/validate.js'
+import { watch } from './commands/watch.js'
 import {
   hasErrors,
   type Diagnostic,
@@ -105,9 +106,17 @@ program
 program
   .command('watch')
   .description('Watch the canonical files and reconcile continuously')
-  .action(() => {
-    // Track F owns `commands/watch.ts`; swap this stub for its export.
-    throw new Error('memory watch is not implemented yet')
+  .action(async () => {
+    const handle = await watch()
+    console.log(`watching ${handle.resolved.memoryRoot}`)
+
+    // Ctrl-C must flush and close the projections rather than leave a
+    // half-written index behind.
+    const stop = () => {
+      void handle.close().then(() => process.exit(0))
+    }
+    process.once('SIGINT', stop)
+    process.once('SIGTERM', stop)
   })
 
 program
