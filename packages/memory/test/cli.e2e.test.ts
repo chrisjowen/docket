@@ -1,0 +1,228 @@
+import { rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+
+import type {
+  DocumentRecord,
+  EdgeRecord,
+  NodeRecord
+} from '../src/projection/file/file-projection.js'
+import {
+  INDEX,
+  indexFiles,
+  makeRepo,
+  memory,
+  readJsonl,
+  removeRepo,
+  write
+} from './helpers.js'
+
+/**
+ * End-to-end coverage of the shipped `memory` binary against a real repository
+ * on a real filesystem (spec §70). The unit tests already cover each module in
+ * isolation; what is proved here is that `init`, `validate`, `sync`, `rebuild`
+ * and `ontology` compose into the workflow the README documents, with the exit
+ * codes spec §40 requires.
+ */
+
+const ORDERS = `---
+id: service.orders
+type: service
+title: Orders API
+tags:
+  - core
+attributes:
+  language: typescript
+  lifecycle: active
+links:
+  - rel: owned_by
+    target: team.payments
+  - rel: depends_on
+    target: datasource.ledger
+    attributes:
+      criticality: high
+      runtime: true
+---
+
+Handles orders. See [[team.payments]].
+`
+
+const PAYMENTS = `---
+id: team.payments
+type: team
+title: Payments
+---
+
+The payments team.
+`
+
+const LEDGER = `---
+id: datasource.ledger
+type: datasource
+title: Ledger
+attributes:
+  zone: private
+---
+
+The ledger.
+`
+
+let root: string | undefined
+
+afterEach(async () => {
+  await removeRepo(root)
+  root = undefined
+})
+
+describe('memory CLI end to end', () => {
+  it('runs init, validate and sync over a real repository', async () => {
+    root = await makeRepo('memory-e2e')
+    await write(root, '.memory/resources/services/orders.md', ORDERS)
+    await write(root, '.memory/resources/teams/payments.md', PAYMENTS)
+    await write(root, '.memory/resources/datasources/ledger.md', LEDGER)
+
+    const validated = await memory(root, 'validate')
+    expect(validated.code).toBe(0)
+    expect(validated.stdout).toContain('3 memory resources')
+    expect(validated.stdout).toContain('2 relationships')
+
+    const synced = await memory(root, 'sync')
+    expect(synced.code).toBe(0)
+    expect(synced.stdout).toContain('3 projected')
+
+    expect(Object.keys(await indexFiles(root))).toEqual([
+      'documents.jsonl',
+      'edges.jsonl',
+      'manifest.json',
+      'nodes.jsonl'
+    ])
+
+    const documents = await readJsonl<DocumentRecord>(root, 'documents.jsonl')
+    expect(documents.map((d) => d.id)).toEqual([
+      'datasource.ledger',
+      'service.orders',
+      'team.payments'
+    ])
+    // The source path is recorded, never the absolute one - the index must stay
+    // diffable and machine-independent.
+    expect(documents.every((d) => !d.path.startsWith('/'))).toBe(true)
+
+    const nodes = await readJsonl<NodeRecord>(root, 'nodes.jsonl')
+    expect(nodes.find((n) => n.id === 'service.orders')?.attributes).toEqual({
+      language: 'typescript',
+      lifecycle: 'active'
+    })
+
+    const edges = await readJsonl<EdgeRecord>(root, 'edges.jsonl')
+    expect(edges).toEqual([
+      {
+        source: 'service.orders',
+        rel: 'depends_on',
+        target: 'datasource.ledger',
+        attributes: { criticality: 'high', runtime: true }
+      },
+      { source: 'service.orders', rel: 'owned_by', target: 'team.payments' }
+    ])
+  })
+
+  it('syncs incrementally and drops a document whose file is deleted', async () => {
+    root = await makeRepo('memory-e2e')
+    await write(root, '.memory/resources/services/orders.md', ORDERS)
+    await write(root, '.memory/resources/teams/payments.md', PAYMENTS)
+    await memory(root, 'sync')
+
+    const unchanged = await memory(root, 'sync')
+    expect(unchanged.stdout).toContain('0 projected, 0 removed, 2 unchanged')
+
+    await rm(join(root, '.memory/resources/teams/payments.md'))
+    const after = await memory(root, 'sync')
+    expect(after.code).toBe(0)
+    expect(after.stdout).toContain('0 projected, 1 removed')
+
+    const documents = await readJsonl<DocumentRecord>(root, 'documents.jsonl')
+    expect(documents.map((d) => d.id)).toEqual(['service.orders'])
+    // The link survives as a now-dangling edge: §17 expects the graph to be
+    // built incrementally, so a missing target is a warning, not a deletion.
+    const edges = await readJsonl<EdgeRecord>(root, 'edges.jsonl')
+    expect(edges.map((e) => e.target)).toContain('team.payments')
+  })
+
+  it('warns on a dangling reference but only fails under --strict (spec §40)', async () => {
+    root = await makeRepo('memory-e2e')
+    await write(root, '.memory/resources/services/orders.md', ORDERS)
+
+    const lenient = await memory(root, 'validate')
+    expect(lenient.code).toBe(0)
+    expect(lenient.stdout).toContain('2 unresolved relationships')
+    expect(lenient.stderr).toContain('dangling-reference')
+
+    const strict = await memory(root, 'validate', '--strict')
+    expect(strict.code).toBe(1)
+    expect(strict.stderr).toContain('dangling-reference')
+  })
+
+  it('exits non-zero on a structural failure and projects nothing for that file', async () => {
+    root = await makeRepo('memory-e2e')
+    await write(root, '.memory/resources/teams/payments.md', PAYMENTS)
+    await write(root, '.memory/notes/broken.md', '---\ntype: note\n---\n\nNo id.\n')
+
+    const validated = await memory(root, 'validate')
+    expect(validated.code).toBe(1)
+    expect(validated.stderr).toContain('invalid-frontmatter')
+
+    const synced = await memory(root, 'sync')
+    expect(synced.code).toBe(1)
+
+    const documents = await readJsonl<DocumentRecord>(root, 'documents.jsonl')
+    expect(documents.map((d) => d.id)).toEqual(['team.payments'])
+  })
+
+  it('reports duplicate ids across files (spec §66)', async () => {
+    root = await makeRepo('memory-e2e')
+    await write(root, '.memory/resources/teams/a.md', PAYMENTS)
+    await write(root, '.memory/resources/teams/b.md', PAYMENTS)
+
+    const validated = await memory(root, 'validate')
+    expect(validated.code).toBe(1)
+    expect(validated.stderr).toContain('duplicate-id')
+  })
+
+  it('inspects the repository-owned ontology (spec §41)', async () => {
+    root = await makeRepo('memory-e2e')
+
+    const list = await memory(root, 'ontology', 'list')
+    expect(list.code).toBe(0)
+    expect(list.stdout).toContain('.memory/entities.yaml')
+    expect(list.stdout).toMatch(/service\s/)
+    expect(list.stdout).toContain('owned_by')
+
+    const shown = await memory(root, 'ontology', 'show', 'service')
+    expect(shown.code).toBe(0)
+    expect(shown.stdout).toContain('lifecycle')
+    expect(shown.stdout).toContain('owned_by')
+
+    const missing = await memory(root, 'ontology', 'show', 'nonesuch')
+    expect(missing.code).toBe(1)
+  })
+
+  it('refuses to run outside an initialized repository', async () => {
+    root = await makeRepo('memory-e2e')
+    await rm(join(root, '.memory.yaml'))
+
+    const result = await memory(root, 'sync')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('memory init')
+  })
+
+  it('rebuilds into an index directory that does not exist yet', async () => {
+    root = await makeRepo('memory-e2e')
+    await write(root, '.memory/resources/teams/payments.md', PAYMENTS)
+    await rm(join(root, INDEX), { recursive: true, force: true })
+
+    const result = await memory(root, 'rebuild')
+    expect(result.code).toBe(0)
+
+    const documents = await readJsonl<DocumentRecord>(root, 'documents.jsonl')
+    expect(documents.map((d) => d.id)).toEqual(['team.payments'])
+  })
+})
