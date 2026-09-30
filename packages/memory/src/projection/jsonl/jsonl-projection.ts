@@ -5,7 +5,8 @@ import type { JsonlProjectionConfig } from '../../config/config.js'
 import { writeFileAtomic } from '../../manifest/manifest.js'
 import type { MemoryDocument } from '../../model/index.js'
 import { stableStringify } from '../../model/stable-json.js'
-import type { MemoryProjection, ProjectionContext } from '../projection.js'
+import type { MemoryProjection, ProjectionContext, SearchAnswer } from '../projection.js'
+import { lexicalSearch } from './lexical-search.js'
 
 export const DOCUMENTS_FILENAME = 'documents.jsonl'
 export const NODES_FILENAME = 'nodes.jsonl'
@@ -135,6 +136,10 @@ class JsonlProjection implements MemoryProjection {
         rm(join(outputDir, name), { force: true })
       )
     )
+  }
+
+  async search(query: string, limit: number): Promise<SearchAnswer> {
+    return { hits: lexicalSearch(this.documents.values(), query, limit) }
   }
 
   private clear(): void {

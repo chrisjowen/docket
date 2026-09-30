@@ -24,16 +24,23 @@
     "zod": "^4.1.12"
   },
   "peerDependencies": {
-    "mem0ai": "^3.3.1"
+    "mem0ai": "^3.3.1",
+    "neo4j-driver": "^6.0.0"
   },
   "peerDependenciesMeta": {
     "mem0ai": {
       "optional": true
+    },
+    "neo4j-driver": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@qdrant/js-client-rest": "^1.18.0",
     "@types/node": "^22.10.2",
     "mem0ai": "^3.3.1",
+    "neo4j-driver": "^6.2.0",
+    "ollama": "^0.5.18",
     "typescript": "^5.7.2",
     "vitest": "^3.2.4"
   }

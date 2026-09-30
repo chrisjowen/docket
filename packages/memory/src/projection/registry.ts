@@ -1,6 +1,7 @@
 import type { ProjectionConfig } from '../config/config.js'
 import { createJsonlProjection } from './jsonl/jsonl-projection.js'
 import { createMem0Projection } from './mem0/mem0-projection.js'
+import { createNeo4jProjection } from './neo4j/neo4j-projection.js'
 import type { MemoryProjection } from './projection.js'
 
 /**
@@ -13,9 +14,11 @@ export function createProjection(config: ProjectionConfig): MemoryProjection {
       return createJsonlProjection(config)
     case 'mem0':
       return createMem0Projection(config)
+    case 'neo4j':
+      return createNeo4jProjection(config)
     default: {
       const type = (config as { type: unknown }).type
-      throw new Error(`Unknown projection type "${String(type)}". Known types: jsonl, mem0.`)
+      throw new Error(`Unknown projection type "${String(type)}". Known types: jsonl, mem0, neo4j.`)
     }
   }
 }

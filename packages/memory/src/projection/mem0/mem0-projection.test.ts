@@ -53,6 +53,13 @@ class FakeMem0 implements Mem0Backend {
   async deleteAll(): Promise<void> {
     this.memories.clear()
   }
+  /** What the next search returns, in order, as mem0 would rank it. */
+  searchResults: StoredMemory[] = []
+  lastSearch: { query: string; limit: number } | null = null
+  async search(query: string, limit: number): Promise<StoredMemory[]> {
+    this.lastSearch = { query, limit }
+    return this.searchResults
+  }
 
   texts(): string[] {
     return [...this.memories.values()].map((memory) => memory.text)
@@ -157,6 +164,35 @@ describe('mem0 projection', () => {
 
     const scoped = await setup({ ...OSS, scope: { userId: 'platform-team' } })
     expect(scoped.scopes).toEqual([{ userId: 'platform-team' }])
+  })
+
+  it('answers a search with document ids and mem0 scores, in mem0 order', async () => {
+    const { projection, backend } = await setup()
+    backend.searchResults = [
+      { id: 'mem-9', score: 0.8, metadata: { [DOCUMENT_ID_KEY]: 'decision.minio' } },
+      { id: 'mem-3', score: 0.6, metadata: { [DOCUMENT_ID_KEY]: 'service.orders' } }
+    ]
+
+    expect(await projection.search?.('uploads', 5)).toEqual({
+      hits: [
+        { id: 'decision.minio', score: 0.8 },
+        { id: 'service.orders', score: 0.6 }
+      ]
+    })
+    expect(backend.lastSearch).toEqual({ query: 'uploads', limit: 5 })
+  })
+
+  it('skips memories it did not project, and repeats of one document', async () => {
+    const { projection, backend } = await setup()
+    backend.searchResults = [
+      { id: 'mem-1', score: 0.9, metadata: { source: 'someone else' } },
+      { id: 'mem-2', score: 0.7, metadata: { [DOCUMENT_ID_KEY]: 'service.orders' } },
+      { id: 'mem-3', score: 0.5, metadata: { [DOCUMENT_ID_KEY]: 'service.orders' } }
+    ]
+
+    expect(await projection.search?.('orders', 5)).toEqual({
+      hits: [{ id: 'service.orders', score: 0.7 }]
+    })
   })
 
   it('renders a document without body, links or tags', () => {

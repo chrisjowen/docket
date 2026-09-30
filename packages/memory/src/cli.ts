@@ -7,6 +7,7 @@ import {
   relationshipsTo
 } from './commands/ontology.js'
 import { rebuild } from './commands/rebuild.js'
+import { DEFAULT_SEARCH_LIMIT, search } from './commands/search.js'
 import { sync } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
@@ -153,6 +154,39 @@ program
     console.log(`✓ ${result.documents.length} memory resources`)
     console.log(`✓ ${links} relationships`)
     if (dangling > 0) console.log(`⚠ ${dangling} unresolved relationships`)
+    report(result.diagnostics)
+  })
+
+program
+  .command('search')
+  .argument('<query...>', 'what to look for')
+  .description('Ask every searchable projection, and show what each found')
+  .option('-n, --limit <count>', 'hits asked of each projection', String(DEFAULT_SEARCH_LIMIT))
+  .option('--json', 'print the full result as JSON')
+  .action(async (words: string[], options: { limit: string; json?: boolean }) => {
+    const limit = Number.parseInt(options.limit, 10)
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error(`--limit must be a positive whole number, got "${options.limit}"`)
+    }
+    const result = await search(words.join(' '), { limit })
+
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2))
+    } else {
+      const byId = new Map(result.documents.map((document) => [document.id, document]))
+      for (const source of result.sources) {
+        console.log(`\n${source.name}`)
+        if (source.note) console.log(`  ${source.note.replace(/\n/g, '\n  ')}`)
+        if (source.error) console.log(`  unavailable: ${source.error}`)
+        else if (source.hits.length === 0) console.log('  no matches')
+        for (const hit of source.hits) {
+          const score = hit.score === undefined ? '' : `  (${Number(hit.score.toFixed(3))})`
+          console.log(`  ${hit.id}${score}  ${byId.get(hit.id)?.path ?? ''}`)
+          if (hit.detail) console.log(`    ${hit.detail}`)
+        }
+      }
+      if (result.sources.length === 0) console.log('No configured projection can search.')
+    }
     report(result.diagnostics)
   })
 

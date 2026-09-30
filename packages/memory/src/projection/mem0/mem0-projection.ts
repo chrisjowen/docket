@@ -2,7 +2,7 @@ import { basename } from 'node:path'
 
 import type { Mem0ProjectionConfig } from '../../config/config.js'
 import type { MemoryDocument } from '../../model/index.js'
-import type { MemoryProjection, ProjectionContext } from '../projection.js'
+import type { MemoryProjection, ProjectionContext, SearchAnswer, SearchHit } from '../projection.js'
 import { connectMem0, type Mem0Backend, type Mem0Scope } from './backend.js'
 
 /** Metadata key tying a mem0 memory back to the canonical document id. */
@@ -112,6 +112,22 @@ class Mem0Projection implements MemoryProjection {
     await this.requireBackend().deleteAll()
     this.owned = new Map()
     this.unconfirmed.clear()
+  }
+
+  /**
+   * mem0's own ranking, mapped back to document ids. Memories without our id
+   * metadata were not projected from `.memory/` and are left out.
+   */
+  async search(query: string, limit: number): Promise<SearchAnswer> {
+    const hits: SearchHit[] = []
+    const seen = new Set<string>()
+    for (const memory of await this.requireBackend().search(query, limit)) {
+      const id = memory.metadata?.[DOCUMENT_ID_KEY]
+      if (typeof id !== 'string' || seen.has(id)) continue
+      seen.add(id)
+      hits.push({ id, ...(memory.score !== undefined ? { score: memory.score } : {}) })
+    }
+    return { hits }
   }
 
   private async ownership(): Promise<Map<string, string[]>> {

@@ -19,12 +19,20 @@ const mem0ScopeSchema = z
     'mem0 scope needs at least one of userId, agentId or runId'
   )
 
+/**
+ * Hits whose semantic similarity is below this are dropped (mem0's own
+ * `threshold`). mem0 always returns its top k otherwise, however weak.
+ * Model-dependent, so there is no default.
+ */
+const mem0MinScoreSchema = z.number().min(0).max(1).optional()
+
 /** Hosted mem0 (app.mem0.ai). The key is read from the environment, never from the file. */
 const mem0PlatformSchema = z.object({
   type: z.literal('mem0'),
   mode: z.literal('platform'),
   apiKeyEnv: z.string().default('MEM0_API_KEY'),
   host: z.string().url().optional(),
+  minScore: mem0MinScoreSchema,
   scope: mem0ScopeSchema.optional()
 })
 
@@ -37,16 +45,60 @@ const mem0OssSchema = z.object({
   type: z.literal('mem0'),
   mode: z.literal('oss'),
   config: z.record(z.string(), z.unknown()).default({}),
+  minScore: mem0MinScoreSchema,
+  scope: mem0ScopeSchema.optional()
+})
+
+/**
+ * mem0's self-hosted REST server (`server/` in the mem0 repository), which also
+ * serves its dashboard. It speaks its own API, not the hosted one, so it has its
+ * own mode. The key is optional because the server can run with auth disabled.
+ */
+const mem0ServerSchema = z.object({
+  type: z.literal('mem0'),
+  mode: z.literal('server'),
+  url: z.string().url(),
+  apiKeyEnv: z.string().default('MEM0_API_KEY'),
+  minScore: mem0MinScoreSchema,
   scope: mem0ScopeSchema.optional()
 })
 
 export const mem0ProjectionConfigSchema = z.discriminatedUnion('mode', [
   mem0PlatformSchema,
+  mem0ServerSchema,
   mem0OssSchema
 ])
 
+/**
+ * A Neo4j graph of the documents and their links. The password is read from the
+ * environment, never from the file; with `passwordEnv` unset the driver
+ * connects without auth, as a local `NEO4J_AUTH=none` server expects.
+ */
+export const neo4jProjectionConfigSchema = z.object({
+  type: z.literal('neo4j'),
+  url: z.string().default('bolt://localhost:7687'),
+  database: z.string().min(1).optional(),
+  username: z.string().default('neo4j'),
+  passwordEnv: z.string().min(1).optional(),
+  /** Every node carries this, so repositories can share one database. Defaults to the repo directory name. */
+  scope: z.string().min(1).optional(),
+  /**
+   * Answer searches by having a local Ollama model write a read-only Cypher
+   * query against the graph's schema. Without it, search is full-text only.
+   */
+  cypher: z
+    .object({
+      provider: z.literal('ollama').default('ollama'),
+      url: z.string().url().default('http://localhost:11434'),
+      model: z.string().min(1),
+      timeoutMs: z.number().int().positive().default(60_000)
+    })
+    .optional()
+})
+
 export type JsonlProjectionConfig = z.infer<typeof jsonlProjectionConfigSchema>
 export type Mem0ProjectionConfig = z.infer<typeof mem0ProjectionConfigSchema>
+export type Neo4jProjectionConfig = z.infer<typeof neo4jProjectionConfigSchema>
 
 export const projectionConfigSchema = z.preprocess(
   // `file` was this projection's name before mem0 made it one of several; it
@@ -55,7 +107,7 @@ export const projectionConfigSchema = z.preprocess(
     value !== null && typeof value === 'object' && (value as { type?: unknown }).type === 'file'
       ? { ...value, type: 'jsonl' }
       : value,
-  z.union([jsonlProjectionConfigSchema, mem0ProjectionConfigSchema])
+  z.union([jsonlProjectionConfigSchema, mem0ProjectionConfigSchema, neo4jProjectionConfigSchema])
 )
 
 export type ProjectionConfig = z.infer<typeof projectionConfigSchema>

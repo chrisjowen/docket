@@ -10,6 +10,28 @@ export interface ProjectionContext {
 }
 
 /**
+ * One document a projection judged relevant to a query, in that projection's
+ * own terms. Hits are never merged into a common score across projections: a
+ * vector similarity, a keyword count and a graph path are different kinds of
+ * evidence, and whoever reads them weighs them.
+ */
+export interface SearchHit {
+  /** The canonical document id. */
+  id: string
+  /** The projection's native score, when it has one. Only comparable within one projection. */
+  score?: number
+  /** Why it matched, in the projection's own words - e.g. a graph path. */
+  detail?: string
+}
+
+/** A projection's answer to a search. */
+export interface SearchAnswer {
+  hits: SearchHit[]
+  /** How the projection read the query, when that is worth showing - e.g. the Cypher it ran. */
+  note?: string
+}
+
+/**
  * A disposable view over the canonical files. Must be fully rebuildable
  * from `.memory/` alone - never a source of truth.
  */
@@ -24,6 +46,9 @@ export interface MemoryProjection {
 
   /** Drop all derived state. Called by `memory rebuild`. */
   reset?(): Promise<void>
+
+  /** Documents relevant to `query`, most relevant first. Optional: not every view can search. */
+  search?(query: string, limit: number): Promise<SearchAnswer>
 
   close?(): Promise<void>
 }

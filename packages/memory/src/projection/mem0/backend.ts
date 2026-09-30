@@ -1,4 +1,6 @@
 import type { Mem0ProjectionConfig } from '../../config/config.js'
+import { connectServer } from './server-backend.js'
+import { resultsOf, scopeFilters } from './wire-format.js'
 
 /** Who the projected memories belong to in mem0. mem0 requires at least one. */
 export interface Mem0Scope {
@@ -10,6 +12,8 @@ export interface Mem0Scope {
 export interface StoredMemory {
   id: string
   metadata?: Record<string, unknown> | null
+  /** Similarity to the query, on search results only. */
+  score?: number
 }
 
 /**
@@ -24,31 +28,14 @@ export interface Mem0Backend {
   delete(memoryId: string): Promise<void>
   /** Every memory in the scope. */
   deleteAll(): Promise<void>
+  /** Memories in the scope most similar to `query`, best first. */
+  search(query: string, limit: number): Promise<StoredMemory[]>
 }
 
 /** Hosted `getAll` page size. */
 const PAGE_SIZE = 100
 /** Self-hosted `getAll` has no pagination, only a cap - set well past spec §73's 10,000. */
 const OSS_LIST_LIMIT = 100_000
-
-/** `getAll` filters are written in the API's snake_case. */
-const scopeFilters = (scope: Mem0Scope): Record<string, string> => {
-  const filters: Record<string, string> = {}
-  if (scope.userId) filters.user_id = scope.userId
-  if (scope.agentId) filters.agent_id = scope.agentId
-  if (scope.runId) filters.run_id = scope.runId
-  return filters
-}
-
-/** Responses have been both a bare array and `{ results }` across mem0 versions. */
-const resultsOf = (response: unknown): StoredMemory[] => {
-  const items = Array.isArray(response)
-    ? response
-    : ((response as { results?: unknown } | null)?.results ?? [])
-  return Array.isArray(items)
-    ? items.filter((item): item is StoredMemory => typeof item?.id === 'string')
-    : []
-}
 
 /**
  * mem0ai is an optional dependency: only repositories that configure a mem0
@@ -64,6 +51,10 @@ const loadMem0 = async <T>(specifier: 'mem0ai' | 'mem0ai/oss'): Promise<T> => {
     )
   }
 }
+
+/** `minScore` in mem0's own terms, when set. */
+const threshold = (config: Mem0ProjectionConfig): { threshold?: number } =>
+  config.minScore === undefined ? {} : { threshold: config.minScore }
 
 type PlatformModule = typeof import('mem0ai')
 type OssModule = typeof import('mem0ai/oss')
@@ -109,6 +100,11 @@ const connectPlatform = async (
     },
     async deleteAll() {
       await client.deleteAll(scope)
+    },
+    async search(query, limit) {
+      return resultsOf(
+        await client.search(query, { filters: filter, topK: limit, ...threshold(config) })
+      )
     }
   }
 }
@@ -138,6 +134,9 @@ const connectOss = async (
     },
     async deleteAll() {
       await memory.deleteAll(scope)
+    },
+    async search(query, limit) {
+      return resultsOf(await memory.search(query, { filters, topK: limit, ...threshold(config) }))
     }
   }
 }
@@ -145,5 +144,13 @@ const connectOss = async (
 export const connectMem0 = (
   config: Mem0ProjectionConfig,
   scope: Mem0Scope
-): Promise<Mem0Backend> =>
-  config.mode === 'platform' ? connectPlatform(config, scope) : connectOss(config, scope)
+): Promise<Mem0Backend> => {
+  switch (config.mode) {
+    case 'platform':
+      return connectPlatform(config, scope)
+    case 'server':
+      return connectServer(config, scope)
+    case 'oss':
+      return connectOss(config, scope)
+  }
+}
