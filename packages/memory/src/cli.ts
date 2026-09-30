@@ -108,7 +108,6 @@ program
   .description('Watch the canonical files and reconcile continuously')
   .action(async () => {
     const handle = await watch()
-    console.log(`watching ${handle.resolved.memoryRoot}`)
 
     // Ctrl-C must flush and close the projections rather than leave a
     // half-written index behind.

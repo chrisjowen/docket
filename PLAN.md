@@ -79,10 +79,6 @@ whether its targets exist and §17 expects the graph to be built incrementally.
 
 Tracked as issues rather than left in conversation:
 
-- Watch can miss files created between chokidar reporting `ready` and the OS
-  actually delivering events on macOS. Tests work around it with the
-  `probeWatcherReady` helper; the product does not.
-- `memory watch` prints its banner after the initial sync output.
 - Claude plugin integration is verified only as far as is possible from outside
   a running session; see the PARTIAL entry in `docs/ACCEPTANCE.md`.
 

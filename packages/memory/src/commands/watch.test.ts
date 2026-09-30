@@ -1,6 +1,7 @@
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   rename,
@@ -92,21 +93,8 @@ const harness = async (): Promise<Harness> => {
         signal
       })
       handles.push(handle)
-
-      // Chokidar's `ready` only means its own walk finished; on macOS the OS
-      // watch can take a moment longer to start delivering. Touching the
-      // ontology is a side-effect-free probe - the resync it triggers is hash
-      // gated - so waiting for its event proves events are actually flowing.
-      const ontology = join(root, '.memory/entities.yaml')
-      await writeFile(ontology, await readFile(ontology, 'utf8'), 'utf8')
-      await until(
-        () => events.find((event) => event.kind === 'ontology-reloaded'),
-        'the watcher to start delivering events'
-      )
-      // `ontology-reloaded` is reported before the resync it triggers, so wait
-      // for that resync too - otherwise it can pick up the test's first writes
-      // and report them as its own.
-      await handle.idle()
+      // No readiness probe: `watch()` only returns once events are flowing
+      // (issue #10), which is exactly what these tests rely on.
       events.length = 0
       return handle
     }
@@ -130,6 +118,30 @@ describe('watch', () => {
     await h.start()
 
     expect(await documentIds(h)()).toEqual(['service.orders'])
+  })
+
+  it('reports that it is watching before the initial sync output (issue #11)', async () => {
+    const h = await harness()
+    await h.write(
+      'resources/services/orders.md',
+      memoryFile('service.orders', 'service', 'Orders')
+    )
+    const events: WatchEvent[] = []
+    handles.push(await watch({ cwd: h.root, report: (event) => events.push(event) }))
+
+    expect(events.map((event) => event.kind)).toEqual(['watching', 'added'])
+    expect(events[0]).toEqual({ kind: 'watching', root: join(h.root, '.memory') })
+  })
+
+  it('cleans up its delivery probe', async () => {
+    const h = await harness()
+    await h.start()
+
+    expect(
+      (await readdir(join(h.root, '.memory'))).filter((name) =>
+        name.startsWith('.watch-probe')
+      )
+    ).toEqual([])
   })
 
   it('projects a file added while watching', async () => {

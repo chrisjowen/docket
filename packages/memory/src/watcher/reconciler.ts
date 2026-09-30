@@ -19,6 +19,8 @@ import { scanSource } from '../source/scanner.js'
 export type WatchEvent =
   | { kind: 'added' | 'updated' | 'removed'; id: string; path: string }
   | { kind: 'ontology-reloaded' }
+  /** Reported before the initial sync, so its output reads under the banner. */
+  | { kind: 'watching'; root: string }
   | { kind: 'diagnostics'; diagnostics: Diagnostic[] }
 
 export type WatchReporter = (event: WatchEvent) => void

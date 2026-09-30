@@ -148,16 +148,25 @@ export const until = async <T>(
  * Rewriting the ontology with its own contents is a side-effect-free probe -
  * the resync it triggers is hash gated - so waiting for the watcher to report
  * the reload proves events are really flowing before a test asserts anything.
- * Callers reset their own event log afterwards.
+ * The rewrite repeats, because a child process cannot tell us when it started
+ * listening and an early rewrite is simply never heard.
+ *
+ * In-process callers do not need this: `watch()` returns only once events are
+ * flowing. Callers reset their own event log afterwards.
  */
 export const probeWatcherReady = async (
   root: string,
   reloaded: () => boolean
 ): Promise<void> => {
   const ontology = join(root, '.memory/entities.yaml')
-  await writeFile(ontology, await readFile(ontology, 'utf8'), 'utf8')
-  await until(
-    () => (reloaded() ? true : undefined),
-    'the watcher to start delivering events'
-  )
+  const contents = await readFile(ontology, 'utf8')
+  let lastTouch = 0
+  await until(async () => {
+    if (reloaded()) return true
+    if (Date.now() - lastTouch > 500) {
+      lastTouch = Date.now()
+      await writeFile(ontology, contents, 'utf8')
+    }
+    return undefined
+  }, 'the watcher to start delivering events')
 }

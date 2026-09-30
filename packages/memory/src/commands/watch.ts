@@ -42,6 +42,9 @@ export const consoleReporter: WatchReporter = (event) => {
     case 'ontology-reloaded':
       console.log('✓ ontology reloaded')
       break
+    case 'watching':
+      console.log(`watching ${event.root}`)
+      break
     case 'diagnostics':
       for (const diagnostic of event.diagnostics) {
         const where = diagnostic.path ? ` ${diagnostic.path}` : ''
@@ -73,6 +76,7 @@ export const watch = async (
     stateRoot: stateRootOf(resolved)
   })
 
+  report({ kind: 'watching', root: resolved.memoryRoot })
   const reconciler = createReconciler(resolved, manager, report)
   await reconciler.sync()
 
@@ -92,6 +96,7 @@ export const watch = async (
   const watcher = await watchSource(resolved, {
     onSource: (path) => reconciler.reconcile(path),
     onOntology: () => reconciler.reconcileOntology(),
+    onCatchUp: () => reconciler.sync(),
     onError: fail
   })
 

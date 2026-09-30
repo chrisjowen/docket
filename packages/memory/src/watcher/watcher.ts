@@ -1,4 +1,5 @@
-import { matchesGlob, relative, resolve, sep } from 'node:path'
+import { rm, writeFile } from 'node:fs/promises'
+import { join, matchesGlob, relative, resolve, sep } from 'node:path'
 import { watch as chokidarWatch } from 'chokidar'
 
 import type { ResolvedConfig } from '../config/config.js'
@@ -9,6 +10,11 @@ export interface SourceWatcherHandlers {
   onSource(absolutePath: string): void | Promise<void>
   /** The ontology registry needs re-inspecting (spec §37). */
   onOntology(): void | Promise<void>
+  /**
+   * Events are now being delivered. Anything that changed before then produced
+   * no event, so the whole tree needs one more pass (issue #10).
+   */
+  onCatchUp(): void | Promise<void>
   /** Anything thrown by a handler, or by chokidar itself. */
   onError(cause: unknown): void
 }
@@ -52,6 +58,9 @@ const isSourceFile = (resolved: ResolvedConfig, absolute: string): boolean => {
     resolved.config.source.include.some((pattern) => matchesGlob(path, pattern))
   )
 }
+
+/** How long to wait for the probe's event before assuming delivery has started anyway. */
+const PROBE_TIMEOUT_MS = 2_000
 
 /**
  * Watch the source root and the ontology file (spec §35, §37).
@@ -113,6 +122,35 @@ export const watchSource = async (
   // Until the initial walk finishes chokidar has not registered the existing
   // tree, and a file created in that window is silently treated as pre-existing.
   await new Promise<void>((done) => watcher.once('ready', done))
+
+  // `ready` only means chokidar's own walk finished. On macOS the OS watch can
+  // take a moment longer to start delivering, and a change in that window
+  // produces no event at all. Write a throwaway file and wait to hear about it,
+  // then catch up on anything that slipped through before events were flowing.
+  // It is a dotfile outside `include`, so it never reaches a handler.
+  const probe = join(resolved.memoryRoot, `.watch-probe-${process.pid}`)
+  let timeout: NodeJS.Timeout | undefined
+  const delivering = new Promise<void>((done) => {
+    const heard = (path: string): void => {
+      if (resolve(path) !== probe) return
+      watcher.off('add', heard)
+      done()
+    }
+    watcher.on('add', heard)
+    timeout = setTimeout(() => {
+      watcher.off('add', heard)
+      done()
+    }, PROBE_TIMEOUT_MS)
+  })
+  try {
+    await writeFile(probe, '')
+    await delivering
+  } finally {
+    clearTimeout(timeout)
+    await rm(probe, { force: true })
+  }
+  queue = queue.then(() => handlers.onCatchUp()).catch(handlers.onError)
+  await queue
 
   return {
     idle: () => queue,
