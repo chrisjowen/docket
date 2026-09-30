@@ -1,0 +1,401 @@
+# Default SDLC ontology.
+#
+# Intentionally small. It defines the resource types and relationships this
+# repository can capture. Extend it as the project needs - adding a type here
+# is all that is required, no CLI change.
+#
+# Read this file before performing structured memory extraction.
+
+version: 1
+
+resourceTypes:
+
+  repository:
+    description: >
+      A source-code repository.
+
+    attributes:
+      url:
+        type: string
+
+      defaultBranch:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a repository when source code lives in its own version-control
+        repository. Capture the repository itself, not the software it builds -
+        that is a service or a library.
+
+      clues:
+        - repository
+        - repo
+        - git
+        - monorepo
+        - checkout
+
+      doNotConfuseWith:
+        - service
+        - library
+
+  service:
+    description: >
+      Independently deployable or operated software capability.
+
+    attributes:
+      language:
+        type: string
+
+      lifecycle:
+        type: string
+        enum:
+          - experimental
+          - active
+          - deprecated
+          - retired
+
+    extraction:
+      instructions: >
+        Capture a service when software has a distinct operational,
+        deployment, or runtime lifecycle.
+
+      clues:
+        - service
+        - API
+        - backend
+        - deployment
+        - runtime
+
+      doNotConfuseWith:
+        - library
+        - repository
+
+  library:
+    description: >
+      Reusable code consumed by other software rather than deployed
+      independently.
+
+    attributes:
+      language:
+        type: string
+
+      package:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a library when code is published or imported for reuse and has
+        no runtime lifecycle of its own.
+
+      clues:
+        - library
+        - package
+        - SDK
+        - module
+        - published
+
+      doNotConfuseWith:
+        - service
+        - repository
+
+  agent:
+    description: >
+      An AI or autonomous software agent.
+
+    attributes:
+      package:
+        type: string
+
+      runtime:
+        type: string
+
+      modes:
+        type: string[]
+
+    extraction:
+      instructions: >
+        Capture an agent when software acts autonomously or semi-autonomously
+        on a task, typically driven by a model rather than fixed control flow.
+
+      clues:
+        - agent
+        - autonomous
+        - LLM
+        - tool use
+        - prompt
+
+      doNotConfuseWith:
+        - service
+        - library
+
+  system:
+    description: >
+      An internal or external technical system.
+
+    extraction:
+      instructions: >
+        Capture a system for a technical whole this project integrates with or
+        depends on but does not itself operate as a single service - including
+        third-party platforms.
+
+      clues:
+        - system
+        - platform
+        - third-party
+        - vendor
+        - integration
+
+      doNotConfuseWith:
+        - service
+        - datasource
+
+  environment:
+    description: >
+      An execution or deployment environment.
+
+    attributes:
+      environmentType:
+        type: string
+        enum:
+          - local
+          - dev
+          - test
+          - staging
+          - production
+
+    extraction:
+      instructions: >
+        Capture an environment when software is run or deployed into a named,
+        durable context with its own configuration or data.
+
+      clues:
+        - environment
+        - staging
+        - production
+        - deployed to
+        - cluster
+
+      doNotConfuseWith:
+        - system
+        - service
+
+  datasource:
+    description: >
+      A source of information consumed by software or agents.
+
+    attributes:
+      zone:
+        type: string
+        enum:
+          - public
+          - private
+          - restricted
+
+    extraction:
+      instructions: >
+        Capture a datasource when data is read from a durable store, feed, or
+        API that other resources depend on for information.
+
+      clues:
+        - database
+        - data source
+        - feed
+        - warehouse
+        - index
+
+      doNotConfuseWith:
+        - system
+        - service
+
+  team:
+    description: >
+      An organisational team responsible for resources.
+
+    extraction:
+      instructions: >
+        Capture a team when a named group of people owns or operates
+        resources. Capture the team, never an individual person.
+
+      clues:
+        - team
+        - squad
+        - owned by
+        - on-call
+        - responsible for
+
+      doNotConfuseWith:
+        - agent
+
+  decision:
+    description: >
+      A durable technical or architectural decision.
+
+    extraction:
+      instructions: >
+        Capture a decision only where a concrete choice has been made. Do not
+        capture open questions as decisions.
+
+      clues:
+        - we decided
+        - chose
+        - instead of
+        - going with
+        - rejected
+
+      doNotConfuseWith:
+        - constraint
+
+  constraint:
+    description: >
+      A meaningful durable limitation affecting architecture, implementation,
+      deployment, security, operations, or development.
+
+    extraction:
+      instructions: >
+        Capture a constraint when a limitation is durable and shapes future
+        work. A constraint is imposed; a decision is chosen.
+
+      clues:
+        - must not
+        - cannot
+        - limited to
+        - required by
+        - compliance
+
+      doNotConfuseWith:
+        - decision
+
+  # --- Extensions beyond the default SDLC ontology -------------------------
+  #
+  # feature_flag was added by the flow in SPEC section 63: a concept turned out
+  # to matter durably and no existing resource type represented it. Adding it
+  # here is the whole change - no CLI or application code was touched.
+
+  feature_flag:
+    description: >
+      A named runtime switch that changes system behaviour without a deploy.
+
+    attributes:
+      key:
+        type: string
+
+      rollout:
+        type: string
+        enum:
+          - "off"
+          - internal
+          - percentage
+          - "on"
+
+      temporary:
+        type: boolean
+
+    extraction:
+      instructions: >
+        Capture a feature flag when a named switch durably shapes which code
+        path runs in production. Do not capture short-lived local toggles.
+
+      clues:
+        - feature flag
+        - flag
+        - rollout
+        - kill switch
+
+      doNotConfuseWith:
+        - constraint
+        - decision
+
+
+relationships:
+
+  owned_by:
+    description: >
+      Identifies the team responsible for a resource.
+
+    from:
+      - service
+      - repository
+      - agent
+      - datasource
+      # Extension: a shared library has an owning team too.
+      - library
+
+    to:
+      - team
+
+  depends_on:
+    description: >
+      Represents a runtime, build, or operational dependency.
+
+    from:
+      - service
+      - agent
+
+    to:
+      - service
+      - datasource
+      - system
+
+    attributes:
+      criticality:
+        type: string
+        enum:
+          - low
+          - medium
+          - high
+
+      runtime:
+        type: boolean
+
+  uses:
+    description: >
+      Represents a resource consuming, invoking, or making use of another.
+
+    from: "*"
+    to: "*"
+
+  supersedes:
+    description: >
+      Marks a decision as replacing an earlier one.
+
+    from:
+      - decision
+
+    to:
+      - decision
+
+  deployed_to:
+    description: >
+      Records where a resource runs. Spec §16 uses this relationship in its
+      link examples, and without it the environment type has no inbound edge.
+
+    from:
+      - service
+      - agent
+
+    to:
+      - environment
+
+
+  # --- Extensions beyond the default SDLC ontology -------------------------
+
+  guarded_by:
+    description: >
+      Records that a resource's behaviour is gated by a feature flag.
+
+    from:
+      - service
+      - agent
+
+    to:
+      - feature_flag
+
+  applies_to:
+    description: >
+      Connects a decision or a constraint to what it governs.
+
+    from:
+      - decision
+      - constraint
+
+    to: "*"

@@ -1,0 +1,19 @@
+version: 1
+
+source:
+  root: .memory
+  include:
+    - "**/*.md"
+
+  exclude:
+    - ".index/**"
+
+ontology:
+  file: .memory/entities.yaml
+
+watch:
+  debounceMs: 300
+
+projections:
+  - type: file
+    output: .memory/.index
