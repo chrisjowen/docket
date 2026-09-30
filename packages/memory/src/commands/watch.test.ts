@@ -1,4 +1,12 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -47,7 +55,7 @@ interface Harness {
   unlink(relativePath: string): Promise<void>
   documents(): Promise<DocumentRecord[]>
   edges(): Promise<EdgeRecord[]>
-  start(): Promise<void>
+  start(signal?: AbortSignal): Promise<WatchHandle>
 }
 
 const harness = async (): Promise<Harness> => {
@@ -77,10 +85,26 @@ const harness = async (): Promise<Harness> => {
     unlink: (relativePath) => rm(join(root, '.memory', relativePath)),
     documents: () => readIndex<DocumentRecord>(DOCUMENTS_FILENAME),
     edges: () => readIndex<EdgeRecord>(EDGES_FILENAME),
-    async start() {
-      handles.push(
-        await watch({ cwd: root, report: (event) => { console.log('EV', root, JSON.stringify(event)); events.push(event) } })
+    async start(signal) {
+      const handle = await watch({
+        cwd: root,
+        report: (event) => events.push(event),
+        signal
+      })
+      handles.push(handle)
+
+      // Chokidar's `ready` only means its own walk finished; on macOS the OS
+      // watch can take a moment longer to start delivering. Touching the
+      // ontology is a side-effect-free probe - the resync it triggers is hash
+      // gated - so waiting for its event proves events are actually flowing.
+      const ontology = join(root, '.memory/entities.yaml')
+      await writeFile(ontology, await readFile(ontology, 'utf8'), 'utf8')
+      await until(
+        () => events.find((event) => event.kind === 'ontology-reloaded'),
+        'the watcher to start delivering events'
       )
+      events.length = 0
+      return handle
     }
   }
 }
@@ -140,6 +164,33 @@ describe('watch', () => {
       return found?.title === 'Order Service' ? found : undefined
     }, 'the edited title to be projected')
     expect(record.title).toBe('Order Service')
+  })
+
+  it('treats an editor atomic save as a single change', async () => {
+    const h = await harness()
+    await h.write(
+      'resources/services/orders.md',
+      memoryFile('service.orders', 'service', 'Orders')
+    )
+    await h.start()
+
+    // What an editor really does: write a temporary file, unlink the original,
+    // rename over it (spec §35, §71). Chokidar sees unlink then add.
+    const file = join(h.root, '.memory/resources/services/orders.md')
+    await writeFile(
+      `${file}.tmp`,
+      memoryFile('service.orders', 'service', 'Saved'),
+      'utf8'
+    )
+    await rm(file)
+    await rename(`${file}.tmp`, file)
+
+    await until(
+      () => h.events.find((event) => event.kind === 'updated'),
+      'the save to be reconciled'
+    )
+    expect((await h.documents()).map((d) => d.title)).toEqual(['Saved'])
+    expect(h.events).toHaveLength(1)
   })
 
   it('removes a deleted file and its edges', async () => {
@@ -256,8 +307,6 @@ describe('watch', () => {
     const contents = memoryFile('service.orders', 'service', 'Orders')
     await h.write('resources/services/orders.md', contents)
     await h.start()
-    // The startup sync already projected it; only what watching does counts.
-    h.events.length = 0
 
     await h.write('resources/services/orders.md', contents)
     // A later, genuinely new file is the sequencing point: once it lands, the
@@ -282,10 +331,37 @@ describe('watch', () => {
     ])
   })
 
-  it('stops on abort', async () => {
+  it('ignores paths outside the configured include and exclude', async () => {
+    const h = await harness()
+    await h.start()
+
+    await h.write('notes/draft.txt', 'not a memory file')
+    await h.write(
+      '.index/stray.md',
+      memoryFile('service.stray', 'service', 'Stray')
+    )
+    await h.write(
+      'resources/services/billing.md',
+      memoryFile('service.billing', 'service', 'Billing')
+    )
+
+    await until(
+      () => (h.events.length > 0 ? true : undefined),
+      'the one included file to be reported'
+    )
+    expect(h.events).toEqual([
+      {
+        kind: 'added',
+        id: 'service.billing',
+        path: '.memory/resources/services/billing.md'
+      }
+    ])
+  })
+
+  it('stops watching on abort', async () => {
     const h = await harness()
     const controller = new AbortController()
-    const handle = await watch({ cwd: h.root, signal: controller.signal })
+    const handle = await h.start(controller.signal)
     controller.abort()
     await handle.close()
 
@@ -293,7 +369,10 @@ describe('watch', () => {
       'resources/services/orders.md',
       memoryFile('service.orders', 'service', 'Orders')
     )
-    await new Promise((done) => setTimeout(done, 400))
+    // Nothing to wait for, so this is the one place a settle is unavoidable:
+    // comfortably longer than the debounce the stopped watcher would have used.
+    await new Promise((done) => setTimeout(done, 1000))
     expect(await h.documents()).toEqual([])
+    expect(h.events).toEqual([])
   })
 })
