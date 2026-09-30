@@ -16,6 +16,11 @@ export interface SourceWatcherHandlers {
 export interface SourceWatcher {
   /** Stops watching and waits for the reconciliation in flight, if any. */
   close(): Promise<void>
+  /**
+   * Resolves once every reconciliation already queued has finished. Changes
+   * still inside their debounce window are not queued yet, so are not waited on.
+   */
+  idle(): Promise<void>
 }
 
 /** Path relative to the memory root, always posix-separated, as globs are written. */
@@ -110,6 +115,7 @@ export const watchSource = async (
   await new Promise<void>((done) => watcher.once('ready', done))
 
   return {
+    idle: () => queue,
     async close() {
       debouncer.cancel()
       await watcher.close()

@@ -103,6 +103,10 @@ const harness = async (): Promise<Harness> => {
         () => events.find((event) => event.kind === 'ontology-reloaded'),
         'the watcher to start delivering events'
       )
+      // `ontology-reloaded` is reported before the resync it triggers, so wait
+      // for that resync too - otherwise it can pick up the test's first writes
+      // and report them as its own.
+      await handle.idle()
       events.length = 0
       return handle
     }

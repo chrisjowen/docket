@@ -24,6 +24,8 @@ export interface WatchHandle {
   resolved: ResolvedConfig
   /** Idempotent. Resolves once watching has stopped and projections are closed. */
   close(): Promise<void>
+  /** Resolves once every reconciliation already queued has finished. */
+  idle(): Promise<void>
 }
 
 /**
@@ -101,5 +103,5 @@ export const watch = async (
 
   options.signal?.addEventListener('abort', () => void close(), { once: true })
 
-  return { resolved, close }
+  return { resolved, close, idle: () => watcher.idle() }
 }

@@ -77,6 +77,8 @@ const harness = async (): Promise<Harness> => {
       await probeWatcherReady(root, () =>
         events.some((event) => event.kind === 'ontology-reloaded')
       )
+      // The probe's resync runs after `ontology-reloaded` is reported.
+      await handle.idle()
       events.length = 0
     },
     documents,
