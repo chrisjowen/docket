@@ -1,45 +1,124 @@
-# team-memory Claude Code plugin
+<p align="center">
+  <img src="../../docs/assets/team-logo.png" alt="Team Memory" width="320">
+</p>
 
-Teaches Claude how this repository's local-first team memory works: where
-canonical memory lives, how to read the ontology, what deserves durable
-capture, and how to extend the model.
+<h3 align="center">Your repo remembers. So does Claude.</h3>
 
-The plugin owns agent behaviour only. Indexing, filesystem synchronization and
-projection lifecycle belong to the `memory` CLI (`@team-memory/cli`), which is
-a separate artifact.
+<p align="center">
+  A Claude Code plugin that gives every session your team's hard-won project knowledge,
+  and quietly writes down what it learns before it forgets.
+</p>
 
-## Contents
+<p align="center">
+  <a href="#install-in-30-seconds">Install</a> ·
+  <a href="#what-you-get">What you get</a> ·
+  <a href="#how-it-works">How it works</a>
+</p>
 
-| Path | Purpose |
-|---|---|
-| `skills/team-memory/SKILL.md` | Using the `memory` CLI: search, ontology, validate, sync |
-| `skills/remember/SKILL.md` | Writing memory: procedure, file format, judgement |
-| `skills/ontology/SKILL.md` | Inspect and extend `.memory/entities.yaml` |
-| `hooks/hooks.json` | SessionStart context injection, Stop review |
-| `scripts/session-start.js` | Injects memory context, best-effort `memory sync` |
-| `scripts/stop-review.js` | Prompts an end-of-session memory review |
+---
 
-## Installation
+## The problem
 
-The repository root is a plugin marketplace
-(`.claude-plugin/marketplace.json`) listing this plugin:
+Every new Claude session starts from zero. It greps the same files, rediscovers the same
+architecture, asks the same questions, and forgets the decision you explained yesterday.
+Your team's knowledge lives in people's heads, stale wikis and Slack threads, none of which
+an agent can read.
+
+## The fix
+
+**Team Memory** keeps project knowledge as plain Markdown in your repository, under
+`.memory/`: services, decisions, constraints, owners and dependencies, each one a file with
+a typed identity and links to the others. The plugin teaches Claude to **read it first** and
+to **keep it current**.
+
+- 🧠 **Context from the first message.** Every session starts knowing where memory lives and
+  how to search it, so Claude asks the repo instead of guessing.
+- 🔎 **Search before grep.** `memory search` asks every projection at once (semantic
+  vectors, a knowledge graph, full text) and points straight at the canonical file.
+- ✍️ **Knowledge captured as you work.** When a session settles a decision or uncovers a
+  constraint, it gets written down. The end-of-session review runs **in the background**,
+  so it never interrupts you.
+- 📐 **Structured, not a junk drawer.** Your repo defines its own ontology in
+  `.memory/entities.yaml`. Claude follows it, and extends it deliberately when something
+  new doesn't fit.
+- 🤝 **Humans and agents share one source of truth.** Memory is reviewed in pull requests,
+  merged like code and owned by the team. There's no hidden vector store to trust blindly.
+- 🔒 **Local-first.** Nothing leaves your machine unless you configure a projection that
+  sends it.
+
+## Install in 30 seconds
 
 ```text
 /plugin marketplace add chrisjowen/team-memory
 /plugin install team-memory@team-memory
 ```
 
-For local development, add a checkout instead:
+Then add the CLI to the repository you want to remember things:
+
+```bash
+pnpm add -D @team-memory/cli
+npx memory init
+```
+
+That's it. Open a session and ask Claude about your system.
+
+<details>
+<summary>Developing the plugin locally</summary>
 
 ```text
 /plugin marketplace add /path/to/team-memory
 /plugin install team-memory@team-memory
 ```
 
-## CLI
+Bump the version in `.claude-plugin/plugin.json` and the root
+`.claude-plugin/marketplace.json` when you release. `/plugin update` compares versions, so
+an unbumped change never reaches installed copies.
 
-The plugin does not install the CLI and does not modify the repository's
-dependencies. Add it to the target repository yourself:
+</details>
+
+## What you get
+
+| Piece | What it does |
+|---|---|
+| **`team-memory` skill** | Using the `memory` CLI: search, ontology, validate, sync |
+| **`remember` skill** | Writing memory well: procedure, file format, what's worth keeping |
+| **`ontology` skill** | Inspecting and extending `.memory/entities.yaml` |
+| **SessionStart hook** | Injects memory context and runs a best-effort `memory sync` |
+| **Stop hook** | Starts a background review of new transcript lines and captures durable knowledge in `.memory/` |
+
+### The background review
+
+When a session has grown by enough since the last review, the Stop hook starts a detached,
+headless `claude -p` and returns straight away. The review agent:
+
+- reads only the transcript lines added since the last review
+- follows the `remember` skill and checks existing memory before writing
+- can only read, run `memory`, and edit files under `.memory/`
+- runs one at a time per repository, so two reviews never race on the same files
+
+Logs land in `~/.cache/team-memory/reviews/`. Set `TEAM_MEMORY_REVIEW_MODEL` to choose the
+model it runs on.
+
+## How it works
+
+```
+   you + Claude                     .memory/**/*.md            memory watch / sync
+  ──────────────  edit Markdown ──►  canonical, in git   ──►   ┌─ vectors (mem0)
+   skills + hooks                    typed by ontology         ├─ knowledge graph
+                                                               └─ jsonl index
+                                         ▲                            │
+                                         └──── memory search ◄────────┘
+```
+
+The plugin owns **agent behaviour** only. Indexing, file watching and projections belong to
+the `memory` CLI (`@team-memory/cli`), a separate package. Agents never write to an index;
+they edit the same Markdown a human would, and `memory watch` does the rest. Edits from
+Claude, from people, from scripts, from `git pull` and from merges all take the same path.
+
+Without the CLI installed the skills still work, because the Markdown files are the source
+of truth either way.
+
+### Recommended `package.json` scripts
 
 ```json
 {
@@ -54,13 +133,11 @@ dependencies. Add it to the target repository yourself:
 }
 ```
 
-Then `memory init` once, and run `npm run memory:watch` during development.
-The skills degrade gracefully when the CLI is absent: memory files are
-authoritative with or without it.
+Run `npm run memory:watch` while you work, and `memory validate --strict` in CI.
 
-## Projection
+---
 
-Projection is driven by the filesystem watcher, never by tool hooks. Agents
-edit Markdown under `.memory/`; `memory watch` reconciles `.memory/.index/`.
-This keeps edits from Claude, humans, scripts, `git pull` and merges on one
-path.
+<p align="center">
+  <b>Stop re-explaining your codebase.</b><br>
+  <code>/plugin install team-memory@team-memory</code>
+</p>

@@ -1,6 +1,16 @@
-# Team Memory
+<p align="center">
+  <img src="docs/assets/team-logo.png" alt="Team Memory" width="320">
+</p>
 
-Local-first team memory for software repositories.
+<h3 align="center">Your repo remembers. So does Claude.</h3>
+
+<p align="center">
+  Local-first team memory for software repositories, and a
+  <a href="packages/claude-plugin/README.md">Claude Code plugin</a> that reads it first and
+  keeps it current.
+</p>
+
+---
 
 Canonical memory is plain Markdown with YAML frontmatter, committed to the repo
 under `.memory/`. Everything else — indexes, graphs, caches — is a disposable
