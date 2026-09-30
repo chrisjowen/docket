@@ -88,14 +88,55 @@ be built incrementally, so a dangling reference is a warning until you ask for
 
 ## Projections
 
-v0 ships one: a file projection writing `documents.jsonl`, `nodes.jsonl`,
-`edges.jsonl` and a manifest under `.memory/.index/`. Output is deterministic —
-records are sorted and no timestamps or absolute paths reach the files — so
-rebuilds are byte-identical and diffable.
+The Markdown files are the source. A projection is a destination: sync and
+watch push every change into each projection listed in `.memory.yaml`.
 
-Graph, full-text, vector and Mem0 projections are deliberately out of scope for
-v0. The `MemoryProjection` interface exists so they can be added without
-touching the canonical format.
+```
+.memory/**/*.md ──► memory sync / watch ──┬──► jsonl → .memory/.index/*.jsonl
+                                          └──► mem0  → hosted or self-hosted mem0
+```
+
+**`jsonl`** writes `documents.jsonl`, `nodes.jsonl` and `edges.jsonl` — a
+readable view of exactly what projections receive. Output is deterministic, so
+rebuilds are byte-identical and diffable. (`type: file` is still accepted.)
+
+**`mem0`** stores each document as one verbatim memory (`infer: false`): the
+title, type, id, body, links and tags as text; the id, type, path, hash, tags
+and provenance as metadata. Rebuilds reproduce it exactly and cost no LLM
+calls. Documents with `index.vector: false` are left out. It needs the optional
+`mem0ai` package (`pnpm add mem0ai`).
+
+```yaml
+projections:
+  # Hosted mem0. The key comes from the environment, never the file.
+  - type: mem0
+    mode: platform
+    apiKeyEnv: MEM0_API_KEY   # default
+    # host: https://api.mem0.ai
+
+  # Or self-hosted. `config` goes to mem0's `Memory` constructor untouched,
+  # so any embedder, vector store or LLM mem0 supports works.
+  - type: mem0
+    mode: oss
+    config:
+      embedder: { provider: ollama, config: { model: nomic-embed-text } }
+      vectorStore: { provider: qdrant, config: { host: localhost, port: 6333 } }
+      llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
+```
+
+Both modes file memories under one scope, by default
+`agentId: team-memory-<repo directory>`. Set `scope:` (`userId`, `agentId`
+and/or `runId`) to choose your own. `memory rebuild` deletes and repopulates the
+whole scope, so do not share it with memories written by anything else. Set
+`MEM0_TELEMETRY=false` to turn off the mem0 SDK's telemetry.
+
+The manifest that makes sync skip unchanged files lives in `state.dir`
+(default `.memory/.index`), independent of any projection. Adding, removing or
+reconfiguring a projection makes the next sync reproject everything, so a newly
+added mem0 receives the whole repository.
+
+Graph and full-text projections are not built yet; the `MemoryProjection`
+interface is where they plug in.
 
 ## Claude Code plugin
 

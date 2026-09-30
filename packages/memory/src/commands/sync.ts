@@ -1,11 +1,6 @@
-import { resolve } from 'node:path'
-import type { ResolvedConfig } from '../config/config.js'
-import {
-  emptyManifest,
-  readManifest,
-  writeManifest,
-  type IndexManifest
-} from '../manifest/manifest.js'
+import { stateRootOf } from '../config/config.js'
+import { emptyManifest, type IndexManifest } from '../manifest/manifest.js'
+import { loadManifestState, saveManifest } from '../manifest/state.js'
 import type { Diagnostic } from '../model/index.js'
 import { ProjectionManager } from '../projection/manager.js'
 import { createProjections } from '../projection/registry.js'
@@ -27,17 +22,6 @@ interface ReconcileOptions extends SyncOptions {
   /** Reset the projections first and project everything (`memory rebuild`). */
   fresh: boolean
 }
-
-/**
- * Where derived state lives. v0 only registers the file projection, so the
- * first projection's output directory is the index root holding the manifest
- * (spec §31, §44).
- */
-const stateRootOf = (resolved: ResolvedConfig): string =>
-  resolve(
-    resolved.projectRoot,
-    resolved.config.projections[0]?.output ?? '.memory/.index'
-  )
 
 /**
  * The shared body of `sync` and `rebuild` - the two differ only in whether they
@@ -68,10 +52,13 @@ export const reconcile = async (
     stateRoot
   })
 
-  const previous = options.fresh
-    ? emptyManifest()
-    : await readManifest(stateRoot)
-  if (options.fresh) await manager.reset()
+  // A manifest written for other projections cannot say what these ones hold,
+  // so that case is a rebuild too - e.g. mem0 just added to the config.
+  const state = options.fresh
+    ? { manifest: emptyManifest(), stale: true }
+    : await loadManifestState(resolved)
+  const previous = state.manifest
+  if (state.stale) await manager.reset()
 
   // Spec §67: a file that is currently broken keeps its previous projection
   // rather than having it erased. Keyed by path because a file that failed to
@@ -113,7 +100,7 @@ export const reconcile = async (
       result.removed.push(id)
     }
 
-    await writeManifest(stateRoot, next)
+    await saveManifest(resolved, next.documents)
   } finally {
     await manager.close()
   }

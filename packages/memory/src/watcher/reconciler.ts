@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { relative, resolve, sep } from 'node:path'
 
 import type { ResolvedConfig } from '../config/config.js'
-import { readManifest } from '../manifest/manifest.js'
+import type { IndexManifest } from '../manifest/manifest.js'
+import { loadManifestState, saveManifest } from '../manifest/state.js'
 import { type Diagnostic, error, hasErrors } from '../model/diagnostic.js'
 import type { MemoryDocument, Ontology } from '../model/index.js'
 import { loadOntology } from '../ontology/loader.js'
@@ -45,16 +46,6 @@ const repoRelative = (projectRoot: string, absolute: string): string =>
   relative(projectRoot, absolute).split(sep).join('/')
 
 /**
- * Where the manifest lives. v0 only registers the file projection, so the first
- * projection's output directory is the index root (spec §31, §44).
- */
-export const stateRootOf = (resolved: ResolvedConfig): string =>
-  resolve(
-    resolved.projectRoot,
-    resolved.config.projections[0]?.output ?? '.memory/.index'
-  )
-
-/**
  * Turns dirty paths into projection mutations (spec §36).
  *
  * Holds the desired state as two indexes - path to what it projected, and id to
@@ -82,15 +73,16 @@ export const createReconciler = (
   }
 
   /**
-   * The hash gate needs what was last projected, which the file projection
-   * already records in its manifest (spec §31). Reading it lets a restarted
-   * watcher skip files nothing has touched; an absent manifest simply means
-   * everything is reprojected.
+   * The hash gate needs what was last projected, which sync records in the
+   * manifest (spec §31). Reading it lets a restarted watcher skip files nothing
+   * has touched. A missing manifest, or one written for other projections,
+   * vouches for nothing: the projections are reset and everything reprojected.
    */
   const seed = async (): Promise<void> => {
     if (seeded) return
     seeded = true
-    const manifest = await readManifest(stateRootOf(resolved))
+    const { manifest, stale } = await loadManifestState(resolved)
+    if (stale) await manager.reset()
     for (const [id, entry] of Object.entries(manifest.documents)) {
       projected.set(entry.path, { id, hash: entry.hash })
       pathOfId.set(id, entry.path)
@@ -115,10 +107,18 @@ export const createReconciler = (
     return ontology
   }
 
+  /** Kept in step with every mutation so a restarted watcher can trust it. */
+  const persist = (): Promise<void> => {
+    const documents: IndexManifest['documents'] = {}
+    for (const [path, entry] of projected) documents[entry.id] = { path, hash: entry.hash }
+    return saveManifest(resolved, documents)
+  }
+
   const forget = async (id: string, path: string): Promise<void> => {
     await manager.remove(id)
     projected.delete(path)
     pathOfId.delete(id)
+    await persist()
     report({ kind: 'removed', id, path })
   }
 
@@ -143,6 +143,7 @@ export const createReconciler = (
     await manager.upsert(document)
     projected.set(document.path, { id: document.id, hash: document.hash })
     pathOfId.set(document.id, document.path)
+    await persist()
     report({
       kind: known ? 'updated' : 'added',
       id: document.id,

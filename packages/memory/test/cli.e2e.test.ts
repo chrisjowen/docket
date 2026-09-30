@@ -6,7 +6,7 @@ import type {
   DocumentRecord,
   EdgeRecord,
   NodeRecord
-} from '../src/projection/file/file-projection.js'
+} from '../src/projection/jsonl/jsonl-projection.js'
 import {
   INDEX,
   indexFiles,

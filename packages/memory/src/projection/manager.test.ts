@@ -79,14 +79,17 @@ describe('ProjectionManager', () => {
 })
 
 describe('registry', () => {
-  it('creates the built-in file projection', () => {
-    expect(createProjection({ type: 'file', output: '.memory/.index' }).name).toBe('file')
-    expect(createProjections([{ type: 'file', output: '.memory/.index' }])).toHaveLength(1)
+  it('creates the built-in projections', () => {
+    expect(createProjection({ type: 'jsonl', output: '.memory/.index' }).name).toBe('jsonl')
+    expect(
+      createProjection({ type: 'mem0', mode: 'oss', config: {} }).name
+    ).toBe('mem0')
+    expect(createProjections([{ type: 'jsonl', output: '.memory/.index' }])).toHaveLength(1)
   })
 
   it('rejects an unknown projection type', () => {
     expect(() =>
-      createProjection({ type: 'kuzu', output: 'x' } as unknown as { type: 'file'; output: string })
+      createProjection({ type: 'kuzu', output: 'x' } as unknown as { type: 'jsonl'; output: string })
     ).toThrow(/Unknown projection type "kuzu"/)
   })
 })

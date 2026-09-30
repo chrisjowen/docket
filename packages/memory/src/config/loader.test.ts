@@ -35,7 +35,51 @@ describe('loadConfig', () => {
     const resolved = defaultConfig('/tmp/nowhere')
     expect(resolved.ontologyPath).toBe('/tmp/nowhere/.memory/entities.yaml')
     expect(resolved.config.projections).toEqual([
-      { type: 'file', output: '.memory/.index' }
+      { type: 'jsonl', output: '.memory/.index' }
     ])
+  })
+
+  const loadYaml = async (yaml: string) => {
+    const root = await mkdtemp(join(tmpdir(), 'memory-loader-'))
+    await writeFile(join(root, '.memory.yaml'), `version: 1\n${yaml}`)
+    return loadConfig(root)
+  }
+
+  it('still accepts the old `file` projection name as jsonl', async () => {
+    const resolved = await loadYaml('projections:\n  - type: file\n    output: .memory/.out\n')
+    expect(resolved.config.projections).toEqual([{ type: 'jsonl', output: '.memory/.out' }])
+  })
+
+  it('accepts a hosted mem0 projection with the key read from the environment', async () => {
+    const resolved = await loadYaml(
+      'projections:\n  - type: mem0\n    mode: platform\n    scope:\n      userId: platform-team\n'
+    )
+    expect(resolved.config.projections).toEqual([
+      { type: 'mem0', mode: 'platform', apiKeyEnv: 'MEM0_API_KEY', scope: { userId: 'platform-team' } }
+    ])
+  })
+
+  it('passes a self-hosted mem0 config through untouched', async () => {
+    const resolved = await loadYaml(
+      'projections:\n  - type: mem0\n    mode: oss\n    config:\n      vectorStore:\n        provider: qdrant\n        config: { host: localhost, port: 6333 }\n'
+    )
+    expect(resolved.config.projections).toEqual([
+      {
+        type: 'mem0',
+        mode: 'oss',
+        config: { vectorStore: { provider: 'qdrant', config: { host: 'localhost', port: 6333 } } }
+      }
+    ])
+  })
+
+  it('rejects a mem0 projection without a mode or with an empty scope', async () => {
+    await expect(loadYaml('projections:\n  - type: mem0\n')).rejects.toThrow(/Invalid/)
+    await expect(
+      loadYaml('projections:\n  - type: mem0\n    mode: oss\n    scope: {}\n')
+    ).rejects.toThrow(/Invalid/)
+  })
+
+  it('keeps the manifest in state.dir, apart from any projection', () => {
+    expect(defaultConfig('/tmp/nowhere').config.state).toEqual({ dir: '.memory/.index' })
   })
 })

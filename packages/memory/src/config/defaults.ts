@@ -18,8 +18,23 @@ watch:
   debounceMs: 300
 
 projections:
-  - type: file
+  - type: jsonl
     output: .memory/.index
+
+  # Optional: project into mem0 as well. Needs \`pnpm add mem0ai\`.
+  #
+  # Hosted (app.mem0.ai) - the key is read from the environment:
+  # - type: mem0
+  #   mode: platform
+  #   apiKeyEnv: MEM0_API_KEY
+  #
+  # Self-hosted - \`config\` is passed to mem0's Memory constructor as-is:
+  # - type: mem0
+  #   mode: oss
+  #   config:
+  #     embedder: { provider: ollama, config: { model: nomic-embed-text } }
+  #     vectorStore: { provider: qdrant, config: { host: localhost, port: 6333 } }
+  #     llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
 `
 
 /**

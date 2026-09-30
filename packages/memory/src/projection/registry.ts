@@ -1,24 +1,23 @@
 import type { ProjectionConfig } from '../config/config.js'
-import { createFileProjection } from './file/file-projection.js'
+import { createJsonlProjection } from './jsonl/jsonl-projection.js'
+import { createMem0Projection } from './mem0/mem0-projection.js'
 import type { MemoryProjection } from './projection.js'
 
-export type ProjectionFactory = (config: ProjectionConfig) => MemoryProjection
-
 /**
- * Built-in registry only for v0 (spec §44). Dynamic package loading - e.g.
+ * Built-in registry (spec §44). Dynamic package loading - e.g.
  * `type: "@company/memory-kuzu"` - would be a fallback on this lookup miss.
  */
-const projectionFactories: Record<string, ProjectionFactory> = {
-  file: createFileProjection
-}
-
 export function createProjection(config: ProjectionConfig): MemoryProjection {
-  const factory = projectionFactories[config.type]
-  if (!factory) {
-    const known = Object.keys(projectionFactories).sort().join(', ')
-    throw new Error(`Unknown projection type "${config.type}". Known types: ${known}.`)
+  switch (config.type) {
+    case 'jsonl':
+      return createJsonlProjection(config)
+    case 'mem0':
+      return createMem0Projection(config)
+    default: {
+      const type = (config as { type: unknown }).type
+      throw new Error(`Unknown projection type "${String(type)}". Known types: jsonl, mem0.`)
+    }
   }
-  return factory(config)
 }
 
 export function createProjections(configs: readonly ProjectionConfig[]): MemoryProjection[] {

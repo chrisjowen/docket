@@ -8,7 +8,7 @@ import type {
   DocumentRecord,
   EdgeRecord,
   NodeRecord
-} from '../src/projection/file/file-projection.js'
+} from '../src/projection/jsonl/jsonl-projection.js'
 import type { WatchEvent } from '../src/watcher/reconciler.js'
 import {
   CLI,
@@ -101,7 +101,12 @@ describe('memory watch over a real repository (spec §71)', () => {
     // create
     await write(h.root, `${NOTES}/orders.md`, file('service.orders', 'service', 'Orders'))
     await h.awaitDocuments((d) => d.length === 1, 'the created document to be indexed')
-    expect((await h.nodes()).map((n) => n.title)).toEqual(['Orders'])
+    // The three JSONL files are replaced independently, so documents can land
+    // a moment before nodes.
+    await until(
+      async () => ((await h.nodes()).map((n) => n.title).join() === 'Orders' ? true : undefined),
+      'the created node to be indexed'
+    )
 
     // edit - a new title and a new link
     await write(

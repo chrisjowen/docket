@@ -1,15 +1,10 @@
 import { readFile, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
-import type { ProjectionConfig } from '../../config/config.js'
-import {
-  emptyManifest,
-  readManifest,
-  writeFileAtomic,
-  writeManifest,
-  type ManifestEntry
-} from '../../manifest/manifest.js'
+import type { JsonlProjectionConfig } from '../../config/config.js'
+import { writeFileAtomic } from '../../manifest/manifest.js'
 import type { MemoryDocument } from '../../model/index.js'
+import { stableStringify } from '../../model/stable-json.js'
 import type { MemoryProjection, ProjectionContext } from '../projection.js'
 
 export const DOCUMENTS_FILENAME = 'documents.jsonl'
@@ -43,22 +38,23 @@ export interface EdgeRecord {
 }
 
 /**
- * Writes the normalized model out as JSONL plus a manifest (spec §27).
+ * Writes the normalized model out as JSONL (spec §27) - a readable view of
+ * exactly what every projection is handed. Useful for debugging and tests; the
+ * canonical source is always the Markdown, never these files.
  *
  * Holds the full projected state in memory so an incremental `upsert` can
  * rewrite whole files atomically without re-reading the canonical sources.
  */
-class FileProjection implements MemoryProjection {
-  readonly name = 'file'
+class JsonlProjection implements MemoryProjection {
+  readonly name = 'jsonl'
 
   private outputDir: string | null = null
   private readonly documents = new Map<string, DocumentRecord>()
   private readonly nodes = new Map<string, NodeRecord>()
   /** Keyed by source document id, so `remove` drops a document's edges with it. */
   private readonly edges = new Map<string, EdgeRecord[]>()
-  private readonly manifest = new Map<string, ManifestEntry>()
 
-  constructor(private readonly config: ProjectionConfig) {}
+  constructor(private readonly config: JsonlProjectionConfig) {}
 
   async init(context: ProjectionContext): Promise<void> {
     const outputDir = resolve(context.projectRoot, this.config.output)
@@ -67,11 +63,10 @@ class FileProjection implements MemoryProjection {
     // Reload what was projected before so a partial `sync` does not drop
     // records for documents it never visited. Missing files mean empty state,
     // which is what makes `rm -rf .memory/.index` safe (spec §2.2).
-    const [documents, nodes, edges, manifest] = await Promise.all([
+    const [documents, nodes, edges] = await Promise.all([
       readJsonl<DocumentRecord>(join(outputDir, DOCUMENTS_FILENAME)),
       readJsonl<NodeRecord>(join(outputDir, NODES_FILENAME)),
-      readJsonl<EdgeRecord>(join(outputDir, EDGES_FILENAME)),
-      readManifest(outputDir)
+      readJsonl<EdgeRecord>(join(outputDir, EDGES_FILENAME))
     ])
 
     this.clear()
@@ -82,7 +77,6 @@ class FileProjection implements MemoryProjection {
       if (bucket) bucket.push(record)
       else this.edges.set(record.source, [record])
     }
-    for (const [id, entry] of Object.entries(manifest.documents)) this.manifest.set(id, entry)
   }
 
   async upsert(document: MemoryDocument): Promise<void> {
@@ -119,7 +113,6 @@ class FileProjection implements MemoryProjection {
       this.edges.delete(document.id)
     }
 
-    this.manifest.set(document.id, { path: document.path, hash: document.hash })
     await this.flush()
   }
 
@@ -127,27 +120,32 @@ class FileProjection implements MemoryProjection {
     this.documents.delete(id)
     this.nodes.delete(id)
     this.edges.delete(id)
-    this.manifest.delete(id)
     await this.flush()
   }
 
-  /** Drops the whole output directory; `memory rebuild` recreates it. */
+  /**
+   * Drops this projection's files only. The output directory is shared with
+   * the manifest by default, and that belongs to sync.
+   */
   async reset(): Promise<void> {
     const outputDir = this.requireOutputDir()
     this.clear()
-    await rm(outputDir, { recursive: true, force: true })
+    await Promise.all(
+      [DOCUMENTS_FILENAME, NODES_FILENAME, EDGES_FILENAME].map((name) =>
+        rm(join(outputDir, name), { force: true })
+      )
+    )
   }
 
   private clear(): void {
     this.documents.clear()
     this.nodes.clear()
     this.edges.clear()
-    this.manifest.clear()
   }
 
   private requireOutputDir(): string {
     if (this.outputDir === null) {
-      throw new Error('file projection used before init() - call ProjectionManager.init() first')
+      throw new Error('jsonl projection used before init() - call ProjectionManager.init() first')
     }
     return this.outputDir
   }
@@ -170,17 +168,13 @@ class FileProjection implements MemoryProjection {
     await Promise.all([
       writeFileAtomic(join(outputDir, DOCUMENTS_FILENAME), toJsonl(documents)),
       writeFileAtomic(join(outputDir, NODES_FILENAME), toJsonl(nodes)),
-      writeFileAtomic(join(outputDir, EDGES_FILENAME), toJsonl(edges)),
-      writeManifest(outputDir, {
-        ...emptyManifest(),
-        documents: Object.fromEntries(this.manifest)
-      })
+      writeFileAtomic(join(outputDir, EDGES_FILENAME), toJsonl(edges))
     ])
   }
 }
 
-export function createFileProjection(config: ProjectionConfig): MemoryProjection {
-  return new FileProjection(config)
+export function createJsonlProjection(config: JsonlProjectionConfig): MemoryProjection {
+  return new JsonlProjection(config)
 }
 
 function toJsonl(records: readonly unknown[]): string {
@@ -204,17 +198,6 @@ async function readJsonl<T>(filePath: string): Promise<T[]> {
   } catch {
     return []
   }
-}
-
-/** `JSON.stringify` with object keys emitted in codepoint order. */
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
-
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, entry]) => entry !== undefined)
-    .sort(([a], [b]) => compare(a, b))
-  return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`).join(',')}}`
 }
 
 function compare(a: string, b: string): number {

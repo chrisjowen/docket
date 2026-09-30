@@ -15,5 +15,5 @@ watch:
   debounceMs: 300
 
 projections:
-  - type: file
+  - type: jsonl
     output: .memory/.index

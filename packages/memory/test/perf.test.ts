@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { makeRepo, memory, readJsonl, removeRepo, write } from './helpers.js'
-import type { DocumentRecord } from '../src/projection/file/file-projection.js'
+import type { DocumentRecord } from '../src/projection/jsonl/jsonl-projection.js'
 
 /**
  * Spec §73 states the target is 10-10,000 memory documents on a developer

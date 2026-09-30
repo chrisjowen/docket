@@ -1,17 +1,17 @@
-import { mkdtemp, readFile, readdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { readManifest } from '../../manifest/manifest.js'
 import type { MemoryDocument } from '../../model/index.js'
 import type { MemoryProjection, ProjectionContext } from '../projection.js'
 import {
   DOCUMENTS_FILENAME,
   EDGES_FILENAME,
   NODES_FILENAME,
-  createFileProjection
-} from './file-projection.js'
+  createJsonlProjection
+} from './jsonl-projection.js'
 
 const OUTPUT = '.memory/.index'
 
@@ -38,7 +38,7 @@ async function newProjection(): Promise<{ projection: MemoryProjection; outputDi
     memoryRoot: join(projectRoot, '.memory'),
     stateRoot: join(projectRoot, OUTPUT)
   }
-  const projection = createFileProjection({ type: 'file', output: OUTPUT })
+  const projection = createJsonlProjection({ type: 'jsonl', output: OUTPUT })
   await projection.init?.(context)
   return { projection, outputDir: join(projectRoot, OUTPUT) }
 }
@@ -60,7 +60,7 @@ const agent = makeDocument({
 })
 const team = makeDocument({ id: 'team.research-platform', type: 'team', title: 'Research Platform' })
 
-describe('file projection', () => {
+describe('jsonl projection', () => {
   let projection: MemoryProjection
   let outputDir: string
 
@@ -98,22 +98,15 @@ describe('file projection', () => {
       },
       { source: 'agent.research-assistant', rel: 'uses', target: 'datasource.public-market-1' }
     ])
-    expect(await readManifest(outputDir)).toEqual({
-      version: 1,
-      documents: {
-        'agent.research-assistant': {
-          path: '.memory/resources/agent.research-assistant.md',
-          hash: 'sha256:agent.research-assistant'
-        }
-      }
-    })
+    // The manifest belongs to sync, not to any projection.
+    expect(existsSync(join(outputDir, 'manifest.json'))).toBe(false)
   })
 
   it('produces byte-identical output regardless of upsert order', async () => {
     await projection.upsert(agent)
     await projection.upsert(team)
     const first = await Promise.all(
-      [DOCUMENTS_FILENAME, NODES_FILENAME, EDGES_FILENAME, 'manifest.json'].map(file =>
+      [DOCUMENTS_FILENAME, NODES_FILENAME, EDGES_FILENAME].map(file =>
         readFile(join(outputDir, file), 'utf8')
       )
     )
@@ -122,7 +115,7 @@ describe('file projection', () => {
     await second.projection.upsert(team)
     await second.projection.upsert(agent)
     const rebuilt = await Promise.all(
-      [DOCUMENTS_FILENAME, NODES_FILENAME, EDGES_FILENAME, 'manifest.json'].map(file =>
+      [DOCUMENTS_FILENAME, NODES_FILENAME, EDGES_FILENAME].map(file =>
         readFile(join(second.outputDir, file), 'utf8')
       )
     )
@@ -148,7 +141,6 @@ describe('file projection', () => {
     expect(await lines(outputDir, EDGES_FILENAME)).toEqual([
       { source: agent.id, rel: 'uses', target: 'datasource.other' }
     ])
-    expect((await readManifest(outputDir)).documents[agent.id]?.hash).toBe('sha256:changed')
   })
 
   it('drops a document and all of its edges on remove', async () => {
@@ -159,10 +151,6 @@ describe('file projection', () => {
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(1)
     expect(await lines(outputDir, NODES_FILENAME)).toHaveLength(1)
     expect(await lines(outputDir, EDGES_FILENAME)).toEqual([])
-    expect(await readManifest(outputDir)).toEqual({
-      version: 1,
-      documents: { [team.id]: { path: team.path, hash: team.hash } }
-    })
   })
 
   it('suppresses graph records when index.graph is false', async () => {
@@ -175,11 +163,13 @@ describe('file projection', () => {
     expect(await lines(outputDir, EDGES_FILENAME)).toEqual([])
   })
 
-  it('reset clears the output directory and reprojects cleanly', async () => {
+  it('reset removes only its own files and reprojects cleanly', async () => {
     await projection.upsert(agent)
+    // The default output directory also holds sync's manifest.
+    await writeFile(join(outputDir, 'manifest.json'), '{}', 'utf8')
     await projection.reset?.()
 
-    await expect(readdir(outputDir)).rejects.toThrow(/ENOENT/)
+    expect(await readdir(outputDir)).toEqual(['manifest.json'])
 
     await projection.upsert(team)
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(1)
@@ -189,7 +179,7 @@ describe('file projection', () => {
     await projection.upsert(agent)
     await projection.upsert(team)
 
-    const reopened = createFileProjection({ type: 'file', output: OUTPUT })
+    const reopened = createJsonlProjection({ type: 'jsonl', output: OUTPUT })
     await reopened.init?.({
       projectRoot: join(outputDir, '..', '..'),
       memoryRoot: join(outputDir, '..'),
@@ -198,6 +188,9 @@ describe('file projection', () => {
     await reopened.upsert(makeDocument({ id: team.id, type: 'team', title: 'Renamed Team' }))
 
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(2)
-    expect(Object.keys((await readManifest(outputDir)).documents)).toEqual([agent.id, team.id])
+    expect(((await lines(outputDir, DOCUMENTS_FILENAME)) as { id: string }[]).map((d) => d.id)).toEqual([
+      agent.id,
+      team.id
+    ])
   })
 })

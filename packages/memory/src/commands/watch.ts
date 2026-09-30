@@ -1,11 +1,10 @@
-import type { ResolvedConfig } from '../config/config.js'
+import { stateRootOf, type ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import { error } from '../model/diagnostic.js'
 import { ProjectionManager } from '../projection/manager.js'
 import { createProjections } from '../projection/registry.js'
 import {
   createReconciler,
-  stateRootOf,
   type WatchEvent,
   type WatchReporter
 } from '../watcher/reconciler.js'

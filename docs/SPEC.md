@@ -2353,6 +2353,10 @@ Store canonical `document.id` and source hash in Mem0 metadata.
 
 Implementation is outside v0.
 
+> Implemented after v0 as `type: mem0` with `mode: platform | oss`; see the
+> README. The file projection is now named `jsonl` (`file` is still accepted),
+> and the manifest lives in `state.dir` rather than inside it.
+
 ---
 
 # 79. Future Projection: Remote Team Memory

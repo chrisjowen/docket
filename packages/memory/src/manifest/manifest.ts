@@ -15,6 +15,12 @@ export interface ManifestEntry {
 /** Maps stable identity to path and last projected hash (spec §31). */
 export interface IndexManifest {
   version: number
+  /**
+   * Fingerprint of the projection config these entries were projected into.
+   * A manifest written for a different set says nothing about what a newly
+   * added projection holds, so it must not gate anything.
+   */
+  projections?: string
   documents: Record<string, ManifestEntry>
 }
 
@@ -43,7 +49,12 @@ export async function readManifest(outputDir: string): Promise<IndexManifest> {
     if (parsed === null || typeof parsed !== 'object') return emptyManifest()
     const documents = (parsed as IndexManifest).documents
     if (documents === null || typeof documents !== 'object') return emptyManifest()
-    return { version: MANIFEST_VERSION, documents }
+    const projections = (parsed as IndexManifest).projections
+    return {
+      version: MANIFEST_VERSION,
+      ...(typeof projections === 'string' ? { projections } : {}),
+      documents
+    }
   } catch {
     return emptyManifest()
   }
@@ -57,7 +68,11 @@ export async function writeManifest(outputDir: string, manifest: IndexManifest):
     if (entry) documents[id] = { hash: entry.hash, path: entry.path }
   }
 
-  const serialized = JSON.stringify({ documents, version: manifest.version }, null, 2)
+  const serialized = JSON.stringify(
+    { documents, projections: manifest.projections, version: manifest.version },
+    null,
+    2
+  )
   await writeFileAtomic(manifestPath(outputDir), `${serialized}\n`)
 }
 

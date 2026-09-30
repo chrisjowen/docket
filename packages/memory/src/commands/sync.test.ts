@@ -33,6 +33,36 @@ beforeEach(async () => {
 })
 
 describe('sync', () => {
+  it('keeps the manifest in state.dir whatever the projections write', async () => {
+    await writeFile(
+      join(root, '.memory.yaml'),
+      'version: 1\nprojections:\n  - type: jsonl\n    output: .memory/.out\n'
+    )
+    await write('orders.md', memoryFile('service.orders', 'service'))
+    await sync({ cwd: root })
+
+    expect(await readdir(join(root, '.memory/.out'))).not.toContain('manifest.json')
+    expect(await readdir(join(root, INDEX))).toContain('manifest.json')
+    expect((await sync({ cwd: root })).unchanged).toBe(1)
+  })
+
+  it('reprojects everything when the projections change, e.g. mem0 added', async () => {
+    await write('orders.md', memoryFile('service.orders', 'service'))
+    await sync({ cwd: root })
+
+    await writeFile(
+      join(root, '.memory.yaml'),
+      'version: 1\nprojections:\n  - type: jsonl\n    output: .memory/.out\n'
+    )
+    const result = await sync({ cwd: root })
+
+    // The unchanged file still reaches the new projection.
+    expect(result.upserted).toEqual(['service.orders'])
+    expect(await readFile(join(root, '.memory/.out/documents.jsonl'), 'utf8')).toContain(
+      'service.orders'
+    )
+  })
+
   it('projects new documents and skips unchanged ones on the next run', async () => {
     await write('orders.md', memoryFile('service.orders', 'service'))
     await write('payments.md', memoryFile('team.payments', 'team'))
@@ -115,7 +145,7 @@ describe('rebuild', () => {
 
     const files = await indexFiles()
     expect(files['documents.jsonl'] ?? '').toBe('')
-    expect(JSON.parse(files['manifest.json'] ?? '{}')).toEqual({
+    expect(JSON.parse(files['manifest.json'] ?? '{}')).toMatchObject({
       documents: {},
       version: 1
     })
