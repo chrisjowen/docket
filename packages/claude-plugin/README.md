@@ -12,8 +12,8 @@ a separate artifact.
 
 | Path | Purpose |
 |---|---|
-| `skills/team-memory/SKILL.md` | Read and write memory under `.memory/` |
-| `skills/remember/SKILL.md` | Explicit "remember this" capture |
+| `skills/team-memory/SKILL.md` | Using the `memory` CLI: search, ontology, validate, sync |
+| `skills/remember/SKILL.md` | Writing memory: procedure, file format, judgement |
 | `skills/ontology/SKILL.md` | Inspect and extend `.memory/entities.yaml` |
 | `hooks/hooks.json` | SessionStart context injection, Stop review |
 | `scripts/session-start.js` | Injects memory context, best-effort `memory sync` |

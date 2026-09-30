@@ -23,7 +23,8 @@ Determine whether this session established or materially changed:
 - durable constraints
 - significant conventions
 
-If so, update the canonical \`.memory/\` files before completing.
+If so, update the canonical \`.memory/\` files before completing,
+following the \`remember\` skill.
 
 Do not capture transient debugging details, unresolved speculation,
 or ordinary conversational information.

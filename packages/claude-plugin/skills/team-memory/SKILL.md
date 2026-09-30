@@ -1,192 +1,73 @@
 ---
 name: team-memory
-description: Read and write this repository's durable team memory under .memory/. Use when you need existing project knowledge (which services, APIs, pipelines, clusters, incidents, runbooks, permits, policies, projects, teams, decisions or constraints exist, who owns what, what depends on what), or when a session establishes durable knowledge worth keeping - an architectural decision, a new service or agent, an ownership or dependency change, a lasting constraint or convention.
+description: Use the `memory` CLI to query and maintain this repository's team memory under .memory/. Use when you need existing project knowledge (which services, APIs, pipelines, clusters, incidents, runbooks, permits, policies, projects, teams, decisions or constraints exist, who owns what, what depends on what), to look up the ontology, to check memory files after writing them, or when projections look stale. To write a memory, use the `remember` skill.
 ---
 
-# Team memory
+# Team memory CLI
 
-Repository memory is stored under `.memory/`.
+Canonical memory is Markdown under `.memory/`. The `memory` CLI searches it,
+checks it against the ontology in `.memory/entities.yaml`, and keeps the
+projections in `.memory/.index/` in step with it. The CLI never writes memory
+files; to capture something, use the `remember` skill.
 
-`.memory/entities.yaml` defines the resource types and relationships available
-for this repository.
+If `memory` is not on the path, try `npx --no-install memory`. If neither
+works, do not install it: read and grep `.memory/` directly.
 
-Never assume a fixed ontology.
-
-Read `.memory/entities.yaml` before performing structured memory extraction.
-
-## Layout
-
-```text
-.memory/entities.yaml        ontology: resource types + relationships
-.memory/resources/<plural>/  resource files (services, agents, teams, ...)
-.memory/decisions/           decision files
-.memory/constraints/         constraint files
-.memory/notes/               free-form durable notes
-.memory/.index/              GENERATED. Never read as truth, never edit.
-```
-
-Directories are convention, not schema. The `type:` field in frontmatter
-determines what a file is; its path does not.
-
-## Finding existing memory
-
-Search with the CLI first:
+## Find what is known
 
 ```bash
-memory search <query...>          # e.g. memory search local model
-memory search -n 5 --json <query> # fewer hits, machine-readable
+memory search <query...>            # e.g. memory search local model
+memory search -n 5 <query...>       # fewer hits per projection (default 10)
+memory search --json <query...>     # full result, including each hit's path
 ```
 
-It asks every searchable projection (semantic and graph) and prints each hit's
-`id` and canonical file path. Read the canonical file it points to; the hit
-itself is a pointer, not the truth.
+Search asks every projection (semantic and graph) and prints each hit's `id`,
+score and canonical file path, grouped by projection. A hit is a pointer:
+read the file it names before relying on it.
 
-Fall back to grepping `.memory/` only when `memory search` is unavailable,
-finds nothing, or you need an exact ID or string match.
+Use search first when you need to know how the system works, who owns
+something, or whether a resource already exists. Grep `.memory/` only when
+search finds nothing, or to confirm an exact `id` is unused.
 
-## Capture
+## Look up the ontology
 
-Capture durable knowledge:
-
-- architectural decisions
-- services
-- systems
-- agents
-- important data sources
-- ownership
-- dependencies
-- significant development constraints
-- environments
-- durable project conventions
-- meaningful relationships between resources
-
-Do not capture:
-
-- transient debugging state
-- speculation
-- conversational filler
-- temporary implementation details
-- information trivially discoverable from nearby code, unless its meaning is
-  non-obvious or strategically important
-
-## Extraction procedure
-
-1. Read `.memory/entities.yaml`.
-2. Find existing matching resources with `memory search <concept>`, then grep
-   `.memory/` for candidate IDs to confirm none already exists.
-3. Identify durable new information.
-4. Match concepts to existing resource types.
-5. Update existing resources where possible.
-6. Create new resources only when necessary.
-7. Add explicit relationships.
-8. Keep Markdown concise.
-9. Never directly edit `.memory/.index/`.
-10. Allow the watcher to update projections.
-
-## File format
-
-Markdown with YAML frontmatter. Required fields: `id`, `type`, `title`.
-
-```markdown
----
-id: agent.research-assistant
-type: agent
-title: Research Assistant
-
-tags:
-  - research
-
-attributes:
-  package: RA.agent
-  runtime: in-process
-
-links:
-  - rel: uses
-    target: datasource.private-market-3
-
-  - rel: owned_by
-    target: team.research-platform
-
-provenance:
-  authority: repo
-  confidence: 1.0
-  capturedBy: claude
----
-
-# Research Assistant
-
-Performs research across public and private market data.
+```bash
+memory ontology list                # every resource type and relationship
+memory ontology show <type>         # one type: attributes, allowed relationships
 ```
 
-Rules:
+Run `show` before writing a resource of that type, so attributes and `links`
+match what the ontology allows. Never assume a fixed ontology; it differs per
+repository.
 
-- `id` follows `<type>.<semantic-name>` and is globally unique in the
-  repository. IDs are independent of file path; moving a file must not change
-  its `id`.
-- `type` must be a resource type registered in `.memory/entities.yaml`.
-- `attributes` must match the attribute definitions for that type.
-- Each `links` entry needs `rel` and `target`. `rel` must be a registered
-  relationship whose `from` allows this resource's type and whose `to` allows
-  the target's type. A link may carry `attributes` when the relationship
-  defines them.
-- A link may target a resource that does not exist yet. That is a warning, not
-  an error.
-- `provenance` and `index` are optional. Set `capturedBy: claude` when you
-  wrote the file.
-- Body prose is for humans and retrieval. Do not restate attributes in prose
-  unless it aids understanding.
-- `[[service.identity]]` inline references are weak mentions only. Assert real
-  relationships in `links`.
+## Check memory after writing it
 
-## Updating existing memory
-
-Prefer updating existing canonical memory over creating another, conflicting
-memory.
-
-If `agent.research-assistant` moves from an in-process runtime to Databricks,
-edit that existing file. Do not create `agent.research-assistant-v2` unless it
-is genuinely a different resource.
-
-When a decision replaces an earlier one, keep both files and link the new one:
-
-```yaml
-links:
-  - rel: supersedes
-    target: decision.agent-runtime
+```bash
+memory validate                     # structure, types, attributes, relationships
+memory validate --strict            # also fail on links to missing resources
 ```
 
-## Missing resource types
+Run `validate` after any edit under `.memory/` and fix what it reports. A link
+to a resource that does not exist yet is a warning unless `--strict`.
 
-If an important durable concept cannot be represented accurately by an existing
-resource type, extend `.memory/entities.yaml` first, then write the resource
-file. Use the `ontology` skill.
+## Keep projections in step
 
-## Never write indexes
-
-You write files. The `memory watch` watcher projects them.
-
-```text
-edit .memory/**.md  ->  watcher  ->  .memory/.index/
+```bash
+memory sync                         # one reconciliation pass
+memory rebuild                      # drop every projection and reproject
 ```
+
+The developer normally runs `memory watch` in the foreground and it projects
+file edits as they happen; the session-start hook also runs one `sync`. Do not
+start `watch` yourself. If search returns stale or missing results for a file
+you know exists, run `sync`; if that does not fix it, `rebuild`.
 
 Never write, edit or delete anything under `.memory/.index/`, and never treat
-it as the source of truth. If projections look stale, the fix is `memory sync`
-(one pass) or `memory rebuild` (from scratch), never hand-editing an index.
+it as the source of truth.
 
-## Commands
+## Setup
 
-Available when the `@team-memory/cli` dev dependency is installed:
-
-```bash
-memory search <query...> # find existing memory across every projection
-memory validate          # check structure, types, attributes, relationships
-memory ontology list     # list resource types and relationships
-memory ontology show service
-memory sync              # one reconciliation pass
-memory rebuild           # discard and rebuild projections
-memory watch             # foreground watcher (the developer runs this)
-memory init              # first-time setup of .memory/ and .memory.yaml
-```
-
-Run `memory validate` after writing memory files. If the CLI is not installed,
-do not install it; the files are still correct and authoritative.
+`memory init` creates `.memory.yaml`, the `.memory/` tree and a starting
+ontology. Run it only when the developer asks to set up team memory in a
+repository that has none; `--force` overwrites an existing config and
+ontology, so never pass it without being told to.
