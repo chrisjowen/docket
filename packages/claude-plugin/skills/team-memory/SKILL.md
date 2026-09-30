@@ -28,6 +28,22 @@ Read `.memory/entities.yaml` before performing structured memory extraction.
 Directories are convention, not schema. The `type:` field in frontmatter
 determines what a file is; its path does not.
 
+## Finding existing memory
+
+Search with the CLI first:
+
+```bash
+memory search <query...>          # e.g. memory search local model
+memory search -n 5 --json <query> # fewer hits, machine-readable
+```
+
+It asks every searchable projection (semantic and graph) and prints each hit's
+`id` and canonical file path. Read the canonical file it points to; the hit
+itself is a pointer, not the truth.
+
+Fall back to grepping `.memory/` only when `memory search` is unavailable,
+finds nothing, or you need an exact ID or string match.
+
 ## Capture
 
 Capture durable knowledge:
@@ -56,8 +72,8 @@ Do not capture:
 ## Extraction procedure
 
 1. Read `.memory/entities.yaml`.
-2. Search `.memory/` for existing matching resources (grep for the concept name
-   and for candidate IDs).
+2. Find existing matching resources with `memory search <concept>`, then grep
+   `.memory/` for candidate IDs to confirm none already exists.
 3. Identify durable new information.
 4. Match concepts to existing resource types.
 5. Update existing resources where possible.
@@ -162,6 +178,7 @@ it as the source of truth. If projections look stale, the fix is `memory sync`
 Available when the `@team-memory/cli` dev dependency is installed:
 
 ```bash
+memory search <query...> # find existing memory across every projection
 memory validate          # check structure, types, attributes, relationships
 memory ontology list     # list resource types and relationships
 memory ontology show service

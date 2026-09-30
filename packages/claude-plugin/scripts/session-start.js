@@ -14,7 +14,9 @@ Canonical memory is stored under \`.memory/\`.
 \`.memory/entities.yaml\` defines the repository's resource types,
 relationship types, attributes, and extraction guidance.
 
-When durable project knowledge is needed, consult \`.memory/\`.
+When durable project knowledge is needed, run \`memory search <query>\`
+and read the canonical files it points to. Grep \`.memory/\` only if
+the CLI is unavailable or finds nothing.
 
 When durable project knowledge is established or materially changed,
 capture it by updating canonical files under \`.memory/\`.
