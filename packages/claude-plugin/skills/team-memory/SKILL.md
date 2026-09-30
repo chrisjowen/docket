@@ -1,6 +1,6 @@
 ---
 name: team-memory
-description: Read and write this repository's durable team memory under .memory/. Use when you need existing project knowledge (which services, agents, datasources, teams, decisions or constraints exist, who owns what, what depends on what), or when a session establishes durable knowledge worth keeping - an architectural decision, a new service or agent, an ownership or dependency change, a lasting constraint or convention.
+description: Read and write this repository's durable team memory under .memory/. Use when you need existing project knowledge (which services, APIs, pipelines, clusters, incidents, runbooks, permits, policies, projects, teams, decisions or constraints exist, who owns what, what depends on what), or when a session establishes durable knowledge worth keeping - an architectural decision, a new service or agent, an ownership or dependency change, a lasting constraint or convention.
 ---
 
 # Team memory

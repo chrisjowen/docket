@@ -207,7 +207,7 @@ describe('memory watch over a real repository (spec §71)', () => {
     await h.start()
 
     // The type is unregistered, so the file is reported and nothing is projected.
-    await write(h.root, `${NOTES}/runbook.md`, file('runbook.deploy', 'runbook', 'Deploy runbook'))
+    await write(h.root, `${NOTES}/experiment.md`, file('chaos_experiment.latency', 'chaos_experiment', 'Latency experiment'))
     await until(
       () =>
         h.events.some(
@@ -225,7 +225,7 @@ describe('memory watch over a real repository (spec §71)', () => {
       ontologyPath,
       ontology.replace(
         '\nrelationships:',
-        '\n  runbook:\n    description: An operational runbook.\n\nrelationships:'
+        '\n  chaos_experiment:\n    description: A planned fault-injection experiment.\n\nrelationships:'
       ),
       'utf8'
     )
@@ -234,7 +234,7 @@ describe('memory watch over a real repository (spec §71)', () => {
       (d) => d.length === 1,
       'the document to be projected once its type is registered'
     )
-    expect(documents[0]?.id).toBe('runbook.deploy')
+    expect(documents[0]?.id).toBe('chaos_experiment.latency')
   })
 
   it('runs as the real `memory watch` process and shuts down cleanly on SIGTERM', async () => {
