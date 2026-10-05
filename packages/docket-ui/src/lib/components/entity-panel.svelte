@@ -66,7 +66,7 @@
     </div>
     {#if entity.tags.length > 0}
       <div class="flex flex-wrap gap-1">
-        {#each entity.tags as tag (tag)}<Badge variant="secondary">{tag}</Badge>{/each}
+        {#each entity.tags as tag, index (index)}<Badge variant="secondary">{tag}</Badge>{/each}
       </div>
     {/if}
   </header>

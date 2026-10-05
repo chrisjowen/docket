@@ -92,8 +92,9 @@
 
   const nodes: GraphNode[] = $derived.by(() => {
     if (!graph) return []
+    const seen = new Set<string>()
     const visible: GraphNode[] = graph.entities
-      .filter((entity) => !hiddenTypes.has(entity.type))
+      .filter((entity) => !hiddenTypes.has(entity.type) && !seen.has(entity.id) && seen.add(entity.id))
       .map((entity) => ({ id: entity.id, title: entity.title, type: entity.type, ghost: false }))
     if (showUnresolved) {
       const ghosts = new Set(
@@ -110,9 +111,11 @@
 
   const links: GraphLink[] = $derived.by(() => {
     const shown = new Set(nodes.map((node) => node.id))
+    const seen = new Set<string>()
     return (graph?.edges ?? [])
       .filter((edge) => !hiddenRels.has(edge.rel) && shown.has(edge.source) && shown.has(edge.target))
       .map((edge) => ({ key: edgeKey(edge), source: edge.source, target: edge.target, rel: edge.rel }))
+      .filter((link) => !seen.has(link.key) && seen.add(link.key))
   })
 
   /** What stays at full strength: an answer, a picked relationship, or the selection's neighbours. */
