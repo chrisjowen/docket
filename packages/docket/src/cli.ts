@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander'
 import { init } from './commands/init.js'
+import { open } from './commands/open.js'
 import {
   ontology,
   relationshipsFrom,
@@ -12,6 +13,7 @@ import { sync } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
 import { confidenceModel, observationConfidence } from './evidence/confidence.js'
+import { openBrowser } from './open/browser.js'
 import {
   hasErrors,
   type Diagnostic,
@@ -198,6 +200,32 @@ program
       if (result.sources.length === 0) console.log('No configured projection can search.')
     }
     report(result.diagnostics)
+  })
+
+program
+  .command('open')
+  .description('Browse, search and ask about the knowledge in a local web UI')
+  .option('-p, --port <port>', 'port to serve on (default: 4380, or any free port when taken)')
+  .option('--no-open', 'print the address without opening a browser')
+  .action(async (options: { port?: string; open: boolean }) => {
+    let port: number | undefined
+    if (options.port !== undefined) {
+      port = Number(options.port)
+      if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        throw new Error(`--port must be a port number, got "${options.port}"`)
+      }
+    }
+    const handle = await open({ port })
+    console.log(`docket UI for ${handle.resolved.projectRoot}`)
+    console.log(`  ${handle.url}`)
+    console.log('Press Ctrl-C to stop.')
+    if (options.open) openBrowser(handle.url)
+
+    const stop = () => {
+      void handle.close().then(() => process.exit(0))
+    }
+    process.once('SIGINT', stop)
+    process.once('SIGTERM', stop)
   })
 
 const ontologyCommand = program
