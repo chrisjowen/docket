@@ -285,7 +285,11 @@ export const validateDocuments = (
   options: ValidateOptions = {}
 ): Diagnostic[] => {
   const strict = options.strict ?? false
-  const byId = new Map(documents.map((d) => [d.id, d]))
+  const byId = new Map<string, MemoryDocument>()
+  for (const document of documents) {
+    const kept = byId.get(document.id)
+    if (!kept || document.path < kept.path) byId.set(document.id, document)
+  }
   const model = confidenceModel(ontology)
   const diagnostics: Diagnostic[] = []
 

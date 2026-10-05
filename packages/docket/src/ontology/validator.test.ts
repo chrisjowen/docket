@@ -161,6 +161,21 @@ describe('validateDocuments', () => {
     expect(codes(diagnostics)).toEqual(['relationship-to-violation'])
   })
 
+  it('checks a link against the type of the first file by path that declares the target', () => {
+    const diagnostics = validateDocuments(
+      [
+        doc('service.a', 'service', {}, [
+          { rel: 'depends_on', target: 'service.orders' }
+        ]),
+        { ...doc('service.orders', 'decision'), path: '.docket/z.md' },
+        { ...doc('service.orders', 'service'), path: '.docket/b.md' },
+        { ...doc('service.orders', 'decision'), path: '.docket/y.md' }
+      ],
+      ontology
+    )
+    expect(codes(diagnostics)).toEqual([])
+  })
+
   it('accepts anything for "*" constraints', () => {
     const diagnostics = validateDocuments(
       [
