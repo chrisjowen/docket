@@ -138,13 +138,15 @@ projections:
 
 Both modes file memories under one scope, by default
 `agentId: docket-<checkout directory>-<hash>`, where the hash is taken over the
-machine's hostname and the checkout's absolute path. The default scope is per
-machine and checkout, so two clones or worktrees with the same directory name,
-or the same path on two machines (devcontainers, CI runners), never share one.
-Changing the hostname or moving the checkout gives it a new scope and orphans
-the old remote one. To share one stable scope across machines or checkouts, set
-`scope:` (`userId`, `agentId` and/or `runId`) explicitly. `docket rebuild` deletes and repopulates the whole scope, so do not
-share it with memories written by anything else. The `neo4j` projection's
+checkout's absolute path (symlinks and letter case resolved). Two clones or
+worktrees with the same directory name therefore never share a scope. Moving a
+checkout to a new path starts a new scope and leaves the old remote one behind.
+The path is the only input, so checkouts on different machines at the same path
+(devcontainers, Codespaces, CI runners) get the same default scope: if they
+point at one shared mem0 or Neo4j server, each must set `scope:` (`userId`,
+`agentId` and/or `runId`) explicitly. Set `scope:` too to choose your own.
+`docket rebuild` deletes and repopulates the whole scope, so do not share it
+with memories written by anything else. The `neo4j` projection's
 `scope` defaults the same way.
 
 Scopes created by earlier versions (`team-memory-<directory>` in mem0, the bare
@@ -183,25 +185,24 @@ specification is [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Releasing
 
-[`.github/workflows/publish.yml`](.github/workflows/publish.yml) publishes
-`@chrisjowen/docket` to npm, with provenance, when a `v<version>` tag is pushed
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) stages
+`@chrisjowen/docket` on npm, with provenance, when a `v<version>` tag is pushed
 (or a GitHub release creates one). It typechecks, builds and tests first, and
-refuses a tag that does not match `packages/docket/package.json`.
+refuses a tag that does not match `packages/docket/package.json`. npm does not
+allow publishing from CI without 2FA, so the workflow runs `npm stage publish`:
+the version lands in npm's staging area and goes live only once a maintainer
+approves it.
 
 1. Bump `version` in `packages/docket/package.json` and merge it.
 2. Tag that commit `v<version>` and push the tag, or publish a GitHub release
    for it.
+3. Approve the staged version with 2FA: `npm stage approve <stage-id>`, or the
+   Staged Packages tab on npmjs.com.
 
-The maintainer configures one of these, once:
-
-- **Trusted publishing (preferred).** On npmjs.com, open the package's
-  Settings → Trusted publishing and add GitHub Actions with repository
-  `chrisjowen/docket` and workflow `publish.yml`. No secret is stored. npm can
-  only attach a trusted publisher to a package that already exists, so the very
-  first release needs the token below (or a one-off manual `npm publish`).
-- **`NPM_TOKEN` secret (fallback).** An npm granular access or automation token
-  with publish rights to `@chrisjowen/docket`, saved as the `NPM_TOKEN`
-  repository secret. Remove it once trusted publishing is configured.
+The workflow authenticates with the `NPM_TOKEN` repository secret (an npm token
+with publish rights to `@chrisjowen/docket`, already configured) and signs
+provenance through GitHub's OIDC token. The first stage of a new package also
+creates a public `0.0.0-stage` placeholder version on npm.
 
 Check what a release will contain with `npm pack --dry-run` in
 `packages/docket`.

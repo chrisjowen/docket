@@ -1,17 +1,17 @@
 name: Publish
 
-# Publishes @chrisjowen/docket to npm when a `v<version>` tag is pushed -
+# Stages @chrisjowen/docket on npm when a `v<version>` tag is pushed -
 # directly, or by publishing a GitHub release that creates the tag. The tag
 # must match the version in packages/docket/package.json.
 #
-# Authentication, in the order npm tries it:
-#   1. npm trusted publishing (OIDC). Configure it once on npmjs.com under the
-#      package's Settings -> Trusted publishing: GitHub Actions, repository
-#      chrisjowen/docket, workflow publish.yml. No secret is needed.
-#   2. An NPM_TOKEN repository secret (an npm automation or granular access
-#      token with publish rights), used only when trusted publishing is not
-#      configured - for example the very first publish, before the package
-#      exists on npm to attach a trusted publisher to.
+# npm does not allow publishing from CI without 2FA, so this runs
+# `npm stage publish`: the version lands in npm's staging area, and a
+# maintainer approves it with 2FA via `npm stage approve <stage-id>` or the
+# Staged Packages tab on npmjs.com. The first stage of a new package creates a
+# public 0.0.0-stage placeholder version.
+#
+# Authentication is the NPM_TOKEN repository secret (an npm token with publish
+# rights); the OIDC token signs provenance.
 
 on:
   push:
@@ -19,7 +19,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OIDC for trusted publishing and provenance
+  id-token: write # OIDC for provenance
 
 jobs:
   publish:
@@ -47,11 +47,11 @@ jobs:
       - run: pnpm build
       - run: pnpm test
 
-      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
-      - run: npm install -g npm@^11.5.1
+      # Staged publishing needs npm 11.15.0 or later; Node 22 ships npm 10.
+      - run: npm install -g npm@^11.15.0
 
-      - name: Publish
+      - name: Stage
         working-directory: packages/docket
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance --access public
+        run: npm stage publish --provenance --access public

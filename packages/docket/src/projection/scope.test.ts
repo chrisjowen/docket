@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -35,14 +36,18 @@ describe('checkoutScope', () => {
     expect(checkoutScope(checkout)).toBe(checkoutScope(checkout))
     expect(checkoutScope(`${checkout}/`)).toBe(checkoutScope(checkout))
     expect(checkoutScope(link)).toBe(checkoutScope(checkout))
+
+    const upperCased = join(root, 'PLATFORM')
+    if (existsSync(upperCased)) expect(checkoutScope(upperCased)).toBe(checkoutScope(checkout))
   })
 
-  it('gives the same path on two machines different scopes', async () => {
-    const checkout = join(root, 'platform')
-    await mkdir(checkout)
+  it('gives checkouts at different paths different scopes', async () => {
+    const first = join(root, 'platform')
+    const second = join(root, 'billing')
+    await mkdir(first)
+    await mkdir(second)
 
-    expect(checkoutScope(checkout, 'laptop')).not.toBe(checkoutScope(checkout, 'codespace'))
-    expect(checkoutScope(checkout, 'laptop')).toBe(checkoutScope(checkout, 'LAPTOP'))
+    expect(checkoutScope(first)).not.toBe(checkoutScope(second))
   })
 
   it('replaces whitespace in the directory name', () => {
