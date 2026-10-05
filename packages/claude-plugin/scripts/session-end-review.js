@@ -10,48 +10,20 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const { CACHE_DIR, checkoutKey, localDocketBin, projectRoot, readJson, readStdin, reviewModel } = require("./common.js");
+const {
+  CACHE_DIR,
+  DEFAULT_REVIEW_MODEL,
+  checkoutKey,
+  localDocketBin,
+  projectRoot,
+  readJson,
+  readStdin,
+} = require("./common.js");
 
 const STATE_DIR = path.join(CACHE_DIR, "reviews");
 
 // Set in the review agent's environment so its own SessionEnd hook stays quiet.
 const REVIEW_ENV = "DOCKET_REVIEW";
-
-const prompt = (transcript, from, to) => `You are reviewing a finished stretch of a Claude Code session for durable project knowledge.
-
-The session transcript is JSONL at:
-${transcript}
-
-Review only lines ${from + 1} to ${to}; earlier lines were already reviewed.
-Read them in chunks with the Read tool (offset/limit).
-
-Read \`.docket/entities.yaml\`.
-
-Determine whether that stretch established or materially changed:
-
-- resource instances
-- attributes
-- relationships
-- architectural decisions
-- durable constraints
-- significant conventions
-
-If so, update the canonical \`.docket/\` files, following the \`remember\` skill.
-Check the existing docket first; the session may already have captured it.
-Run the CLI as \`docket\`, or as \`npx --no-install docket\` if \`docket\` is not found.
-
-Do not capture transient debugging details, unresolved speculation,
-or ordinary conversational information.
-
-Never capture credentials, secrets, tokens, private keys or passwords, even
-when they appear in the transcript. The docket is committed to the repository
-and may be sent to remote projections. Record that a secret exists and where
-it is managed, never its value.
-
-If an important concept cannot be represented by the current ontology,
-extend \`.docket/entities.yaml\` conservatively first.
-
-Edit nothing outside \`.docket/\`. If nothing qualifies, say so in one line and stop.`;
 
 /** Lines in a JSONL file. Each entry ends with a newline, so count those. */
 function countLines(text) {
@@ -109,35 +81,18 @@ const bin = localDocketBin(root);
 const env = { ...process.env, [REVIEW_ENV]: "1" };
 if (bin) env.PATH = `${path.dirname(bin)}${path.delimiter}${env.PATH || ""}`;
 
-const model = reviewModel(root);
-const claudeArgs = [
-  "-p",
-  prompt(input.transcript_path, reviewed, lines),
-  "--model",
-  model,
-  "--no-session-persistence",
-  "--permission-mode",
-  "dontAsk",
-  "--allowedTools",
-  "Read",
-  "Grep",
-  "Glob",
-  "Skill",
-  "Bash(docket *)",
-  "Bash(npx --no-install docket *)",
-  "Edit(.docket/**)",
-  "Write(.docket/**)",
-];
+const model = process.env.DOCKET_REVIEW_MODEL || DEFAULT_REVIEW_MODEL;
 
 const log = fs.openSync(path.join(STATE_DIR, `${session}.log`), "a");
 fs.writeSync(
   log,
-  `\n--- ${new Date().toISOString()} session end: review lines ${reviewed + 1}-${lines} of ${root} on ${model}\n`,
+  `\n--- ${new Date().toISOString()} session end: queued lines ${reviewed + 1}-${lines} of ${root} on ${model}\n`,
 );
 
 const job = {
   root,
-  claudeArgs,
+  transcript: input.transcript_path,
+  model,
   from: reviewed,
   to: lines,
   stateFile,

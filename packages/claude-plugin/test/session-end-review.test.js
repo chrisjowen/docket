@@ -127,21 +127,14 @@ describe("session-end review hook", () => {
     assert.equal(flag(call, "--permission-mode"), "dontAsk");
   });
 
-  it("takes the model from .docket.yaml, and DOCKET_REVIEW_MODEL over that", async () => {
+  it("takes the model from DOCKET_REVIEW_MODEL", async () => {
     const { box, transcript, input } = setup();
-    fs.writeFileSync(
-      path.join(box.repo, ".docket.yaml"),
-      "version: 1\n\nreview:\n  # cheap enough\n  model: \"sonnet\" # pinned\n\nwatch:\n  model: nope\n",
-    );
     fs.writeFileSync(transcript, transcriptLines(3));
-    runHook(SCRIPT, input(), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
-    const [fromConfig] = await reviewed(box);
-    assert.equal(flag(fromConfig, "--model"), "sonnet");
 
-    fs.appendFileSync(transcript, transcriptLines(3, { from: 3 }));
     runHook(SCRIPT, input(), box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_MODEL: "opus" }));
-    const [, fromEnv] = await reviewed(box, 2);
-    assert.equal(flag(fromEnv, "--model"), "opus");
+
+    const [call] = await reviewed(box);
+    assert.equal(flag(call, "--model"), "opus");
   });
 
   it("lets the reviewer run the project's docket CLI", async () => {
@@ -197,6 +190,24 @@ describe("session-end review hook", () => {
     fs.unlinkSync(lockFile);
     await reviewed(box);
     assert.deepEqual(box.reviewState(SESSION), { entries: 3 });
+  });
+
+  it("reviews only what a review that finished while it waited left unreviewed", async () => {
+    const { box, transcript, input } = setup();
+    fs.writeFileSync(transcript, transcriptLines(95));
+    fs.mkdirSync(box.reviewDir, { recursive: true });
+    const lockFile = path.join(box.reviewDir, `${checkoutKey(box.repo)}.lock`);
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid }));
+
+    runHook(SCRIPT, input(), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
+    await sleep(500);
+    // The earlier review of this session, holding the lock, reviewed lines 1-50.
+    fs.writeFileSync(path.join(box.reviewDir, `${SESSION}.json`), JSON.stringify({ entries: 50 }));
+    fs.unlinkSync(lockFile);
+
+    const [call] = await reviewed(box);
+    assert.match(promptOf(call), /Review only lines 51 to 95;/);
+    assert.deepEqual(box.reviewState(SESSION), { entries: 95 });
   });
 
   it("clears a lock left by a review that died", async () => {

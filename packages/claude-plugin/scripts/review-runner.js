@@ -18,6 +18,63 @@ const LOCK_POLL_MS = Number(process.env.DOCKET_REVIEW_LOCK_POLL_MS) || 5000;
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
+const prompt = (transcript, from, to) => `You are reviewing a finished stretch of a Claude Code session for durable project knowledge.
+
+The session transcript is JSONL at:
+${transcript}
+
+Review only lines ${from + 1} to ${to}; earlier lines were already reviewed.
+Read them in chunks with the Read tool (offset/limit).
+
+Read \`.docket/entities.yaml\`.
+
+Determine whether that stretch established or materially changed:
+
+- resource instances
+- attributes
+- relationships
+- architectural decisions
+- durable constraints
+- significant conventions
+
+If so, update the canonical \`.docket/\` files, following the \`remember\` skill.
+Check the existing docket first; the session may already have captured it.
+Run the CLI as \`docket\`, or as \`npx --no-install docket\` if \`docket\` is not found.
+
+Do not capture transient debugging details, unresolved speculation,
+or ordinary conversational information.
+
+Never capture credentials, secrets, tokens, private keys or passwords, even
+when they appear in the transcript. The docket is committed to the repository
+and may be sent to remote projections. Record that a secret exists and where
+it is managed, never its value.
+
+If an important concept cannot be represented by the current ontology,
+extend \`.docket/entities.yaml\` conservatively first.
+
+Edit nothing outside \`.docket/\`. If nothing qualifies, say so in one line and stop.`;
+
+function claudeArgs(job, from) {
+  return [
+    "-p",
+    prompt(job.transcript, from, job.to),
+    "--model",
+    job.model,
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--allowedTools",
+    "Read",
+    "Grep",
+    "Glob",
+    "Skill",
+    "Bash(docket *)",
+    "Bash(npx --no-install docket *)",
+    "Edit(.docket/**)",
+    "Write(.docket/**)",
+  ];
+}
+
 function log(message) {
   process.stdout.write(`${new Date().toISOString()} ${message}\n`);
 }
@@ -71,17 +128,18 @@ async function main() {
 
   try {
     // A review of this session may have finished while this one waited.
-    const reviewed = readJson(job.stateFile, { entries: 0 }).entries || 0;
-    if (reviewed >= job.to) {
+    const from = Math.max(job.from, readJson(job.stateFile, { entries: 0 }).entries || 0);
+    if (from >= job.to) {
       log("already reviewed");
       return;
     }
 
-    const code = await runClaude(job.claudeArgs, job.root);
+    log(`reviewing lines ${from + 1}-${job.to}`);
+    const code = await runClaude(claudeArgs(job, from), job.root);
     if (code === 0) {
       fs.writeFileSync(job.stateFile, JSON.stringify({ entries: job.to }));
     } else {
-      log(`claude exited with ${code}; lines ${job.from + 1}-${job.to} stay unreviewed`);
+      log(`claude exited with ${code}; lines ${from + 1}-${job.to} stay unreviewed`);
     }
   } finally {
     unlock(job.lockFile);

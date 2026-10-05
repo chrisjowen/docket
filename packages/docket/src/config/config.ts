@@ -137,16 +137,6 @@ export const memoryConfigSchema = z.object({
       debounceMs: z.number().int().positive().default(300)
     })
     .prefault({}),
-  /**
-   * Read by the Claude plugin, not by the CLI: the model its end-of-session
-   * review runs on. `DOCKET_REVIEW_MODEL` overrides it. Declared here so the
-   * key is documented and validated with the rest of the file.
-   */
-  review: z
-    .object({
-      model: z.string().min(1).default('haiku')
-    })
-    .prefault({}),
   projections: z.array(projectionConfigSchema).default([
     { type: 'jsonl', output: '.docket/.index' }
   ])

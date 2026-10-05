@@ -110,13 +110,8 @@ about 40 KB), so a review typically reads tens of thousands of tokens, and more 
 long session. At Haiku's $1 per million input tokens that is a few cents per session;
 on a subscription it counts towards your usage like any other Claude Code session.
 
-**Model.** Set it per repository in `.docket.yaml`, or per machine with
-`DOCKET_REVIEW_MODEL`, which wins:
-
-```yaml
-review:
-  model: sonnet   # any model name or alias `claude --model` accepts
-```
+**Model.** Set `DOCKET_REVIEW_MODEL` to any model name or alias `claude --model`
+accepts, for example `DOCKET_REVIEW_MODEL=sonnet`.
 
 Set `DOCKET_REVIEW=1` in the environment to turn the review off.
 

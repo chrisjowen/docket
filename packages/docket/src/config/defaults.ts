@@ -17,11 +17,6 @@ ontology:
 watch:
   debounceMs: 300
 
-# The model the Claude plugin's end-of-session review runs on (default: haiku).
-# DOCKET_REVIEW_MODEL in the environment overrides it.
-# review:
-#   model: haiku
-
 projections:
   - type: jsonl
     output: .docket/.index

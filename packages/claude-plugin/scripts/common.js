@@ -9,7 +9,7 @@ const path = require("node:path");
 /** Where hook bookkeeping lives - review state, logs and locks. */
 const CACHE_DIR = path.join(os.homedir(), ".cache", "docket");
 
-/** The model the background review runs on unless configured otherwise. */
+/** The model the background review runs on unless `DOCKET_REVIEW_MODEL` names another. */
 const DEFAULT_REVIEW_MODEL = "haiku";
 
 function readStdin() {
@@ -72,39 +72,6 @@ function localDocketBin(root) {
   return fs.existsSync(bin) ? bin : null;
 }
 
-/**
- * The model for the background review: `DOCKET_REVIEW_MODEL`, else
- * `review.model` in the project's `.docket.yaml`, else a small, cheap model.
- */
-function reviewModel(root) {
-  return process.env.DOCKET_REVIEW_MODEL || configuredReviewModel(root) || DEFAULT_REVIEW_MODEL;
-}
-
-/**
- * Reads `review.model` from `.docket.yaml` without a YAML parser, which the
- * plugin cannot ship. Handles the block form `docket init` documents:
- *
- *   review:
- *     model: sonnet
- */
-function configuredReviewModel(root) {
-  let text;
-  try {
-    text = fs.readFileSync(path.join(root, ".docket.yaml"), "utf8");
-  } catch {
-    return null;
-  }
-  const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^review:\s*(#.*)?$/.test(line));
-  if (start === -1) return null;
-  for (const line of lines.slice(start + 1)) {
-    if (/^\S/.test(line)) break; // the next top-level key
-    const match = /^\s+model:\s*(["']?)([^"'#\s]+)\1\s*(#.*)?$/.exec(line);
-    if (match) return match[2];
-  }
-  return null;
-}
-
 module.exports = {
   CACHE_DIR,
   DEFAULT_REVIEW_MODEL,
@@ -115,5 +82,4 @@ module.exports = {
   projectRoot,
   readJson,
   readStdin,
-  reviewModel,
 };

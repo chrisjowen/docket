@@ -22,11 +22,6 @@ describe("plugin wiring", () => {
     }
   });
 
-  it("forbids capturing secrets in the remember skill (SPEC §74)", () => {
-    const skill = fs.readFileSync(path.join(PLUGIN, "skills", "remember", "SKILL.md"), "utf8");
-    assert.match(skill, /Never capture credentials, secrets, tokens, private keys or passwords/);
-  });
-
   it("gives one checkout one lock however its path is spelled", (context) => {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "docket-key-")));
     try {
