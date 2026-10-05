@@ -72,7 +72,8 @@ describe.skipIf(!URL)('neo4j projection', () => {
     )
 
   beforeAll(() => {
-    driver = neo4j.driver(URL ?? '', neo4j.auth.none())
+    // No token, as the projection connects to a NEO4J_AUTH=none server.
+    driver = neo4j.driver(URL ?? '')
   })
 
   afterAll(async () => {
