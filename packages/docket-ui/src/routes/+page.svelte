@@ -55,8 +55,12 @@
 
   // The selection lives in the URL hash, so it survives a reload and can be shared.
   const fromHash = (): string | null => {
-    const hash = decodeURIComponent(location.hash.slice(1))
-    return hash === '' ? null : hash
+    try {
+      const hash = decodeURIComponent(location.hash.slice(1))
+      return hash === '' ? null : hash
+    } catch {
+      return null
+    }
   }
 
   onMount(() => {
