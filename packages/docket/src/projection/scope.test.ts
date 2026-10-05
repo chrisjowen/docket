@@ -37,6 +37,14 @@ describe('checkoutScope', () => {
     expect(checkoutScope(link)).toBe(checkoutScope(checkout))
   })
 
+  it('gives the same path on two machines different scopes', async () => {
+    const checkout = join(root, 'platform')
+    await mkdir(checkout)
+
+    expect(checkoutScope(checkout, 'laptop')).not.toBe(checkoutScope(checkout, 'codespace'))
+    expect(checkoutScope(checkout, 'laptop')).toBe(checkoutScope(checkout, 'LAPTOP'))
+  })
+
   it('replaces whitespace in the directory name', () => {
     expect(checkoutScope('/repos/acme platform')).toMatch(/^docket-acme-platform-[0-9a-f]{12}$/)
   })

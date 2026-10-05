@@ -138,10 +138,12 @@ projections:
 
 Both modes file memories under one scope, by default
 `agentId: docket-<checkout directory>-<hash>`, where the hash is taken over the
-checkout's absolute path. Every checkout gets its own scope, so two clones or
-worktrees with the same directory name never share one; moving a checkout gives
-it a new scope. Set `scope:` (`userId`, `agentId` and/or `runId`) to choose
-your own. `docket rebuild` deletes and repopulates the whole scope, so do not
+machine's hostname and the checkout's absolute path. The default scope is per
+machine and checkout, so two clones or worktrees with the same directory name,
+or the same path on two machines (devcontainers, CI runners), never share one.
+Changing the hostname or moving the checkout gives it a new scope and orphans
+the old remote one. To share one stable scope across machines or checkouts, set
+`scope:` (`userId`, `agentId` and/or `runId`) explicitly. `docket rebuild` deletes and repopulates the whole scope, so do not
 share it with memories written by anything else. The `neo4j` projection's
 `scope` defaults the same way.
 
