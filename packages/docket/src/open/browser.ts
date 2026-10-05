@@ -6,7 +6,7 @@ const opener = (url: string): [string, string[]] => {
     case 'darwin':
       return ['open', [url]]
     case 'win32':
-      return ['cmd', ['/c', 'start', '""', url]]
+      return ['cmd', ['/c', 'start', '', url]]
     default:
       return ['xdg-open', [url]]
   }
