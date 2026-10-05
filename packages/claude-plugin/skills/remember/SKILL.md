@@ -1,30 +1,30 @@
 ---
 name: remember
-description: Write durable knowledge into team memory under .memory/. Use when the user says "remember this", "capture this", "save this as team memory", "record this decision", "add this to memory", or otherwise asks for a fact, decision or constraint to be written down for future sessions, and when an end-of-session review finds durable knowledge worth capturing.
+description: Write durable knowledge into the docket under .docket/. Use when the user says "remember this", "capture this", "add this to the docket", "record this decision", "add this to memory", or otherwise asks for a fact, decision or constraint to be written down for future sessions, and when an end-of-session review finds durable knowledge worth capturing.
 ---
 
 # Remember
 
-Write durable knowledge to canonical Markdown under `.memory/`. Use the
-`team-memory` skill for the CLI commands referenced here.
+Write durable knowledge to canonical Markdown under `.docket/`. Use the
+`docket` skill for the CLI commands referenced here.
 
 ## Procedure
 
-1. Find existing memory with `memory search <subject>`, then grep `.memory/`
+1. Find existing knowledge with `docket search <subject>`, then grep `.docket/`
    for the likely `id` to confirm it is unused.
 2. Decide update or create:
    - existing resource, new or changed facts -> update that file
    - genuinely new resource -> create one file
    - no existing type fits -> use the `ontology` skill to extend
-     `.memory/entities.yaml` conservatively, then write the file
-3. Run `memory ontology show <type>` for the type you are writing, so
+     `.docket/entities.yaml` conservatively, then write the file
+3. Run `docket ontology show <type>` for the type you are writing, so
    attributes and `links` match what it allows. Never assume a fixed ontology.
 4. Write the file in the format below.
 5. Add relationships in `links` where meaningful - ownership, dependency, use,
    deployment, supersession. A relationship the user stated is part of what
    they asked you to remember.
-6. Run `memory validate`, fix what it reports, and report the file path you
-   wrote. Never touch `.memory/.index/`; the watcher projects your edits.
+6. Run `docket validate`, fix what it reports, and report the file path you
+   wrote. Never touch `.docket/.index/`; the watcher projects your edits.
 
 ## File format
 
@@ -63,7 +63,7 @@ Performs research across public and private market data.
 
 - `id` is `<type>.<semantic-name>`, globally unique, and independent of the
   file's path; moving a file must not change its `id`.
-- Directories under `.memory/` are convention. `type:` decides what a file is.
+- Directories under `.docket/` are convention. `type:` decides what a file is.
 - Each `links` entry needs `rel` and `target`, and may carry `attributes` when
   the relationship defines them. A target that does not exist yet is a warning,
   not an error.

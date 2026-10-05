@@ -1,5 +1,5 @@
 {
-  "description": "team-memory session context injection and end-of-session memory review",
+  "description": "docket session context injection and end-of-session knowledge review",
   "hooks": {
     "SessionStart": [
       {

@@ -1,0 +1,57 @@
+name: Publish
+
+# Stages @chrisjowen/docket on npm when a `v<version>` tag is pushed -
+# directly, or by publishing a GitHub release that creates the tag. The tag
+# must match the version in packages/docket/package.json.
+#
+# npm does not allow publishing from CI without 2FA, so this runs
+# `npm stage publish`: the version lands in npm's staging area, and a
+# maintainer approves it with 2FA via `npm stage approve <stage-id>` or the
+# Staged Packages tab on npmjs.com. The first stage of a new package creates a
+# public 0.0.0-stage placeholder version.
+#
+# Authentication is the NPM_TOKEN repository secret (an npm token with publish
+# rights); the OIDC token signs provenance.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write # OIDC for provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Check the tag matches the package version
+        run: |
+          version=$(node -p "require('./packages/docket/package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package version $version"
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # The end-to-end tests run the built CLI, so build before testing.
+      - run: pnpm build
+      - run: pnpm test
+
+      # Staged publishing needs npm 11.15.0 or later; Node 22 ships npm 10.
+      - run: npm install -g npm@^11.15.0
+
+      - name: Stage
+        working-directory: packages/docket
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm stage publish --provenance --access public

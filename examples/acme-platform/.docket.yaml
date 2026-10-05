@@ -1,0 +1,19 @@
+version: 1
+
+source:
+  root: .docket
+  include:
+    - "**/*.md"
+
+  exclude:
+    - ".index/**"
+
+ontology:
+  file: .docket/entities.yaml
+
+watch:
+  debounceMs: 300
+
+projections:
+  - type: jsonl
+    output: .docket/.index

@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  packages/memory:
+  packages/docket:
     dependencies:
       chokidar:
         specifier: ^4.0.3

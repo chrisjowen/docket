@@ -2,5 +2,5 @@ node_modules/
 dist/
 *.tsbuildinfo
 .DS_Store
-# Derived, never canonical. Anchored patterns would miss examples/*/.memory/.
-**/.memory/.index/
+# Derived, never canonical. Anchored patterns would miss examples/*/.docket/.
+**/.docket/.index/

@@ -2,23 +2,23 @@
 
 ## `acme-platform/`
 
-A worked team memory for a small e-commerce platform. It exists so you can read
-what team memory actually looks like once a real system is in it, rather than
+A worked docket for a small e-commerce platform. It exists so you can read
+what a docket actually looks like once a real system is in it, rather than
 inferring it from the format description.
 
 Acme runs a checkout, an order service and a support chat API on a Kubernetes
 cluster, plus a research agent on Databricks that a different team owns. There
 is a payment processor it does not control, a customer-data residency rule it
 did not choose, a superseded datastore decision, and a feature flag standing
-between the old and new checkout. All of that is in `.memory/`.
+between the old and new checkout. All of that is in `.docket/`.
 
 ```text
-.memory.yaml                             config: where memory lives, what to watch
-.memory/entities.yaml                    the ontology - what types and links mean here
-.memory/resources/<plural>/              resource files
-.memory/decisions/                       decisions
-.memory/constraints/                     constraints
-.memory/.index/                          generated, gitignored, disposable
+.docket.yaml                             config: where the docket lives, what to watch
+.docket/entities.yaml                    the ontology - what types and links mean here
+.docket/resources/<plural>/              resource files
+.docket/decisions/                       decisions
+.docket/constraints/                     constraints
+.docket/.index/                          generated, gitignored, disposable
 ```
 
 21 resources and 37 links:
@@ -39,23 +39,23 @@ between the old and new checkout. All of that is in `.memory/`.
 
 ## Run it
 
-From this directory, with the CLI built (`pnpm -C packages/memory build` at the
+From this directory, with the CLI built (`pnpm -C packages/docket build` at the
 repository root):
 
 ```bash
 cd examples/acme-platform
 
-node ../../packages/memory/dist/cli.js validate --strict
-node ../../packages/memory/dist/cli.js rebuild
-node ../../packages/memory/dist/cli.js ontology list
-node ../../packages/memory/dist/cli.js ontology show feature_flag
-node ../../packages/memory/dist/cli.js watch
+node ../../packages/docket/dist/cli.js validate --strict
+node ../../packages/docket/dist/cli.js rebuild
+node ../../packages/docket/dist/cli.js ontology list
+node ../../packages/docket/dist/cli.js ontology show feature_flag
+node ../../packages/docket/dist/cli.js watch
 ```
 
-Or with the package installed, just `memory validate`, `memory rebuild` and so
+Or with the package installed, just `docket validate`, `docket rebuild` and so
 on.
 
-`.memory/.index/` is generated. Delete it and run `rebuild` and you get the same
+`.docket/.index/` is generated. Delete it and run `rebuild` and you get the same
 bytes back; that is the whole point of the projection model. It is gitignored by
 the `.gitignore` in this directory - the root one only covers the root, because
 Git anchors a pattern with an embedded slash to its own directory.
@@ -63,7 +63,7 @@ Git anchors a pattern with an embedded slash to its own directory.
 ## What it demonstrates
 
 **The ontology is the schema, and it is per-repository.**
-`.memory/entities.yaml` starts as the default SDLC ontology from `memory init`
+`.docket/entities.yaml` starts as the default SDLC ontology from `docket init`
 and then extends it: a `feature_flag` resource type, `guarded_by` and
 `applies_to` relationships, and `library` added to the sources `owned_by` will
 accept. No CLI change was needed for any of that. The extension blocks are
@@ -73,7 +73,7 @@ commented so you can see the seam.
 `depends_on` `service.orders` with `criticality: high`; `agent.research-assistant`
 `deployed_to` `environment.production`; `decision.orders-on-postgres`
 `supersedes` `decision.orders-on-dynamodb`. Point a relationship at a type its
-definition does not allow and `memory validate` rejects it.
+definition does not allow and `docket validate` rejects it.
 
 **Provenance distinguishes who captured what.** `service.orders` is
 `capturedBy: human`, `confidence: 1.0`. `agent.research-assistant` is
@@ -92,7 +92,7 @@ schema looks the way it does is only in that file.
 `docs/SPEC.md` walks three flows. Each has something concrete here.
 
 **§61, human edit.** A developer edits
-`.memory/resources/services/orders.md`. Run `memory watch` in this directory,
+`.docket/resources/services/orders.md`. Run `docket watch` in this directory,
 change `lifecycle:` or add a link, and watch the index update. Executed and
 recorded as criterion 4 of [`docs/ACCEPTANCE.md`](../docs/ACCEPTANCE.md).
 

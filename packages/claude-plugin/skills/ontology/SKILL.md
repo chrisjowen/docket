@@ -1,18 +1,18 @@
 ---
 name: ontology
-description: Inspect or extend the team memory ontology in .memory/entities.yaml. Use when asked to add a new resource type or relationship, extend the memory model, or answer "how should this concept be represented in memory?", and whenever a durable concept cannot be captured accurately with the existing resource types.
+description: Inspect or extend the docket ontology in .docket/entities.yaml. Use when asked to add a new resource type or relationship, extend the docket model, or answer "how should this concept be represented in the docket?", and whenever a durable concept cannot be captured accurately with the existing resource types.
 ---
 
-# Memory ontology
+# Docket ontology
 
-`.memory/entities.yaml` is the repository's ontology: the registry of resource
+`.docket/entities.yaml` is the repository's ontology: the registry of resource
 types and relationships. It is data, not code. The CLI does not need changing
 when it grows.
 
 ## Procedure
 
-1. Read `.memory/entities.yaml` in full. `memory ontology list` and
-   `memory ontology show <type>` are available if the CLI is installed.
+1. Read `.docket/entities.yaml` in full. `docket ontology list` and
+   `docket ontology show <type>` are available if the CLI is installed.
 2. Prefer reuse. Check for semantic duplication before adding anything. Add a
    new resource type only when an important durable concept cannot be
    represented accurately using existing types.
@@ -25,7 +25,7 @@ when it grows.
 5. Keep backwards compatibility. Do not rename or remove existing types,
    attributes or relationships, and do not reorganise the file, unless the user
    asked for exactly that. Existing resource files depend on these names.
-6. Run `memory validate` after editing. Resource files referencing a type or
+6. Run `docket validate` after editing. Resource files referencing a type or
    relationship you removed will fail.
 7. Then write or update the resource files that needed the new semantics.
 
@@ -94,5 +94,5 @@ Rules:
 
 ## Never write indexes
 
-Edit `.memory/entities.yaml` only. The watcher detects the ontology change and
-revalidates and reprojects affected resources. Never edit `.memory/.index/`.
+Edit `.docket/entities.yaml` only. The watcher detects the ontology change and
+revalidates and reprojects affected resources. Never edit `.docket/.index/`.
