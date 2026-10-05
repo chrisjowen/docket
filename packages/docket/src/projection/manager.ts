@@ -27,6 +27,10 @@ export class ProjectionManager {
     await this.fanOut('remove', projection => projection.remove(id))
   }
 
+  async flush(): Promise<void> {
+    await this.fanOut('flush', projection => projection.flush?.())
+  }
+
   async reset(): Promise<void> {
     await this.fanOut('reset', projection => projection.reset?.())
   }

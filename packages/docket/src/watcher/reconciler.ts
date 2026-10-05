@@ -56,6 +56,10 @@ const repoRelative = (projectRoot: string, absolute: string): string =>
  *
  * Nothing here throws on bad input: a file that cannot be parsed or validated
  * is reported and keeps whatever it last projected (spec §67).
+ *
+ * Mutations are buffered: each pass ends with one `commit`, which flushes the
+ * projections and then records the manifest, so a full sync over thousands of
+ * files writes each derived file once rather than once per document.
  */
 export const createReconciler = (
   resolved: ResolvedConfig,
@@ -64,6 +68,19 @@ export const createReconciler = (
 ): Reconciler => {
   const projected = new Map<string, Projected>()
   const pathOfId = new Map<string, string>()
+  /**
+   * Paths refused because their file repeats an id another path owns (spec
+   * §66), keyed by path. When the owner lets go of the id, the refused file is
+   * reconsidered, so whichever file still defines it ends up projected.
+   */
+  const shadowed = new Map<string, string>()
+  /** Something was handed to the projections since the last commit. */
+  let dirty = false
+  /**
+   * Mutation events wait for the commit, so whoever hears one can rely on the
+   * derived files already reflecting it.
+   */
+  let pending: WatchEvent[] = []
   let ontology: Ontology | null = null
   let ontologyLoaded = false
   let seeded = false
@@ -107,19 +124,49 @@ export const createReconciler = (
     return ontology
   }
 
-  /** Kept in step with every mutation so a restarted watcher can trust it. */
-  const persist = (): Promise<void> => {
+  /**
+   * Ends every pass, so a restarted watcher can trust the manifest. The
+   * projections are flushed first: the manifest vouches for what they hold, so
+   * it must never get ahead of them.
+   */
+  const commit = async (): Promise<void> => {
+    if (!dirty) return
+    await manager.flush()
     const documents: IndexManifest['documents'] = {}
     for (const [path, entry] of projected) documents[entry.id] = { path, hash: entry.hash }
-    return saveManifest(resolved, documents)
+    await saveManifest(resolved, documents)
+    dirty = false
+    const committed = pending
+    pending = []
+    for (const event of committed) report(event)
+  }
+
+  const absoluteOf = (path: string): string => resolve(resolved.projectRoot, path)
+
+  /** Whether the file at a repo-relative path still defines `id` right now. */
+  const definesId = async (path: string, id: string): Promise<boolean> => {
+    try {
+      const raw = await readFile(absoluteOf(path), 'utf8')
+      return parseMemoryFile(raw, path).document?.id === id
+    } catch {
+      return false
+    }
   }
 
   const forget = async (id: string, path: string): Promise<void> => {
     await manager.remove(id)
     projected.delete(path)
-    pathOfId.delete(id)
-    await persist()
-    report({ kind: 'removed', id, path })
+    if (pathOfId.get(id) === path) pathOfId.delete(id)
+    dirty = true
+    pending.push({ kind: 'removed', id, path })
+
+    // A file refused for repeating this id may now be its only definition.
+    for (const [other, otherId] of shadowed) {
+      if (otherId !== id) continue
+      shadowed.delete(other)
+      await reconcileFile(absoluteOf(other))
+      break
+    }
   }
 
   const project = async (document: MemoryDocument): Promise<void> => {
@@ -131,11 +178,25 @@ export const createReconciler = (
       await forget(previous.id, document.path)
     }
 
-    // The same id arriving from another path is a move. Dropping the old path
-    // now means its later unlink event finds nothing to remove, so the resource
-    // is never deleted and recreated (spec §36).
+    // The same id arriving from another path is a move - unless the former
+    // path still defines it, in which case this file is a duplicate, such as a
+    // copy about to be edited into a new resource. A duplicate is reported and
+    // not projected, so the original keeps its id (spec §66).
     const formerPath = pathOfId.get(document.id)
     if (formerPath !== undefined && formerPath !== document.path) {
+      if (await definesId(formerPath, document.id)) {
+        shadowed.set(document.path, document.id)
+        reportAll([
+          error('duplicate-id', `Duplicate id, already defined in ${formerPath}`, {
+            path: document.path,
+            id: document.id
+          })
+        ])
+        return
+      }
+      // A move. Dropping the old path now means its later unlink event finds
+      // nothing to remove, so the resource is never deleted and recreated
+      // (spec §36).
       projected.delete(formerPath)
     }
 
@@ -143,18 +204,19 @@ export const createReconciler = (
     await manager.upsert(document)
     projected.set(document.path, { id: document.id, hash: document.hash })
     pathOfId.set(document.id, document.path)
-    await persist()
-    report({
+    dirty = true
+    pending.push({
       kind: known ? 'updated' : 'added',
       id: document.id,
       path: document.path
     })
   }
 
-  const reconcile = async (absolutePath: string): Promise<void> => {
-    await seed()
+  const reconcileFile = async (absolutePath: string): Promise<void> => {
     const path = repoRelative(resolved.projectRoot, absolutePath)
     const previous = projected.get(path)
+    // Re-decided below: a refused duplicate stays refused only if it still is one.
+    shadowed.delete(path)
 
     let raw: string
     try {
@@ -199,6 +261,12 @@ export const createReconciler = (
     await project(parsed.document)
   }
 
+  const reconcile = async (absolutePath: string): Promise<void> => {
+    await seed()
+    await reconcileFile(absolutePath)
+    await commit()
+  }
+
   const sync = async (): Promise<void> => {
     await seed()
     const registry = await ensureOntology()
@@ -215,6 +283,14 @@ export const createReconciler = (
       )
     )
 
+    // The scan refuses every repeat of an id but the first (spec §66).
+    shadowed.clear()
+    for (const d of diagnostics) {
+      if (d.code === 'duplicate-id' && d.path !== undefined && d.id !== undefined) {
+        shadowed.set(d.path, d.id)
+      }
+    }
+
     for (const document of scan.documents) {
       if (broken.has(document.path)) continue
       if (projected.get(document.path)?.hash === document.hash) continue
@@ -230,6 +306,7 @@ export const createReconciler = (
     for (const [path, entry] of [...projected]) {
       if (!seen.has(path)) await forget(entry.id, path)
     }
+    await commit()
   }
 
   /**

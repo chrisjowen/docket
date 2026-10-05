@@ -45,6 +45,8 @@ export interface EdgeRecord {
  *
  * Holds the full projected state in memory so an incremental `upsert` can
  * rewrite whole files atomically without re-reading the canonical sources.
+ * Mutations only mark that state dirty; `flush` (or `close`) writes it out
+ * once, so a sync of n documents rewrites each file once rather than n times.
  */
 class JsonlProjection implements MemoryProjection {
   readonly name = 'jsonl'
@@ -54,6 +56,8 @@ class JsonlProjection implements MemoryProjection {
   private readonly nodes = new Map<string, NodeRecord>()
   /** Keyed by source document id, so `remove` drops a document's edges with it. */
   private readonly edges = new Map<string, EdgeRecord[]>()
+  /** Set by every mutation, cleared once the files match the in-memory state. */
+  private dirty = false
 
   constructor(private readonly config: JsonlProjectionConfig) {}
 
@@ -114,14 +118,14 @@ class JsonlProjection implements MemoryProjection {
       this.edges.delete(document.id)
     }
 
-    await this.flush()
+    this.dirty = true
   }
 
   async remove(id: string): Promise<void> {
     this.documents.delete(id)
     this.nodes.delete(id)
     this.edges.delete(id)
-    await this.flush()
+    this.dirty = true
   }
 
   /**
@@ -131,6 +135,7 @@ class JsonlProjection implements MemoryProjection {
   async reset(): Promise<void> {
     const outputDir = this.requireOutputDir()
     this.clear()
+    this.dirty = false
     await Promise.all(
       [DOCUMENTS_FILENAME, NODES_FILENAME, EDGES_FILENAME].map((name) =>
         rm(join(outputDir, name), { force: true })
@@ -140,6 +145,10 @@ class JsonlProjection implements MemoryProjection {
 
   async search(query: string, limit: number): Promise<SearchAnswer> {
     return { hits: lexicalSearch(this.documents.values(), query, limit) }
+  }
+
+  async close(): Promise<void> {
+    await this.flush()
   }
 
   private clear(): void {
@@ -161,20 +170,27 @@ class JsonlProjection implements MemoryProjection {
    * same bytes (spec §72). Nothing derived from the run - no timestamps,
    * absolute paths or run ids - is ever written.
    */
-  private async flush(): Promise<void> {
+  async flush(): Promise<void> {
+    if (!this.dirty) return
     const outputDir = this.requireOutputDir()
 
     const documents = [...this.documents.values()].sort((a, b) => compare(a.id, b.id))
     const nodes = [...this.nodes.values()].sort((a, b) => compare(a.id, b.id))
     const edges = [...this.edges.values()].flat().sort(compareEdges)
 
-    // ponytail: whole-file rewrite per mutation. Fine at v0 scale (spec §73);
-    // batch the flush if a sync of thousands of files gets slow.
-    await Promise.all([
-      writeFileAtomic(join(outputDir, DOCUMENTS_FILENAME), toJsonl(documents)),
-      writeFileAtomic(join(outputDir, NODES_FILENAME), toJsonl(nodes)),
-      writeFileAtomic(join(outputDir, EDGES_FILENAME), toJsonl(edges))
-    ])
+    // Cleared before writing, from the snapshot above, so a mutation that lands
+    // while the files are written marks the state dirty again.
+    this.dirty = false
+    try {
+      await Promise.all([
+        writeFileAtomic(join(outputDir, DOCUMENTS_FILENAME), toJsonl(documents)),
+        writeFileAtomic(join(outputDir, NODES_FILENAME), toJsonl(nodes)),
+        writeFileAtomic(join(outputDir, EDGES_FILENAME), toJsonl(edges))
+      ])
+    } catch (cause) {
+      this.dirty = true
+      throw cause
+    }
   }
 }
 

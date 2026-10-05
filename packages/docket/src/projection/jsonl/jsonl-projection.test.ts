@@ -70,6 +70,7 @@ describe('jsonl projection', () => {
 
   it('projects documents, nodes and edges into the expected records', async () => {
     await projection.upsert(agent)
+    await projection.flush?.()
 
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toEqual([
       {
@@ -105,6 +106,7 @@ describe('jsonl projection', () => {
   it('produces byte-identical output regardless of upsert order', async () => {
     await projection.upsert(agent)
     await projection.upsert(team)
+    await projection.flush?.()
     const first = await Promise.all(
       [DOCUMENTS_FILENAME, NODES_FILENAME, EDGES_FILENAME].map(file =>
         readFile(join(outputDir, file), 'utf8')
@@ -114,6 +116,7 @@ describe('jsonl projection', () => {
     const second = await newProjection()
     await second.projection.upsert(team)
     await second.projection.upsert(agent)
+    await second.projection.flush?.()
     const rebuilt = await Promise.all(
       [DOCUMENTS_FILENAME, NODES_FILENAME, EDGES_FILENAME].map(file =>
         readFile(join(second.outputDir, file), 'utf8')
@@ -133,6 +136,7 @@ describe('jsonl projection', () => {
         links: [{ rel: 'uses', target: 'datasource.other' }]
       })
     )
+    await projection.flush?.()
 
     const documents = (await lines(outputDir, DOCUMENTS_FILENAME)) as { title: string }[]
     expect(documents).toHaveLength(1)
@@ -147,6 +151,7 @@ describe('jsonl projection', () => {
     await projection.upsert(agent)
     await projection.upsert(team)
     await projection.remove(agent.id)
+    await projection.flush?.()
 
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(1)
     expect(await lines(outputDir, NODES_FILENAME)).toHaveLength(1)
@@ -157,6 +162,7 @@ describe('jsonl projection', () => {
     await projection.upsert(
       makeDocument({ ...agent, index: { graph: false, fts: true, vector: true } })
     )
+    await projection.flush?.()
 
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(1)
     expect(await lines(outputDir, NODES_FILENAME)).toEqual([])
@@ -165,6 +171,7 @@ describe('jsonl projection', () => {
 
   it('reset removes only its own files and reprojects cleanly', async () => {
     await projection.upsert(agent)
+    await projection.flush?.()
     // The default output directory also holds sync's manifest.
     await writeFile(join(outputDir, 'manifest.json'), '{}', 'utf8')
     await projection.reset?.()
@@ -172,12 +179,14 @@ describe('jsonl projection', () => {
     expect(await readdir(outputDir)).toEqual(['manifest.json'])
 
     await projection.upsert(team)
+    await projection.flush?.()
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(1)
   })
 
   it('reloads existing state on init so a partial sync keeps untouched records', async () => {
     await projection.upsert(agent)
     await projection.upsert(team)
+    await projection.close?.()
 
     const reopened = createJsonlProjection({ type: 'jsonl', output: OUTPUT })
     await reopened.init?.({
@@ -186,11 +195,31 @@ describe('jsonl projection', () => {
       stateRoot: outputDir
     })
     await reopened.upsert(makeDocument({ id: team.id, type: 'team', title: 'Renamed Team' }))
+    await reopened.flush?.()
 
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(2)
     expect(((await lines(outputDir, DOCUMENTS_FILENAME)) as { id: string }[]).map((d) => d.id)).toEqual([
       agent.id,
       team.id
     ])
+  })
+
+  it('buffers mutations and writes them once, on flush or close', async () => {
+    await projection.upsert(agent)
+    await projection.upsert(team)
+    await projection.remove(team.id)
+    expect(existsSync(join(outputDir, DOCUMENTS_FILENAME))).toBe(false)
+
+    await projection.flush?.()
+    expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(1)
+
+    // Nothing changed since, so a second flush leaves the files alone.
+    await writeFile(join(outputDir, DOCUMENTS_FILENAME), 'sentinel\n', 'utf8')
+    await projection.flush?.()
+    expect(await readFile(join(outputDir, DOCUMENTS_FILENAME), 'utf8')).toBe('sentinel\n')
+
+    await projection.upsert(team)
+    await projection.close?.()
+    expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(2)
   })
 })
