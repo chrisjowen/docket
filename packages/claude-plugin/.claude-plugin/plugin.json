@@ -1,7 +1,7 @@
 {
-  "name": "team-memory",
-  "version": "0.1.1",
-  "description": "Local-first repository team memory",
+  "name": "docket",
+  "version": "0.2.0",
+  "description": "Local-first project knowledge, captured and classified as Markdown",
   "author": {
     "name": "Platform Engineering"
   }

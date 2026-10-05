@@ -1,0 +1,70 @@
+{
+  "name": "@chrisjowen/docket",
+  "version": "0.1.0",
+  "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
+  "keywords": [
+    "knowledge",
+    "ontology",
+    "markdown",
+    "claude-code",
+    "mem0",
+    "neo4j"
+  ],
+  "homepage": "https://github.com/chrisjowen/docket#readme",
+  "bugs": {
+    "url": "https://github.com/chrisjowen/docket/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrisjowen/docket.git",
+    "directory": "packages/docket"
+  },
+  "type": "module",
+  "bin": {
+    "docket": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json && mkdir -p dist/ontology && cp src/ontology/*.yaml dist/ontology/",
+    "prepack": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "commander": "^14.0.1",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.12"
+  },
+  "peerDependencies": {
+    "mem0ai": "^3.3.1",
+    "neo4j-driver": "^6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "mem0ai": {
+      "optional": true
+    },
+    "neo4j-driver": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@qdrant/js-client-rest": "^1.18.0",
+    "@types/node": "^22.10.2",
+    "mem0ai": "^3.3.1",
+    "neo4j-driver": "^6.2.0",
+    "ollama": "^0.5.18",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

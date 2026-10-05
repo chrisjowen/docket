@@ -51,7 +51,7 @@ Max concurrency 5. Phase 1 was the serial choke point.
 - **E** `src/cli.ts`, `src/commands/{sync,rebuild,validate,ontology}.ts`
 - **F** `src/watcher/**`, `src/commands/watch.ts`
 - **G** `packages/claude-plugin/**`
-- **H** `packages/memory/test/**`
+- **H** `packages/docket/test/**`
 - **I** `examples/**`
 
 Phase 1 files are frozen. A track needing a contract change raises it rather than editing in place.
@@ -73,7 +73,7 @@ each other in a way indistinguishable from a missed event.
 **Watch validates more quietly than `validate`.** The single-file watch pass
 filters out `dangling-reference` diagnostics, because one file cannot see
 whether its targets exist and §17 expects the graph to be built incrementally.
-`memory validate` still reports them across the whole set.
+`docket validate` still reports them across the whole set.
 
 ## Known gaps
 

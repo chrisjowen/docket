@@ -16,10 +16,10 @@ const path = require("node:path");
 // Replace with a real signal if it misfires.
 const MIN_NEW_TRANSCRIPT_ENTRIES = 40;
 
-const STATE_DIR = path.join(os.homedir(), ".cache", "team-memory", "reviews");
+const STATE_DIR = path.join(os.homedir(), ".cache", "docket", "reviews");
 
 // Set in the review agent's environment so its own Stop hook stays quiet.
-const REVIEW_ENV = "TEAM_MEMORY_REVIEW";
+const REVIEW_ENV = "DOCKET_REVIEW";
 
 const prompt = (transcript, from) => `You are reviewing a finished stretch of a Claude Code session for durable project knowledge.
 
@@ -29,7 +29,7 @@ ${transcript}
 Review only entries from line ${from + 1} onward; earlier lines were already reviewed.
 Read it in chunks with the Read tool (offset/limit).
 
-Read \`.memory/entities.yaml\`.
+Read \`.docket/entities.yaml\`.
 
 Determine whether that stretch established or materially changed:
 
@@ -40,16 +40,16 @@ Determine whether that stretch established or materially changed:
 - durable constraints
 - significant conventions
 
-If so, update the canonical \`.memory/\` files, following the \`remember\` skill.
-Check existing memory first; the session may already have captured it.
+If so, update the canonical \`.docket/\` files, following the \`remember\` skill.
+Check the existing docket first; the session may already have captured it.
 
 Do not capture transient debugging details, unresolved speculation,
 or ordinary conversational information.
 
 If an important concept cannot be represented by the current ontology,
-extend \`.memory/entities.yaml\` conservatively first.
+extend \`.docket/entities.yaml\` conservatively first.
 
-Edit nothing outside \`.memory/\`. If nothing qualifies, say so in one line and stop.`;
+Edit nothing outside \`.docket/\`. If nothing qualifies, say so in one line and stop.`;
 
 function readStdin() {
   try {
@@ -82,7 +82,7 @@ if (process.env[REVIEW_ENV]) process.exit(0);
 if (input.stop_hook_active) process.exit(0);
 
 const root = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
-if (!fs.existsSync(path.join(root, ".memory"))) process.exit(0);
+if (!fs.existsSync(path.join(root, ".docket"))) process.exit(0);
 
 let entries = 0;
 try {
@@ -97,7 +97,7 @@ const stateFile = path.join(STATE_DIR, `${session}.json`);
 const reviewed = readJson(stateFile, { entries: 0 }).entries;
 if (entries - reviewed < MIN_NEW_TRANSCRIPT_ENTRIES) process.exit(0);
 
-// One review per repository at a time; two agents editing .memory/ race.
+// One review per repository at a time; two agents editing .docket/ race.
 const repoKey = crypto.createHash("sha1").update(root).digest("hex").slice(0, 12);
 const lockFile = path.join(STATE_DIR, `${repoKey}.lock`);
 const lock = readJson(lockFile, null);
@@ -116,23 +116,24 @@ const args = [
   "Grep",
   "Glob",
   "Skill",
-  "Bash(memory *)",
-  "Edit(.memory/**)",
-  "Write(.memory/**)",
+  "Bash(docket *)",
+  "Bash(npx --no-install docket *)",
+  "Edit(.docket/**)",
+  "Write(.docket/**)",
 ];
-if (process.env.TEAM_MEMORY_REVIEW_MODEL) {
-  args.push("--model", process.env.TEAM_MEMORY_REVIEW_MODEL);
+if (process.env.DOCKET_REVIEW_MODEL) {
+  args.push("--model", process.env.DOCKET_REVIEW_MODEL);
 }
 
 // Detached through a shell so the lock is released however the review ends.
 const child = spawn(
   "/bin/sh",
-  ["-c", 'claude "$@"; rm -f "$TEAM_MEMORY_LOCK"', "sh", ...args],
+  ["-c", 'claude "$@"; rm -f "$DOCKET_LOCK"', "sh", ...args],
   {
     cwd: root,
     detached: true,
     stdio: ["ignore", log, log],
-    env: { ...process.env, [REVIEW_ENV]: "1", TEAM_MEMORY_LOCK: lockFile },
+    env: { ...process.env, [REVIEW_ENV]: "1", DOCKET_LOCK: lockFile },
   },
 );
 child.on("error", () => {});

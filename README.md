@@ -1,49 +1,51 @@
-<p align="center">
-  <img src="docs/assets/team-logo.png" alt="Team Memory" width="320">
-</p>
+<h1 align="center">docket</h1>
 
 <h3 align="center">Your repo remembers. So does Claude.</h3>
 
 <p align="center">
-  Local-first team memory for software repositories, and a
+  Capture and classify project knowledge in your repository, and a
   <a href="packages/claude-plugin/README.md">Claude Code plugin</a> that reads it first and
   keeps it current.
 </p>
 
 ---
 
-Canonical memory is plain Markdown with YAML frontmatter, committed to the repo
-under `.memory/`. Everything else — indexes, graphs, caches — is a disposable
+Canonical knowledge is plain Markdown with YAML frontmatter, committed to the repo
+under `.docket/`. Everything else — indexes, graphs, caches — is a disposable
 projection that can be deleted and rebuilt byte-for-byte:
 
 ```bash
-rm -rf .memory/.index
-memory rebuild
+rm -rf .docket/.index
+docket rebuild
 ```
 
-A repo-defined ontology at `.memory/entities.yaml` says what resource types and
+A repo-defined ontology at `.docket/entities.yaml` says what resource types and
 relationships mean. Humans and agents edit the same files.
 
 ## Install
 
 ```bash
-pnpm add -D @team-memory/cli
+pnpm add -D @chrisjowen/docket   # or: npm install --save-dev @chrisjowen/docket
+npx docket init
 ```
+
+Node 22 or later. The command is `docket`; run it through `npx` (or a
+`package.json` script) when it is installed as a dev dependency.
 
 ## Use
 
 ```bash
-memory init                 # scaffold .memory.yaml, .memory/ and the default ontology
-memory validate             # check files against the ontology
-memory validate --strict    # unresolved links become errors
-memory sync                 # project changed files into .memory/.index
-memory rebuild              # reset and reproject everything
-memory watch                # reconcile continuously as files change
-memory ontology list        # what resource types and relationships exist
-memory ontology show service
+docket init                 # scaffold .docket.yaml, .docket/ and the default ontology
+docket validate             # check files against the ontology
+docket validate --strict    # unresolved links become errors
+docket sync                 # project changed files into .docket/.index
+docket rebuild              # reset and reproject everything
+docket watch                # reconcile continuously as files change
+docket ontology list        # what resource types and relationships exist
+docket ontology show service
 ```
 
-## A memory file
+## A docket file
 
 ```markdown
 ---
@@ -99,10 +101,10 @@ be built incrementally, so a dangling reference is a warning until you ask for
 ## Projections
 
 The Markdown files are the source. A projection is a destination: sync and
-watch push every change into each projection listed in `.memory.yaml`.
+watch push every change into each projection listed in `.docket.yaml`.
 
 ```
-.memory/**/*.md ──► memory sync / watch ──┬──► jsonl → .memory/.index/*.jsonl
+.docket/**/*.md ──► docket sync / watch ──┬──► jsonl → .docket/.index/*.jsonl
                                           └──► mem0  → hosted or self-hosted mem0
 ```
 
@@ -135,13 +137,23 @@ projections:
 ```
 
 Both modes file memories under one scope, by default
-`agentId: team-memory-<repo directory>`. Set `scope:` (`userId`, `agentId`
-and/or `runId`) to choose your own. `memory rebuild` deletes and repopulates the
-whole scope, so do not share it with memories written by anything else. Set
+`agentId: docket-<checkout directory>-<hash>`, where the hash is taken over the
+checkout's absolute path. Every checkout gets its own scope, so two clones or
+worktrees with the same directory name never share one; moving a checkout gives
+it a new scope. Set `scope:` (`userId`, `agentId` and/or `runId`) to choose
+your own. `docket rebuild` deletes and repopulates the whole scope, so do not
+share it with memories written by anything else. The `neo4j` projection's
+`scope` defaults the same way.
+
+Scopes created by earlier versions (`team-memory-<directory>` in mem0, the bare
+directory name in Neo4j) are left behind, not migrated or deleted: the first
+`docket sync` projects everything into the new scope. Delete the old scope by
+hand if you no longer want it, or set `scope:` to the old value to keep using
+it. Set
 `MEM0_TELEMETRY=false` to turn off the mem0 SDK's telemetry.
 
 The manifest that makes sync skip unchanged files lives in `state.dir`
-(default `.memory/.index`), independent of any projection. Adding, removing or
+(default `.docket/.index`), independent of any projection. Adding, removing or
 reconfiguring a projection makes the next sync reproject everything, so a newly
 added mem0 receives the whole repository.
 
@@ -166,3 +178,28 @@ pnpm build
 
 Layout, phases and track ownership are in [`PLAN.md`](PLAN.md). The full
 specification is [`docs/SPEC.md`](docs/SPEC.md).
+
+## Releasing
+
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) publishes
+`@chrisjowen/docket` to npm, with provenance, when a `v<version>` tag is pushed
+(or a GitHub release creates one). It typechecks, builds and tests first, and
+refuses a tag that does not match `packages/docket/package.json`.
+
+1. Bump `version` in `packages/docket/package.json` and merge it.
+2. Tag that commit `v<version>` and push the tag, or publish a GitHub release
+   for it.
+
+The maintainer configures one of these, once:
+
+- **Trusted publishing (preferred).** On npmjs.com, open the package's
+  Settings → Trusted publishing and add GitHub Actions with repository
+  `chrisjowen/docket` and workflow `publish.yml`. No secret is stored. npm can
+  only attach a trusted publisher to a package that already exists, so the very
+  first release needs the token below (or a one-off manual `npm publish`).
+- **`NPM_TOKEN` secret (fallback).** An npm granular access or automation token
+  with publish rights to `@chrisjowen/docket`, saved as the `NPM_TOKEN`
+  repository secret. Remove it once trusted publishing is configured.
+
+Check what a release will contain with `npm pack --dry-run` in
+`packages/docket`.

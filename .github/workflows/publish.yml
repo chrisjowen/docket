@@ -1,0 +1,57 @@
+name: Publish
+
+# Publishes @chrisjowen/docket to npm when a `v<version>` tag is pushed -
+# directly, or by publishing a GitHub release that creates the tag. The tag
+# must match the version in packages/docket/package.json.
+#
+# Authentication, in the order npm tries it:
+#   1. npm trusted publishing (OIDC). Configure it once on npmjs.com under the
+#      package's Settings -> Trusted publishing: GitHub Actions, repository
+#      chrisjowen/docket, workflow publish.yml. No secret is needed.
+#   2. An NPM_TOKEN repository secret (an npm automation or granular access
+#      token with publish rights), used only when trusted publishing is not
+#      configured - for example the very first publish, before the package
+#      exists on npm to attach a trusted publisher to.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write # OIDC for trusted publishing and provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Check the tag matches the package version
+        run: |
+          version=$(node -p "require('./packages/docket/package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package version $version"
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # The end-to-end tests run the built CLI, so build before testing.
+      - run: pnpm build
+      - run: pnpm test
+
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - run: npm install -g npm@^11.5.1
+
+      - name: Publish
+        working-directory: packages/docket
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public

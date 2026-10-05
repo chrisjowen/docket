@@ -1,6 +1,6 @@
 Here’s a self-contained implementation spec you can hand directly to a coding agent.
 
-# Local-First Team Memory System
+# Docket: Local-First Project Knowledge System
 
 ## 1. Purpose
 
@@ -15,7 +15,7 @@ The first implementation should provide:
 - A Node.js/TypeScript CLI built with Commander.
 - A filesystem watcher for continuous projection after files change.
 - Markdown memory files with YAML frontmatter.
-- A repository-defined resource/ontology registry at `.memory/entities.yaml`.
+- A repository-defined resource/ontology registry at `.docket/entities.yaml`.
 - Validation of memory files against that registry.
 - A generic projection plugin API.
 - An initial file-based projection for development and testing.
@@ -36,7 +36,7 @@ The design must make those future integrations straightforward.
 Canonical memory exists only under:
 
 ```text
-.memory/
+.docket/
 ```
 
 A memory is not authoritative merely because it exists inside:
@@ -49,7 +49,7 @@ A memory is not authoritative merely because it exists inside:
 - an agent session
 - a projection cache
 
-All derived stores must be rebuildable from `.memory/`.
+All derived stores must be rebuildable from `.docket/`.
 
 ---
 
@@ -58,8 +58,8 @@ All derived stores must be rebuildable from `.memory/`.
 The following must always be safe:
 
 ```bash
-rm -rf .memory/.index
-memory rebuild
+rm -rf .docket/.index
+docket rebuild
 ```
 
 After rebuilding, the resulting logical projection must contain the same information represented by the canonical files.
@@ -73,18 +73,18 @@ Resource types and relationships must not be hardcoded into the memory engine.
 They are defined in:
 
 ```text
-.memory/entities.yaml
+.docket/entities.yaml
 ```
 
 The CLI ships with a default SDLC ontology only as an initialization template.
 
-After `memory init`, the repository-owned `entities.yaml` is authoritative.
+After `docket init`, the repository-owned `entities.yaml` is authoritative.
 
 ---
 
 ## 2.4 Agents write files, not databases
 
-Claude or any other agent must persist memory by creating or editing files under `.memory/`.
+Claude or any other agent must persist memory by creating or editing files under `.docket/`.
 
 Agents must never directly mutate a projection backend.
 
@@ -93,7 +93,7 @@ Correct:
 ```text
 agent
   ↓
-.memory/resources/services/orders.md
+.docket/resources/services/orders.md
   ↓
 watcher
   ↓
@@ -114,7 +114,7 @@ graph database
 
 The system must not depend only on startup ingestion.
 
-After `memory watch` starts, changes made to canonical memory files must be reflected in active projections automatically.
+After `docket watch` starts, changes made to canonical memory files must be reflected in active projections automatically.
 
 Changes may come from:
 
@@ -137,12 +137,12 @@ Claude hooks are not the synchronization mechanism.
 ```text
                     repository
                         │
-              .memory/entities.yaml
+              .docket/entities.yaml
                         │
                ontology / schema
                         │
                         ▼
-               .memory/**/*.md
+               .docket/**/*.md
                canonical memory
                         │
               ┌─────────┴─────────┐
@@ -164,7 +164,7 @@ Claude hooks are not the synchronization mechanism.
         ▼               ▼                ▼
  FileProjection    future Graph     future Vector
         │               │                │
- .memory/.index       Kuzu/etc       Mem0/etc
+ .docket/.index       Kuzu/etc       Mem0/etc
 ```
 
 ---
@@ -174,7 +174,7 @@ Claude hooks are not the synchronization mechanism.
 After initialization, a repository should look approximately like:
 
 ```text
-.memory/
+.docket/
 ├── entities.yaml
 │
 ├── resources/
@@ -197,10 +197,10 @@ After initialization, a repository should look approximately like:
     ├── nodes.jsonl
     └── edges.jsonl
 
-.memory.yaml
+.docket.yaml
 ```
 
-`.memory/.index/` must be generated and should normally be added to `.gitignore`.
+`.docket/.index/` must be generated and should normally be added to `.gitignore`.
 
 Resource directories are conventions rather than schema.
 
@@ -209,7 +209,7 @@ A custom resource type does not require changing the CLI.
 For example:
 
 ```text
-.memory/resources/feature-flags/
+.docket/resources/feature-flags/
 ```
 
 may be introduced by a project.
@@ -221,7 +221,7 @@ may be introduced by a project.
 Create:
 
 ```text
-.memory.yaml
+.docket.yaml
 ```
 
 Initial format:
@@ -230,7 +230,7 @@ Initial format:
 version: 1
 
 source:
-  root: .memory
+  root: .docket
   include:
     - "**/*.md"
 
@@ -238,14 +238,14 @@ source:
     - ".index/**"
 
 ontology:
-  file: .memory/entities.yaml
+  file: .docket/entities.yaml
 
 watch:
   debounceMs: 300
 
 projections:
   - type: file
-    output: .memory/.index
+    output: .docket/.index
 ```
 
 Future projection configuration may look like:
@@ -253,13 +253,13 @@ Future projection configuration may look like:
 ```yaml
 projections:
   - type: file
-    output: .memory/.index
+    output: .docket/.index
 
   - type: kuzu
-    database: .memory/.cache/graph
+    database: .docket/.cache/graph
 
   - type: mem0
-    config: .memory/mem0.yaml
+    config: .docket/mem0.yaml
 ```
 
 The initial implementation only needs `file`.
@@ -273,10 +273,10 @@ The initial implementation only needs `file`.
 The ontology must live at:
 
 ```text
-.memory/entities.yaml
+.docket/entities.yaml
 ```
 
-The default may be changed through `.memory.yaml`, but all implementation should resolve the ontology path through configuration.
+The default may be changed through `.docket.yaml`, but all implementation should resolve the ontology path through configuration.
 
 ---
 
@@ -446,7 +446,7 @@ relationships:
 
 # 11. Default SDLC Ontology
 
-`memory init` should create a useful but intentionally small starting ontology.
+`docket init` should create a useful but intentionally small starting ontology.
 
 Include at least:
 
@@ -695,13 +695,13 @@ IDs must not depend on filesystem path.
 Moving:
 
 ```text
-.memory/resources/services/foo.md
+.docket/resources/services/foo.md
 ```
 
 to:
 
 ```text
-.memory/resources/platform/foo.md
+.docket/resources/platform/foo.md
 ```
 
 must not change its identity.
@@ -753,7 +753,7 @@ Reason:
 
 The memory graph may be built incrementally.
 
-`memory validate --strict` may treat unresolved references as errors.
+`docket validate --strict` may treat unresolved references as errors.
 
 ---
 
@@ -1041,7 +1041,7 @@ The initial projection exists primarily to prove the architecture and inspect no
 Output directory:
 
 ```text
-.memory/.index/
+.docket/.index/
 ```
 
 Files:
@@ -1062,7 +1062,7 @@ One JSON object per canonical memory document.
 Example:
 
 ```json
-{"id":"agent.research-assistant","type":"agent","title":"Research Assistant","path":".memory/resources/agents/research-assistant.md","content":"The Research Assistant performs research...","tags":["research","agents"]}
+{"id":"agent.research-assistant","type":"agent","title":"Research Assistant","path":".docket/resources/agents/research-assistant.md","content":"The Research Assistant performs research...","tags":["research","agents"]}
 ```
 
 ---
@@ -1107,7 +1107,7 @@ Example:
   "version": 1,
   "documents": {
     "agent.research-assistant": {
-      "path": ".memory/resources/agents/research-assistant.md",
+      "path": ".docket/resources/agents/research-assistant.md",
       "hash": "sha256:abc123"
     }
   }
@@ -1123,13 +1123,13 @@ The manifest maps stable identity to path and last projected hash.
 Package name:
 
 ```text
-@your-org/memory
+@chrisjowen/docket
 ```
 
 Binary:
 
 ```text
-memory
+docket
 ```
 
 Use Commander.
@@ -1137,24 +1137,24 @@ Use Commander.
 Commands:
 
 ```bash
-memory init
-memory watch
-memory sync
-memory rebuild
-memory validate
-memory ontology
+docket init
+docket watch
+docket sync
+docket rebuild
+docket validate
+docket ontology
 ```
 
 ---
 
-# 33. `memory init`
+# 33. `docket init`
 
 Creates:
 
 ```text
-.memory/
-.memory/entities.yaml
-.memory.yaml
+.docket/
+.docket/entities.yaml
+.docket.yaml
 ```
 
 It should also create the basic directory structure.
@@ -1162,7 +1162,7 @@ It should also create the basic directory structure.
 If `.gitignore` exists, offer or automatically add:
 
 ```text
-.memory/.index/
+.docket/.index/
 ```
 
 Do not overwrite an existing ontology without explicit force.
@@ -1170,14 +1170,14 @@ Do not overwrite an existing ontology without explicit force.
 Support:
 
 ```bash
-memory init --force
+docket init --force
 ```
 
 only where behavior is clearly documented.
 
 ---
 
-# 34. `memory watch`
+# 34. `docket watch`
 
 Run a foreground filesystem watcher.
 
@@ -1193,8 +1193,8 @@ Example output:
 
 ```text
 Memory watcher started
-Source: .memory/**/*.md
-Ontology: .memory/entities.yaml
+Source: .docket/**/*.md
+Ontology: .docket/entities.yaml
 Projections: file
 
 ✓ service.orders updated
@@ -1243,7 +1243,7 @@ Default debounce:
 300 ms
 ```
 
-Configurable through `.memory.yaml`.
+Configurable through `.docket.yaml`.
 
 ---
 
@@ -1293,7 +1293,7 @@ The reconciler should avoid deleting and recreating a resource unnecessarily whe
 The watcher must also watch:
 
 ```text
-.memory/entities.yaml
+.docket/entities.yaml
 ```
 
 When the ontology changes:
@@ -1307,7 +1307,7 @@ For v0 it is acceptable to perform a full `sync` when ontology changes.
 
 ---
 
-# 38. `memory sync`
+# 38. `docket sync`
 
 Perform one complete reconciliation pass.
 
@@ -1335,7 +1335,7 @@ This command should be safe to run:
 
 ---
 
-# 39. `memory rebuild`
+# 39. `docket rebuild`
 
 Semantics:
 
@@ -1350,15 +1350,15 @@ create new manifest
 Equivalent logical behavior:
 
 ```bash
-rm -rf .memory/.index
-memory sync
+rm -rf .docket/.index
+docket sync
 ```
 
 but implemented through the projection interface.
 
 ---
 
-# 40. `memory validate`
+# 40. `docket validate`
 
 Validate:
 
@@ -1377,7 +1377,7 @@ Validate:
 Example:
 
 ```text
-✓ 42 memory resources
+✓ 42 resources
 ✓ 91 relationships
 ⚠ 2 unresolved relationships
 
@@ -1391,27 +1391,27 @@ Return non-zero for actual structural/schema failures.
 Warnings do not produce failure unless:
 
 ```bash
-memory validate --strict
+docket validate --strict
 ```
 
 ---
 
-# 41. `memory ontology`
+# 41. `docket ontology`
 
 Provide simple inspection tooling.
 
 Required:
 
 ```bash
-memory ontology list
-memory ontology show service
+docket ontology list
+docket ontology show service
 ```
 
 Optional later:
 
 ```bash
-memory ontology diff-defaults
-memory ontology upgrade
+docket ontology diff-defaults
+docket ontology upgrade
 ```
 
 Do not automatically upgrade the repository ontology when the CLI changes.
@@ -1424,7 +1424,7 @@ Recommended:
 
 ```text
 packages/
-└── memory/
+└── docket/
     ├── src/
     │   ├── cli.ts
     │   │
@@ -1534,12 +1534,12 @@ Suggested layout:
 
 ```text
 plugins/
-└── team-memory/
+└── docket/
     ├── .claude-plugin/
     │   └── plugin.json
     │
     ├── skills/
-    │   ├── team-memory/
+    │   ├── docket/
     │   │   └── SKILL.md
     │   ├── remember/
     │   │   └── SKILL.md
@@ -1582,19 +1582,19 @@ Those belong to the CLI.
 
 ---
 
-# 47. Main `team-memory` Skill
+# 47. Main `docket` Skill
 
 The skill must state clearly:
 
 ```text
-Repository memory is stored under .memory/.
+Repository memory is stored under .docket/.
 
-.memory/entities.yaml defines the resource types and relationships available
+.docket/entities.yaml defines the resource types and relationships available
 for this repository.
 
 Never assume a fixed ontology.
 
-Read .memory/entities.yaml before performing structured memory extraction.
+Read .docket/entities.yaml before performing structured memory extraction.
 ```
 
 It should instruct Claude to capture durable knowledge including:
@@ -1625,15 +1625,15 @@ Do not capture:
 
 The skill should instruct the agent:
 
-1. Read `.memory/entities.yaml`.
-2. Search `.memory/` for existing matching resources.
+1. Read `.docket/entities.yaml`.
+2. Search `.docket/` for existing matching resources.
 3. Identify durable new information.
 4. Match concepts to existing resource types.
 5. Update existing resources where possible.
 6. Create new resources only when necessary.
 7. Add explicit relationships.
 8. Keep Markdown concise.
-9. Never directly edit `.memory/.index/`.
+9. Never directly edit `.docket/.index/`.
 10. Allow the watcher to update projections.
 
 ---
@@ -1674,7 +1674,7 @@ unless it is genuinely a different resource.
 
 # 50. Ontology Extension
 
-The agent is allowed to extend `.memory/entities.yaml`.
+The agent is allowed to extend `.docket/entities.yaml`.
 
 Instruction:
 
@@ -1747,7 +1747,7 @@ Provide an explicit skill for requests such as:
 ```text
 remember this
 capture this
-save this as team memory
+add this to the docket
 record this decision
 ```
 
@@ -1790,28 +1790,28 @@ On Claude session start, inject context similar to:
 ```text
 This repository uses local-first team memory.
 
-Canonical memory is stored under `.memory/`.
+Canonical memory is stored under `.docket/`.
 
-`.memory/entities.yaml` defines the repository's resource types,
+`.docket/entities.yaml` defines the repository's resource types,
 relationship types, attributes, and extraction guidance.
 
-When durable project knowledge is needed, consult `.memory/`.
+When durable project knowledge is needed, consult `.docket/`.
 
 When durable project knowledge is established or materially changed,
-capture it by updating canonical files under `.memory/`.
+capture it by updating canonical files under `.docket/`.
 
-Never edit `.memory/.index/`; it is generated.
+Never edit `.docket/.index/`; it is generated.
 ```
 
 The hook may also run:
 
 ```bash
-memory sync
+docket sync
 ```
 
 if the local CLI is available.
 
-Failure to run `memory sync` should not prevent Claude from working.
+Failure to run `docket sync` should not prevent Claude from working.
 
 Do not start a permanent daemon from the Claude hook.
 
@@ -1826,7 +1826,7 @@ Prompt intent:
 ```text
 Review the session for durable project knowledge.
 
-Read `.memory/entities.yaml`.
+Read `.docket/entities.yaml`.
 
 Determine whether this session established or materially changed:
 
@@ -1837,13 +1837,13 @@ Determine whether this session established or materially changed:
 - durable constraints
 - significant conventions
 
-If so, update the canonical `.memory/` files before completing.
+If so, update the canonical `.docket/` files before completing.
 
 Do not capture transient debugging details, unresolved speculation,
 or ordinary conversational information.
 
 If an important concept cannot be represented by the current ontology,
-extend `.memory/entities.yaml` conservatively first.
+extend `.docket/entities.yaml` conservatively first.
 ```
 
 The stop hook should not blindly create files.
@@ -1867,7 +1867,7 @@ Claude Write/Edit
        ↓
 filesystem
        ↓
-memory watch
+docket watch
 ```
 
 not:
@@ -1892,9 +1892,9 @@ Example:
 
 ```json
 {
-  "name": "team-memory",
+  "name": "docket",
   "version": "0.1.0",
-  "description": "Local-first repository team memory",
+  "description": "Local-first project knowledge, captured and classified as Markdown",
   "author": {
     "name": "Platform Engineering"
   }
@@ -1912,12 +1912,12 @@ Example:
 ```json
 {
   "devDependencies": {
-    "@your-org/memory": "^0.1.0"
+    "@chrisjowen/docket": "^0.1.0"
   },
   "scripts": {
-    "memory:watch": "memory watch",
-    "memory:sync": "memory sync",
-    "memory:validate": "memory validate"
+    "docket:watch": "docket watch",
+    "docket:sync": "docket sync",
+    "docket:validate": "docket validate"
   }
 }
 ```
@@ -1933,7 +1933,7 @@ Support installation through the organization's Claude plugin distribution mecha
 Expected usage should eventually look similar to:
 
 ```text
-/plugin install team-memory@company
+/plugin install docket@docket
 ```
 
 Local development of the plugin may use an unpacked plugin directory.
@@ -1949,7 +1949,7 @@ A normal development session should look like:
 ```text
 git clone
 npm install
-npm run memory:watch
+npm run docket:watch
 ```
 
 Or as part of an existing dev command:
@@ -1963,7 +1963,7 @@ which may supervise:
 ```text
 application
 frontend
-memory watch
+docket watch
 ```
 
 ---
@@ -1973,7 +1973,7 @@ memory watch
 Developer edits:
 
 ```text
-.memory/resources/services/orders.md
+.docket/resources/services/orders.md
 ```
 
 Flow:
@@ -2043,16 +2043,16 @@ Example:
 
 ```text
 main
-  .memory decision says runtime = AWS
+  .docket decision says runtime = AWS
 
 feature/databricks
-  .memory decision says runtime = Databricks
+  .docket decision says runtime = Databricks
 ```
 
 Checking out the branch should cause:
 
 ```text
-memory sync
+docket sync
 ```
 
 or watcher filesystem events to reconcile projections to the checked-out state.
@@ -2080,8 +2080,8 @@ Two files must not define the same ID.
 Example:
 
 ```text
-.memory/services/foo.md
-.memory/old/foo.md
+.docket/services/foo.md
+.docket/old/foo.md
 ```
 
 both containing:
@@ -2106,7 +2106,7 @@ If a developer temporarily creates invalid YAML while editing:
 Example:
 
 ```text
-ERROR .memory/resources/services/orders.md
+ERROR .docket/resources/services/orders.md
 Invalid frontmatter at line 7.
 
 Previous projection retained.
@@ -2206,7 +2206,7 @@ The resulting projection must remain correct.
 Create a test proving:
 
 ```text
-memory rebuild
+docket rebuild
 ```
 
 from identical canonical files produces logically identical:
@@ -2253,7 +2253,7 @@ Never automatically capture:
 
 Claude skill instructions must explicitly state this.
 
-If such information appears during a session, it must not be persisted to `.memory/`.
+If such information appears during a session, it must not be persisted to `.docket/`.
 
 ---
 
@@ -2409,17 +2409,17 @@ The implementation is complete when all of the following work.
 ## Initialization
 
 ```bash
-memory init
+docket init
 ```
 
 creates:
 
 ```text
-.memory.yaml
-.memory/entities.yaml
-.memory/resources/
-.memory/decisions/
-.memory/constraints/
+.docket.yaml
+.docket/entities.yaml
+.docket/resources/
+.docket/decisions/
+.docket/constraints/
 ```
 
 with a default SDLC ontology.
@@ -2438,7 +2438,7 @@ title: Orders
 ---
 ```
 
-`memory validate` succeeds.
+`docket validate` succeeds.
 
 Unknown type:
 
@@ -2455,16 +2455,16 @@ fails unless `spaceship` exists in `entities.yaml`.
 Running:
 
 ```bash
-memory rebuild
+docket rebuild
 ```
 
 creates:
 
 ```text
-.memory/.index/documents.jsonl
-.memory/.index/nodes.jsonl
-.memory/.index/edges.jsonl
-.memory/.index/manifest.json
+.docket/.index/documents.jsonl
+.docket/.index/nodes.jsonl
+.docket/.index/edges.jsonl
+.docket/.index/manifest.json
 ```
 
 ---
@@ -2474,7 +2474,7 @@ creates:
 With:
 
 ```bash
-memory watch
+docket watch
 ```
 
 running, editing a canonical file automatically updates the file projection without restarting the process.
@@ -2537,19 +2537,19 @@ Implement in this order:
 1. TypeScript models.
 2. Configuration loading.
 3. Default SDLC ontology.
-4. `memory init`.
+4. `docket init`.
 5. Frontmatter parser.
 6. Ontology validator.
 7. Scanner.
 8. Manifest.
 9. Projection API.
 10. FileProjection.
-11. `memory sync`.
-12. `memory rebuild`.
-13. `memory validate`.
+11. `docket sync`.
+12. `docket rebuild`.
+13. `docket validate`.
 14. Chokidar watcher.
 15. Reconciler.
-16. `memory watch`.
+16. `docket watch`.
 17. Ontology CLI inspection.
 18. Claude plugin.
 19. Tests.

@@ -4,6 +4,11 @@ Every acceptance criterion in [SPEC §81](SPEC.md) run against the built
 CLI. Each block below is the command as executed followed by its real
 combined stdout and stderr and its exit code. Nothing here is illustrative.
 
+The record predates the rename to docket, so it shows the `memory` command,
+the `.memory/` layout, `.memory.yaml` and the `team-memory` plugin as they were
+when it was run. They are now `docket`, `.docket/`, `.docket.yaml` and the
+`docket` plugin.
+
 `memory` on the path is a two-line wrapper around the built CLI:
 
 ```sh

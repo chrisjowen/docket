@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="../../docs/assets/team-logo.png" alt="Team Memory" width="320">
-</p>
+<h1 align="center">docket</h1>
 
 <h3 align="center">Your repo remembers. So does Claude.</h3>
 
@@ -26,22 +24,22 @@ an agent can read.
 
 ## The fix
 
-**Team Memory** keeps project knowledge as plain Markdown in your repository, under
-`.memory/`: services, decisions, constraints, owners and dependencies, each one a file with
+**Docket** captures and classifies project knowledge as plain Markdown in your repository, under
+`.docket/`: services, decisions, constraints, owners and dependencies, each one a file with
 a typed identity and links to the others. The plugin teaches Claude to **read it first** and
 to **keep it current**.
 
-- 🧠 **Context from the first message.** Every session starts knowing where memory lives and
+- 🧠 **Context from the first message.** Every session starts knowing where the docket lives and
   how to search it, so Claude asks the repo instead of guessing.
-- 🔎 **Search before grep.** `memory search` asks every projection at once (semantic
+- 🔎 **Search before grep.** `docket search` asks every projection at once (semantic
   vectors, a knowledge graph, full text) and points straight at the canonical file.
 - ✍️ **Knowledge captured as you work.** When a session settles a decision or uncovers a
   constraint, it gets written down. The end-of-session review runs **in the background**,
   so it never interrupts you.
 - 📐 **Structured, not a junk drawer.** Your repo defines its own ontology in
-  `.memory/entities.yaml`. Claude follows it, and extends it deliberately when something
+  `.docket/entities.yaml`. Claude follows it, and extends it deliberately when something
   new doesn't fit.
-- 🤝 **Humans and agents share one source of truth.** Memory is reviewed in pull requests,
+- 🤝 **Humans and agents share one source of truth.** The docket is reviewed in pull requests,
   merged like code and owned by the team. There's no hidden vector store to trust blindly.
 - 🔒 **Local-first.** Nothing leaves your machine unless you configure a projection that
   sends it.
@@ -49,15 +47,15 @@ to **keep it current**.
 ## Install in 30 seconds
 
 ```text
-/plugin marketplace add chrisjowen/team-memory
-/plugin install team-memory@team-memory
+/plugin marketplace add chrisjowen/docket
+/plugin install docket@docket
 ```
 
 Then add the CLI to the repository you want to remember things:
 
 ```bash
-pnpm add -D @team-memory/cli
-npx memory init
+pnpm add -D @chrisjowen/docket
+npx docket init
 ```
 
 That's it. Open a session and ask Claude about your system.
@@ -66,8 +64,8 @@ That's it. Open a session and ask Claude about your system.
 <summary>Developing the plugin locally</summary>
 
 ```text
-/plugin marketplace add /path/to/team-memory
-/plugin install team-memory@team-memory
+/plugin marketplace add /path/to/docket
+/plugin install docket@docket
 ```
 
 Bump the version in `.claude-plugin/plugin.json` and the root
@@ -80,11 +78,11 @@ an unbumped change never reaches installed copies.
 
 | Piece | What it does |
 |---|---|
-| **`team-memory` skill** | Using the `memory` CLI: search, ontology, validate, sync |
-| **`remember` skill** | Writing memory well: procedure, file format, what's worth keeping |
-| **`ontology` skill** | Inspecting and extending `.memory/entities.yaml` |
-| **SessionStart hook** | Injects memory context and runs a best-effort `memory sync` |
-| **Stop hook** | Starts a background review of new transcript lines and captures durable knowledge in `.memory/` |
+| **`docket` skill** | Using the `docket` CLI: search, ontology, validate, sync |
+| **`remember` skill** | Writing to the docket well: procedure, file format, what's worth keeping |
+| **`ontology` skill** | Inspecting and extending `.docket/entities.yaml` |
+| **SessionStart hook** | Injects docket context and runs a best-effort `docket sync` |
+| **Stop hook** | Starts a background review of new transcript lines and captures durable knowledge in `.docket/` |
 
 ### The background review
 
@@ -92,27 +90,27 @@ When a session has grown by enough since the last review, the Stop hook starts a
 headless `claude -p` and returns straight away. The review agent:
 
 - reads only the transcript lines added since the last review
-- follows the `remember` skill and checks existing memory before writing
-- can only read, run `memory`, and edit files under `.memory/`
+- follows the `remember` skill and checks the existing docket before writing
+- can only read, run `docket`, and edit files under `.docket/`
 - runs one at a time per repository, so two reviews never race on the same files
 
-Logs land in `~/.cache/team-memory/reviews/`. Set `TEAM_MEMORY_REVIEW_MODEL` to choose the
+Logs land in `~/.cache/docket/reviews/`. Set `DOCKET_REVIEW_MODEL` to choose the
 model it runs on.
 
 ## How it works
 
 ```
-   you + Claude                     .memory/**/*.md            memory watch / sync
+   you + Claude                     .docket/**/*.md            docket watch / sync
   ──────────────  edit Markdown ──►  canonical, in git   ──►   ┌─ vectors (mem0)
    skills + hooks                    typed by ontology         ├─ knowledge graph
                                                                └─ jsonl index
                                          ▲                            │
-                                         └──── memory search ◄────────┘
+                                         └──── docket search ◄────────┘
 ```
 
 The plugin owns **agent behaviour** only. Indexing, file watching and projections belong to
-the `memory` CLI (`@team-memory/cli`), a separate package. Agents never write to an index;
-they edit the same Markdown a human would, and `memory watch` does the rest. Edits from
+the `docket` CLI (`@chrisjowen/docket`), a separate package. Agents never write to an index;
+they edit the same Markdown a human would, and `docket watch` does the rest. Edits from
 Claude, from people, from scripts, from `git pull` and from merges all take the same path.
 
 Without the CLI installed the skills still work, because the Markdown files are the source
@@ -123,21 +121,21 @@ of truth either way.
 ```json
 {
   "devDependencies": {
-    "@team-memory/cli": "^0.1.0"
+    "@chrisjowen/docket": "^0.1.0"
   },
   "scripts": {
-    "memory:watch": "memory watch",
-    "memory:sync": "memory sync",
-    "memory:validate": "memory validate"
+    "docket:watch": "docket watch",
+    "docket:sync": "docket sync",
+    "docket:validate": "docket validate"
   }
 }
 ```
 
-Run `npm run memory:watch` while you work, and `memory validate --strict` in CI.
+Run `npm run docket:watch` while you work, and `docket validate --strict` in CI.
 
 ---
 
 <p align="center">
   <b>Stop re-explaining your codebase.</b><br>
-  <code>/plugin install team-memory@team-memory</code>
+  <code>/plugin install docket@docket</code>
 </p>
