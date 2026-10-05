@@ -41,9 +41,36 @@ docket validate --strict    # unresolved links become errors
 docket sync                 # project changed files into .docket/.index
 docket rebuild              # reset and reproject everything
 docket watch                # reconcile continuously as files change
+docket search <query...>    # ask every searchable projection
+docket open                 # browse, search and ask in a local web UI
 docket ontology list        # what resource types and relationships exist
 docket ontology show service
 ```
+
+## Browse it: `docket open`
+
+`docket open` serves a web UI for the repository on `http://127.0.0.1:4380/`
+(or any free port when that one is taken; `--port` picks one, `--no-open`
+skips launching the browser). It reads the canonical files on every request,
+so it needs no projection beyond the default `jsonl`, and listens on loopback
+only.
+
+- **Graph** - every entity and relationship as a force-directed graph,
+  filtered by type and relationship. Links to entities no file defines yet
+  show as dashed ghosts.
+- **Details** - an entity's frontmatter, notes, links in and out, and its
+  provenance: authority, confidence and evidence, whenever the file has them.
+- **Quick search** (`⌘K` or `/`) - instant type-ahead over ids, titles, types,
+  tags, attributes, notes and relationship names. `type:service`,
+  `rel:depends_on` and `tag:core` narrow it down; picking a result focuses
+  the graph on it.
+- **Ask** - a question answered by `docket search`, the same search agents
+  use, with the relationship paths that join what it found. It answers from
+  the projections, so run `docket sync` first; the UI says when the index is
+  behind the files.
+
+The UI is a SvelteKit app in [`packages/docket-ui`](packages/docket-ui),
+built into the npm package, so `npm i -g @chrisjowen/docket` is all it needs.
 
 ## A docket file
 
@@ -176,9 +203,13 @@ Agents never write to an index. See its
 ```bash
 pnpm install
 pnpm typecheck
-pnpm test
-pnpm build
+pnpm build     # the web UI first, then docket, which ships a copy of it
+pnpm test      # the end-to-end tests run the built CLI
 ```
+
+To work on the web UI with hot reload, run `docket open --no-open` in a
+repository with a `.docket/`, then `pnpm -C packages/docket-ui dev`; the dev
+server proxies `/api` to it (set `DOCKET_API` if it is not on port 4380).
 
 Layout, phases and track ownership are in [`PLAN.md`](PLAN.md). The full
 specification is [`docs/SPEC.md`](docs/SPEC.md).

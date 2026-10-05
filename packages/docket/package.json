@@ -33,7 +33,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json && mkdir -p dist/ontology && cp src/ontology/*.yaml dist/ontology/",
+    "build": "rm -rf dist && tsc -p tsconfig.json && mkdir -p dist/ontology && cp src/ontology/*.yaml dist/ontology/ && node scripts/copy-ui.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
