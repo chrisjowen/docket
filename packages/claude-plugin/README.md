@@ -31,11 +31,12 @@ to **keep it current**.
 
 - 🧠 **Context from the first message.** Every session starts knowing where the docket lives and
   how to search it, so Claude asks the repo instead of guessing.
-- 🔎 **Search before grep.** `docket search` asks every projection at once (semantic
-  vectors, a knowledge graph, full text) and points straight at the canonical file.
+- 🔎 **Search before grep.** `docket search` asks every projection at once and points
+  straight at the canonical file. Out of the box that is a keyword index; configure
+  mem0 or Neo4j and it asks semantic vectors or a knowledge graph as well.
 - ✍️ **Knowledge captured as you work.** When a session settles a decision or uncovers a
-  constraint, it gets written down. The end-of-session review runs **in the background**,
-  so it never interrupts you.
+  constraint, it gets written down. The end-of-session review runs **in the background**
+  on a small model, so it never interrupts you.
 - 📐 **Structured, not a junk drawer.** Your repo defines its own ontology in
   `.docket/entities.yaml`. Claude follows it, and extends it deliberately when something
   new doesn't fit.
@@ -81,21 +82,43 @@ an unbumped change never reaches installed copies.
 | **`docket` skill** | Using the `docket` CLI: search, ontology, validate, sync |
 | **`remember` skill** | Writing to the docket well: procedure, file format, what's worth keeping |
 | **`ontology` skill** | Inspecting and extending `.docket/entities.yaml` |
-| **SessionStart hook** | Injects docket context and runs a best-effort `docket sync` |
-| **Stop hook** | Starts a background review of new transcript lines and captures durable knowledge in `.docket/` |
+| **SessionStart hook** | Injects docket context and starts a best-effort `docket sync` in the background |
+| **SessionEnd hook** | Starts a background review of the session and captures durable knowledge in `.docket/` |
 
 ### The background review
 
-When a session has grown by enough since the last review, the Stop hook starts a detached,
-headless `claude -p` and returns straight away. The review agent:
+When a session ends, the SessionEnd hook starts a detached, headless `claude -p` and
+returns straight away. The review agent:
 
-- reads only the transcript lines added since the last review
+- reads only the transcript lines no earlier review has seen, so a resumed session is
+  reviewed from where the last review stopped, and nothing is reviewed twice
 - follows the `remember` skill and checks the existing docket before writing
-- can only read, run `docket`, and edit files under `.docket/`
-- runs one at a time per repository, so two reviews never race on the same files
+- never captures credentials, secrets, tokens, private keys or passwords
+- can only read, run `docket`, and edit files under `.docket/`; the project's own
+  `node_modules/.bin` is put first on its `PATH`, so a dev-dependency install works
+- runs one at a time per repository: a session that ends while another review is
+  running is reviewed once that one finishes
+- leaves no session behind in your `/resume` list
 
-Logs land in `~/.cache/docket/reviews/`. Set `DOCKET_REVIEW_MODEL` to choose the
-model it runs on.
+Lines count as reviewed only once a review succeeds, so a missing, signed-out or failing
+`claude` leaves them for the next time that session ends. A session in which you never
+typed a prompt is not reviewed at all. Logs land in `~/.cache/docket/reviews/`.
+
+**Cost.** One review per session, on Claude Haiku by default. Its input is the
+unreviewed part of the transcript plus `.docket/entities.yaml` (the default ontology is
+about 40 KB), so a review typically reads tens of thousands of tokens, and more after a
+long session. At Haiku's $1 per million input tokens that is a few cents per session;
+on a subscription it counts towards your usage like any other Claude Code session.
+
+**Model.** Set it per repository in `.docket.yaml`, or per machine with
+`DOCKET_REVIEW_MODEL`, which wins:
+
+```yaml
+review:
+  model: sonnet   # any model name or alias `claude --model` accepts
+```
+
+Set `DOCKET_REVIEW=1` in the environment to turn the review off.
 
 ## How it works
 

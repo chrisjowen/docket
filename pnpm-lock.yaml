@@ -8,6 +8,8 @@ importers:
 
   .: {}
 
+  packages/claude-plugin: {}
+
   packages/docket:
     dependencies:
       chokidar:

@@ -82,4 +82,10 @@ describe('loadConfig', () => {
   it('keeps the manifest in state.dir, apart from any projection', () => {
     expect(defaultConfig('/tmp/nowhere').config.state).toEqual({ dir: '.docket/.index' })
   })
+
+  it("defaults the plugin's review model to a small one, and accepts another", async () => {
+    expect(defaultConfig('/tmp/nowhere').config.review).toEqual({ model: 'haiku' })
+    expect((await loadYaml('review:\n  model: sonnet\n')).config.review).toEqual({ model: 'sonnet' })
+    await expect(loadYaml('review:\n  model: ""\n')).rejects.toThrow(/Invalid/)
+  })
 })

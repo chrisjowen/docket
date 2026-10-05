@@ -1,33 +1,29 @@
 #!/usr/bin/env node
-// Stop hook (SPEC §55).
-// Reviews a substantial session for durable knowledge worth capturing, in the
-// background: it starts a detached headless `claude -p` that reads the
-// transcript and follows the `remember` skill, then returns at once so the
-// interactive session is never interrupted. It does not create files itself;
-// the review agent exercises judgement.
+// SessionEnd hook (SPEC §55).
+// When a session ends, reviews the part of it no review has seen yet for
+// durable knowledge worth capturing. The review runs in the background: this
+// starts a detached runner (`review-runner.js`) that drives a headless
+// `claude -p` over the transcript, following the `remember` skill, and returns
+// at once so ending the session is never delayed. It does not create files
+// itself; the review agent exercises judgement.
 
 const { spawn } = require("node:child_process");
-const crypto = require("node:crypto");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
+const { CACHE_DIR, checkoutKey, localDocketBin, projectRoot, readJson, readStdin, reviewModel } = require("./common.js");
 
-// ponytail: transcript growth is a crude proxy for "enough new to review".
-// Replace with a real signal if it misfires.
-const MIN_NEW_TRANSCRIPT_ENTRIES = 40;
+const STATE_DIR = path.join(CACHE_DIR, "reviews");
 
-const STATE_DIR = path.join(os.homedir(), ".cache", "docket", "reviews");
-
-// Set in the review agent's environment so its own Stop hook stays quiet.
+// Set in the review agent's environment so its own SessionEnd hook stays quiet.
 const REVIEW_ENV = "DOCKET_REVIEW";
 
-const prompt = (transcript, from) => `You are reviewing a finished stretch of a Claude Code session for durable project knowledge.
+const prompt = (transcript, from, to) => `You are reviewing a finished stretch of a Claude Code session for durable project knowledge.
 
 The session transcript is JSONL at:
 ${transcript}
 
-Review only entries from line ${from + 1} onward; earlier lines were already reviewed.
-Read it in chunks with the Read tool (offset/limit).
+Review only lines ${from + 1} to ${to}; earlier lines were already reviewed.
+Read them in chunks with the Read tool (offset/limit).
 
 Read \`.docket/entities.yaml\`.
 
@@ -42,73 +38,84 @@ Determine whether that stretch established or materially changed:
 
 If so, update the canonical \`.docket/\` files, following the \`remember\` skill.
 Check the existing docket first; the session may already have captured it.
+Run the CLI as \`docket\`, or as \`npx --no-install docket\` if \`docket\` is not found.
 
 Do not capture transient debugging details, unresolved speculation,
 or ordinary conversational information.
+
+Never capture credentials, secrets, tokens, private keys or passwords, even
+when they appear in the transcript. The docket is committed to the repository
+and may be sent to remote projections. Record that a secret exists and where
+it is managed, never its value.
 
 If an important concept cannot be represented by the current ontology,
 extend \`.docket/entities.yaml\` conservatively first.
 
 Edit nothing outside \`.docket/\`. If nothing qualifies, say so in one line and stop.`;
 
-function readStdin() {
-  try {
-    return JSON.parse(fs.readFileSync(0, "utf8") || "{}");
-  } catch {
-    return {};
-  }
+/** Lines in a JSONL file. Each entry ends with a newline, so count those. */
+function countLines(text) {
+  let lines = 0;
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) lines += 1;
+  return lines;
 }
 
-function readJson(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return fallback;
-  }
-}
-
-function isRunning(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+/**
+ * Whether the user said anything in these entries. A stretch with no prompt -
+ * a session opened and closed, or only bookkeeping since the last review - has
+ * nothing to review, so no model is started for it.
+ */
+function hasUserPrompt(entries) {
+  return entries.some((line) => {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      return false;
+    }
+    if (entry.type !== "user" || entry.isMeta) return false;
+    const content = entry.message && entry.message.content;
+    if (typeof content === "string") return content.trim() !== "";
+    return Array.isArray(content) && content.some((block) => block && block.type === "text");
+  });
 }
 
 const input = readStdin();
 
 if (process.env[REVIEW_ENV]) process.exit(0);
-if (input.stop_hook_active) process.exit(0);
+if (!input.transcript_path) process.exit(0);
 
-const root = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const root = projectRoot(input);
 if (!fs.existsSync(path.join(root, ".docket"))) process.exit(0);
 
-let entries = 0;
+let text;
 try {
-  entries = fs.readFileSync(input.transcript_path, "utf8").split("\n").length;
+  text = fs.readFileSync(input.transcript_path, "utf8");
 } catch {
   process.exit(0);
 }
+const lines = countLines(text);
 
 fs.mkdirSync(STATE_DIR, { recursive: true });
 const session = input.session_id || path.basename(input.transcript_path, ".jsonl");
 const stateFile = path.join(STATE_DIR, `${session}.json`);
-const reviewed = readJson(stateFile, { entries: 0 }).entries;
-if (entries - reviewed < MIN_NEW_TRANSCRIPT_ENTRIES) process.exit(0);
+const reviewed = Math.min(readJson(stateFile, { entries: 0 }).entries || 0, lines);
+if (lines <= reviewed) process.exit(0);
+if (!hasUserPrompt(text.split("\n").slice(reviewed, lines))) process.exit(0);
 
-// One review per repository at a time; two agents editing .docket/ race.
-const repoKey = crypto.createHash("sha1").update(root).digest("hex").slice(0, 12);
-const lockFile = path.join(STATE_DIR, `${repoKey}.lock`);
-const lock = readJson(lockFile, null);
-if (lock && isRunning(lock.pid)) process.exit(0);
+// The project's own CLI goes first on the reviewer's PATH, so the `docket`
+// commands the `remember` skill asks for resolve without a global install.
+const bin = localDocketBin(root);
+const env = { ...process.env, [REVIEW_ENV]: "1" };
+if (bin) env.PATH = `${path.dirname(bin)}${path.delimiter}${env.PATH || ""}`;
 
-const log = fs.openSync(path.join(STATE_DIR, `${session}.log`), "a");
-fs.writeSync(log, `\n--- ${new Date().toISOString()} review lines ${reviewed + 1}-${entries} of ${root}\n`);
-
-const args = [
+const model = reviewModel(root);
+const claudeArgs = [
   "-p",
-  prompt(input.transcript_path, reviewed),
+  prompt(input.transcript_path, reviewed, lines),
+  "--model",
+  model,
+  "--no-session-persistence",
   "--permission-mode",
   "dontAsk",
   "--allowedTools",
@@ -121,24 +128,29 @@ const args = [
   "Edit(.docket/**)",
   "Write(.docket/**)",
 ];
-if (process.env.DOCKET_REVIEW_MODEL) {
-  args.push("--model", process.env.DOCKET_REVIEW_MODEL);
-}
 
-// Detached through a shell so the lock is released however the review ends.
-const child = spawn(
-  "/bin/sh",
-  ["-c", 'claude "$@"; rm -f "$DOCKET_LOCK"', "sh", ...args],
-  {
-    cwd: root,
-    detached: true,
-    stdio: ["ignore", log, log],
-    env: { ...process.env, [REVIEW_ENV]: "1", DOCKET_LOCK: lockFile },
-  },
+const log = fs.openSync(path.join(STATE_DIR, `${session}.log`), "a");
+fs.writeSync(
+  log,
+  `\n--- ${new Date().toISOString()} session end: review lines ${reviewed + 1}-${lines} of ${root} on ${model}\n`,
 );
+
+const job = {
+  root,
+  claudeArgs,
+  from: reviewed,
+  to: lines,
+  stateFile,
+  // One review per repository at a time; two agents editing .docket/ race.
+  lockFile: path.join(STATE_DIR, `${checkoutKey(root)}.lock`),
+};
+
+const child = spawn(process.execPath, [path.join(__dirname, "review-runner.js")], {
+  cwd: root,
+  detached: true,
+  stdio: ["ignore", log, log],
+  env: { ...env, DOCKET_REVIEW_JOB: JSON.stringify(job) },
+});
 child.on("error", () => {});
 child.unref();
-
-fs.writeFileSync(lockFile, JSON.stringify({ pid: child.pid, session }));
-fs.writeFileSync(stateFile, JSON.stringify({ entries }));
 process.exit(0);
