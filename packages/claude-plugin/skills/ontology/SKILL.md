@@ -92,6 +92,49 @@ Rules:
   `extraction.clues` and `extraction.doNotConfuseWith` where confusion is
   likely.
 
+## Evidence sources and confidence rules
+
+Captured resources and links carry `evidence` naming a source kind - `code`,
+`manifest`, `infrastructure`, `runtime` and so on. Confidence is computed from
+that evidence, never written by hand, and the ontology says what each kind of
+evidence is worth:
+
+```yaml
+evidence:
+  unevidenced: 0.5          # no evidence and no stated provenance.confidence
+  sources:
+    code:
+      description: Source code. Record the file, lines and symbol.
+      confidence: 0.6       # one observation, unless a type says otherwise
+      requires: [path]      # location fields every observation must give
+    runtime:
+      confidence: 0.85
+      requiresAny: [urls, endpoint, symbol]
+
+resourceTypes:
+  secret:
+    confidence:             # what one observation is worth for this type
+      code: 0.3             # a name in code is not proof a secret exists
+      runtime: 0.85
+
+relationships:
+  depends_on:
+    confidence:
+      manifest: 0.95        # a declared dependency is close to certain
+```
+
+- Observations of one source kind do not corroborate each other; the strongest
+  counts. Independent kinds combine: `1 - (1 - a)(1 - b)`.
+- Add a type's `confidence:` block when evidence about it is notably stronger
+  or weaker than the source's default - typically for things code only refers
+  to by name (pods, secrets, clusters) or things a manifest declares outright.
+- `evidence.sources` replaces docket's built-in kinds when present. A type or
+  relationship without a `confidence:` block uses docket's built-in rule for
+  that name, if there is one. `docket ontology show <type>` prints the
+  effective value per source.
+- Location fields are `repository`, `path`, `lines`, `symbol`, `key`,
+  `method`, `endpoint`, `urls` and `commit`.
+
 ## Never write indexes
 
 Edit `.docket/entities.yaml` only. The watcher detects the ontology change and

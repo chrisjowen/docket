@@ -151,6 +151,24 @@ describe("session-end review hook", () => {
     assert.equal(call.path.split(path.delimiter)[0], local);
   });
 
+  it("has the reviewer record evidence, stamped with this session and date", async () => {
+    const { box, transcript, input } = setup();
+    fs.writeFileSync(transcript, transcriptLines(3));
+
+    runHook(SCRIPT, input(), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
+
+    const [call] = await reviewed(box);
+    const prompt = promptOf(call);
+    assert.match(prompt, /Record evidence for every resource and every link/);
+    assert.match(prompt, new RegExp(`session: ${SESSION}`));
+    assert.match(prompt, /observedAt: \d{4}-\d{2}-\d{2}/);
+    assert.match(prompt, /Never write a\s+confidence/);
+    assert.match(prompt, /append an\s+evidence entry/);
+    const allowed = call.argv.slice(call.argv.indexOf("--allowedTools") + 1);
+    assert.ok(allowed.includes("Bash(git rev-parse *)"));
+    assert.ok(allowed.includes("Bash(git remote get-url *)"));
+  });
+
   it("tells the reviewer never to capture secrets", async () => {
     const { box, transcript, input } = setup();
     fs.writeFileSync(transcript, transcriptLines(3));

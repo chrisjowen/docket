@@ -26,6 +26,19 @@ links:
     attributes:
       criticality: high
       runtime: true
+    evidence:
+      - source: manifest
+        path: services/orders/package.json
+        key: dependencies.stripe
+        observedAt: 2026-09-02
+        observedBy: claude
+      - source: code
+        path: services/orders/src/payments/charge.ts
+        lines: 8-31
+        symbol: chargeOrder
+        observedAt: 2026-09-02
+        observedBy: claude
+        note: Calls stripe.paymentIntents.create before an order is accepted.
 
   - rel: uses
     target: library.order-events

@@ -42,8 +42,8 @@ docket sync                 # project changed files into .docket/.index
 docket rebuild              # reset and reproject everything
 docket watch                # reconcile continuously as files change
 docket search <query...>    # ask every projection that can search
-docket ontology list        # what resource types and relationships exist
-docket ontology show service
+docket ontology list        # resource types, relationships and evidence sources
+docket ontology show service  # attributes, relationships and confidence by source
 ```
 
 ## A docket file
@@ -78,6 +78,68 @@ Handles conversation persistence and retrieval.
 the file does not change what it identifies. Only `id`, `type` and `title` are
 required.
 
+## Evidence and confidence
+
+A captured resource or link says exactly where it was seen, as `evidence`: a
+source kind and the location — file, line range and symbol; config key; API
+method and endpoint; URL — with when, by whom and in which session.
+
+```yaml
+evidence:
+  - source: infrastructure
+    path: deploy/k8s/orders/deployment.yaml
+    lines: 1-48
+    symbol: Deployment/orders-api
+    urls:
+      - https://github.com/acme/platform/blob/3f2c1d0/deploy/k8s/orders/deployment.yaml#L1-L48
+    observedAt: 2026-10-05
+    observedBy: claude
+    session: 6c1f0e2a
+    note: Deployment with 3 replicas of the orders-api image.
+```
+
+Links take an `evidence` list of their own. Evidence is append-only: seeing
+something again adds an entry and never rewrites an earlier one.
+
+Confidence is computed, never written. The ontology says what one observation
+from each source is worth, per resource type and relationship — a dependency
+declared in a manifest is close to certain, a pod or secret named in code is
+not much until something independent confirms it:
+
+```yaml
+# .docket/entities.yaml
+evidence:
+  sources:
+    code: { confidence: 0.6, requires: [path] }
+    runtime: { confidence: 0.85, requiresAny: [urls, endpoint, symbol] }
+
+resourceTypes:
+  pod:
+    confidence: { code: 0.3, infrastructure: 0.7, runtime: 0.9 }
+
+relationships:
+  depends_on:
+    confidence: { manifest: 0.95, code: 0.65 }
+```
+
+Observations of one source kind do not corroborate each other — the strongest
+counts — while independent kinds combine as `1 - (1 - a)(1 - b)`: a pod read
+from code (0.3) and seen running (0.9) is 0.93. A resource with no evidence
+takes its `provenance.confidence`, or `evidence.unevidenced` (0.5). The
+default ontology ships the source kinds `code`, `manifest`, `config`,
+`infrastructure`, `api`, `runtime`, `docs`, `conversation` and `human`, and
+rules for the types where it matters; an ontology written before evidence
+existed gets the same defaults. `docket ontology show <type>` prints the
+confidence each source earns for that type, and `docket validate` rejects
+evidence that does not give the location its source requires.
+
+Several files may declare the same `id` — two branches capturing the same
+service, say. They are one resource: projections receive a single merged
+entity with every file's evidence, one relationship per (source, rel, target),
+and the confidence the combined evidence earns. The first file by path names
+it and its attribute values stand; a file that disagrees gets a warning, and
+one that gives the id another type is left out with an error.
+
 ## How it fits together
 
 ```
@@ -110,17 +172,22 @@ watch push every change into each projection listed in `.docket.yaml`.
                                           └──► neo4j  → a Neo4j graph
 ```
 
+Every projection receives merged entities — one per id, however many files
+declare it — each resource and link carrying its evidence, evidence count,
+corroborating source kinds and confidence.
+
 **`jsonl`** writes `documents.jsonl`, `nodes.jsonl` and `edges.jsonl` — a
 readable view of exactly what projections receive. Output is deterministic, so
 rebuilds are byte-identical and diffable. (`type: file` is still accepted.)
 It is the default, and the only projection `docket search` has out of the box:
 a lexical keyword search over titles, ids, tags and bodies.
 
-**`mem0`** stores each document as one verbatim memory (`infer: false`): the
-title, type, id, body, links and tags as text; the id, type, path, hash, tags
-and provenance as metadata. Rebuilds reproduce it exactly and cost no LLM
-calls. Documents with `index.vector: false` are left out. It needs the optional
-`mem0ai` package (`pnpm add mem0ai`).
+**`mem0`** stores each resource as one verbatim memory (`infer: false`): the
+title, type, id, confidence, body, links, evidence and tags as text; the id,
+type, paths, hash, tags, confidence and evidence count as metadata. Rebuilds
+reproduce it exactly and cost no LLM calls. Documents with
+`index.vector: false` are left out. It needs the optional `mem0ai` package
+(`pnpm add mem0ai`).
 
 ```yaml
 projections:
@@ -160,11 +227,14 @@ hand if you no longer want it, or set `scope:` to the old value to keep using
 it. Set
 `MEM0_TELEMETRY=false` to turn off the mem0 SDK's telemetry.
 
-**`neo4j`** writes each document as a node and each link as a relationship,
-with a full-text index over the documents. It needs the optional `neo4j-driver`
-package and a running Neo4j server. `docket search` asks it with a full-text
-query, or, with `cypher` set, has a local Ollama model write a read-only Cypher
-query against the graph's schema (falling back to full-text when that fails or finds nothing).
+**`neo4j`** writes one `(:Memory:<Type>)` node per resource and one
+relationship per (source, rel, target), with `confidence`, `evidenceCount`,
+`sources` and `evidence` on both, so a query can ask for what rests on code
+alone — and a full-text index over the documents. It needs the optional
+`neo4j-driver` package and a running Neo4j server. `docket search` asks it with
+a full-text query, or, with `cypher` set, has a local Ollama model write a
+read-only Cypher query against the graph's schema (falling back to full-text
+when that fails or finds nothing).
 
 ```yaml
 projections:
@@ -177,10 +247,12 @@ projections:
     #   model: "qwen2.5:7b"           # Ollama at http://localhost:11434
 ```
 
-The manifest that makes sync skip unchanged files lives in `state.dir`
-(default `.docket/.index`), independent of any projection. Adding, removing or
-reconfiguring a projection makes the next sync reproject everything, so a newly
-added mem0 receives the whole repository.
+The manifest that makes sync skip unchanged resources lives in `state.dir`
+(default `.docket/.index`), independent of any projection. A resource is
+reprojected whenever what it projects changes — one of its files, or a
+confidence rule in the ontology. Adding, removing or reconfiguring a projection
+makes the next sync reproject everything, so a newly added mem0 receives the
+whole repository.
 
 New projections plug in through the `MemoryProjection` interface.
 

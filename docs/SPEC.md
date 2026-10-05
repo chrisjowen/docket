@@ -804,20 +804,79 @@ Optional:
 
 ```yaml
 provenance:
-  authority: repo
-  confidence: 1.0
   capturedBy: claude
 ```
 
 Initial schema:
 
 ```text
-authority: string
-confidence: number from 0 to 1
+authority: string        (legacy; not used to judge confidence)
+confidence: number 0-1   (stated; stands in only where nothing has evidence)
 capturedBy: string
 ```
 
 Do not make provenance mandatory.
+
+## 20.1 Evidence
+
+A resource and each of its links may carry `evidence`: one entry per
+observation, saying where it was seen.
+
+```yaml
+evidence:
+  - source: code
+    path: services/orders/src/k8s.ts
+    lines: 14-30
+    symbol: ordersDeployment
+    commit: 3f2c1d0
+    urls:
+      - https://github.com/acme/platform/blob/3f2c1d0/services/orders/src/k8s.ts#L14-L30
+    observedAt: 2026-10-05
+    observedBy: claude
+    session: 6c1f0e2a
+    note: Builds the Deployment manifest for the orders API.
+
+links:
+  - rel: depends_on
+    target: secret.orders-db-password
+    evidence:
+      - source: code
+        path: services/orders/src/k8s.ts
+        lines: 22
+```
+
+`source` names a kind registered under `evidence.sources` in the ontology.
+Location fields are `repository`, `path`, `lines`, `symbol`, `key`, `method`,
+`endpoint`, `urls` and `commit`; a source kind declares which it `requires`
+(all) or `requiresAny` (one of), and validation rejects evidence without them.
+Unknown fields are warned about and dropped.
+
+Evidence is append-only: a new sighting adds an entry and never rewrites an
+earlier one. Agent-captured files (`capturedBy` other than `human`) are warned
+about when the resource or a link records no evidence.
+
+## 20.2 Confidence
+
+Confidence is computed, never written by hand. One observation is worth its
+source kind's `confidence`, unless the resource type or relationship declares a
+`confidence:` rule for that kind:
+
+```yaml
+resourceTypes:
+  pod:
+    confidence:
+      code: 0.3
+      runtime: 0.9
+```
+
+Observations of one kind do not corroborate each other: the strongest counts.
+Independent kinds combine as `1 - Π(1 - c)`, rounded to two decimals. With no
+evidence, a resource or link takes the highest stated `provenance.confidence`
+of the files that declare it, or `evidence.unevidenced`.
+
+An ontology without `evidence.sources` uses docket's built-in kinds, and a
+type or relationship without a `confidence:` block uses docket's built-in rule
+for that name, if any. Both come from the default ontology.
 
 ---
 
@@ -897,6 +956,25 @@ export interface MemoryProvenance {
 }
 ```
 
+Each file also normalizes its `evidence` (§20.1), on the document and on each
+link.
+
+Projections do not receive documents. Every document that declares an id is
+merged into one `MemoryEntity` (§66): links deduplicated per (rel, target),
+evidence unioned, and an assessment computed for the entity and each link:
+
+```ts
+export interface Assessment {
+  confidence: number
+  basis: 'evidence' | 'stated' | 'unevidenced'
+  evidenceCount: number
+  sources: string[]
+}
+```
+
+The entity's `paths` lists every file, `path` is the first, and `hash` is over
+the merged entity, so it changes whenever what is projected does.
+
 Projections must not parse Markdown or YAML themselves.
 
 ---
@@ -959,7 +1037,7 @@ export interface MemoryProjection {
 
   init?(context: ProjectionContext): Promise<void>
 
-  upsert(document: MemoryDocument): Promise<void>
+  upsert(entity: MemoryEntity): Promise<void>
 
   remove(id: string): Promise<void>
 
@@ -1057,43 +1135,43 @@ edges.jsonl
 
 # 28. `documents.jsonl`
 
-One JSON object per canonical memory document.
+One JSON object per entity - every file that declares an id, merged.
 
 Example:
 
 ```json
-{"id":"agent.research-assistant","type":"agent","title":"Research Assistant","path":".docket/resources/agents/research-assistant.md","content":"The Research Assistant performs research...","tags":["research","agents"]}
+{"content":"The Research Assistant performs research...","id":"agent.research-assistant","path":".docket/resources/agents/research-assistant.md","paths":[".docket/resources/agents/research-assistant.md"],"tags":["research","agents"],"title":"Research Assistant","type":"agent"}
 ```
 
 ---
 
 # 29. `nodes.jsonl`
 
-One node per memory document.
+One node per entity, with its evidence and assessment (§22).
 
 Example:
 
 ```json
-{"id":"agent.research-assistant","type":"agent","title":"Research Assistant","attributes":{"package":"RA.agent","runtime":"in-process","modes":["fast","slow"]}}
+{"attributes":{"modes":["fast","slow"],"package":"RA.agent","runtime":"in-process"},"basis":"evidence","confidence":0.6,"evidence":[{"path":"agents/ra/src/agent.ts","source":"code"}],"evidenceCount":1,"id":"agent.research-assistant","sources":["code"],"title":"Research Assistant","type":"agent"}
 ```
 
 ---
 
 # 30. `edges.jsonl`
 
-One line per explicit relationship.
+One line per (source, rel, target), however many times it was declared, with
+its evidence and assessment.
 
 Example:
 
 ```json
-{"source":"agent.research-assistant","rel":"uses","target":"datasource.public-market-1"}
-{"source":"agent.research-assistant","rel":"owned_by","target":"team.research-platform"}
+{"basis":"unevidenced","confidence":0.5,"evidence":[],"evidenceCount":0,"rel":"uses","source":"agent.research-assistant","sources":[],"target":"datasource.public-market-1"}
 ```
 
 Relationship attributes:
 
 ```json
-{"source":"service.orders","rel":"depends_on","target":"service.identity","attributes":{"criticality":"high","runtime":true}}
+{"attributes":{"criticality":"high","runtime":true},"basis":"evidence","confidence":0.95,"evidence":[{"key":"dependencies.identity-client","path":"package.json","source":"manifest"}],"evidenceCount":1,"rel":"depends_on","source":"service.orders","sources":["manifest"],"target":"service.identity"}
 ```
 
 ---
@@ -1364,12 +1442,13 @@ Validate:
 
 - Markdown/frontmatter structure.
 - Required fields.
-- duplicate IDs.
+- files that share an ID but disagree on its type (§66).
 - registered resource type.
 - attributes against type definitions.
 - relationship existence.
 - source resource allowed for relationship.
 - target type where target exists.
+- evidence source kinds and the locations they require (§20.1).
 - relationship attributes.
 - confidence range.
 - unresolved references.
@@ -2069,19 +2148,18 @@ Do not build custom merge semantics in v0.
 
 Human or agent resolves Git conflicts normally.
 
-Stable IDs help detect accidental duplicate resources after merges.
+Stable IDs let two branches that captured the same resource merge into one
+entity rather than two (§66).
 
 ---
 
-# 66. Validation of Duplicate IDs
+# 66. Files That Share an ID
 
-Two files must not define the same ID.
-
-Example:
+Several files may define the same ID:
 
 ```text
 .docket/services/foo.md
-.docket/old/foo.md
+.docket/captured/foo-running.md
 ```
 
 both containing:
@@ -2090,7 +2168,21 @@ both containing:
 id: service.foo
 ```
 
-must produce a validation error.
+They are observations of one resource - two branches capturing the same
+service, or a later sighting written separately - and are merged into one
+entity (§22), not rejected:
+
+- The first file by path is primary: its type and title stand, and so do its
+  attribute values; a later file that disagrees gets a `conflicting-attribute`
+  warning.
+- Tags, mentions, links and evidence are unioned, never overwritten. Links are
+  deduplicated per (rel, target), their evidence combined.
+- Bodies are kept in path order, each distinct body once.
+- A file that gives the ID a different type describes something else: it gets
+  a `conflicting-type` error and is left out of the entity.
+
+A broken file holds the whole entity it contributed to at its previous
+projection (§67) until it is fixed.
 
 ---
 
@@ -2165,7 +2257,7 @@ Implement unit tests for:
 - type validation.
 - relationship validation.
 - dangling relationships.
-- duplicate IDs.
+- merging files that share an ID, and the confidence their evidence earns.
 - manifest behavior.
 - create/update/delete reconciliation.
 - rename handling.

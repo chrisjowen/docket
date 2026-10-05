@@ -18,12 +18,12 @@ const LOCK_POLL_MS = Number(process.env.DOCKET_REVIEW_LOCK_POLL_MS) || 5000;
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
-const prompt = (transcript, from, to) => `You are reviewing a finished stretch of a Claude Code session for durable project knowledge.
+const prompt = (job, from) => `You are reviewing a finished stretch of a Claude Code session for durable project knowledge.
 
 The session transcript is JSONL at:
-${transcript}
+${job.transcript}
 
-Review only lines ${from + 1} to ${to}; earlier lines were already reviewed.
+Review only lines ${from + 1} to ${job.to}; earlier lines were already reviewed.
 Read them in chunks with the Read tool (offset/limit).
 
 Read \`.docket/entities.yaml\`.
@@ -41,6 +41,21 @@ If so, update the canonical \`.docket/\` files, following the \`remember\` skill
 Check the existing docket first; the session may already have captured it.
 Run the CLI as \`docket\`, or as \`npx --no-install docket\` if \`docket\` is not found.
 
+Record evidence for every resource and every link you write, as the
+\`remember\` skill describes: the source kind and the exact place the session
+saw it - file path, line range and symbol; config key; API method and endpoint;
+URL - or, for something the user said, \`source: conversation\` with a note of
+what was said. Take the location from the transcript: the file the session
+read, the command it ran, the URL it opened. Use \`observedBy: claude\`,
+\`observedAt: ${job.date}\` and \`session: ${job.session}\`. Never write a
+confidence; docket computes it from the evidence.
+
+When the docket already has a resource or link the session saw again, append an
+evidence entry to it. Never edit or remove existing evidence.
+
+Write a body that describes the resource properly - what it is and does, how
+it is used or configured, and how it was found - not a one-line label.
+
 Do not capture transient debugging details, unresolved speculation,
 or ordinary conversational information.
 
@@ -57,7 +72,7 @@ Edit nothing outside \`.docket/\`. If nothing qualifies, say so in one line and 
 function claudeArgs(job, from) {
   return [
     "-p",
-    prompt(job.transcript, from, job.to),
+    prompt(job, from),
     "--model",
     job.model,
     "--no-session-persistence",
@@ -70,6 +85,9 @@ function claudeArgs(job, from) {
     "Skill",
     "Bash(docket *)",
     "Bash(npx --no-install docket *)",
+    // Read-only, for pinning evidence to a commit and building permalinks.
+    "Bash(git rev-parse *)",
+    "Bash(git remote get-url *)",
     "Edit(.docket/**)",
     "Write(.docket/**)",
   ];
