@@ -1,4 +1,4 @@
-import type { MemoryDocument } from '../model/index.js'
+import type { MemoryEntity } from '../model/index.js'
 
 export interface ProjectionContext {
   /** Absolute path to the repository root (the dir holding `.docket.yaml`). */
@@ -34,13 +34,17 @@ export interface SearchAnswer {
 /**
  * A disposable view over the canonical files. Must be fully rebuildable
  * from `.docket/` alone - never a source of truth.
+ *
+ * It receives entities, not files: every file that declares an id merged
+ * into one, links deduplicated per (source, rel, target), each with the
+ * evidence behind it and the confidence computed from that evidence.
  */
 export interface MemoryProjection {
   readonly name: string
 
   init?(context: ProjectionContext): Promise<void>
 
-  upsert(document: MemoryDocument): Promise<void>
+  upsert(entity: MemoryEntity): Promise<void>
 
   remove(id: string): Promise<void>
 

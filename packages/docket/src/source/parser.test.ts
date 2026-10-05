@@ -69,6 +69,7 @@ describe('parseMemoryFile', () => {
       attributes: {},
       links: [],
       mentions: [],
+      evidence: [],
       index: { graph: true, fts: true, vector: true }
     })
     expect(document?.provenance).toBeUndefined()
@@ -189,6 +190,99 @@ links:
     const second = parseMemoryFile(FULL, 'agents/ra.md').document
     expect(second?.attributes.modes).toEqual(['fast', 'slow'])
     expect(second?.tags).toEqual(['research', 'agents'])
+  })
+})
+
+describe('parseMemoryFile: evidence', () => {
+  const EVIDENCED = `---
+id: pod.orders-api
+type: pod
+title: Orders API pod
+evidence:
+  - source: code
+    path: services/orders/src/k8s.ts
+    lines: 14-30
+    symbol: ordersDeployment
+    commit: 3f2c1d0
+    observedAt: 2026-10-05
+    observedBy: claude
+    session: 6c1f
+    note: Builds the Deployment.
+  - source: runtime
+    urls: https://k8s.example.com/ns/orders/deployments/orders-api
+    observedAt: 2026-10-06T09:30:00Z
+links:
+  - rel: depends_on
+    target: secret.orders-db
+    evidence:
+      - source: api
+        method: GET
+        endpoint: /v1/secrets/orders-db
+        lines: 7
+---
+`
+
+  it('reads where each observation was made, keeping dates as written', () => {
+    const { document, diagnostics } = parseMemoryFile(EVIDENCED, 'pod.md')
+    expect(diagnostics).toEqual([])
+    expect(document?.evidence).toEqual([
+      {
+        source: 'code',
+        path: 'services/orders/src/k8s.ts',
+        lines: '14-30',
+        symbol: 'ordersDeployment',
+        commit: '3f2c1d0',
+        observedAt: '2026-10-05',
+        observedBy: 'claude',
+        session: '6c1f',
+        note: 'Builds the Deployment.'
+      },
+      {
+        source: 'runtime',
+        urls: ['https://k8s.example.com/ns/orders/deployments/orders-api'],
+        observedAt: '2026-10-06T09:30:00Z'
+      }
+    ])
+    expect(document?.links[0]?.evidence).toEqual([
+      { source: 'api', method: 'GET', endpoint: '/v1/secrets/orders-db', lines: '7' }
+    ])
+  })
+
+  it('warns about fields evidence does not define and drops them', () => {
+    const { document, diagnostics } = parseMemoryFile(
+      EVIDENCED.replace('    commit: 3f2c1d0\n', '    url: https://example.com\n    file: x.ts\n'),
+      'pod.md'
+    )
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        code: 'unknown-evidence-field',
+        path: 'pod.md',
+        message: expect.stringContaining('evidence[0]: "url", "file" ignored')
+      })
+    ])
+    expect(document?.evidence[0]).not.toHaveProperty('url')
+  })
+
+  it('rejects a malformed line range, date or URL', () => {
+    for (const [from, to] of [
+      ['lines: 14-30', 'lines: 30-14'],
+      ['lines: 14-30', 'lines: around 14'],
+      ['observedAt: 2026-10-05', 'observedAt: last week'],
+      ['urls: https://k8s.example.com/ns/orders/deployments/orders-api', 'urls: not a url']
+    ] as const) {
+      const { document, diagnostics } = parseMemoryFile(EVIDENCED.replace(from, to), 'pod.md')
+      expect(document, to).toBeUndefined()
+      expect(diagnostics[0], to).toMatchObject({ severity: 'error', code: 'invalid-frontmatter' })
+    }
+  })
+
+  it('requires a source on every observation', () => {
+    const { diagnostics } = parseMemoryFile(
+      '---\nid: a.b\ntype: service\ntitle: B\nevidence:\n  - path: x.ts\n---\n',
+      'b.md'
+    )
+    expect(diagnostics[0]).toMatchObject({ code: 'invalid-frontmatter', message: expect.stringContaining('evidence.0.source') })
   })
 })
 

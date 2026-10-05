@@ -55,29 +55,18 @@ describe('scanSource', () => {
     expect(documents.map((d) => d.id)).toEqual(['service.keep'])
   })
 
-  it('emits an error diagnostic for each duplicate id (spec §66)', async () => {
+  it('keeps every file that declares an id, for aggregation to merge', async () => {
     await write('.docket/services/foo.md', doc('service.foo'))
     await write('.docket/old/foo.md', doc('service.foo'))
     await write('.docket/older/foo.md', doc('service.foo'))
 
     const { documents, diagnostics } = await scanSource(resolved())
-    expect(documents).toHaveLength(3)
-    expect(diagnostics).toEqual([
-      {
-        severity: 'error',
-        code: 'duplicate-id',
-        id: 'service.foo',
-        path: '.docket/older/foo.md',
-        message: expect.stringContaining('.docket/old/foo.md')
-      },
-      {
-        severity: 'error',
-        code: 'duplicate-id',
-        id: 'service.foo',
-        path: '.docket/services/foo.md',
-        message: expect.stringContaining('.docket/old/foo.md')
-      }
+    expect(documents.map((d) => d.path)).toEqual([
+      '.docket/old/foo.md',
+      '.docket/older/foo.md',
+      '.docket/services/foo.md'
     ])
+    expect(diagnostics).toEqual([])
   })
 
   it('collects parse diagnostics without dropping the healthy files', async () => {

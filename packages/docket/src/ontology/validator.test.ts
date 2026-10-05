@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_INDEX_FLAGS,
   type MemoryDocument,
+  type MemoryEvidence,
   type MemoryLink,
   type Ontology
 } from '../model/index.js'
@@ -52,6 +53,7 @@ const doc = (
   links,
   content: '',
   mentions: [],
+  evidence: [],
   index: DEFAULT_INDEX_FLAGS
 })
 
@@ -227,5 +229,118 @@ describe('validateDocuments', () => {
       doc('team.x', 'team')
     ]
     expect(validateDocuments(documents, ontology)).toEqual([])
+  })
+})
+
+describe('validateDocuments: evidence', () => {
+  const seen = (
+    evidence: MemoryEvidence[],
+    overrides: Partial<MemoryDocument> = {}
+  ): MemoryDocument => ({ ...doc('service.a', 'service'), evidence, ...overrides })
+
+  it('accepts evidence that gives the location its source requires', () => {
+    const diagnostics = validateDocuments(
+      [
+        seen([
+          { source: 'code', path: 'src/orders.ts', lines: '12-40', symbol: 'OrdersRepository' },
+          { source: 'api', method: 'GET', endpoint: '/v1/orders' },
+          { source: 'runtime', urls: ['https://grafana.example.com/d/orders'] },
+          { source: 'conversation', session: 'abc123', note: 'The user said so.' }
+        ])
+      ],
+      ontology
+    )
+    expect(diagnostics).toEqual([])
+  })
+
+  it('rejects a source kind the ontology does not register', () => {
+    const diagnostics = validateDocuments([seen([{ source: 'hearsay' }])], ontology)
+    expect(diagnostics).toEqual([
+      expect.objectContaining({ severity: 'error', code: 'unknown-evidence-source' })
+    ])
+    expect(diagnostics[0]?.message).toMatch(/known sources: .*code/)
+  })
+
+  it('requires the location fields a source kind names', () => {
+    const diagnostics = validateDocuments(
+      [
+        seen([
+          { source: 'code', symbol: 'OrdersRepository' },
+          { source: 'api', method: 'GET' },
+          { source: 'runtime', note: 'saw it' }
+        ])
+      ],
+      ontology
+    )
+    expect(codes(diagnostics)).toEqual([
+      'evidence-location-missing',
+      'evidence-location-missing',
+      'evidence-location-missing'
+    ])
+    expect(diagnostics.map((d) => d.message)).toEqual([
+      expect.stringMatching(/code evidence on service\.a must give path/),
+      expect.stringMatching(/api evidence .* must give endpoint/),
+      expect.stringMatching(/runtime evidence .* at least one of urls, endpoint, symbol/)
+    ])
+  })
+
+  it('checks evidence recorded on a link', () => {
+    const diagnostics = validateDocuments(
+      [
+        doc('service.a', 'service', {}, [
+          { rel: 'depends_on', target: 'service.b', evidence: [{ source: 'manifest' }] }
+        ]),
+        doc('service.b', 'service')
+      ],
+      ontology
+    )
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'evidence-location-missing',
+        message: expect.stringContaining('link depends_on → service.b')
+      })
+    ])
+  })
+
+  it('takes source kinds from the ontology when it declares them', () => {
+    const own: Ontology = {
+      ...ontology,
+      evidence: { sources: { ticket: { confidence: 0.5, requires: ['urls'] } } }
+    }
+    expect(codes(validateDocuments([seen([{ source: 'code', path: 'a.ts' }])], own))).toEqual([
+      'unknown-evidence-source'
+    ])
+    expect(
+      validateDocuments([seen([{ source: 'ticket', urls: ['https://example.com/T-1'] }])], own)
+    ).toEqual([])
+  })
+
+  it('warns when an agent captured a resource or link without saying where it saw it', () => {
+    const byClaude = {
+      ...doc('service.a', 'service', {}, [
+        { rel: 'uses', target: 'service.a' },
+        { rel: 'owned_by', target: 'team.x', evidence: [{ source: 'config', path: 'CODEOWNERS', lines: '3' }] }
+      ]),
+      provenance: { capturedBy: 'claude' }
+    }
+    expect(validateDocuments([byClaude, doc('team.x', 'team')], ontology).map((d) => [d.code, d.message])).toEqual([
+      ['missing-evidence', expect.stringContaining('no evidence for the resource')],
+      ['missing-evidence', expect.stringContaining('no evidence for link uses → service.a')]
+    ])
+
+    // People and files that do not say who wrote them are not nagged.
+    expect(validateDocuments([seen([], { provenance: { capturedBy: 'human' } })], ontology)).toEqual([])
+    expect(validateDocuments([seen([])], ontology)).toEqual([])
+  })
+
+  it('warns that a stated confidence is not used once everything has evidence', () => {
+    const evidenced = seen([{ source: 'code', path: 'a.ts' }], { provenance: { confidence: 1 } })
+    expect(validateDocuments([evidenced], ontology)).toEqual([
+      expect.objectContaining({ severity: 'warning', code: 'stated-confidence-ignored' })
+    ])
+
+    // An unevidenced link still takes the stated confidence.
+    const partly = { ...evidenced, links: [{ rel: 'uses', target: 'service.a' }] }
+    expect(validateDocuments([partly], ontology)).toEqual([])
   })
 })

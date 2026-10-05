@@ -58,21 +58,7 @@ export const scanSource = async (
     if (result.document) documents.push(result.document)
   }
 
-  // Identity is the id, not the path, so the same id in two files is unresolvable (spec §66).
-  const firstSeen = new Map<string, string>()
-  for (const document of documents) {
-    const original = firstSeen.get(document.id)
-    if (original === undefined) {
-      firstSeen.set(document.id, document.path)
-      continue
-    }
-    diagnostics.push(
-      error('duplicate-id', `Duplicate id, already defined in ${original}`, {
-        path: document.path,
-        id: document.id
-      })
-    )
-  }
-
+  // Several files may declare one id: they are observations of the same
+  // resource, merged by aggregation rather than rejected here.
   return { documents, diagnostics }
 }

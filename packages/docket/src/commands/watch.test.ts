@@ -232,7 +232,7 @@ describe('watch', () => {
     await h.start()
 
     expect(await h.edges()).toEqual([
-      { source: 'service.orders', rel: 'owned_by', target: 'team.platform' }
+      expect.objectContaining({ source: 'service.orders', rel: 'owned_by', target: 'team.platform' })
     ])
 
     await h.unlink('resources/services/orders.md')

@@ -8,7 +8,7 @@ import type {
 } from 'neo4j-driver'
 
 import type { Neo4jProjectionConfig } from '../../config/config.js'
-import type { MemoryDocument } from '../../model/index.js'
+import type { MemoryEntity } from '../../model/index.js'
 import type { MemoryProjection, ProjectionContext, SearchAnswer, SearchHit } from '../projection.js'
 import { checkoutScope } from '../scope.js'
 import type { GraphSchema } from './cypher-prompt.js'
@@ -17,7 +17,9 @@ import {
   describeNeighbours,
   fulltextQuery,
   labelFor,
-  relationshipTypeFor,
+  NODE_PROPERTIES,
+  nodeProperties,
+  relationshipRows,
   type Neighbour
 } from './graph-model.js'
 import { ollamaChat, type Chat } from './ollama-chat.js'
@@ -27,9 +29,6 @@ const FULLTEXT_INDEX = 'memory_text'
 const CYPHER_TIMEOUT_MS = 10_000
 /** Lucene's English analyzer: drops stop words and stems, so `ordering` finds `orders`. */
 const FULLTEXT_ANALYZER = 'english'
-
-/** Properties a document writes; cleared when it becomes a stub. */
-const DOCUMENT_PROPERTIES = ['type', 'title', 'path', 'content', 'tags', 'hash', 'attributes']
 
 /**
  * neo4j-driver is an optional dependency: only repositories that configure a
@@ -48,22 +47,16 @@ const loadDriver = async () => {
 
 type Neo4jApi = Awaited<ReturnType<typeof loadDriver>>
 
-/** Neo4j properties hold primitives and arrays of them; anything else is kept as JSON. */
-const toProperty = (value: unknown): unknown =>
-  value === null ||
-  ['string', 'number', 'boolean'].includes(typeof value) ||
-  (Array.isArray(value) && value.every((item) => ['string', 'number', 'boolean'].includes(typeof item)))
-    ? value
-    : JSON.stringify(value)
-
 /** Labels this projection may remove are only ones it could have written. */
 const isOwnLabel = (label: string): boolean => label !== 'Memory' && /^[A-Za-z][A-Za-z0-9]*$/.test(label)
 
 /**
- * Projects documents into Neo4j as `(:Memory:<Type>)` nodes joined by typed
- * relationships - `depends_on` becomes `-[:DEPENDS_ON]->`. A link to a document
- * not (yet) projected points at a stub node, which is filled in when that
- * document arrives and deleted once nothing links to it.
+ * Projects entities into Neo4j as `(:Memory:<Type>)` nodes joined by typed
+ * relationships - `depends_on` becomes `-[:DEPENDS_ON]->`. One node per id and
+ * one relationship per (source, rel, target), however many files observed
+ * them, each carrying its evidence count and aggregate confidence. A link to
+ * a document not (yet) projected points at a stub node, which is filled in
+ * when that document arrives and deleted once nothing links to it.
  *
  * Every node carries `scope` (one per checkout by default), so several
  * checkouts can share one database and `reset` only clears its own.
@@ -105,44 +98,29 @@ class Neo4jProjection implements MemoryProjection {
     await this.ensureFulltextIndex()
   }
 
-  async upsert(document: MemoryDocument): Promise<void> {
-    if (!document.index.graph) {
-      await this.remove(document.id)
+  async upsert(entity: MemoryEntity): Promise<void> {
+    if (!entity.index.graph) {
+      await this.remove(entity.id)
       return
     }
 
     await this.write(async (tx) => {
       await tx.run(
         `MERGE (n:Memory {scope: $scope, id: $id})
-         SET n.stub = false, n.type = $type, n.title = $title, n.path = $path,
-             n.content = $content, n.tags = $tags, n.hash = $hash, n.attributes = $attributes`,
-        {
-          scope: this.scope,
-          id: document.id,
-          type: document.type,
-          title: document.title,
-          path: document.path,
-          content: document.content,
-          // A string, because the full-text index only reads string properties.
-          tags: document.tags.join(' '),
-          hash: document.hash,
-          attributes: JSON.stringify(document.attributes)
-        }
+         SET n += $properties, n.stub = false`,
+        { scope: this.scope, id: entity.id, properties: nodeProperties(entity) }
       )
-      await this.replaceTypeLabel(tx, document.id, labelFor(document.type))
-      const previousTargets = await this.dropOutgoing(tx, document.id)
+      await this.replaceTypeLabel(tx, entity.id, labelFor(entity.type))
+      const previousTargets = await this.dropOutgoing(tx, entity.id)
 
-      for (const link of document.links) {
-        const attributes = Object.fromEntries(
-          Object.entries(link.attributes ?? {}).map(([key, value]) => [key, toProperty(value)])
-        )
+      for (const row of relationshipRows(entity)) {
         await tx.run(
           `MATCH (n:Memory {scope: $scope, id: $id})
            MERGE (t:Memory {scope: $scope, id: $target})
              ON CREATE SET t.stub = true
-           CREATE (n)-[r:\`${relationshipTypeFor(link.rel)}\`]->(t)
-           SET r = $attributes, r.rel = $rel`,
-          { scope: this.scope, id: document.id, target: link.target, rel: link.rel, attributes }
+           MERGE (n)-[r:\`${row.type}\` {rel: $rel}]->(t)
+           SET r = $properties`,
+          { scope: this.scope, id: entity.id, target: row.target, rel: row.rel, properties: row.properties }
         )
       }
 
@@ -163,7 +141,7 @@ class Neo4jProjection implements MemoryProjection {
         await this.replaceTypeLabel(tx, id, null)
         await tx.run(
           `MATCH (n:Memory {scope: $scope, id: $id})
-           SET n.stub = true REMOVE ${DOCUMENT_PROPERTIES.map((p) => `n.${p}`).join(', ')}`,
+           SET n.stub = true REMOVE ${NODE_PROPERTIES.map((p) => `n.${p}`).join(', ')}`,
           { scope: this.scope, id }
         )
       } else if (record) {

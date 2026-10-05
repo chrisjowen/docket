@@ -1,4 +1,4 @@
-import type { MemoryDocument } from '../model/index.js'
+import type { MemoryEntity } from '../model/index.js'
 import type { MemoryProjection, ProjectionContext } from './projection.js'
 
 /**
@@ -19,8 +19,8 @@ export class ProjectionManager {
     await this.fanOut('init', projection => projection.init?.(context))
   }
 
-  async upsert(document: MemoryDocument): Promise<void> {
-    await this.fanOut('upsert', projection => projection.upsert(document))
+  async upsert(entity: MemoryEntity): Promise<void> {
+    await this.fanOut('upsert', projection => projection.upsert(entity))
   }
 
   async remove(id: string): Promise<void> {

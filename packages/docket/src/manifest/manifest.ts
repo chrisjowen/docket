@@ -4,13 +4,18 @@ import { dirname, join } from 'node:path'
 export const MANIFEST_FILENAME = 'manifest.json'
 export const MANIFEST_VERSION = 1
 
-/** What `sync` needs to decide a document is unchanged. */
+/** What `sync` needs to decide an entity is unchanged. */
 export interface ManifestEntry {
-  /** Repo-relative path of the source file, as of the last projection. */
+  /** Repo-relative path of the entity's first source file, as of the last projection. */
   path: string
-  /** `sha256:<hex>` of the file contents that produced the current records. */
+  /** Every source file, when more than one declares the id. */
+  paths?: string[]
+  /** `sha256:<hex>` of the merged entity that produced the current records. */
   hash: string
 }
+
+/** Every file an entry was projected from. */
+export const entryPaths = (entry: ManifestEntry): string[] => entry.paths ?? [entry.path]
 
 /** Maps stable identity to path and last projected hash (spec §31). */
 export interface IndexManifest {
@@ -65,7 +70,7 @@ export async function writeManifest(outputDir: string, manifest: IndexManifest):
   const documents: Record<string, ManifestEntry> = {}
   for (const id of Object.keys(manifest.documents).sort()) {
     const entry = manifest.documents[id]
-    if (entry) documents[id] = { hash: entry.hash, path: entry.path }
+    if (entry) documents[id] = { hash: entry.hash, path: entry.path, paths: entry.paths }
   }
 
   const serialized = JSON.stringify(

@@ -29,6 +29,8 @@ export interface FoundDocument {
   type: string
   title: string
   path: string
+  /** How far its evidence supports it - absent while its files do not validate. */
+  confidence?: number
   /** The projections that returned it. */
   foundBy: string[]
 }
@@ -57,6 +59,7 @@ export const search = async (
   const scanned = await validate({ cwd: options.cwd })
   const { resolved } = scanned
   const known = new Map(scanned.documents.map((document) => [document.id, document]))
+  const entities = new Map(scanned.entities.map((entity) => [entity.id, entity]))
 
   const projections = createProjections(resolved.config.projections)
   const context = {
@@ -112,10 +115,19 @@ export const search = async (
   const documents = [...foundBy.entries()]
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .flatMap(([id, by]) => {
-      const document = known.get(id)
-      return document
-        ? [{ id, type: document.type, title: document.title, path: document.path, foundBy: by }]
-        : []
+      const document = entities.get(id) ?? known.get(id)
+      if (!document) return []
+      const confidence = entities.get(id)?.confidence
+      return [
+        {
+          id,
+          type: document.type,
+          title: document.title,
+          path: document.path,
+          ...(confidence === undefined ? {} : { confidence }),
+          foundBy: by
+        }
+      ]
     })
 
   return { query, sources, documents, diagnostics }

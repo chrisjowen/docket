@@ -1,5 +1,6 @@
 import { stateRootOf } from '../config/config.js'
-import { emptyManifest, type IndexManifest } from '../manifest/manifest.js'
+import { emptyManifest } from '../manifest/manifest.js'
+import { planProjection } from '../manifest/plan.js'
 import { loadManifestState, saveManifest } from '../manifest/state.js'
 import type { Diagnostic } from '../model/index.js'
 import { ProjectionManager } from '../projection/manager.js'
@@ -12,9 +13,9 @@ export interface SyncResult {
   diagnostics: Diagnostic[]
   /** Ids projected this run, in path order. */
   upserted: string[]
-  /** Ids in the manifest whose source file is gone. */
+  /** Ids in the manifest with no source file left. */
   removed: string[]
-  /** Documents whose hash matched the manifest and were left alone. */
+  /** Entities whose merged hash matched the manifest and were left alone. */
   unchanged: number
 }
 
@@ -30,7 +31,7 @@ interface ReconcileOptions extends SyncOptions {
 export const reconcile = async (
   options: ReconcileOptions
 ): Promise<SyncResult> => {
-  const { resolved, documents, ontology, diagnostics } = await validate(options)
+  const { resolved, entities, broken, ontology, diagnostics } = await validate(options)
   const result: SyncResult = {
     diagnostics,
     upserted: [],
@@ -57,57 +58,27 @@ export const reconcile = async (
   const state = options.fresh
     ? { manifest: emptyManifest(), stale: true }
     : await loadManifestState(resolved)
-  const previous = state.manifest
   if (state.stale) await manager.reset()
 
-  // Spec §67: a file that is currently broken keeps its previous projection
-  // rather than having it erased. Keyed by path because a file that failed to
-  // parse never produced an id.
-  const broken = new Set(
-    diagnostics
-      .filter((d) => d.severity === 'error' && d.path !== undefined)
-      .map((d) => d.path as string)
-  )
-
-  const next: IndexManifest = emptyManifest()
+  // Projections receive entities - every file that declares an id, merged -
+  // so one resource is one record however many files observed it.
+  const plan = planProjection(entities, broken, state.manifest.documents)
 
   try {
-    for (const document of documents) {
-      if (broken.has(document.path)) continue
-
-      const before = previous.documents[document.id]
-      if (before?.hash === document.hash && before.path === document.path) {
-        next.documents[document.id] = before
-        result.unchanged += 1
-        continue
-      }
-
-      await manager.upsert(document)
-      next.documents[document.id] = {
-        path: document.path,
-        hash: document.hash
-      }
-      result.upserted.push(document.id)
-    }
-
-    for (const [id, entry] of Object.entries(previous.documents)) {
-      if (next.documents[id]) continue
-      if (broken.has(entry.path)) {
-        next.documents[id] = entry
-        continue
-      }
-      await manager.remove(id)
-      result.removed.push(id)
-    }
+    for (const id of plan.removals) await manager.remove(id)
+    for (const entity of plan.upserts) await manager.upsert(entity)
 
     // Once per pass, and before the manifest: the manifest vouches for what
     // the projections hold, so it must never get ahead of them.
     await manager.flush()
-    await saveManifest(resolved, next.documents)
+    await saveManifest(resolved, plan.next)
   } finally {
     await manager.close()
   }
 
+  result.upserted = plan.upserts.map((entity) => entity.id)
+  result.removed = plan.removals
+  result.unchanged = plan.unchanged
   return result
 }
 

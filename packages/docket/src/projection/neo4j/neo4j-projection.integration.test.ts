@@ -1,8 +1,9 @@
 import neo4j, { type Driver } from 'neo4j-driver'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
+import { entitiesOf, entityOf } from '../../../test/entities.js'
 import type { Neo4jProjectionConfig } from '../../config/config.js'
-import type { MemoryDocument } from '../../model/index.js'
+import type { MemoryDocument, MemoryEntity } from '../../model/index.js'
 import type { MemoryProjection } from '../projection.js'
 import { createNeo4jProjection } from './neo4j-projection.js'
 
@@ -18,7 +19,7 @@ const CONTEXT = {
   stateRoot: '/repos/acme/.docket/.index'
 }
 
-const makeDocument = (overrides: Partial<MemoryDocument> = {}): MemoryDocument => ({
+const makeFile = (overrides: Partial<MemoryDocument> = {}): MemoryDocument => ({
   id: 'service.api',
   type: 'service',
   title: 'Orders API',
@@ -29,9 +30,12 @@ const makeDocument = (overrides: Partial<MemoryDocument> = {}): MemoryDocument =
   links: [{ rel: 'depends_on', target: 'datasource.postgres', attributes: { criticality: 'high' } }],
   content: 'Takes orders and stores them.\n',
   mentions: [],
+  evidence: [],
   index: { graph: true, fts: true, vector: true },
   ...overrides
 })
+
+const makeDocument = (overrides: Partial<MemoryDocument> = {}): MemoryEntity => entityOf(makeFile(overrides))
 
 describe.skipIf(!URL)('neo4j projection', () => {
   let driver: Driver
@@ -100,6 +104,43 @@ describe.skipIf(!URL)('neo4j projection', () => {
     ])
     expect(await edges()).toEqual([
       { from: 'service.api', type: 'DEPENDS_ON', rel: 'depends_on', criticality: 'high', to: 'datasource.postgres' }
+    ])
+  })
+
+  it('writes one relationship per (source, rel, target) with its evidence count and confidence', async () => {
+    await fresh()
+    const inManifest = { source: 'manifest', path: 'package.json', key: 'dependencies.pg' }
+    const inCode = { source: 'code', path: 'src/db.ts', lines: '12' }
+    const [merged] = entitiesOf([
+      makeFile({
+        path: '.docket/a.md',
+        evidence: [inCode],
+        links: [
+          { rel: 'depends_on', target: 'datasource.postgres', evidence: [inManifest] },
+          { rel: 'depends_on', target: 'datasource.postgres', evidence: [inCode] }
+        ]
+      }),
+      makeFile({ path: '.docket/b.md', links: [{ rel: 'depends_on', target: 'datasource.postgres' }] })
+    ])
+    if (!merged) throw new Error('fixture')
+    await projection.upsert(merged)
+    await projection.upsert(merged)
+
+    expect(
+      await read(
+        'MATCH (a:Memory {scope: $scope})-[r]->(b:Memory {scope: $scope}) ' +
+          'RETURN a.id AS from, r.rel AS rel, b.id AS to, r.evidenceCount AS count, r.confidence AS confidence, r.sources AS sources'
+      )
+    ).toEqual([
+      { from: 'service.api', rel: 'depends_on', to: 'datasource.postgres', count: 2, confidence: 0.96, sources: ['code', 'manifest'] }
+    ])
+    expect(
+      await read(
+        'MATCH (n:Memory {scope: $scope, id: "service.api"}) ' +
+          'RETURN n.paths AS paths, n.confidence AS confidence, n.evidenceCount AS count, n.evidence AS evidence'
+      )
+    ).toEqual([
+      { paths: ['.docket/a.md', '.docket/b.md'], confidence: 0.6, count: 1, evidence: JSON.stringify([inCode]) }
     ])
   })
 

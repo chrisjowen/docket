@@ -1,5 +1,7 @@
 import type { Mem0ProjectionConfig } from '../../config/config.js'
-import type { MemoryDocument } from '../../model/index.js'
+import { describeAssessment, describeEvidence } from '../../evidence/describe.js'
+import type { MemoryEntity } from '../../model/index.js'
+import { stableStringify } from '../../model/stable-json.js'
 import type { MemoryProjection, ProjectionContext, SearchAnswer, SearchHit } from '../projection.js'
 import { checkoutScope } from '../scope.js'
 import { connectMem0, type Mem0Backend, type Mem0Scope } from './backend.js'
@@ -20,40 +22,65 @@ export const defaultScope = (projectRoot: string): Mem0Scope => ({
   agentId: checkoutScope(projectRoot)
 })
 
-/** The text mem0 embeds and returns on search: what an agent should read. */
-export const renderDocument = (document: MemoryDocument): string => {
-  const lines = [`# ${document.title}`, `${document.type} ${document.id}`]
-  const body = document.content.trim()
+/**
+ * The text mem0 embeds and returns on search: what an agent should read. One
+ * memory per entity, carrying how far to trust it and exactly where it was
+ * seen, so a hit can be checked without opening the file.
+ */
+export const renderDocument = (entity: MemoryEntity): string => {
+  const lines = [
+    `# ${entity.title}`,
+    `${entity.type} ${entity.id}`,
+    `Confidence: ${describeAssessment(entity)}`
+  ]
+  const body = entity.content.trim()
   if (body) lines.push('', body)
-  if (document.links.length > 0) {
+
+  const listed = new Set(entity.evidence.map(stableStringify))
+  if (entity.links.length > 0) {
     lines.push('', 'Links:')
-    for (const link of document.links) lines.push(`- ${link.rel} ${link.target}`)
+    for (const link of entity.links) {
+      lines.push(`- ${link.rel} ${link.target} (confidence ${link.confidence})`)
+      // Evidence the link shares with the resource is listed once, below.
+      for (const evidence of link.evidence) {
+        if (!listed.has(stableStringify(evidence))) lines.push(`  - ${describeEvidence(evidence)}`)
+      }
+    }
   }
-  if (document.tags.length > 0) lines.push('', `Tags: ${document.tags.join(', ')}`)
+
+  if (entity.evidence.length > 0) {
+    lines.push('', 'Evidence:')
+    for (const evidence of entity.evidence) lines.push(`- ${describeEvidence(evidence)}`)
+  }
+
+  if (entity.tags.length > 0) lines.push('', `Tags: ${entity.tags.join(', ')}`)
   return `${lines.join('\n')}\n`
 }
 
 /** Scalar metadata only, so it filters the same way on the hosted and self-hosted stores. */
-export const documentMetadata = (document: MemoryDocument): Record<string, unknown> => ({
-  [DOCUMENT_ID_KEY]: document.id,
-  memory_type: document.type,
-  memory_path: document.path,
-  memory_hash: document.hash,
-  ...(document.tags.length > 0 ? { memory_tags: document.tags.join(',') } : {}),
-  ...(document.provenance?.authority !== undefined
-    ? { authority: document.provenance.authority }
+export const documentMetadata = (entity: MemoryEntity): Record<string, unknown> => ({
+  [DOCUMENT_ID_KEY]: entity.id,
+  memory_type: entity.type,
+  memory_path: entity.path,
+  ...(entity.paths.length > 1 ? { memory_paths: entity.paths.join(',') } : {}),
+  memory_hash: entity.hash,
+  ...(entity.tags.length > 0 ? { memory_tags: entity.tags.join(',') } : {}),
+  confidence: entity.confidence,
+  confidence_basis: entity.basis,
+  evidence_count: entity.evidenceCount,
+  ...(entity.sources.length > 0 ? { evidence_sources: entity.sources.join(',') } : {}),
+  ...(entity.provenance?.authority !== undefined
+    ? { authority: entity.provenance.authority }
     : {}),
-  ...(document.provenance?.confidence !== undefined
-    ? { confidence: document.provenance.confidence }
-    : {}),
-  ...(document.provenance?.capturedBy !== undefined
-    ? { captured_by: document.provenance.capturedBy }
+  ...(entity.provenance?.capturedBy !== undefined
+    ? { captured_by: entity.provenance.capturedBy }
     : {})
 })
 
 /**
- * Projects each document into mem0 as one verbatim memory (`infer: false`), so
+ * Projects each entity into mem0 as one verbatim memory (`infer: false`), so
  * a rebuild reproduces exactly what the Markdown says and costs no LLM calls.
+ * Files that declare the same id arrive already merged, so they are one memory.
  * Documents with `index.vector: false` are kept out (spec §21).
  *
  * mem0 assigns memory ids, and the hosted API may accept a write before it can
@@ -84,17 +111,17 @@ class Mem0Projection implements MemoryProjection {
     this.unconfirmed.clear()
   }
 
-  async upsert(document: MemoryDocument): Promise<void> {
-    await this.remove(document.id)
-    if (!document.index.vector) return
+  async upsert(entity: MemoryEntity): Promise<void> {
+    await this.remove(entity.id)
+    if (!entity.index.vector) return
 
     const ids = await this.requireBackend().add(
-      renderDocument(document),
-      documentMetadata(document)
+      renderDocument(entity),
+      documentMetadata(entity)
     )
     const owned = await this.ownership()
-    owned.set(document.id, ids)
-    if (ids.length === 0) this.unconfirmed.add(document.id)
+    owned.set(entity.id, ids)
+    if (ids.length === 0) this.unconfirmed.add(entity.id)
   }
 
   async remove(id: string): Promise<void> {

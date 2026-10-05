@@ -134,4 +134,35 @@ describe('default-sdlc.yaml', () => {
     if (!document) return
     expect(validateDocuments([document], ontology)).toEqual([])
   })
+
+  it('declares where evidence comes from, and what each source needs to point at', async () => {
+    const ontology = await load()
+    const sources = ontology.evidence?.sources ?? {}
+    expect(Object.keys(sources).sort()).toEqual(
+      ['api', 'code', 'config', 'conversation', 'docs', 'human', 'infrastructure', 'manifest', 'runtime']
+    )
+    expect(sources.code?.requires).toEqual(['path'])
+    expect(sources.api?.requires).toEqual(['endpoint'])
+    expect(ontology.evidence?.unevidenced).toBe(0.5)
+  })
+
+  it('only writes confidence rules for registered sources', async () => {
+    const ontology = await load()
+    const sources = new Set(Object.keys(ontology.evidence?.sources ?? {}))
+    const definitions = { ...ontology.resourceTypes, ...ontology.relationships }
+    for (const [name, definition] of Object.entries(definitions)) {
+      for (const source of Object.keys(definition.confidence ?? {})) {
+        expect(sources, `${name} -> ${source}`).toContain(source)
+      }
+    }
+  })
+
+  it('trusts a manifest dependency and doubts runtime things read from code', async () => {
+    const ontology = await load()
+    expect(ontology.relationships.depends_on?.confidence?.manifest).toBeGreaterThanOrEqual(0.9)
+    for (const type of ['pod', 'secret', 'cluster', 'container', 'infrastructure']) {
+      expect(ontology.resourceTypes[type]?.confidence?.code, type).toBeLessThan(0.5)
+      expect(ontology.resourceTypes[type]?.confidence?.runtime, type).toBeGreaterThanOrEqual(0.85)
+    }
+  })
 })

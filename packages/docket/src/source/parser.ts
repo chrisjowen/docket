@@ -1,7 +1,12 @@
 import matter from 'gray-matter'
 import { parse as parseYaml } from 'yaml'
-import { type Diagnostic, error } from '../model/diagnostic.js'
-import { frontmatterSchema, type MemoryDocument } from '../model/document.js'
+import { type Diagnostic, error, warning } from '../model/diagnostic.js'
+import {
+  frontmatterSchema,
+  MEMORY_EVIDENCE_FIELDS,
+  type MemoryDocument,
+  type MemoryEvidence
+} from '../model/document.js'
 import { hashContent } from './hashing.js'
 
 export interface ParseResult {
@@ -34,6 +39,34 @@ export const extractMentions = (body: string): string[] => {
   }
   return [...seen]
 }
+
+const KNOWN_EVIDENCE_FIELDS = new Set(MEMORY_EVIDENCE_FIELDS)
+
+/**
+ * Keeps the fields evidence defines and warns about the rest - most often a
+ * near miss like `url` for `urls` - rather than failing the whole file.
+ */
+const knownEvidence = (
+  entries: readonly Record<string, unknown>[],
+  at: string,
+  relativePath: string,
+  diagnostics: Diagnostic[]
+): MemoryEvidence[] =>
+  entries.map((entry, index) => {
+    const unknown = Object.keys(entry).filter((key) => !KNOWN_EVIDENCE_FIELDS.has(key))
+    if (unknown.length > 0) {
+      diagnostics.push(
+        warning(
+          'unknown-evidence-field',
+          `${at}[${index}]: ${unknown.map((key) => `"${key}"`).join(', ')} ignored; evidence fields are ${MEMORY_EVIDENCE_FIELDS.join(', ')}.`,
+          { path: relativePath }
+        )
+      )
+    }
+    return Object.fromEntries(
+      Object.entries(entry).filter(([key]) => KNOWN_EVIDENCE_FIELDS.has(key))
+    ) as unknown as MemoryEvidence
+  })
 
 /**
  * Ontology-independent parse of one canonical file (spec §23). Structural problems
@@ -74,6 +107,7 @@ export const parseMemoryFile = (
   }
 
   const fm = parsed.data
+  const diagnostics: Diagnostic[] = []
   return {
     document: {
       id: fm.id,
@@ -83,12 +117,17 @@ export const parseMemoryFile = (
       hash: hashContent(raw),
       tags: fm.tags,
       attributes: fm.attributes,
-      links: fm.links,
+      links: fm.links.map(({ evidence, ...link }, index) =>
+        evidence === undefined
+          ? link
+          : { ...link, evidence: knownEvidence(evidence, `links[${index}].evidence`, relativePath, diagnostics) }
+      ),
       content: body,
       mentions: extractMentions(body),
+      evidence: knownEvidence(fm.evidence, 'evidence', relativePath, diagnostics),
       provenance: fm.provenance,
       index: fm.index
     },
-    diagnostics: []
+    diagnostics
   }
 }

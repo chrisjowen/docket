@@ -319,7 +319,7 @@ describe('rebuild determinism (spec §72)', () => {
     expect(b['edges.jsonl']).toBe(a['edges.jsonl'])
 
     const withoutPath = (records: DocumentRecord[]): unknown[] =>
-      records.map(({ path, ...rest }) => rest)
+      records.map(({ path, paths, ...rest }) => rest)
     expect(withoutPath(await readJsonl(reverse, 'documents.jsonl'))).toEqual(
       withoutPath(await readJsonl(forward, 'documents.jsonl'))
     )
