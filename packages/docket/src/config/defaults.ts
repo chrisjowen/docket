@@ -35,6 +35,11 @@ projections:
   #     embedder: { provider: ollama, config: { model: nomic-embed-text } }
   #     vectorStore: { provider: qdrant, config: { host: localhost, port: 6333 } }
   #     llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
+
+  # Optional: a Neo4j graph with full-text search. Needs \`pnpm add neo4j-driver\`.
+  # - type: neo4j
+  #   url: bolt://localhost:7687
+  #   passwordEnv: NEO4J_PASSWORD
 `
 
 /**

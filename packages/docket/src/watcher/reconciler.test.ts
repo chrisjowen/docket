@@ -16,7 +16,11 @@ const memoryFile = (id: string, type: string, title: string): string =>
 
 interface Harness {
   resolved: ResolvedConfig
-  projection: { upsert: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> }
+  projection: {
+    upsert: ReturnType<typeof vi.fn>
+    remove: ReturnType<typeof vi.fn>
+    flush: ReturnType<typeof vi.fn>
+  }
   events: WatchEvent[]
   reconciler: ReturnType<typeof createReconciler>
   write(relativePath: string, contents: string): Promise<string>
@@ -30,7 +34,8 @@ const harness = async (): Promise<Harness> => {
 
   const projection = {
     upsert: vi.fn(async () => {}),
-    remove: vi.fn(async () => {})
+    remove: vi.fn(async () => {}),
+    flush: vi.fn(async () => {})
   }
   const manager = new ProjectionManager([
     { name: 'fake', ...projection } satisfies MemoryProjection
@@ -266,5 +271,81 @@ describe('createReconciler', () => {
     await h.reconciler.sync()
 
     expect(h.projection.remove.mock.calls).toEqual([['service.orders']])
+  })
+
+  it('keeps the original id when a file is copied and the copy then changes id', async () => {
+    const original = await h.write(
+      'resources/services/orders.md',
+      memoryFile('service.orders', 'service', 'Orders')
+    )
+    await h.reconciler.reconcile(original)
+
+    // Copying a memory file as a template: the copy repeats the id until edited.
+    const copy = await h.write(
+      'resources/services/billing.md',
+      memoryFile('service.orders', 'service', 'Orders')
+    )
+    await h.reconciler.reconcile(copy)
+    expect(diagnostics(h.events)).toContainEqual(
+      expect.objectContaining({
+        code: 'duplicate-id',
+        path: '.docket/resources/services/billing.md',
+        id: 'service.orders'
+      })
+    )
+    expect(h.projection.upsert).toHaveBeenCalledTimes(1)
+
+    await h.write(
+      'resources/services/billing.md',
+      memoryFile('service.billing', 'service', 'Billing')
+    )
+    await h.reconciler.reconcile(copy)
+
+    expect(h.projection.remove).not.toHaveBeenCalled()
+    expect(h.projection.upsert.mock.calls.map(([d]) => (d as { id: string }).id)).toEqual([
+      'service.orders',
+      'service.billing'
+    ])
+
+    // The original is still tracked under its own path, so deleting it removes it.
+    await h.remove('resources/services/orders.md')
+    await h.reconciler.reconcile(original)
+    expect(h.projection.remove.mock.calls).toEqual([['service.orders']])
+  })
+
+  it('projects a refused duplicate once the original lets go of the id', async () => {
+    const original = await h.write(
+      'resources/services/orders.md',
+      memoryFile('service.orders', 'service', 'Orders')
+    )
+    await h.reconciler.reconcile(original)
+    const copy = await h.write(
+      'resources/services/order-service.md',
+      memoryFile('service.orders', 'service', 'Orders')
+    )
+    await h.reconciler.reconcile(copy)
+    expect(h.projection.upsert).toHaveBeenCalledTimes(1)
+
+    await h.remove('resources/services/orders.md')
+    await h.reconciler.reconcile(original)
+
+    expect(h.projection.upsert.mock.calls.at(-1)?.[0]).toMatchObject({
+      id: 'service.orders',
+      path: '.docket/resources/services/order-service.md'
+    })
+    expect(h.events.filter((e) => e.kind !== 'diagnostics').at(-1)).toMatchObject({
+      id: 'service.orders',
+      path: '.docket/resources/services/order-service.md'
+    })
+  })
+
+  it('flushes the projections once per pass, not once per document', async () => {
+    for (const name of ['a', 'b', 'c']) {
+      await h.write(`resources/services/${name}.md`, memoryFile(`service.${name}`, 'service', name))
+    }
+    await h.reconciler.sync()
+
+    expect(h.projection.upsert).toHaveBeenCalledTimes(3)
+    expect(h.projection.flush).toHaveBeenCalledTimes(1)
   })
 })

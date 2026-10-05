@@ -44,11 +44,20 @@ export interface MemoryProjection {
 
   remove(id: string): Promise<void>
 
+  /**
+   * Make every `upsert` and `remove` so far durable. A projection may buffer
+   * mutations until then, so callers flush before recording what was projected
+   * - sync once per pass, the watcher once per reconciliation. Optional: a
+   * projection that writes through has nothing to do.
+   */
+  flush?(): Promise<void>
+
   /** Drop all derived state. Called by `docket rebuild`. */
   reset?(): Promise<void>
 
   /** Documents relevant to `query`, most relevant first. Optional: not every view can search. */
   search?(query: string, limit: number): Promise<SearchAnswer>
 
+  /** Releases resources. Flushes first, so nothing buffered is lost. */
   close?(): Promise<void>
 }

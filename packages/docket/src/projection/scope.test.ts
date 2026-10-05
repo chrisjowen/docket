@@ -37,8 +37,26 @@ describe('checkoutScope', () => {
     expect(checkoutScope(`${checkout}/`)).toBe(checkoutScope(checkout))
     expect(checkoutScope(link)).toBe(checkoutScope(checkout))
 
-    const upperCased = join(root, 'PLATFORM')
-    if (existsSync(upperCased)) expect(checkoutScope(upperCased)).toBe(checkoutScope(checkout))
+  })
+
+  // macOS and Windows filesystems are case-insensitive by default, so one
+  // checkout is reachable through several spellings of its path.
+  const caseInsensitive = (dir: string): boolean => existsSync(dir.toUpperCase())
+
+  it('gives every case variant of a checkout path the one scope, named in its on-disk case', async (context) => {
+    const checkout = join(root, 'Repos', 'Platform')
+    await mkdir(checkout, { recursive: true })
+    if (!caseInsensitive(checkout)) context.skip()
+
+    const scope = checkoutScope(checkout)
+    expect(scope).toMatch(/^docket-Platform-[0-9a-f]{12}$/)
+    for (const variant of [
+      join(root, 'repos', 'platform'),
+      join(root, 'REPOS', 'PLATFORM'),
+      join(root, 'Repos', 'pLaTfOrM')
+    ]) {
+      expect(checkoutScope(variant), variant).toBe(scope)
+    }
   })
 
   it('gives checkouts at different paths different scopes', async () => {

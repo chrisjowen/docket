@@ -9,6 +9,15 @@ the `.memory/` layout, `.memory.yaml` and the `team-memory` plugin as they were
 when it was run. They are now `docket`, `.docket/`, `.docket.yaml` and the
 `docket` plugin.
 
+The Claude plugin has also changed since (section 9). It was recorded at
+plugin version 0.1.0, when a `Stop` hook blocked the session after a turn and
+asked the model itself to review it. The review now runs in the background
+when a session ends: a `SessionEnd` hook starts a detached headless
+`claude -p` on a small model, over only the transcript lines no review has
+seen. The SessionStart sync no longer blocks either. Section 9 still shows
+what was run then; the plugin's own tests (`packages/claude-plugin/test/`)
+cover the hooks as they are now.
+
 `memory` on the path is a two-line wrapper around the built CLI:
 
 ```sh
@@ -1265,6 +1274,10 @@ exit=0  (no JSON above)
 
 ### 9e. The Stop hook performs memory review
 
+> Superseded. The `Stop` hook and `stop-review.js` below no longer exist; the
+> review now runs in the background from a `SessionEnd` hook
+> (`session-end-review.js`). See the note at the top of this record.
+
 The hook only fires for a substantial session, so feed it a fake transcript
 long enough to qualify:
 
@@ -1363,6 +1376,9 @@ parse and behave correctly when invoked directly, including their
 no-memory, no-loop and short-session guards; three skills exist with valid
 frontmatter; every `memory` command the plugin references exists in the
 built CLI; and nothing in the plugin writes to `.memory/.index/`.
+
+(As recorded at plugin 0.1.0; the hooks have changed since - see the note at
+the top of this record.)
 
 **PARTIAL.** Everything checkable from here passes. The model-behaviour half
 is untested and must not be read as passing.

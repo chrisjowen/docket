@@ -1,4 +1,5 @@
 import {
+  copyFile,
   mkdir,
   mkdtemp,
   readdir,
@@ -18,6 +19,7 @@ import {
   type DocumentRecord,
   type EdgeRecord
 } from '../projection/jsonl/jsonl-projection.js'
+import type { Diagnostic } from '../model/diagnostic.js'
 import type { WatchEvent } from '../watcher/reconciler.js'
 import { init } from './init.js'
 import { watch, type WatchHandle } from './watch.js'
@@ -100,6 +102,9 @@ const harness = async (): Promise<Harness> => {
     }
   }
 }
+
+const diagnosticsOf = (events: WatchEvent[]): Diagnostic[] =>
+  events.flatMap((event) => (event.kind === 'diagnostics' ? event.diagnostics : []))
 
 const documentIds = (h: Harness) => async (): Promise<string[]> =>
   (await h.documents()).map((record) => record.id)
@@ -245,6 +250,32 @@ describe('watch', () => {
       id: 'service.orders',
       path: '.docket/resources/services/orders.md'
     })
+  })
+
+  it('keeps a document whose file was copied and the copy given a new id', async () => {
+    const h = await harness()
+    await h.write(
+      'decisions/a.md',
+      memoryFile('decision.a', 'decision', 'A')
+    )
+    const handle = await h.start()
+
+    // Copy a memory file as a template, then edit the copy into a new resource.
+    await copyFile(join(h.root, '.docket/decisions/a.md'), join(h.root, '.docket/decisions/b.md'))
+    await until(
+      () =>
+        diagnosticsOf(h.events).find((d) => d.code === 'duplicate-id'),
+      'the copy to be reported as a duplicate'
+    )
+    await h.write('decisions/b.md', memoryFile('decision.b', 'decision', 'B'))
+    await until(
+      () => h.events.find((event) => event.kind === 'added' && event.id === 'decision.b'),
+      'the edited copy to be projected'
+    )
+    await handle.idle()
+
+    expect(await documentIds(h)()).toEqual(['decision.a', 'decision.b'])
+    expect(h.events.filter((event) => event.kind === 'removed')).toEqual([])
   })
 
   it('coalesces a burst of saves into one reconciliation', async () => {

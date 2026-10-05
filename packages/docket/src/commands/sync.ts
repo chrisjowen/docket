@@ -100,6 +100,9 @@ export const reconcile = async (
       result.removed.push(id)
     }
 
+    // Once per pass, and before the manifest: the manifest vouches for what
+    // the projections hold, so it must never get ahead of them.
+    await manager.flush()
     await saveManifest(resolved, next.documents)
   } finally {
     await manager.close()

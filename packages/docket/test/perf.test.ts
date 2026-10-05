@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { makeRepo, memory, readJsonl, removeRepo, write } from './helpers.js'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+
+import { INDEX, makeRepo, memory, readJsonl, removeRepo, write } from './helpers.js'
 import type { DocumentRecord } from '../src/projection/jsonl/jsonl-projection.js'
 
 /**
@@ -10,11 +13,17 @@ import type { DocumentRecord } from '../src/projection/jsonl/jsonl-projection.js
  * roughly an order of magnitude of headroom on a laptop - enough to catch an
  * accidental exponential or a per-document process spawn, and nothing tighter.
  * A flaky performance assertion is worse than none.
+ *
+ * The one hard number is the Claude plugin's: a cold sync that cannot finish
+ * inside the 20 s a session-start hook used to allow never saved its manifest,
+ * so it restarted from nothing every session and never converged. A cold sync
+ * of 2,000 documents takes well under a second on a laptop, so 20 s still
+ * leaves an order of magnitude for a slow CI runner.
  */
 
-const DOCUMENTS = 500
-const COLD_SYNC_BUDGET_MS = 90_000
-const WARM_SYNC_BUDGET_MS = 30_000
+const DOCUMENTS = 2_000
+const COLD_SYNC_BUDGET_MS = 20_000
+const WARM_SYNC_BUDGET_MS = 20_000
 
 let root: string | undefined
 
@@ -50,6 +59,9 @@ describe('performance expectations (spec §73)', () => {
         expect(result.stdout).toContain(`${DOCUMENTS} projected`)
       })
       expect(cold).toBeLessThan(COLD_SYNC_BUDGET_MS)
+      // A completed pass records what it projected, which is what lets the next
+      // one converge instead of starting over.
+      expect(existsSync(join(repo, INDEX, 'manifest.json'))).toBe(true)
 
       expect(await readJsonl<DocumentRecord>(repo, 'documents.jsonl')).toHaveLength(
         DOCUMENTS

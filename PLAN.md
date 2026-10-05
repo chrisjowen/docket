@@ -84,7 +84,8 @@ Tracked as issues rather than left in conversation:
 
 ## Non-goals for v0
 
-No graph DB or FTS index. Mem0 was added after v0 as an optional projection
-(`type: mem0`, hosted or self-hosted). No dynamic projection package
-loading. See spec §80. The `MemoryProjection` interface exists so those can be
-added without touching the canonical format.
+No graph DB or FTS index in v0. Both were added after v0 as optional
+projections: mem0 (`type: mem0`, hosted or self-hosted) and a Neo4j graph with a
+full-text index (`type: neo4j`). No dynamic projection package loading. See
+spec §80. The `MemoryProjection` interface is how they were added without
+touching the canonical format.

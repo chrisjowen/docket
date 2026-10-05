@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // SessionStart hook (SPEC §54).
-// Injects docket context. Optionally runs one `docket sync` pass if the CLI is
-// present. Never starts a daemon, never fails the session.
+// Injects docket context. If the CLI is present, starts one `docket sync` pass
+// in the background. Never starts a daemon, never blocks or fails the session.
 
-const { existsSync } = require("node:fs");
-const { execFileSync } = require("node:child_process");
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
+const { CACHE_DIR, checkoutKey, isRunning, localDocketBin, projectRoot, readJson } = require("./common.js");
 
 const CONTEXT = `This repository uses docket: local-first project knowledge,
 captured and classified as Markdown.
@@ -25,22 +26,16 @@ capture it by updating canonical files under \`.docket/\`.
 
 Never edit \`.docket/.index/\`; it is generated.`;
 
-const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const root = projectRoot();
 
-if (!existsSync(path.join(root, ".docket"))) {
+if (!fs.existsSync(path.join(root, ".docket"))) {
   process.exit(0);
 }
 
 try {
-  // One reconciliation pass so projections reflect the checked-out branch.
-  // The watcher (`docket watch`) owns continuous sync; this does not daemonize.
-  execFileSync("npx", ["--no-install", "docket", "sync"], {
-    cwd: root,
-    stdio: "ignore",
-    timeout: 20000,
-  });
+  startSync(root);
 } catch {
-  // CLI absent or sync failed. Not fatal: the docket files are still authoritative.
+  // CLI absent or sync failed to start. Not fatal: the docket files are still authoritative.
 }
 
 process.stdout.write(
@@ -51,3 +46,34 @@ process.stdout.write(
     },
   }),
 );
+
+/**
+ * One reconciliation pass so projections reflect the checked-out branch. It
+ * runs detached: a large repository's first sync can outlast any hook timeout,
+ * and a sync killed part-way never records its manifest, so it would start
+ * over at every session. The watcher (`docket watch`) owns continuous sync;
+ * this does not daemonize. A sync still running from an earlier session start
+ * - after a compaction, say - is left to finish rather than joined by another.
+ */
+function startSync(root) {
+  const lockDir = path.join(CACHE_DIR, "sync");
+  const lockFile = path.join(lockDir, `${checkoutKey(root)}.json`);
+  const running = readJson(lockFile, null);
+  if (running && isRunning(running.pid)) return;
+
+  const bin = localDocketBin(root);
+  const [command, args] = bin ? [bin, ["sync"]] : ["npx", ["--no-install", "docket", "sync"]];
+  const child = spawn(command, args, {
+    cwd: root,
+    detached: true,
+    stdio: "ignore",
+    shell: process.platform === "win32",
+  });
+  child.on("error", () => {});
+  child.unref();
+
+  if (child.pid) {
+    fs.mkdirSync(lockDir, { recursive: true });
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: child.pid }));
+  }
+}

@@ -86,6 +86,12 @@ with `rel: supersedes`.
 Capture: decisions, ownership, dependencies, constraints, conventions,
 services, agents, systems, environments, datasources, teams.
 
+Never capture credentials, secrets, tokens, private keys or passwords - not
+when asked to, and not when they appear in a session or transcript you are
+reviewing. The docket is committed to the repository and may be sent to
+remote projections. Record that a secret exists and where it is managed (for
+example, which vault or environment variable), never its value.
+
 Do not capture transient debugging state, speculation, temporary
 implementation details, or what nearby code already says plainly. When asked
 to, refuse politely, say why, and offer the durable version if there is one.

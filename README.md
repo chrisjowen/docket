@@ -41,6 +41,7 @@ docket validate --strict    # unresolved links become errors
 docket sync                 # project changed files into .docket/.index
 docket rebuild              # reset and reproject everything
 docket watch                # reconcile continuously as files change
+docket search <query...>    # ask every projection that can search
 docket ontology list        # what resource types and relationships exist
 docket ontology show service
 ```
@@ -104,13 +105,16 @@ The Markdown files are the source. A projection is a destination: sync and
 watch push every change into each projection listed in `.docket.yaml`.
 
 ```
-.docket/**/*.md ──► docket sync / watch ──┬──► jsonl → .docket/.index/*.jsonl
-                                          └──► mem0  → hosted or self-hosted mem0
+.docket/**/*.md ──► docket sync / watch ──┬──► jsonl  → .docket/.index/*.jsonl
+                                          ├──► mem0   → hosted or self-hosted mem0
+                                          └──► neo4j  → a Neo4j graph
 ```
 
 **`jsonl`** writes `documents.jsonl`, `nodes.jsonl` and `edges.jsonl` — a
 readable view of exactly what projections receive. Output is deterministic, so
 rebuilds are byte-identical and diffable. (`type: file` is still accepted.)
+It is the default, and the only projection `docket search` has out of the box:
+a lexical keyword search over titles, ids, tags and bodies.
 
 **`mem0`** stores each document as one verbatim memory (`infer: false`): the
 title, type, id, body, links and tags as text; the id, type, path, hash, tags
@@ -156,13 +160,29 @@ hand if you no longer want it, or set `scope:` to the old value to keep using
 it. Set
 `MEM0_TELEMETRY=false` to turn off the mem0 SDK's telemetry.
 
+**`neo4j`** writes each document as a node and each link as a relationship,
+with a full-text index over the documents. It needs the optional `neo4j-driver`
+package and a running Neo4j server. `docket search` asks it with a full-text
+query, or, with `cypher` set, has a local Ollama model write a read-only Cypher
+query against the graph's schema (falling back to full-text when that fails or finds nothing).
+
+```yaml
+projections:
+  - type: neo4j
+    url: bolt://localhost:7687        # default
+    username: neo4j                   # default
+    passwordEnv: NEO4J_PASSWORD       # unset: connect without auth
+    # database: neo4j
+    # cypher:
+    #   model: "qwen2.5:7b"           # Ollama at http://localhost:11434
+```
+
 The manifest that makes sync skip unchanged files lives in `state.dir`
 (default `.docket/.index`), independent of any projection. Adding, removing or
 reconfiguring a projection makes the next sync reproject everything, so a newly
 added mem0 receives the whole repository.
 
-Graph and full-text projections are not built yet; the `MemoryProjection`
-interface is where they plug in.
+New projections plug in through the `MemoryProjection` interface.
 
 ## Claude Code plugin
 
@@ -175,9 +195,9 @@ Agents never write to an index. See its
 
 ```bash
 pnpm install
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm typecheck   # sources and tests
+pnpm build       # the end-to-end tests run the built CLI, so build first
+pnpm test        # the CLI's suite and the plugin's hook tests
 ```
 
 Layout, phases and track ownership are in [`PLAN.md`](PLAN.md). The full

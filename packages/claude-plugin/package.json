@@ -1,0 +1,8 @@
+{
+  "name": "@chrisjowen/docket-claude-plugin",
+  "private": true,
+  "description": "The docket Claude Code plugin. Not published to npm; installed through the plugin marketplace.",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  }
+}
