@@ -155,6 +155,43 @@ Again: [[service.identity]].
   })
 })
 
+describe('parseMemoryFile YAML handling', () => {
+  const DATED = `---
+id: release.v2
+type: release
+title: v2
+attributes:
+  date: 2026-10-05
+  shippedAt: 2026-10-05T10:00:00Z
+links:
+  - rel: supersedes
+    target: release.v1
+    attributes:
+      since: 2026-10-01
+---
+`
+
+  it('keeps unquoted dates as the strings they were written as (YAML 1.2)', () => {
+    const { document, diagnostics } = parseMemoryFile(DATED, 'r.md')
+    expect(diagnostics).toEqual([])
+    expect(document?.attributes).toEqual({
+      date: '2026-10-05',
+      shippedAt: '2026-10-05T10:00:00Z'
+    })
+    expect(document?.links[0]?.attributes).toEqual({ since: '2026-10-01' })
+  })
+
+  it('returns fresh objects on every parse, never ones shared between calls', () => {
+    const first = parseMemoryFile(FULL, 'agents/ra.md').document
+    ;(first?.attributes.modes as string[]).push('mutated')
+    first?.tags.push('mutated')
+
+    const second = parseMemoryFile(FULL, 'agents/ra.md').document
+    expect(second?.attributes.modes).toEqual(['fast', 'slow'])
+    expect(second?.tags).toEqual(['research', 'agents'])
+  })
+})
+
 describe('hashContent', () => {
   it('is stable, prefixed, and content-dependent', () => {
     expect(hashContent(MINIMAL)).toMatch(/^sha256:[0-9a-f]{64}$/)

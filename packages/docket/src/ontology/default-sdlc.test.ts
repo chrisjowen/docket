@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { DEFAULT_ONTOLOGY_PATH } from '../config/defaults.js'
 import { ontologySchema } from '../model/ontology.js'
+import { parseMemoryFile } from '../source/parser.js'
+import { validateDocuments } from './validator.js'
 
 const load = async () =>
   ontologySchema.parse(parse(await readFile(DEFAULT_ONTOLOGY_PATH, 'utf8')))
@@ -120,5 +122,16 @@ describe('default-sdlc.yaml', () => {
         for (const type of original[side]) expect(current?.[side], `${name}.${side}`).toContain(type)
       }
     }
+  })
+
+  it('accepts the unquoted dates its string-typed date attributes invite', async () => {
+    const ontology = await load()
+    const { document } = parseMemoryFile(
+      '---\nid: release.v2\ntype: release\ntitle: v2\nattributes:\n  status: released\n  date: 2026-10-05\n---\n',
+      'r.md'
+    )
+    expect(document).toBeDefined()
+    if (!document) return
+    expect(validateDocuments([document], ontology)).toEqual([])
   })
 })

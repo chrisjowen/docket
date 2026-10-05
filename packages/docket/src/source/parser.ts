@@ -1,4 +1,5 @@
 import matter from 'gray-matter'
+import { parse as parseYaml } from 'yaml'
 import { type Diagnostic, error } from '../model/diagnostic.js'
 import { frontmatterSchema, type MemoryDocument } from '../model/document.js'
 import { hashContent } from './hashing.js'
@@ -8,6 +9,16 @@ export interface ParseResult {
   document?: MemoryDocument
   diagnostics: Diagnostic[]
 }
+
+/**
+ * Frontmatter is read with the same YAML 1.2 engine as the ontology, not
+ * gray-matter's default js-yaml (YAML 1.1). Under 1.1 an unquoted
+ * `date: 2026-10-05` becomes a `Date`, which fails a `string` attribute and
+ * projects as `{}`. Passing any options also turns off gray-matter's global
+ * cache, which would otherwise keep every parsed file for the life of the
+ * process and hand callers objects shared with that cache.
+ */
+const MATTER_OPTIONS = { engines: { yaml: (source: string) => parseYaml(source) as object } }
 
 const MENTION = /\[\[([^\]\n]+)\]\]/g
 
@@ -35,7 +46,7 @@ export const parseMemoryFile = (
   let body: string
   let data: unknown
   try {
-    const file = matter(raw)
+    const file = matter(raw, MATTER_OPTIONS)
     body = file.content
     data = file.data
   } catch (cause) {
