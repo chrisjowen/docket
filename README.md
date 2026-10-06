@@ -62,6 +62,7 @@ only.
   confidence docket computes for it and for each link, the sources that
   corroborate it, and every piece of evidence - file and lines, endpoint,
   URLs, when and by whom - merged from all the files that declare its id.
+  Each link expands to show the evidence for that relationship.
 - **Quick search** (`⌘K` or `/`) - instant type-ahead over ids, titles, types,
   tags, attributes, notes and relationship names. `type:service`,
   `rel:depends_on` and `tag:core` narrow it down; picking a result focuses
