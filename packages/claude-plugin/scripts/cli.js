@@ -9,7 +9,7 @@ const path = require("node:path");
 const { canonicalPath } = require("./common.js");
 
 const CLI_PACKAGE = "@chrisjowen/docket";
-const CLI_VERSION = "0.1.0";
+const CLI_VERSION = "0.2.0";
 
 /** What runs the pinned release when no `docket` is installed. */
 const NPX_COMMAND = ["npx", ["-y", `${CLI_PACKAGE}@${CLI_VERSION}`]];

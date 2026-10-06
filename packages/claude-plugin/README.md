@@ -159,7 +159,7 @@ Without the CLI installed the plugin runs the release it pins through `npx`, and
 ```json
 {
   "devDependencies": {
-    "@chrisjowen/docket": "^0.1.0"
+    "@chrisjowen/docket": "^0.2.0"
   },
   "scripts": {
     "docket:watch": "docket watch",
