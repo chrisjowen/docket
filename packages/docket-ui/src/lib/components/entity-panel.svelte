@@ -6,7 +6,7 @@
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { basisLabel, confidenceOf, evidenceOf, linksOf, provenanceOf } from '$lib/model.js'
+  import { basisLabel, linksOf } from '$lib/model.js'
   import type { UiEdge, UiEntity, UiGraph } from '$lib/types.js'
   import EvidenceItem from './evidence-item.svelte'
   import Notes from './notes.svelte'
@@ -23,10 +23,9 @@
 
   const byId = $derived(new Map(graph.entities.map((item) => [item.id, item])))
   const links = $derived(linksOf(graph, entity.id))
-  const provenance = $derived(provenanceOf(entity))
-  /** docket's computed confidence; a file's stated figure only when talking to a server without it. */
-  const confidence = $derived(entity.assessment ? entity.assessment.confidence : confidenceOf(provenance.confidence))
-  const evidence = $derived(evidenceOf(entity))
+  const provenance = $derived(entity.provenance ?? {})
+  const confidence = $derived(entity.assessment?.confidence ?? null)
+  const evidence = $derived(entity.evidence)
   /** Provenance fields beyond the three every file may carry. */
   const otherProvenance = $derived(
     Object.entries(provenance).filter(([key]) => !['authority', 'confidence', 'capturedBy', 'evidence'].includes(key))
@@ -145,7 +144,7 @@
         <ul class="flex flex-col gap-1">
           {#each edges as edge, index (index)}
             {@const end = ends(edge, direction)}
-            <li>
+            <li class="flex flex-col gap-1">
               <button
                 type="button"
                 class="hover:bg-muted flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm"
@@ -184,6 +183,16 @@
                   {/if}
                 </span>
               </button>
+              {#if edge.evidence && edge.evidence.length > 0}
+                <details class="pl-7.5">
+                  <summary class="text-muted-foreground cursor-pointer text-xs">
+                    Evidence ({edge.evidence.length})
+                  </summary>
+                  <ul class="mt-1 flex flex-col gap-1.5">
+                    {#each edge.evidence as item, evidenceIndex (evidenceIndex)}<li><EvidenceItem {item} /></li>{/each}
+                  </ul>
+                </details>
+              {/if}
             </li>
           {/each}
         </ul>

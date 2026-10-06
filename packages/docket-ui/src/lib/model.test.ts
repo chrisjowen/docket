@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { blocks, evidenceLocation, evidenceOf, inline, neighbourhood, parseQuery, provenanceOf, quickSearch, typeSlots } from './model.js'
+import { blocks, evidenceLocation, inline, neighbourhood, parseQuery, quickSearch, typeSlots } from './model.js'
 import type { UiEntity, UiGraph } from './types.js'
 
 const entity = (id: string, overrides: Partial<UiEntity> = {}): UiEntity => ({
@@ -61,6 +61,17 @@ describe('quickSearch', () => {
     expect(hit?.kind === 'entity' && hit.snippet).toContain('Writes every order')
   })
 
+  it('builds the body snippet from the word that matched the body best', () => {
+    const graph: UiGraph = {
+      ...GRAPH,
+      entities: [entity('service.orders', { attributes: { language: 'typescript' }, content: 'Bookkeeping runs nightly.' })],
+      edges: []
+    }
+    const [hit] = quickSearch(graph, 'script bookkeeping')
+    expect(hit).toMatchObject({ kind: 'entity', field: 'body' })
+    expect(hit?.kind === 'entity' && hit.snippet).toContain('Bookkeeping runs nightly')
+  })
+
   it('finds relationships by name and by the entities they join', () => {
     expect(ids('depends')).toEqual([
       'service.checkout depends_on service.orders',
@@ -103,36 +114,12 @@ describe('neighbourhood', () => {
   })
 })
 
-describe('provenance', () => {
-  it('takes the merged evidence docket serves', () => {
-    const subject = entity('service.orders', {
-      evidence: [{ source: 'code', path: 'src/a.ts' }],
-      frontmatter: { evidence: [{ source: 'code', path: 'src/elsewhere.ts' }] }
-    })
-    expect(evidenceOf(subject)).toEqual([{ source: 'code', path: 'src/a.ts' }])
-  })
-
-  it('falls back to the frontmatter when the server sends no evidence, once each', () => {
-    const subject = entity('service.orders', {
-      provenance: { authority: 'code', evidence: [{ source: 'src/a.ts' }] },
-      frontmatter: { provenance: { evidence: [{ source: 'src/a.ts' }] }, evidence: ['https://example.com/doc'] }
-    })
-    delete (subject as Partial<UiEntity>).evidence
-    expect(evidenceOf(subject)).toEqual([{ source: 'src/a.ts' }, 'https://example.com/doc'])
-  })
-
+describe('evidenceLocation', () => {
   it('says where an observation points in one line', () => {
     expect(evidenceLocation({ source: 'code', path: 'src/a.ts', lines: '12-40', symbol: 'handler' })).toBe('src/a.ts:12-40 · handler')
     expect(evidenceLocation({ source: 'api', method: 'GET', endpoint: '/v1/orders' })).toBe('GET /v1/orders')
   })
 
-  it('merges provenance from the model over the raw frontmatter', () => {
-    const subject = entity('service.orders', {
-      provenance: { confidence: 0.4 },
-      frontmatter: { provenance: { confidence: 0.9, capturedBy: 'agent' } }
-    })
-    expect(provenanceOf(subject)).toEqual({ confidence: 0.4, capturedBy: 'agent' })
-  })
 })
 
 describe('blocks', () => {

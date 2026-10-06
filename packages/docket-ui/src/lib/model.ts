@@ -118,7 +118,7 @@ const snippet = (content: string, word: string): string => {
 
 const scoreEntity = (entity: UiEntity, words: readonly string[]): QuickResult | null => {
   let score = 0
-  let best: { field: MatchField; value: number } = { field: 'body', value: 0 }
+  let best: { field: MatchField; value: number; word: string } = { field: 'body', value: 0, word: '' }
   for (const word of words) {
     let wordBest = 0
     let wordField: MatchField = 'body'
@@ -132,10 +132,10 @@ const scoreEntity = (entity: UiEntity, words: readonly string[]): QuickResult | 
     // Every word must match somewhere: type-ahead narrows, it never widens.
     if (wordBest === 0) return null
     score += wordBest
-    if (wordBest > best.value) best = { field: wordField, value: wordBest }
+    if (wordBest > best.value) best = { field: wordField, value: wordBest, word }
   }
   const result: QuickResult = { kind: 'entity', entity, score, field: best.field }
-  if (best.field === 'body' && words[0]) result.snippet = snippet(entity.content, words[0])
+  if (best.field === 'body') result.snippet = snippet(entity.content, best.word)
   return result
 }
 
@@ -208,35 +208,6 @@ function compare(a: string, b: string): number {
 
 // --- Provenance ---------------------------------------------------------------
 
-/** One piece of evidence, as loosely as files may record it. */
-export type Evidence = Record<string, unknown> | string
-
-/**
- * The entity's observations. docket hands them over merged from every file
- * that declares the id; an older server without them leaves the frontmatter
- * as the only place to look.
- */
-export const evidenceOf = (entity: UiEntity): Evidence[] => {
-  if (Array.isArray(entity.evidence)) return entity.evidence
-  const found: unknown[] = []
-  for (const holder of [entity.provenance, entity.frontmatter, entity.frontmatter.provenance]) {
-    if (holder && typeof holder === 'object' && 'evidence' in holder) {
-      const value = (holder as { evidence: unknown }).evidence
-      if (Array.isArray(value)) found.push(...value)
-      else if (value !== undefined && value !== null) found.push(value)
-    }
-  }
-  const seen = new Set<string>()
-  return found
-    .filter((item): item is Evidence => typeof item === 'string' || (typeof item === 'object' && item !== null))
-    .filter((item) => {
-      const key = JSON.stringify(item)
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-}
-
 /** Where an observation points, in one line: `src/a.ts:12-40 · handler`, `GET /v1/orders`. */
 export const evidenceLocation = (evidence: Record<string, unknown>): string => {
   const text = (key: string): string => (typeof evidence[key] === 'string' ? (evidence[key] as string) : '')
@@ -257,19 +228,6 @@ const BASIS_LABEL: Record<string, string> = {
 }
 
 export const basisLabel = (basis: string): string => BASIS_LABEL[basis] ?? basis
-
-/** The entity's provenance, from the model or straight from the frontmatter. */
-export const provenanceOf = (entity: UiEntity): Record<string, unknown> => {
-  const fromFile = entity.frontmatter.provenance
-  return {
-    ...(fromFile && typeof fromFile === 'object' && !Array.isArray(fromFile) ? (fromFile as Record<string, unknown>) : {}),
-    ...(entity.provenance ?? {})
-  }
-}
-
-/** A 0-1 confidence, or null when absent or not a number. */
-export const confidenceOf = (value: unknown): number | null =>
-  typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : null
 
 /** A link-ish string worth making clickable. */
 export const isUrl = (value: unknown): value is string =>
