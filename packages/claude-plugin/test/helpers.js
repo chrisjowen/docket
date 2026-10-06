@@ -1,13 +1,16 @@
 // Sandboxes for driving the hook scripts the way Claude Code does: JSON on
-// stdin, a scratch HOME, and fake `claude` and `docket` binaries on PATH that
-// record how they were called instead of doing anything.
+// stdin, a scratch HOME, and fake `claude`, `npx` and `docket` binaries on
+// PATH that record how they were called instead of doing anything. PATH holds
+// only the sandbox's own `bin/` and the system directories, so no real `npx`
+// or installed `docket` is ever reached.
 
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const SCRIPTS = path.join(__dirname, "..", "scripts");
+const PLUGIN = path.join(__dirname, "..");
+const SCRIPTS = path.join(PLUGIN, "scripts");
 
 // Records one JSON line per call, then sleeps and exits as told by the env.
 const FAKE_BIN = `#!/usr/bin/env node
@@ -15,6 +18,7 @@ const fs = require("node:fs");
 const name = require("node:path").basename(process.argv[1]);
 fs.appendFileSync(process.env.FAKE_CALLS, JSON.stringify({
   name,
+  bin: process.argv[1],
   argv: process.argv.slice(2),
   cwd: process.cwd(),
   path: process.env.PATH,
@@ -31,8 +35,9 @@ function sandbox() {
   const repo = path.join(dir, "repo");
   const bin = path.join(dir, "bin");
   for (const d of [home, path.join(repo, ".docket"), bin]) fs.mkdirSync(d, { recursive: true });
-  const fakeClaude = path.join(bin, "claude");
-  fs.writeFileSync(fakeClaude, FAKE_BIN, { mode: 0o755 });
+  for (const name of ["claude", "npx"]) fs.writeFileSync(path.join(bin, name), FAKE_BIN, { mode: 0o755 });
+  // The fakes' `#!/usr/bin/env node` finds this node, and nothing else beside it.
+  fs.symlinkSync(process.execPath, path.join(bin, "node"));
   const calls = path.join(dir, "calls.jsonl");
 
   return {
@@ -42,7 +47,7 @@ function sandbox() {
     calls,
     env(extra = {}) {
       const env = {
-        PATH: `${bin}${path.delimiter}${path.dirname(process.execPath)}${path.delimiter}/usr/bin:/bin`,
+        PATH: `${bin}${path.delimiter}/usr/bin${path.delimiter}/bin`,
         HOME: home,
         FAKE_CALLS: calls,
         DOCKET_REVIEW_LOCK_POLL_MS: "50",
@@ -50,6 +55,13 @@ function sandbox() {
       };
       for (const [key, value] of Object.entries(env)) if (value === undefined) delete env[key];
       return env;
+    },
+    /** Installs a fake `docket` CLI in a directory of its own, as `npm i -g` would. */
+    installGlobalDocket() {
+      const global = path.join(dir, "global");
+      fs.mkdirSync(global, { recursive: true });
+      fs.writeFileSync(path.join(global, "docket"), FAKE_BIN, { mode: 0o755 });
+      return global;
     },
     /** Installs a fake `docket` CLI in the repo, as `pnpm add -D` would. */
     installDocket() {
@@ -119,4 +131,4 @@ async function until(check, what, timeoutMs = 10_000) {
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
-module.exports = { runHook, sandbox, sleep, transcriptLines, until };
+module.exports = { PLUGIN, runHook, sandbox, sleep, transcriptLines, until };

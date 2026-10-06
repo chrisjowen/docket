@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // SessionStart hook (SPEC §54).
-// Injects docket context. If the CLI is present, starts one `docket sync` pass
-// in the background. Never starts a daemon, never blocks or fails the session.
+// Injects docket context and starts one `docket sync` pass in the background,
+// through npx when no CLI is installed. Never starts a daemon, never blocks or
+// fails the session.
 
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const { CACHE_DIR, checkoutKey, isRunning, localDocketBin, projectRoot, readJson } = require("./common.js");
+const { NPX_DOCKET, resolveDocket } = require("./cli.js");
+const { CACHE_DIR, checkoutKey, isRunning, projectRoot, readJson } = require("./common.js");
 
 const CONTEXT = `This repository uses docket: local-first project knowledge,
 captured and classified as Markdown.
@@ -17,8 +19,8 @@ Canonical knowledge is stored under \`.docket/\`.
 relationship types, attributes, and extraction guidance.
 
 When durable project knowledge is needed, run \`docket search <query>\`
-(\`npx --no-install docket search <query>\` if \`docket\` is not on the path)
-and read the canonical files it points to. Grep \`.docket/\` only if
+(\`${NPX_DOCKET} search <query>\` if \`docket\` is not on
+the path) and read the canonical files it points to. Grep \`.docket/\` only if
 the CLI is unavailable or finds nothing.
 
 When durable project knowledge is established or materially changed,
@@ -61,9 +63,8 @@ function startSync(root) {
   const running = readJson(lockFile, null);
   if (running && isRunning(running.pid)) return;
 
-  const bin = localDocketBin(root);
-  const [command, args] = bin ? [bin, ["sync"]] : ["npx", ["--no-install", "docket", "sync"]];
-  const child = spawn(command, args, {
+  const [command, args] = resolveDocket(root);
+  const child = spawn(command, [...args, "sync"], {
     cwd: root,
     detached: true,
     stdio: "ignore",

@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { afterEach, describe, it } = require("node:test");
+const { NPX_DOCKET, PLUGIN_BIN } = require("../scripts/cli.js");
 const { checkoutKey } = require("../scripts/common.js");
 const { runHook, sandbox, sleep, transcriptLines, until } = require("./helpers.js");
 
@@ -137,9 +138,8 @@ describe("session-end review hook", () => {
     assert.equal(flag(call, "--model"), "opus");
   });
 
-  it("lets the reviewer run the project's docket CLI", async () => {
+  it("lets the reviewer run docket without any install", async () => {
     const { box, transcript, input } = setup();
-    const local = box.installDocket();
     fs.writeFileSync(transcript, transcriptLines(3));
 
     runHook(SCRIPT, input(), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
@@ -147,8 +147,10 @@ describe("session-end review hook", () => {
     const [call] = await reviewed(box);
     const allowed = call.argv.slice(call.argv.indexOf("--allowedTools") + 1);
     assert.ok(allowed.includes("Bash(docket *)"));
-    assert.ok(allowed.includes("Bash(npx --no-install docket *)"));
-    assert.equal(call.path.split(path.delimiter)[0], local);
+    assert.ok(allowed.includes(`Bash(${NPX_DOCKET} *)`));
+    assert.match(promptOf(call), new RegExp(`as \`${NPX_DOCKET}\` if \`docket\` is not found`));
+    // The plugin's own `docket` comes first; it finds the CLI or falls back to npx.
+    assert.equal(call.path.split(path.delimiter)[0], PLUGIN_BIN);
   });
 
   it("has the reviewer record evidence, stamped with this session and date", async () => {

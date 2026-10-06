@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { afterEach, describe, it } = require("node:test");
+const { CLI_VERSION, NPX_DOCKET } = require("../scripts/cli.js");
 const { runHook, sandbox, sleep, until } = require("./helpers.js");
 
 const SCRIPT = "session-start.js";
@@ -70,11 +71,34 @@ describe("session-start hook", () => {
     assert.equal(box.readCalls().length, 1);
   });
 
-  it("still injects context when the CLI is not installed", () => {
+  it("syncs through the pinned release on npx when the CLI is not installed", async () => {
     const box = setup();
     const result = runHook(SCRIPT, input(box), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
 
     assert.equal(result.status, 0);
-    assert.match(JSON.parse(result.stdout).hookSpecificOutput.additionalContext, /docket/);
+    const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
+    assert.ok(context.includes(`${NPX_DOCKET} search <query>`), context);
+    const [call] = await until(() => {
+      const calls = box.readCalls();
+      return calls.length > 0 && calls;
+    }, "npx to start");
+    assert.equal(call.name, "npx");
+    assert.deepEqual(call.argv, ["-y", `@chrisjowen/docket@${CLI_VERSION}`, "sync"]);
+  });
+
+  it("syncs with a docket installed on the path", async () => {
+    const box = setup();
+    const global = box.installGlobalDocket();
+    const env = box.env({ CLAUDE_PROJECT_DIR: box.repo });
+    env.PATH = `${global}${path.delimiter}${env.PATH}`;
+
+    runHook(SCRIPT, input(box), env);
+
+    const [call] = await until(() => {
+      const calls = box.readCalls();
+      return calls.length > 0 && calls;
+    }, "docket sync to start");
+    assert.equal(call.name, "docket");
+    assert.deepEqual(call.argv, ["sync"]);
   });
 });

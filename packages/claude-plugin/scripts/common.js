@@ -66,19 +66,12 @@ function isRunning(pid) {
   }
 }
 
-/** The project's own `docket` binary, when the CLI is installed in it. */
-function localDocketBin(root) {
-  const bin = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "docket.cmd" : "docket");
-  return fs.existsSync(bin) ? bin : null;
-}
-
 module.exports = {
   CACHE_DIR,
   DEFAULT_REVIEW_MODEL,
   canonicalPath,
   checkoutKey,
   isRunning,
-  localDocketBin,
   projectRoot,
   readJson,
   readStdin,

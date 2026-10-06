@@ -1,0 +1,18 @@
+#!/usr/bin/env node
+// `docket` on the Bash tool's path, which Claude Code builds from every
+// enabled plugin's `bin/`. Runs the project's or an installed CLI when there is
+// one, else the release the plugin pins, through npx (see scripts/cli.js).
+
+const { spawnSync } = require("node:child_process");
+const { resolveDocket } = require("../scripts/cli.js");
+
+const [command, args] = resolveDocket(process.cwd());
+const result = spawnSync(command, [...args, ...process.argv.slice(2)], {
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
+if (result.error) {
+  process.stderr.write(`docket: could not run ${command}: ${result.error.message}\n`);
+  process.exit(127);
+}
+process.exit(result.status ?? 1);
