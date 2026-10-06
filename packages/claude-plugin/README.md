@@ -47,19 +47,33 @@ to **keep it current**.
 
 ## Install in 30 seconds
 
+From the root of the repository you want to remember things:
+
+```bash
+npx @chrisjowen/docket setup
+```
+
+That installs the plugin, sets up `.docket/` in the repository if it has none,
+and offers to put the `docket` CLI on your path. Restart Claude Code, open a
+session and ask Claude about your system. Running it again updates what is
+installed; `--yes` answers every question with the recommended answer, and
+without a terminal nothing is asked at all.
+
+**For the whole team:** `npx @chrisjowen/docket setup --team` installs the plugin
+for the repository instead, in `.claude/settings.json`. Commit that file and
+everyone who clones the repository is offered the plugin.
+
+**Just the plugin,** from inside Claude Code:
+
 ```text
 /plugin marketplace add chrisjowen/docket
 /plugin install docket@docket
 ```
 
-Then add the CLI to the repository you want to remember things:
-
-```bash
-pnpm add -D @chrisjowen/docket
-npx docket init
-```
-
-That's it. Open a session and ask Claude about your system.
+No separate CLI install is needed. The plugin puts `docket` on Claude's path:
+it runs the repository's own CLI, or one on your path, and otherwise the CLI
+release the plugin pins, through `npx` (Node 22 or later). Set up a
+repository with `npx @chrisjowen/docket init`.
 
 <details>
 <summary>Developing the plugin locally</summary>
@@ -82,6 +96,7 @@ an unbumped change never reaches installed copies.
 | **`docket` skill** | Using the `docket` CLI: search, ontology, validate, sync |
 | **`remember` skill** | Writing to the docket well: procedure, file format, evidence, what's worth keeping |
 | **`ontology` skill** | Inspecting and extending `.docket/entities.yaml` |
+| **`docket` on the path** | The plugin's `bin/docket`: the project's or your CLI, else the pinned release through `npx` |
 | **SessionStart hook** | Injects docket context and starts a best-effort `docket sync` in the background |
 | **SessionEnd hook** | Starts a background review of the session and captures durable knowledge in `.docket/` |
 
@@ -99,8 +114,8 @@ returns straight away. The review agent:
   confidence grows as independent evidence arrives
 - never captures credentials, secrets, tokens, private keys or passwords
 - can only read, run `docket` and read-only `git rev-parse` / `git remote get-url`,
-  and edit files under `.docket/`; the project's own `node_modules/.bin` is put
-  first on its `PATH`, so a dev-dependency install works
+  and edit files under `.docket/`; its `docket` is the plugin's own, so it finds
+  the project's or your CLI, or runs the pinned release through `npx`
 - runs one at a time per repository: a session that ends while another review is
   running is reviewed once that one finishes
 - leaves no session behind in your `/resume` list
@@ -136,8 +151,8 @@ the `docket` CLI (`@chrisjowen/docket`), a separate package. Agents never write 
 they edit the same Markdown a human would, and `docket watch` does the rest. Edits from
 Claude, from people, from scripts, from `git pull` and from merges all take the same path.
 
-Without the CLI installed the skills still work, because the Markdown files are the source
-of truth either way.
+Without the CLI installed the plugin runs the release it pins through `npx`, and without
+`npx` the skills still work, because the Markdown files are the source of truth either way.
 
 ### Recommended `package.json` scripts
 
@@ -160,5 +175,5 @@ Run `npm run docket:watch` while you work, and `docket validate --strict` in CI.
 
 <p align="center">
   <b>Stop re-explaining your codebase.</b><br>
-  <code>/plugin install docket@docket</code>
+  <code>npx @chrisjowen/docket setup</code>
 </p>

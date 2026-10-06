@@ -24,17 +24,64 @@ relationships mean. Humans and agents edit the same files.
 
 ## Install
 
+One command, from the root of the repository you want to remember things:
+
+```bash
+npx @chrisjowen/docket setup
+```
+
+It installs the Claude Code plugin (through the `claude` CLI, for your user),
+offers to run `docket init` if the repository has no `.docket.yaml`, and offers
+to install the CLI globally so `docket` works in your shell too. Run it again
+whenever you like: it updates what is already installed and leaves an existing
+`.docket.yaml` alone. Restart Claude Code afterwards to load the plugin.
+
+Without a terminal (CI, scripts) it asks nothing: it installs the plugin and
+skips the rest unless told otherwise. `--yes` takes the recommended answer to
+every question (set up the repository, but no global install), `--no-init`
+and `--no-global` skip those offers, and `--global` installs the CLI without
+asking. Node 22 or later.
+
+### For a team
+
+```bash
+npx @chrisjowen/docket setup --team
+```
+
+installs the plugin for the repository instead of for you: it records the
+marketplace and the plugin in `.claude/settings.json`. Commit that file, and
+everyone who clones the repository and trusts it in Claude Code is offered the
+plugin.
+
+### Just the plugin
+
+Without the `claude` CLI on your path, or to do it by hand, install the plugin
+from inside Claude Code:
+
+```text
+/plugin marketplace add chrisjowen/docket
+/plugin install docket@docket
+```
+
+The plugin needs no separate CLI install. It runs the repository's own
+`docket`, or one on your path, and otherwise the CLI release it pins, through
+`npx` (so Node 22 or later is still needed). Set up a repository with
+`npx @chrisjowen/docket init`.
+
+### As a dev dependency
+
 ```bash
 pnpm add -D @chrisjowen/docket   # or: npm install --save-dev @chrisjowen/docket
 npx docket init
 ```
 
-Node 22 or later. The command is `docket`; run it through `npx` (or a
-`package.json` script) when it is installed as a dev dependency.
+The command is `docket`; run it through `npx` (or a `package.json` script) when
+it is installed as a dev dependency. The plugin uses this copy first.
 
 ## Use
 
 ```bash
+docket setup                # install the Claude Code plugin and set up this repository
 docket init                 # scaffold .docket.yaml, .docket/ and the default ontology
 docket validate             # check files against the ontology
 docket validate --strict    # unresolved links become errors
@@ -285,7 +332,9 @@ allow publishing from CI without 2FA, so the workflow runs `npm stage publish`:
 the version lands in npm's staging area and goes live only once a maintainer
 approves it.
 
-1. Bump `version` in `packages/docket/package.json` and merge it.
+1. Bump `version` in `packages/docket/package.json`, and `CLI_VERSION` in
+   `packages/claude-plugin/scripts/cli.js` to match (the plugin's tests fail
+   until they agree), and merge it.
 2. Tag that commit `v<version>` and push the tag, or publish a GitHub release
    for it.
 3. Approve the staged version with 2FA: `npm stage approve <stage-id>`, or the
