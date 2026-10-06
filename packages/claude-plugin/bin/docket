@@ -4,11 +4,12 @@
 // one, else the release the plugin pins, through npx (see scripts/cli.js).
 
 const { spawnSync } = require("node:child_process");
-const { resolveDocket } = require("../scripts/cli.js");
+const { WRAPPER_ENV, resolveDocket } = require("../scripts/cli.js");
 
 const [command, args] = resolveDocket(process.cwd());
 const result = spawnSync(command, [...args, ...process.argv.slice(2)], {
   stdio: "inherit",
+  env: { ...process.env, [WRAPPER_ENV]: "1" },
   shell: process.platform === "win32",
 });
 if (result.error) {

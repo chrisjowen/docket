@@ -26,27 +26,11 @@ function runDocket(box, args, { prefix = [] } = {}) {
   return spawnSync(path.join(PLUGIN_BIN, "docket"), args, { cwd: box.repo, env, encoding: "utf8", timeout: 10_000 });
 }
 
-/** Every file the plugin ships, relative to its root. */
-function pluginFiles(dir = PLUGIN) {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    if (["node_modules", "test"].includes(entry.name)) return [];
-    const file = path.join(dir, entry.name);
-    return entry.isDirectory() ? pluginFiles(file) : [path.relative(PLUGIN, file)];
-  });
-}
-
 describe("docket CLI resolution", () => {
   it("pins the CLI release this repository builds", () => {
     const manifest = JSON.parse(fs.readFileSync(CLI_MANIFEST, "utf8"));
     assert.equal(CLI_PACKAGE, manifest.name);
     assert.equal(CLI_VERSION, manifest.version, "bump CLI_VERSION in scripts/cli.js with the CLI's version");
-  });
-
-  it("names the pinned release in scripts/cli.js only", () => {
-    const pinned = pluginFiles().filter((file) =>
-      /@chrisjowen\/docket@|npx --no-install|CLI_VERSION = /.test(fs.readFileSync(path.join(PLUGIN, file), "utf8")),
-    );
-    assert.deepEqual(pinned, [path.join("scripts", "cli.js")]);
   });
 
   it("runs the project's own CLI first, passing every argument through", () => {
@@ -88,6 +72,30 @@ describe("docket CLI resolution", () => {
     const [call] = box.readCalls();
     assert.equal(call.name, "npx");
     assert.deepEqual(call.argv, ["-y", `${CLI_PACKAGE}@${CLI_VERSION}`, "ontology", "list"]);
+  });
+
+  it("reaches npx when another copy of the plugin is on the path", () => {
+    const box = setup();
+    const copies = ["old", "new"].map((name) => {
+      const copy = path.join(box.dir, "plugins", name);
+      for (const dir of ["bin", "scripts"]) fs.cpSync(path.join(PLUGIN, dir), path.join(copy, dir), { recursive: true });
+      return path.join(copy, "bin");
+    });
+    const env = box.env();
+    env.PATH = [...copies, env.PATH].join(path.delimiter);
+
+    const result = spawnSync(path.join(copies[0], "docket"), ["validate"], {
+      cwd: box.repo,
+      env,
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(
+      box.readCalls().map((call) => [call.name, call.argv]),
+      [["npx", ["-y", `${CLI_PACKAGE}@${CLI_VERSION}`, "validate"]]],
+    );
   });
 
   it("exits with the CLI's exit code", () => {

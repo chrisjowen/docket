@@ -20,6 +20,9 @@ const NPX_DOCKET = `npx -y ${CLI_PACKAGE}@${CLI_VERSION}`;
 /** The plugin's own `bin/`, which Claude Code puts on the Bash tool's path. */
 const PLUGIN_BIN = path.join(__dirname, "..", "bin");
 
+/** Set by `bin/docket` on what it runs, so no wrapper ever runs another wrapper. */
+const WRAPPER_ENV = "DOCKET_PLUGIN_WRAPPER";
+
 const EXE = process.platform === "win32" ? ["docket.cmd", "docket.exe", "docket"] : ["docket"];
 
 function isExecutable(file) {
@@ -52,10 +55,11 @@ function localDocketBin(root) {
 
 /**
  * How to run `docket` in `root`, as `[command, args]`: the project's own CLI,
- * else one on the path, else the pinned release through npx.
+ * else one on the path, else the pinned release through npx. Under a plugin
+ * wrapper the path is not searched: it may hold another copy of the plugin.
  */
-function resolveDocket(root, envPath) {
-  const bin = localDocketBin(root) || docketOnPath(envPath);
+function resolveDocket(root, env = process.env) {
+  const bin = localDocketBin(root) || (env[WRAPPER_ENV] ? null : docketOnPath(env.PATH || ""));
   return bin ? [bin, []] : NPX_COMMAND;
 }
 
@@ -65,6 +69,7 @@ module.exports = {
   NPX_COMMAND,
   NPX_DOCKET,
   PLUGIN_BIN,
+  WRAPPER_ENV,
   docketOnPath,
   resolveDocket,
 };
