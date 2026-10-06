@@ -85,13 +85,16 @@ export const which = (
 /**
  * Whether a `docket` in `dir` is one the developer installed. npx and package
  * scripts put a project's or npx's own `node_modules/.bin` on the path, and a
- * `docket` there is gone once the command ends.
+ * `docket` there is gone once the command ends. Claude Code puts a plugin's
+ * `bin/` on the path too, and the docket plugin's wrapper there is not in the
+ * developer's own shell.
  */
 const isInstalledBinDir = (dir: string): boolean => {
   const normalized = resolve(dir)
   return (
     !normalized.endsWith(`${sep}node_modules${sep}.bin`) &&
-    !normalized.includes(`${sep}_npx${sep}`)
+    !normalized.includes(`${sep}_npx${sep}`) &&
+    !existsSync(join(normalized, '..', '.claude-plugin', 'plugin.json'))
   )
 }
 

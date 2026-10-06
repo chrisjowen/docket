@@ -385,5 +385,21 @@ describe('setup', () => {
       expect(await box.calls()).toContainEqual(['npm', 'install', '-g', CLI_SPEC])
       expect(result.steps.find((step) => step.name === 'cli')).toMatchObject({ outcome: 'done' })
     })
+
+    it("does not count the plugin's own wrapper as installed", async () => {
+      const box = await sandbox()
+      const plugin = join(box.dir, '.claude', 'plugins', 'cache', 'docket', 'docket', '0.4.0')
+      await mkdir(join(plugin, '.claude-plugin'), { recursive: true })
+      await writeFile(join(plugin, '.claude-plugin', 'plugin.json'), '{"name":"docket"}')
+      await mkdir(join(plugin, 'bin'))
+      await writeFile(join(plugin, 'bin', 'docket'), '#!/bin/sh\n')
+      await chmod(join(plugin, 'bin', 'docket'), 0o755)
+      box.env.PATH = [join(plugin, 'bin'), box.env.PATH].join(delimiter)
+
+      const result = await run(box, { global: true })
+
+      expect(await box.calls()).toContainEqual(['npm', 'install', '-g', CLI_SPEC])
+      expect(result.steps.find((step) => step.name === 'cli')).toMatchObject({ outcome: 'done' })
+    })
   })
 })
