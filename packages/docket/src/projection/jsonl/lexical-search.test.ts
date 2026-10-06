@@ -8,6 +8,7 @@ const doc = (id: string, title: string, content = '', tags: string[] = []): Docu
   type: id.split('.')[0] ?? 'note',
   title,
   path: `.docket/${id}.md`,
+  paths: [`.docket/${id}.md`],
   content,
   tags
 })

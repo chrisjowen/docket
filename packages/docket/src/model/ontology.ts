@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { EVIDENCE_LOCATION_FIELDS, type EvidenceLocationField } from './document.js'
+
 /** Attribute value kinds supported in v0. Deliberately minimal. */
 export const ATTRIBUTE_TYPES = [
   'string',
@@ -25,10 +27,18 @@ export interface ExtractionGuidance {
   doNotConfuseWith?: string[]
 }
 
+/**
+ * How much one observation from each source kind is worth for this resource
+ * type or relationship, overriding the source's own `confidence` - e.g. a pod
+ * read from code is worth less than one seen running.
+ */
+export type ConfidenceRules = Record<string, number>
+
 export interface ResourceTypeDefinition {
   description?: string
   attributes?: Record<string, AttributeDefinition>
   extraction?: ExtractionGuidance
+  confidence?: ConfidenceRules
 }
 
 /** `"*"` means any registered resource type. */
@@ -39,12 +49,32 @@ export interface RelationshipDefinition {
   from: TypeConstraint
   to: TypeConstraint
   attributes?: Record<string, AttributeDefinition>
+  confidence?: ConfidenceRules
+}
+
+/** A kind of place evidence comes from - `code`, `manifest`, `api` - and what it is worth. */
+export interface EvidenceSourceDefinition {
+  description?: string
+  /** What one observation of this kind is worth when no type or relationship rule says otherwise. */
+  confidence: number
+  /** Location fields every observation of this kind must give. */
+  requires?: EvidenceLocationField[]
+  /** Location fields of which every observation must give at least one. */
+  requiresAny?: EvidenceLocationField[]
+}
+
+export interface EvidenceSettings {
+  /** Replaces docket's built-in source kinds when present. */
+  sources?: Record<string, EvidenceSourceDefinition>
+  /** Confidence of a memory with no evidence and no stated `provenance.confidence`. */
+  unevidenced?: number
 }
 
 export interface Ontology {
   version: number
   resourceTypes: Record<string, ResourceTypeDefinition>
   relationships: Record<string, RelationshipDefinition>
+  evidence?: EvidenceSettings
 }
 
 // --- Schemas ---------------------------------------------------------------
@@ -61,10 +91,15 @@ export const extractionGuidanceSchema = z.object({
   doNotConfuseWith: z.array(z.string()).optional()
 })
 
+const probability = z.number().min(0).max(1)
+
+export const confidenceRulesSchema = z.record(z.string(), probability)
+
 export const resourceTypeDefinitionSchema = z.object({
   description: z.string().optional(),
   attributes: z.record(z.string(), attributeDefinitionSchema).optional(),
-  extraction: extractionGuidanceSchema.optional()
+  extraction: extractionGuidanceSchema.optional(),
+  confidence: confidenceRulesSchema.optional()
 })
 
 const typeConstraintSchema = z.union([z.literal('*'), z.array(z.string())])
@@ -73,7 +108,22 @@ export const relationshipDefinitionSchema = z.object({
   description: z.string().optional(),
   from: typeConstraintSchema,
   to: typeConstraintSchema,
-  attributes: z.record(z.string(), attributeDefinitionSchema).optional()
+  attributes: z.record(z.string(), attributeDefinitionSchema).optional(),
+  confidence: confidenceRulesSchema.optional()
+})
+
+const locationFieldsSchema = z.array(z.enum(EVIDENCE_LOCATION_FIELDS))
+
+export const evidenceSourceDefinitionSchema = z.object({
+  description: z.string().optional(),
+  confidence: probability,
+  requires: locationFieldsSchema.optional(),
+  requiresAny: locationFieldsSchema.optional()
+})
+
+export const evidenceSettingsSchema = z.object({
+  sources: z.record(z.string(), evidenceSourceDefinitionSchema).optional(),
+  unevidenced: probability.optional()
 })
 
 export const ontologySchema = z.object({
@@ -81,5 +131,6 @@ export const ontologySchema = z.object({
   resourceTypes: z.record(z.string(), resourceTypeDefinitionSchema).default({}),
   relationships: z
     .record(z.string(), relationshipDefinitionSchema)
-    .default({})
+    .default({}),
+  evidence: evidenceSettingsSchema.optional()
 })

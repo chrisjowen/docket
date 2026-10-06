@@ -22,8 +22,9 @@ docket search --json <query...>     # full result, including each hit's path
 ```
 
 Search asks every projection (semantic and graph) and prints each hit's `id`,
-score and canonical file path, grouped by projection. A hit is a pointer:
-read the file it names before relying on it.
+score, canonical file path and confidence, grouped by projection. A hit is a
+pointer: read the file it names before relying on it, and check its
+`evidence` before treating a low-confidence fact as settled.
 
 Use search first when you need to know how the system works, who owns
 something, or whether a resource already exists. Grep `.docket/` only when
@@ -32,8 +33,8 @@ search finds nothing, or to confirm an exact `id` is unused.
 ## Look up the ontology
 
 ```bash
-docket ontology list                # every resource type and relationship
-docket ontology show <type>         # one type: attributes, allowed relationships
+docket ontology list                # resource types, relationships, evidence sources
+docket ontology show <type>         # one type: attributes, relationships, confidence by source
 ```
 
 Run `show` before writing a resource of that type, so attributes and `links`

@@ -10,13 +10,28 @@ tags:
 links:
   - rel: applies_to
     target: agent.research-assistant
+    evidence:
+      - source: conversation
+        observedAt: 2026-09-14
+        observedBy: claude
+        session: 7f3c9a1e
 
   - rel: applies_to
     target: system.databricks
+    evidence:
+      - source: conversation
+        observedAt: 2026-09-14
+        observedBy: claude
+        session: 7f3c9a1e
+
+evidence:
+  - source: conversation
+    observedAt: 2026-09-14
+    observedBy: claude
+    session: 7f3c9a1e
+    note: Agreed with the user after weighing the market-data licence against copying tables out of the lakehouse.
 
 provenance:
-  authority: repo
-  confidence: 1.0
   capturedBy: claude
 ---
 

@@ -19,7 +19,6 @@ import {
   type DocumentRecord,
   type EdgeRecord
 } from '../projection/jsonl/jsonl-projection.js'
-import type { Diagnostic } from '../model/diagnostic.js'
 import type { WatchEvent } from '../watcher/reconciler.js'
 import { init } from './init.js'
 import { watch, type WatchHandle } from './watch.js'
@@ -102,9 +101,6 @@ const harness = async (): Promise<Harness> => {
     }
   }
 }
-
-const diagnosticsOf = (events: WatchEvent[]): Diagnostic[] =>
-  events.flatMap((event) => (event.kind === 'diagnostics' ? event.diagnostics : []))
 
 const documentIds = (h: Harness) => async (): Promise<string[]> =>
   (await h.documents()).map((record) => record.id)
@@ -232,7 +228,7 @@ describe('watch', () => {
     await h.start()
 
     expect(await h.edges()).toEqual([
-      { source: 'service.orders', rel: 'owned_by', target: 'team.platform' }
+      expect.objectContaining({ source: 'service.orders', rel: 'owned_by', target: 'team.platform' })
     ])
 
     await h.unlink('resources/services/orders.md')
@@ -261,11 +257,12 @@ describe('watch', () => {
     const handle = await h.start()
 
     // Copy a memory file as a template, then edit the copy into a new resource.
+    // Until it is edited the copy repeats the id, so it merges with the original (§66).
     await copyFile(join(h.root, '.docket/decisions/a.md'), join(h.root, '.docket/decisions/b.md'))
     await until(
-      () =>
-        diagnosticsOf(h.events).find((d) => d.code === 'duplicate-id'),
-      'the copy to be reported as a duplicate'
+      async () =>
+        (await h.documents()).find((d) => d.id === 'decision.a' && d.paths.length === 2),
+      'the copy to be merged with the original'
     )
     await h.write('decisions/b.md', memoryFile('decision.b', 'decision', 'B'))
     await until(

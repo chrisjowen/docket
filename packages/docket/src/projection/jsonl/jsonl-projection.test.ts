@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import type { MemoryDocument } from '../../model/index.js'
+import { entitiesOf, entityOf, makeDocument as makeFile } from '../../../test/entities.js'
+import { builtinOntology } from '../../evidence/confidence.js'
+import type { MemoryDocument, MemoryEntity } from '../../model/index.js'
 import type { MemoryProjection, ProjectionContext } from '../projection.js'
 import {
   DOCUMENTS_FILENAME,
@@ -15,8 +17,8 @@ import {
 
 const OUTPUT = '.docket/.index'
 
-function makeDocument(overrides: Partial<MemoryDocument> & { id: string }): MemoryDocument {
-  return {
+function makeDocument(overrides: Partial<MemoryDocument> & { id: string }): MemoryEntity {
+  return entityOf({
     type: 'agent',
     title: 'Research Assistant',
     path: `.docket/resources/${overrides.id}.md`,
@@ -26,10 +28,14 @@ function makeDocument(overrides: Partial<MemoryDocument> & { id: string }): Memo
     links: [],
     content: '',
     mentions: [],
+    evidence: [],
     index: { graph: true, fts: true, vector: true },
     ...overrides
-  }
+  })
 }
+
+/** What a record with no evidence and no stated confidence carries. */
+const UNEVIDENCED = { confidence: 0.5, basis: 'unevidenced', evidenceCount: 0, sources: [], evidence: [] }
 
 async function newProjection(): Promise<{ projection: MemoryProjection; outputDir: string }> {
   const projectRoot = await mkdtemp(join(tmpdir(), 'memory-file-projection-'))
@@ -78,6 +84,7 @@ describe('jsonl projection', () => {
         type: 'agent',
         title: 'Research Assistant',
         path: '.docket/resources/agent.research-assistant.md',
+        paths: ['.docket/resources/agent.research-assistant.md'],
         content: 'The Research Assistant performs research...',
         tags: ['research', 'agents']
       }
@@ -87,7 +94,8 @@ describe('jsonl projection', () => {
         id: 'agent.research-assistant',
         type: 'agent',
         title: 'Research Assistant',
-        attributes: { package: 'RA.agent', runtime: 'in-process', modes: ['fast', 'slow'] }
+        attributes: { package: 'RA.agent', runtime: 'in-process', modes: ['fast', 'slow'] },
+        ...UNEVIDENCED
       }
     ])
     expect(await lines(outputDir, EDGES_FILENAME)).toEqual([
@@ -95,9 +103,10 @@ describe('jsonl projection', () => {
         source: 'agent.research-assistant',
         rel: 'owned_by',
         target: 'team.research-platform',
-        attributes: { criticality: 'high' }
+        attributes: { criticality: 'high' },
+        ...UNEVIDENCED
       },
-      { source: 'agent.research-assistant', rel: 'uses', target: 'datasource.public-market-1' }
+      { source: 'agent.research-assistant', rel: 'uses', target: 'datasource.public-market-1', ...UNEVIDENCED }
     ])
     // The manifest belongs to sync, not to any projection.
     expect(existsSync(join(outputDir, 'manifest.json'))).toBe(false)
@@ -143,7 +152,7 @@ describe('jsonl projection', () => {
     expect(documents[0]?.title).toBe('Renamed')
     expect(await lines(outputDir, NODES_FILENAME)).toHaveLength(1)
     expect(await lines(outputDir, EDGES_FILENAME)).toEqual([
-      { source: agent.id, rel: 'uses', target: 'datasource.other' }
+      { source: agent.id, rel: 'uses', target: 'datasource.other', ...UNEVIDENCED }
     ])
   })
 
@@ -159,9 +168,7 @@ describe('jsonl projection', () => {
   })
 
   it('suppresses graph records when index.graph is false', async () => {
-    await projection.upsert(
-      makeDocument({ ...agent, index: { graph: false, fts: true, vector: true } })
-    )
+    await projection.upsert({ ...agent, index: { graph: false, fts: true, vector: true } })
     await projection.flush?.()
 
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(1)
@@ -222,4 +229,77 @@ describe('jsonl projection', () => {
     await projection.close?.()
     expect(await lines(outputDir, DOCUMENTS_FILENAME)).toHaveLength(2)
   })
+
+  it('writes one record per entity and one edge per (source, rel, target), with merged evidence', async () => {
+    const [orders] = entitiesOf(
+      [
+        {
+          ...makeFile({ id: 'service.orders' }),
+          path: '.docket/resources/services/orders.md',
+          content: 'Takes orders.\n',
+          evidence: [{ source: 'code', path: 'src/orders/server.ts', lines: '1-20' }],
+          links: [
+            {
+              rel: 'depends_on',
+              target: 'datasource.orders-db',
+              evidence: [{ source: 'manifest', path: 'package.json', key: 'dependencies.pg' }]
+            }
+          ]
+        },
+        {
+          ...makeFile({ id: 'service.orders' }),
+          path: '.docket/captured/orders-runtime.md',
+          content: 'Runs three replicas.\n',
+          evidence: [{ source: 'runtime', endpoint: 'https://orders.internal/healthz' }],
+          links: [
+            {
+              rel: 'depends_on',
+              target: 'datasource.orders-db',
+              evidence: [{ source: 'code', path: 'src/orders/db.ts', lines: '12' }]
+            }
+          ]
+        }
+      ],
+      builtinOntology()
+    )
+    if (!orders) throw new Error('no entity')
+    await projection.upsert(orders)
+    await projection.flush?.()
+
+    expect(await lines(outputDir, DOCUMENTS_FILENAME)).toEqual([
+      expect.objectContaining({
+        id: 'service.orders',
+        path: '.docket/captured/orders-runtime.md',
+        paths: ['.docket/captured/orders-runtime.md', '.docket/resources/services/orders.md'],
+        content: 'Runs three replicas.\n\nTakes orders.\n'
+      })
+    ])
+    expect(await lines(outputDir, NODES_FILENAME)).toEqual([
+      expect.objectContaining({
+        id: 'service.orders',
+        // code 0.6 and runtime 0.85, independent: 1 - 0.4 * 0.15.
+        confidence: 0.94,
+        basis: 'evidence',
+        evidenceCount: 2,
+        sources: ['code', 'runtime']
+      })
+    ])
+    expect(await lines(outputDir, EDGES_FILENAME)).toEqual([
+      {
+        source: 'service.orders',
+        rel: 'depends_on',
+        target: 'datasource.orders-db',
+        evidence: [
+          { source: 'code', path: 'src/orders/db.ts', lines: '12' },
+          { source: 'manifest', path: 'package.json', key: 'dependencies.pg' }
+        ],
+        // depends_on rules: manifest 0.95, code 0.65 - 1 - 0.05 * 0.35.
+        confidence: 0.98,
+        basis: 'evidence',
+        evidenceCount: 2,
+        sources: ['code', 'manifest']
+      }
+    ])
+  })
 })
+

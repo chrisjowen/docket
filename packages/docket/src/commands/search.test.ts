@@ -43,6 +43,8 @@ describe('search', () => {
         type: 'decision',
         title: 'Use MinIO in development',
         path: '.docket/decisions/minio.md',
+        // No evidence and no stated confidence: the ontology's default.
+        confidence: 0.5,
         foundBy: ['jsonl']
       }
     ])

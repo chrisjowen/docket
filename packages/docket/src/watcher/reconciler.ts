@@ -1,8 +1,11 @@
 import { readFile } from 'node:fs/promises'
-import { relative, resolve, sep } from 'node:path'
+import { relative, sep } from 'node:path'
 
 import type { ResolvedConfig } from '../config/config.js'
-import type { IndexManifest } from '../manifest/manifest.js'
+import { aggregate } from '../evidence/aggregate.js'
+import { confidenceModel } from '../evidence/confidence.js'
+import { entryPaths, type IndexManifest } from '../manifest/manifest.js'
+import { manifestEntry, planProjection } from '../manifest/plan.js'
 import { loadManifestState, saveManifest } from '../manifest/state.js'
 import { type Diagnostic, error, hasErrors } from '../model/diagnostic.js'
 import type { MemoryDocument, Ontology } from '../model/index.js'
@@ -35,45 +38,47 @@ export interface Reconciler {
   sync(): Promise<void>
 }
 
-/** What was last handed to the projections for a given path. */
-interface Projected {
-  id: string
+/** The last read of one source path. */
+interface SourceFile {
+  /** Of the raw bytes, so an unchanged rewrite is skipped before parsing. Empty when unknown. */
   hash: string
+  /** Absent when the file did not parse. */
+  document?: MemoryDocument
+  /** Had an error, so it contributes nothing and holds what it last projected (spec §67). */
+  broken: boolean
 }
 
 /** Path as recorded on documents: repo-relative and always posix-separated. */
 const repoRelative = (projectRoot: string, absolute: string): string =>
   relative(projectRoot, absolute).split(sep).join('/')
 
+const NO_ONTOLOGY: Ontology = { version: 1, resourceTypes: {}, relationships: {} }
+
 /**
  * Turns dirty paths into projection mutations (spec §36).
  *
- * Holds the desired state as two indexes - path to what it projected, and id to
- * the path it came from - because identity lives inside the file, not in the
- * path. That is what lets an edit change a document's id without orphaning the
- * old one, and a move re-register an id without its old path's unlink event
+ * Several files may declare one id, so projections receive entities - every
+ * file of an id merged - and a change to one path re-aggregates the ids it
+ * touched: the id it declared before and the id it declares now. That is what
+ * lets an edit change a document's id without orphaning the old one, and a
+ * move register an id at its new path without its old path's unlink event
  * deleting the resource that just moved.
  *
- * Nothing here throws on bad input: a file that cannot be parsed or validated
- * is reported and keeps whatever it last projected (spec §67).
+ * Holds the last read of every path, and the manifest of what each id last
+ * projected. Nothing here throws on bad input: a file that cannot be parsed or
+ * validated is reported and its id keeps whatever it last projected (spec §67).
  *
  * Mutations are buffered: each pass ends with one `commit`, which flushes the
  * projections and then records the manifest, so a full sync over thousands of
- * files writes each derived file once rather than once per document.
+ * files writes each derived file once rather than once per entity.
  */
 export const createReconciler = (
   resolved: ResolvedConfig,
   manager: ProjectionManager,
   report: WatchReporter
 ): Reconciler => {
-  const projected = new Map<string, Projected>()
-  const pathOfId = new Map<string, string>()
-  /**
-   * Paths refused because their file repeats an id another path owns (spec
-   * §66), keyed by path. When the owner lets go of the id, the refused file is
-   * reconsidered, so whichever file still defines it ends up projected.
-   */
-  const shadowed = new Map<string, string>()
+  const files = new Map<string, SourceFile>()
+  let projected: IndexManifest['documents'] = {}
   /** Something was handed to the projections since the last commit. */
   let dirty = false
   /**
@@ -91,19 +96,17 @@ export const createReconciler = (
 
   /**
    * The hash gate needs what was last projected, which sync records in the
-   * manifest (spec §31). Reading it lets a restarted watcher skip files nothing
-   * has touched. A missing manifest, or one written for other projections,
-   * vouches for nothing: the projections are reset and everything reprojected.
+   * manifest (spec §31). Reading it lets a restarted watcher skip entities
+   * nothing has touched. A missing manifest, or one written for other
+   * projections, vouches for nothing: the projections are reset and
+   * everything reprojected.
    */
   const seed = async (): Promise<void> => {
     if (seeded) return
     seeded = true
     const { manifest, stale } = await loadManifestState(resolved)
     if (stale) await manager.reset()
-    for (const [id, entry] of Object.entries(manifest.documents)) {
-      projected.set(entry.path, { id, hash: entry.hash })
-      pathOfId.set(id, entry.path)
-    }
+    projected = { ...manifest.documents }
   }
 
   const reloadOntology = async (): Promise<boolean> => {
@@ -132,91 +135,73 @@ export const createReconciler = (
   const commit = async (): Promise<void> => {
     if (!dirty) return
     await manager.flush()
-    const documents: IndexManifest['documents'] = {}
-    for (const [path, entry] of projected) documents[entry.id] = { path, hash: entry.hash }
-    await saveManifest(resolved, documents)
+    await saveManifest(resolved, projected)
     dirty = false
     const committed = pending
     pending = []
     for (const event of committed) report(event)
   }
 
-  const absoluteOf = (path: string): string => resolve(resolved.projectRoot, path)
+  /**
+   * Re-aggregates `ids` from the files as last read and applies the
+   * difference. Scoped to those ids, so a pass over one path never touches
+   * entities whose files it did not read.
+   */
+  const apply = async (ids: ReadonlySet<string> | 'all'): Promise<void> => {
+    const inScope = (id: string): boolean => ids === 'all' || ids.has(id)
+    const broken = new Set<string>()
+    const documents: MemoryDocument[] = []
+    for (const [path, file] of files) {
+      if (file.broken) broken.add(path)
+      else if (file.document && inScope(file.document.id)) documents.push(file.document)
+    }
 
-  /** Whether the file at a repo-relative path still defines `id` right now. */
-  const definesId = async (path: string, id: string): Promise<boolean> => {
-    try {
-      const raw = await readFile(absoluteOf(path), 'utf8')
-      return parseMemoryFile(raw, path).document?.id === id
-    } catch {
-      return false
+    const merged = aggregate(documents, confidenceModel(ontology ?? NO_ONTOLOGY))
+    reportAll(merged.diagnostics)
+    for (const diagnostic of merged.diagnostics) {
+      if (diagnostic.severity === 'error' && diagnostic.path !== undefined) broken.add(diagnostic.path)
+    }
+
+    const previous = Object.fromEntries(Object.entries(projected).filter(([id]) => inScope(id)))
+    const plan = planProjection(merged.entities, broken, previous)
+
+    for (const id of plan.removals) {
+      const entry = projected[id]
+      await manager.remove(id)
+      delete projected[id]
+      dirty = true
+      pending.push({ kind: 'removed', id, path: entry?.path ?? '' })
+    }
+
+    for (const entity of plan.upserts) {
+      const known = entity.id in projected
+      await manager.upsert(entity)
+      projected[entity.id] = manifestEntry(entity)
+      dirty = true
+      pending.push({ kind: known ? 'updated' : 'added', id: entity.id, path: entity.path })
     }
   }
 
-  const forget = async (id: string, path: string): Promise<void> => {
-    await manager.remove(id)
-    projected.delete(path)
-    if (pathOfId.get(id) === path) pathOfId.delete(id)
-    dirty = true
-    pending.push({ kind: 'removed', id, path })
-
-    // A file refused for repeating this id may now be its only definition.
-    for (const [other, otherId] of shadowed) {
-      if (otherId !== id) continue
-      shadowed.delete(other)
-      await reconcileFile(absoluteOf(other))
-      break
-    }
+  /** Ids a path contributes to: as last read, and as the manifest last recorded. */
+  const idsAt = (path: string): string[] => {
+    const declared = files.get(path)?.document?.id
+    return [
+      ...(declared === undefined ? [] : [declared]),
+      ...Object.entries(projected)
+        .filter(([, entry]) => entryPaths(entry).includes(path))
+        .map(([id]) => id)
+    ]
   }
 
-  const project = async (document: MemoryDocument): Promise<void> => {
-    const previous = projected.get(document.path)
-
-    // The id lives in the file, so an edit can change it. Without this the old
-    // id would stay in the projection with no file behind it (spec §36).
-    if (previous && previous.id !== document.id) {
-      await forget(previous.id, document.path)
-    }
-
-    // The same id arriving from another path is a move - unless the former
-    // path still defines it, in which case this file is a duplicate, such as a
-    // copy about to be edited into a new resource. A duplicate is reported and
-    // not projected, so the original keeps its id (spec §66).
-    const formerPath = pathOfId.get(document.id)
-    if (formerPath !== undefined && formerPath !== document.path) {
-      if (await definesId(formerPath, document.id)) {
-        shadowed.set(document.path, document.id)
-        reportAll([
-          error('duplicate-id', `Duplicate id, already defined in ${formerPath}`, {
-            path: document.path,
-            id: document.id
-          })
-        ])
-        return
-      }
-      // A move. Dropping the old path now means its later unlink event finds
-      // nothing to remove, so the resource is never deleted and recreated
-      // (spec §36).
-      projected.delete(formerPath)
-    }
-
-    const known = pathOfId.has(document.id)
-    await manager.upsert(document)
-    projected.set(document.path, { id: document.id, hash: document.hash })
-    pathOfId.set(document.id, document.path)
-    dirty = true
-    pending.push({
-      kind: known ? 'updated' : 'added',
-      id: document.id,
-      path: document.path
-    })
+  const reconcile = async (absolutePath: string): Promise<void> => {
+    await seed()
+    await reconcileFile(absolutePath)
+    await commit()
   }
 
   const reconcileFile = async (absolutePath: string): Promise<void> => {
     const path = repoRelative(resolved.projectRoot, absolutePath)
-    const previous = projected.get(path)
-    // Re-decided below: a refused duplicate stays refused only if it still is one.
-    shadowed.delete(path)
+    const before = new Set(idsAt(path))
 
     let raw: string
     try {
@@ -226,20 +211,22 @@ export const createReconciler = (
         reportAll([error('unreadable-file', (cause as Error).message, { path })])
         return
       }
-      // The file is gone, so drop whatever this path last projected (spec §36).
-      if (previous) await forget(previous.id, path)
+      // The file is gone, so whatever it contributed goes with it (spec §36).
+      files.delete(path)
+      if (before.size > 0) await apply(before)
       return
     }
 
     // Identical bytes cannot change the projection, so stop before parsing
     // (spec §24). This is also what makes a no-op rewrite free.
     const hash = hashContent(raw)
-    if (previous?.hash === hash) return
+    if (files.get(path)?.hash === hash) return
 
     const parsed = parseMemoryFile(raw, path)
     if (!parsed.document) {
       // Half-saved frontmatter keeps the previous projection (spec §67).
       reportAll(parsed.diagnostics)
+      files.set(path, { hash, broken: true })
       return
     }
 
@@ -256,15 +243,9 @@ export const createReconciler = (
         : [])
     ]
     reportAll(diagnostics)
-    if (hasErrors(diagnostics)) return
+    files.set(path, { hash, document: parsed.document, broken: hasErrors(diagnostics) })
 
-    await project(parsed.document)
-  }
-
-  const reconcile = async (absolutePath: string): Promise<void> => {
-    await seed()
-    await reconcileFile(absolutePath)
-    await commit()
+    await apply(new Set([...before, parsed.document.id]))
   }
 
   const sync = async (): Promise<void> => {
@@ -283,38 +264,30 @@ export const createReconciler = (
       )
     )
 
-    // The scan refuses every repeat of an id but the first (spec §66).
-    shadowed.clear()
-    for (const d of diagnostics) {
-      if (d.code === 'duplicate-id' && d.path !== undefined && d.id !== undefined) {
-        shadowed.set(d.path, d.id)
-      }
-    }
-
+    // The scan is the whole truth: a path it never saw is gone, and a path
+    // that produced a diagnostic still exists - it is broken, not deleted (§67).
+    files.clear()
     for (const document of scan.documents) {
-      if (broken.has(document.path)) continue
-      if (projected.get(document.path)?.hash === document.hash) continue
-      await project(document)
+      files.set(document.path, {
+        hash: document.hash,
+        document,
+        broken: broken.has(document.path)
+      })
+    }
+    for (const path of broken) {
+      if (!files.has(path)) files.set(path, { hash: '', broken: true })
     }
 
-    // A path that produced a diagnostic still exists on disk - it is broken,
-    // not deleted - so only paths the scan never saw at all are removed (§67).
-    const seen = new Set([
-      ...scan.documents.map((d) => d.path),
-      ...diagnostics.flatMap((d) => d.path ?? [])
-    ])
-    for (const [path, entry] of [...projected]) {
-      if (!seen.has(path)) await forget(entry.id, path)
-    }
+    await apply('all')
     await commit()
   }
 
   /**
-   * Spec §37: reload, revalidate, report, re-project. The normalized model is
-   * ontology-independent - the parser never sees the registry - so nothing can
-   * change interpretation in v0, and the hash-gated full sync the spec permits
-   * covers the rest: newly valid documents get projected, newly invalid ones are
-   * reported and keep what they had.
+   * Spec §37: reload, revalidate, report, re-project. Confidence rules live in
+   * the registry, so a reload can change what an entity projects; the
+   * hash-gated full sync covers that along with the rest - newly valid
+   * documents get projected, newly invalid ones are reported and keep what
+   * they had.
    */
   const reconcileOntology = async (): Promise<void> => {
     if (!(await reloadOntology())) return

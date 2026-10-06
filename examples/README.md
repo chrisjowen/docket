@@ -75,9 +75,17 @@ commented so you can see the seam.
 `supersedes` `decision.orders-on-dynamodb`. Point a relationship at a type its
 definition does not allow and `docket validate` rejects it.
 
-**Provenance distinguishes who captured what.** `service.orders` is
-`capturedBy: human`, `confidence: 1.0`. `agent.research-assistant` is
-`capturedBy: claude`, `confidence: 0.9`. Same file format, different trust.
+**Evidence says where each thing was seen, and confidence follows from it.**
+`agent.research-assistant` was captured by Claude, and it and each of its links
+record the file and lines, manifest key, Databricks bundle or conversation they
+came from. Its confidence is computed from that evidence - code, manifest and
+conversation corroborate each other - rather than written by hand.
+`service.orders` was written by a person and states `confidence: 1.0`, which
+stands where nothing is evidenced; its Stripe dependency has evidence of its
+own, from `package.json` and the code that charges the card.
+`docket ontology show <type>` prints what each source of evidence is worth for
+a type. This ontology predates evidence, so it gets docket's built-in sources
+and rules.
 
 **IDs do not depend on paths.** `feature_flag.checkout-rewrite` lives in
 `resources/feature-flags/`, a directory the CLI knows nothing about. Move the

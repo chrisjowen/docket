@@ -2,11 +2,14 @@ import { readFile } from 'node:fs/promises'
 import { parse as parseYaml } from 'yaml'
 
 import type { ResolvedConfig } from '../config/config.js'
+import { confidenceModel } from '../evidence/confidence.js'
 import {
+  type ConfidenceRules,
   type Diagnostic,
   type Ontology,
   error,
-  ontologySchema
+  ontologySchema,
+  warning
 } from '../model/index.js'
 
 export interface LoadedOntology {
@@ -74,5 +77,29 @@ export const loadOntology = async (
     }
   }
 
-  return { ontology: parsed.data, diagnostics: [] }
+  return { ontology: parsed.data, diagnostics: checkConfidenceRules(parsed.data, path) }
+}
+
+/**
+ * A `confidence:` rule for a source kind that is not registered can never
+ * apply - most likely a typo, so it is worth a warning.
+ */
+const checkConfidenceRules = (ontology: Ontology, path: string): Diagnostic[] => {
+  const sources = confidenceModel(ontology).sources
+  const check = (section: string, definitions: Record<string, { confidence?: ConfidenceRules }>) =>
+    Object.entries(definitions).flatMap(([name, definition]) =>
+      Object.keys(definition.confidence ?? {})
+        .filter((source) => !(source in sources))
+        .map((source) =>
+          warning(
+            'unknown-evidence-source',
+            `${section}.${name}.confidence names source "${source}", which is not registered under evidence.sources.`,
+            { path }
+          )
+        )
+    )
+  return [
+    ...check('resourceTypes', ontology.resourceTypes),
+    ...check('relationships', ontology.relationships)
+  ]
 }

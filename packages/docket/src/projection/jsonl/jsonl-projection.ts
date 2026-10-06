@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 
 import type { JsonlProjectionConfig } from '../../config/config.js'
 import { writeFileAtomic } from '../../manifest/manifest.js'
-import type { MemoryDocument } from '../../model/index.js'
+import type { Assessment, MemoryEntity, MemoryEvidence } from '../../model/index.js'
 import { stableStringify } from '../../model/stable-json.js'
 import type { MemoryProjection, ProjectionContext, SearchAnswer } from '../projection.js'
 import { lexicalSearch } from './lexical-search.js'
@@ -12,31 +12,43 @@ export const DOCUMENTS_FILENAME = 'documents.jsonl'
 export const NODES_FILENAME = 'nodes.jsonl'
 export const EDGES_FILENAME = 'edges.jsonl'
 
-/** One line of `documents.jsonl` (spec §28). */
+/** One line of `documents.jsonl` (spec §28): one per entity, however many files declare it. */
 export interface DocumentRecord {
   id: string
   type: string
   title: string
+  /** The first source file. */
   path: string
+  /** Every source file, in path order. */
+  paths: string[]
   content: string
   tags: string[]
 }
 
-/** One line of `nodes.jsonl` (spec §29). */
-export interface NodeRecord {
+/** One line of `nodes.jsonl` (spec §29), with the evidence behind it and the confidence it earns. */
+export interface NodeRecord extends Assessment {
   id: string
   type: string
   title: string
   attributes: Record<string, unknown>
+  evidence: MemoryEvidence[]
 }
 
-/** One line of `edges.jsonl` (spec §30). */
-export interface EdgeRecord {
+/** One line of `edges.jsonl` (spec §30): one per (source, rel, target). */
+export interface EdgeRecord extends Assessment {
   source: string
   rel: string
   target: string
   attributes?: Record<string, unknown>
+  evidence: MemoryEvidence[]
 }
+
+const assessmentOf = (assessed: Assessment): Assessment => ({
+  confidence: assessed.confidence,
+  basis: assessed.basis,
+  evidenceCount: assessed.evidenceCount,
+  sources: [...assessed.sources]
+})
 
 /**
  * Writes the normalized model out as JSONL (spec §27) - a readable view of
@@ -84,38 +96,43 @@ class JsonlProjection implements MemoryProjection {
     }
   }
 
-  async upsert(document: MemoryDocument): Promise<void> {
-    this.documents.set(document.id, {
-      id: document.id,
-      type: document.type,
-      title: document.title,
-      path: document.path,
-      content: document.content,
-      tags: [...document.tags]
+  async upsert(entity: MemoryEntity): Promise<void> {
+    this.documents.set(entity.id, {
+      id: entity.id,
+      type: entity.type,
+      title: entity.title,
+      path: entity.path,
+      paths: [...entity.paths],
+      content: entity.content,
+      tags: [...entity.tags]
     })
 
     // `index.graph: false` suppresses the graph records only (spec §21). The
     // `fts` and `vector` flags have no counterpart in this projection in v0 -
     // they are hints for the future FTS and vector projections.
-    if (document.index.graph) {
-      this.nodes.set(document.id, {
-        id: document.id,
-        type: document.type,
-        title: document.title,
-        attributes: document.attributes
+    if (entity.index.graph) {
+      this.nodes.set(entity.id, {
+        id: entity.id,
+        type: entity.type,
+        title: entity.title,
+        attributes: entity.attributes,
+        evidence: entity.evidence,
+        ...assessmentOf(entity)
       })
       this.edges.set(
-        document.id,
-        document.links.map(link => ({
-          source: document.id,
+        entity.id,
+        entity.links.map(link => ({
+          source: entity.id,
           rel: link.rel,
           target: link.target,
-          ...(link.attributes ? { attributes: link.attributes } : {})
+          ...(link.attributes ? { attributes: link.attributes } : {}),
+          evidence: link.evidence,
+          ...assessmentOf(link)
         }))
       )
     } else {
-      this.nodes.delete(document.id)
-      this.edges.delete(document.id)
+      this.nodes.delete(entity.id)
+      this.edges.delete(entity.id)
     }
 
     this.dirty = true
@@ -225,11 +242,7 @@ function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
+/** Entities carry one link per (source, rel, target), so that triple orders edges totally. */
 function compareEdges(a: EdgeRecord, b: EdgeRecord): number {
-  return (
-    compare(a.source, b.source) ||
-    compare(a.rel, b.rel) ||
-    compare(a.target, b.target) ||
-    compare(stableStringify(a.attributes ?? null), stableStringify(b.attributes ?? null))
-  )
+  return compare(a.source, b.source) || compare(a.rel, b.rel) || compare(a.target, b.target)
 }

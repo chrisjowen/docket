@@ -1,23 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { MemoryDocument } from '../model/index.js'
+import { entityOf, makeDocument } from '../../test/entities.js'
 import { ProjectionManager } from './manager.js'
 import type { MemoryProjection } from './projection.js'
 import { createProjection, createProjections } from './registry.js'
 
-const document: MemoryDocument = {
-  id: 'agent.a',
-  type: 'agent',
-  title: 'A',
-  path: '.docket/a.md',
-  hash: 'sha256:a',
-  tags: [],
-  attributes: {},
-  links: [],
-  content: '',
-  mentions: [],
-  index: { graph: true, fts: true, vector: true }
-}
+const document = entityOf(makeDocument({ id: 'agent.a', title: 'A', path: '.docket/a.md' }))
 
 function fakeProjection(name: string, overrides: Partial<MemoryProjection> = {}): MemoryProjection {
   return {

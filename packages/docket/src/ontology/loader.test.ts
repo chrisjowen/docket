@@ -44,6 +44,50 @@ describe('loadOntology', () => {
     expect(ontology?.relationships.uses?.from).toBe('*')
   })
 
+  it('warns about a confidence rule for a source that is not registered', async () => {
+    const { ontology, diagnostics } = await loadOntology(
+      await resolvedFor(
+        [
+          'version: 1',
+          'resourceTypes:',
+          '  pod:',
+          '    confidence:',
+          '      code: 0.3',
+          '      kubectl: 0.9',
+          'relationships: {}'
+        ].join('\n')
+      )
+    )
+
+    expect(ontology?.resourceTypes.pod?.confidence).toEqual({ code: 0.3, kubectl: 0.9 })
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        code: 'unknown-evidence-source',
+        message: expect.stringContaining('resourceTypes.pod.confidence names source "kubectl"')
+      })
+    ])
+  })
+
+  it('rejects a confidence outside 0 to 1 and a location field evidence does not have', async () => {
+    const { ontology, diagnostics } = await loadOntology(
+      await resolvedFor(
+        [
+          'version: 1',
+          'evidence:',
+          '  sources:',
+          '    ticket:',
+          '      confidence: 1.5',
+          '      requires: [ticketId]',
+          'resourceTypes: {}',
+          'relationships: {}'
+        ].join('\n')
+      )
+    )
+    expect(ontology).toBeNull()
+    expect(diagnostics.map((d) => d.code)).toEqual(['ontology-invalid', 'ontology-invalid'])
+  })
+
   it('reports a missing ontology file instead of throwing', async () => {
     const { ontology, diagnostics } = await loadOntology(await resolvedFor())
     expect(ontology).toBeNull()

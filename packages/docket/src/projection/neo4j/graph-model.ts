@@ -1,3 +1,5 @@
+import type { Assessment, MemoryEntity } from '../../model/index.js'
+
 /**
  * How the memory model is named in Neo4j. Cypher cannot take labels or
  * relationship types as parameters, so they are built here from a strict
@@ -24,6 +26,86 @@ export const relationshipTypeFor = (rel: string): string => {
   }
   return type
 }
+
+/** Neo4j properties hold primitives and arrays of them; anything else is kept as JSON. */
+export const toProperty = (value: unknown): unknown =>
+  value === null ||
+  ['string', 'number', 'boolean'].includes(typeof value) ||
+  (Array.isArray(value) && value.every((item) => ['string', 'number', 'boolean'].includes(typeof item)))
+    ? value
+    : JSON.stringify(value)
+
+/**
+ * How far a node or relationship is corroborated, as properties a query can
+ * filter on: `WHERE r.confidence < 0.5`, `WHERE 'runtime' IN n.sources`. The
+ * evidence itself is JSON, for reading rather than matching.
+ */
+const assessmentProperties = (assessed: Assessment & { evidence: unknown[] }): Record<string, unknown> => ({
+  confidence: assessed.confidence,
+  confidenceBasis: assessed.basis,
+  evidenceCount: assessed.evidenceCount,
+  sources: assessed.sources,
+  evidence: JSON.stringify(assessed.evidence)
+})
+
+/** Every property an entity writes on its node. Removed again when the node becomes a stub. */
+export const nodeProperties = (entity: MemoryEntity): Record<string, unknown> => ({
+  type: entity.type,
+  title: entity.title,
+  path: entity.path,
+  paths: entity.paths,
+  content: entity.content,
+  // A string, because the full-text index only reads string properties.
+  tags: entity.tags.join(' '),
+  hash: entity.hash,
+  attributes: JSON.stringify(entity.attributes),
+  ...assessmentProperties(entity)
+})
+
+/** Names of the properties `nodeProperties` writes. */
+export const NODE_PROPERTIES = [
+  'type',
+  'title',
+  'path',
+  'paths',
+  'content',
+  'tags',
+  'hash',
+  'attributes',
+  'confidence',
+  'confidenceBasis',
+  'evidenceCount',
+  'sources',
+  'evidence'
+] as const
+
+/** One relationship to write: the entity has exactly one per (rel, target). */
+export interface RelationshipRow {
+  /** Neo4j relationship type, e.g. `DEPENDS_ON`. */
+  type: string
+  rel: string
+  target: string
+  properties: Record<string, unknown>
+}
+
+/**
+ * The relationships an entity writes, one per (source, rel, target) however
+ * many files declared it. The link's own attributes come first, so they can
+ * never shadow `rel` or the confidence a query relies on.
+ */
+export const relationshipRows = (entity: MemoryEntity): RelationshipRow[] =>
+  entity.links.map((link) => ({
+    type: relationshipTypeFor(link.rel),
+    rel: link.rel,
+    target: link.target,
+    properties: {
+      ...Object.fromEntries(
+        Object.entries(link.attributes ?? {}).map(([key, value]) => [key, toProperty(value)])
+      ),
+      rel: link.rel,
+      ...assessmentProperties(link)
+    }
+  }))
 
 const LUCENE_SPECIAL = /[+\-!(){}[\]^"~*?:\\/&|]/g
 

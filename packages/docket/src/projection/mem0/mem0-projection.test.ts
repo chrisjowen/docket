@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { entitiesOf, entityOf } from '../../../test/entities.js'
 import type { Mem0ProjectionConfig } from '../../config/config.js'
-import type { MemoryDocument } from '../../model/index.js'
+import type { MemoryDocument, MemoryEntity } from '../../model/index.js'
 import { checkoutScope } from '../scope.js'
 import type { Mem0Backend, Mem0Scope, StoredMemory } from './backend.js'
 import {
@@ -17,7 +18,7 @@ const CONTEXT = {
   stateRoot: '/repos/acme platform/.docket/.index'
 }
 
-const makeDocument = (overrides: Partial<MemoryDocument> = {}): MemoryDocument => ({
+const makeFile = (overrides: Partial<MemoryDocument> = {}): MemoryDocument => ({
   id: 'service.orders',
   type: 'service',
   title: 'Orders',
@@ -28,9 +29,12 @@ const makeDocument = (overrides: Partial<MemoryDocument> = {}): MemoryDocument =
   links: [{ rel: 'owned_by', target: 'team.payments' }],
   content: 'Handles orders.\n',
   mentions: [],
+  evidence: [],
   index: { graph: true, fts: true, vector: true },
   ...overrides
 })
+
+const makeDocument = (overrides: Partial<MemoryDocument> = {}): MemoryEntity => entityOf(makeFile(overrides))
 
 /** An in-memory mem0 that can withhold ids on add, as the hosted API may. */
 class FakeMem0 implements Mem0Backend {
@@ -86,12 +90,16 @@ describe('mem0 projection', () => {
 
     const [memory] = [...backend.memories.values()]
     expect(memory?.text).toBe(
-      '# Orders\nservice service.orders\n\nHandles orders.\n\nLinks:\n- owned_by team.payments\n\nTags: core\n'
+      '# Orders\nservice service.orders\nConfidence: 0.5, no evidence recorded\n\nHandles orders.\n\n' +
+        'Links:\n- owned_by team.payments (confidence 0.5)\n\nTags: core\n'
     )
     expect(memory?.metadata).toMatchObject({
       [DOCUMENT_ID_KEY]: 'service.orders',
       memory_type: 'service',
-      memory_hash: 'sha256:orders'
+      memory_hash: expect.stringMatching(/^sha256:/),
+      confidence: 0.5,
+      confidence_basis: 'unevidenced',
+      evidence_count: 0
     })
   })
 
@@ -199,7 +207,74 @@ describe('mem0 projection', () => {
 
   it('renders a document without body, links or tags', () => {
     expect(renderDocument(makeDocument({ content: '', links: [], tags: [] }))).toBe(
-      '# Orders\nservice service.orders\n'
+      '# Orders\nservice service.orders\nConfidence: 0.5, no evidence recorded\n'
     )
+  })
+
+  it('says exactly where each thing was seen, listing evidence a link shares with its resource once', () => {
+    const seenInCode = {
+      source: 'code',
+      path: 'src/orders/server.ts',
+      lines: '10-42',
+      symbol: 'createServer',
+      observedAt: '2026-10-05',
+      observedBy: 'claude'
+    }
+    const text = renderDocument(
+      makeDocument({
+        tags: [],
+        evidence: [seenInCode],
+        links: [
+          { rel: 'owned_by', target: 'team.payments' },
+          {
+            rel: 'depends_on',
+            target: 'datasource.orders-db',
+            evidence: [{ source: 'manifest', path: 'package.json', key: 'dependencies.pg', urls: ['https://example.com/pg'] }]
+          }
+        ]
+      })
+    )
+
+    expect(text).toBe(
+      [
+        '# Orders',
+        'service service.orders',
+        'Confidence: 0.6 from code (1 observation)',
+        '',
+        'Handles orders.',
+        '',
+        'Links:',
+        '- owned_by team.payments (confidence 0.5)',
+        '- depends_on datasource.orders-db (confidence 0.9)',
+        '  - manifest: package.json key dependencies.pg https://example.com/pg',
+        '',
+        'Evidence:',
+        '- code: src/orders/server.ts:10-42 createServer (2026-10-05, claude)',
+        ''
+      ].join('\n')
+    )
+  })
+
+  it('stores files that share an id as one memory with their combined confidence', async () => {
+    const { projection, backend } = await setup()
+    const [merged] = entitiesOf([
+      makeFile({ evidence: [{ source: 'code', path: 'src/orders.ts' }] }),
+      makeFile({
+        path: '.docket/captured/orders.md',
+        evidence: [{ source: 'runtime', symbol: 'deployment/orders' }]
+      })
+    ])
+    if (!merged) throw new Error('no entity')
+    await projection.upsert(merged)
+
+    expect(backend.memories.size).toBe(1)
+    expect([...backend.memories.values()][0]?.metadata).toMatchObject({
+      memory_path: '.docket/captured/orders.md',
+      memory_paths: '.docket/captured/orders.md,.docket/resources/services/orders.md',
+      confidence: 0.94,
+      confidence_basis: 'evidence',
+      evidence_count: 2,
+      evidence_sources: 'code,runtime'
+    })
   })
 })

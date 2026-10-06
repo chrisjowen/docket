@@ -80,7 +80,7 @@ an unbumped change never reaches installed copies.
 | Piece | What it does |
 |---|---|
 | **`docket` skill** | Using the `docket` CLI: search, ontology, validate, sync |
-| **`remember` skill** | Writing to the docket well: procedure, file format, what's worth keeping |
+| **`remember` skill** | Writing to the docket well: procedure, file format, evidence, what's worth keeping |
 | **`ontology` skill** | Inspecting and extending `.docket/entities.yaml` |
 | **SessionStart hook** | Injects docket context and starts a best-effort `docket sync` in the background |
 | **SessionEnd hook** | Starts a background review of the session and captures durable knowledge in `.docket/` |
@@ -93,9 +93,14 @@ returns straight away. The review agent:
 - reads only the transcript lines no earlier review has seen, so a resumed session is
   reviewed from where the last review stopped, and nothing is reviewed twice
 - follows the `remember` skill and checks the existing docket before writing
+- records where everything it captures was seen - the file, lines and symbol, the
+  config key, the API endpoint, the URL, or what you said - with the session and date
+- appends a new sighting to what is already there instead of rewriting it, so
+  confidence grows as independent evidence arrives
 - never captures credentials, secrets, tokens, private keys or passwords
-- can only read, run `docket`, and edit files under `.docket/`; the project's own
-  `node_modules/.bin` is put first on its `PATH`, so a dev-dependency install works
+- can only read, run `docket` and read-only `git rev-parse` / `git remote get-url`,
+  and edit files under `.docket/`; the project's own `node_modules/.bin` is put
+  first on its `PATH`, so a dev-dependency install works
 - runs one at a time per repository: a session that ends while another review is
   running is reviewed once that one finishes
 - leaves no session behind in your `/resume` list

@@ -1,8 +1,10 @@
+import { type ConfidenceModel, confidenceModel } from '../evidence/confidence.js'
 import {
   type AttributeDefinition,
   type AttributeType,
   type Diagnostic,
   type MemoryDocument,
+  type MemoryEvidence,
   type MemoryLink,
   type Ontology,
   type TypeConstraint,
@@ -94,12 +96,119 @@ const checkAttributes = (
   return diagnostics
 }
 
+/** `capturedBy` that is not a person: what an agent wrote is expected to say where it saw it. */
+const capturedByAgent = (document: MemoryDocument): boolean => {
+  const by = document.provenance?.capturedBy
+  return by !== undefined && by !== 'human'
+}
+
+/**
+ * Evidence must name a registered source kind and give the location fields
+ * that kind requires - `code` names a file, `api` an endpoint - so every
+ * observation can be found again.
+ */
+const checkEvidence = (
+  evidence: readonly MemoryEvidence[],
+  subject: string,
+  model: ConfidenceModel,
+  where: { path: string; id: string }
+): Diagnostic[] => {
+  const diagnostics: Diagnostic[] = []
+  const known = Object.keys(model.sources).sort().join(', ')
+
+  for (const observation of evidence) {
+    const source = model.sources[observation.source]
+    if (!source) {
+      diagnostics.push(
+        error(
+          'unknown-evidence-source',
+          `Evidence source "${observation.source}" on ${subject} is not registered; known sources: ${known}.`,
+          where
+        )
+      )
+      continue
+    }
+
+    const missing = (source.requires ?? []).filter((field) => observation[field] === undefined)
+    if (missing.length > 0) {
+      diagnostics.push(
+        error(
+          'evidence-location-missing',
+          `${observation.source} evidence on ${subject} must give ${missing.join(' and ')}.`,
+          where
+        )
+      )
+    }
+
+    const anyOf = source.requiresAny ?? []
+    if (anyOf.length > 0 && !anyOf.some((field) => observation[field] !== undefined)) {
+      diagnostics.push(
+        error(
+          'evidence-location-missing',
+          `${observation.source} evidence on ${subject} must give at least one of ${anyOf.join(', ')}.`,
+          where
+        )
+      )
+    }
+  }
+
+  return diagnostics
+}
+
+/** Provenance checks that do not depend on any one evidence entry. */
+const checkProvenance = (
+  document: MemoryDocument,
+  where: { path: string; id: string }
+): Diagnostic[] => {
+  const diagnostics: Diagnostic[] = []
+
+  if (capturedByAgent(document)) {
+    const by = document.provenance?.capturedBy
+    if (document.evidence.length === 0) {
+      diagnostics.push(
+        warning(
+          'missing-evidence',
+          `Captured by ${by} with no evidence for the resource; record where it was seen so its confidence can be judged.`,
+          where
+        )
+      )
+    }
+    for (const link of document.links) {
+      if ((link.evidence?.length ?? 0) > 0) continue
+      diagnostics.push(
+        warning(
+          'missing-evidence',
+          `Captured by ${by} with no evidence for link ${link.rel} → ${link.target}; record where the relationship was seen.`,
+          where
+        )
+      )
+    }
+  }
+
+  // A stated confidence still stands in for links that record no evidence,
+  // so it is only dead once the resource and every link have some.
+  const everythingEvidenced =
+    document.evidence.length > 0 && document.links.every((link) => (link.evidence?.length ?? 0) > 0)
+  if (everythingEvidenced && document.provenance?.confidence !== undefined) {
+    diagnostics.push(
+      warning(
+        'stated-confidence-ignored',
+        'provenance.confidence is not used when the resource and its links record evidence; confidence is computed from the evidence.',
+        where
+      )
+    )
+  }
+
+  return diagnostics
+}
+
 const checkLink = (
   link: MemoryLink,
   document: MemoryDocument,
   ontology: Ontology,
   byId: Map<string, MemoryDocument>,
-  strict: boolean
+  strict: boolean,
+  model: ConfidenceModel
 ): Diagnostic[] => {
   const where = { path: document.path, id: document.id }
   const relationship = ontology.relationships[link.rel]
@@ -155,7 +264,8 @@ const checkLink = (
       'link-attribute',
       `relationship "${link.rel}"`,
       where
-    )
+    ),
+    ...checkEvidence(link.evidence ?? [], `link ${link.rel} → ${link.target}`, model, where)
   )
 
   return diagnostics
@@ -163,8 +273,9 @@ const checkLink = (
 
 /**
  * Ontology-dependent validation of an entire document set. Structural
- * frontmatter checks and duplicate-id detection happen upstream in the parser
- * and scanner; this layer only answers questions the registry can answer.
+ * frontmatter checks happen upstream in the parser, and files that share an id
+ * are reconciled downstream by aggregation; this layer only answers questions
+ * the registry can answer.
  *
  * Diagnostics are returned, never thrown and never printed.
  */
@@ -174,7 +285,12 @@ export const validateDocuments = (
   options: ValidateOptions = {}
 ): Diagnostic[] => {
   const strict = options.strict ?? false
-  const byId = new Map(documents.map((d) => [d.id, d]))
+  const byId = new Map<string, MemoryDocument>()
+  for (const document of documents) {
+    const kept = byId.get(document.id)
+    if (!kept || document.path < kept.path) byId.set(document.id, document)
+  }
+  const model = confidenceModel(ontology)
   const diagnostics: Diagnostic[] = []
 
   for (const document of documents) {
@@ -203,8 +319,13 @@ export const validateDocuments = (
       )
     }
 
+    diagnostics.push(
+      ...checkEvidence(document.evidence, document.id, model, where),
+      ...checkProvenance(document, where)
+    )
+
     for (const link of document.links) {
-      diagnostics.push(...checkLink(link, document, ontology, byId, strict))
+      diagnostics.push(...checkLink(link, document, ontology, byId, strict, model))
     }
   }
 

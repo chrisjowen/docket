@@ -92,6 +92,9 @@ fs.writeSync(
 const job = {
   root,
   transcript: input.transcript_path,
+  // What the reviewer records as where and when its evidence was observed.
+  session,
+  date: new Date().toISOString().slice(0, 10),
   model,
   from: reviewed,
   to: lines,

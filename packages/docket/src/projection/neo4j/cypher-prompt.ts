@@ -27,8 +27,12 @@ Rules:
 - Never match a title or id exactly ({title: 'api'} finds nothing): names in a question are
   partial, so use WHERE toLower(n.id) CONTAINS 'api' OR toLower(n.title) CONTAINS 'api'.
 
-Properties on every node: id, type, title, path, content, tags (space-separated), attributes (JSON string), stub.
-Properties on every relationship: rel (its name as written, e.g. depends_on) plus its attributes.
+Properties on every node: id, type, title, path, content, tags (space-separated), attributes (JSON string), stub,
+confidence, confidenceBasis, evidenceCount, sources, evidence (JSON string).
+Properties on every relationship: rel (its name as written, e.g. depends_on), its attributes,
+confidence, confidenceBasis, evidenceCount, sources, evidence (JSON string).
+confidence (0 to 1) is how well evidence corroborates a node or relationship; sources lists the kinds of
+evidence behind it (e.g. code, manifest, runtime) and evidenceCount how many observations.
 
 Examples:
 Q: which services depend on a datasource?
@@ -38,7 +42,9 @@ MATCH (d:Memory:Decision {scope: $scope}) RETURN d
 Q: what does the orders api depend on?
 MATCH (s:Memory {scope: $scope})-[r:DEPENDS_ON]->(d:Memory {scope: $scope}) WHERE toLower(s.id) CONTAINS 'api' OR toLower(s.title) CONTAINS 'api' RETURN s, r, d
 Q: what uses the object storage?
-MATCH (n:Memory {scope: $scope})-[r:USES]->(o:Memory {scope: $scope}) WHERE toLower(o.title) CONTAINS 'object storage' RETURN n, r, o`
+MATCH (n:Memory {scope: $scope})-[r:USES]->(o:Memory {scope: $scope}) WHERE toLower(o.title) CONTAINS 'object storage' RETURN n, r, o
+Q: which pods have we only seen in code?
+MATCH (p:Memory:Pod {scope: $scope}) WHERE p.sources = ['code'] RETURN p`
 
 /** The prompt that turns `question` into Cypher against this graph's schema. */
 export const buildCypherPrompt = (question: string, schema: GraphSchema): CypherPrompt => {

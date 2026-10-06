@@ -11,6 +11,7 @@ import { DEFAULT_SEARCH_LIMIT, search } from './commands/search.js'
 import { sync } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
+import { confidenceModel, observationConfidence } from './evidence/confidence.js'
 import {
   hasErrors,
   type Diagnostic,
@@ -148,10 +149,17 @@ program
   .option('--strict', 'treat unresolved references as errors')
   .action(async (options: { strict?: boolean }) => {
     const result = await validate({ strict: options.strict })
-    const links = result.documents.reduce((n, d) => n + d.links.length, 0)
+    // Files that share an id are one resource; without an ontology nothing
+    // was merged, so count the files.
+    const merged = result.ontology !== null
+    const resources = merged ? result.entities : result.documents
+    const files = result.entities.reduce((n, e) => n + e.paths.length, 0)
+    const links = resources.reduce((n, r) => n + r.links.length, 0)
     const dangling = count(result.diagnostics, 'dangling-reference')
 
-    console.log(`✓ ${result.documents.length} resources`)
+    console.log(
+      `✓ ${resources.length} resources${merged && files > resources.length ? ` from ${files} files` : ''}`
+    )
     console.log(`✓ ${links} relationships`)
     if (dangling > 0) console.log(`⚠ ${dangling} unresolved relationships`)
     report(result.diagnostics)
@@ -181,7 +189,9 @@ program
         else if (source.hits.length === 0) console.log('  no matches')
         for (const hit of source.hits) {
           const score = hit.score === undefined ? '' : `  (${Number(hit.score.toFixed(3))})`
-          console.log(`  ${hit.id}${score}  ${byId.get(hit.id)?.path ?? ''}`)
+          const found = byId.get(hit.id)
+          const confidence = found?.confidence === undefined ? '' : `  confidence ${found.confidence}`
+          console.log(`  ${hit.id}${score}  ${found?.path ?? ''}${confidence}`)
           if (hit.detail) console.log(`    ${hit.detail}`)
         }
       }
@@ -219,6 +229,23 @@ ontologyCommand
         `  ${pad(name, relWidth)}  ${describe(definition.from)} → ${describe(definition.to)}`
       )
     }
+
+    const model = confidenceModel(registry)
+    const sources = Object.keys(model.sources).sort()
+    console.log(`\nEvidence sources (${sources.length})`)
+    const sourceWidth = widest(sources)
+    for (const name of sources) {
+      const source = model.sources[name]
+      if (!source) continue
+      const needs = [
+        ...(source.requires ?? []),
+        ...(source.requiresAny?.length ? [`one of ${source.requiresAny.join('/')}`] : [])
+      ]
+      console.log(
+        `  ${pad(name, sourceWidth)}  ${source.confidence}${needs.length ? `  needs ${needs.join(', ')}` : ''}`
+      )
+    }
+    console.log(`  (no evidence: ${model.unevidenced})`)
   })
 
 ontologyCommand
@@ -254,6 +281,18 @@ ontologyCommand
 
     const extraction = definition.extraction?.instructions
     if (extraction) console.log(`\n  extraction\n    ${extraction.trim()}`)
+
+    // What one observation of this type is worth, by where it was seen. A
+    // value the type sets itself is marked, so its rules stand out.
+    const model = confidenceModel(registry)
+    const rules = model.resourceTypes[type] ?? {}
+    const sources = Object.keys(model.sources).sort()
+    const sourceWidth = widest(sources)
+    console.log('\n  confidence by evidence source')
+    for (const source of sources) {
+      const value = observationConfidence(model, { kind: 'resource', type }, source)
+      console.log(`    ${pad(source, sourceWidth)}  ${value}${source in rules ? '  (this type)' : ''}`)
+    }
   })
 
 try {

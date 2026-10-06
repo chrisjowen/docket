@@ -9,6 +9,101 @@
 
 version: 1
 
+# --- Evidence and confidence ---------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming a source kind below and the exact location. Confidence is
+# computed from that evidence, never written by hand:
+#
+#   - One observation is worth its source's `confidence`, unless the resource
+#     type or relationship has a `confidence:` rule for that source - a pod read
+#     from code is worth less than a dependency read from a manifest.
+#   - Observations of the same source kind do not corroborate each other: the
+#     strongest one counts. Independent source kinds combine, so a pod seen in
+#     code (0.3) and running in the cluster (0.9) is 1 - 0.7 * 0.1 = 0.93.
+#   - A memory with no evidence takes its `provenance.confidence`, or
+#     `unevidenced` when it has none.
+#
+# A type or relationship without a `confidence:` block uses docket's built-in
+# rule for that name, if there is one, and otherwise the source's confidence.
+
+evidence:
+  unevidenced: 0.5
+
+  sources:
+    human:
+      description: >
+        Stated or confirmed by a person - written by hand, or confirmed when
+        asked. Record who in observedBy.
+      confidence: 0.9
+
+    conversation:
+      description: >
+        Established in an agent session - the user said so, or a decision was
+        reached. Record the session and, in note, what was said.
+      confidence: 0.7
+
+    manifest:
+      description: >
+        A dependency or package manifest or lockfile - package.json, go.mod,
+        Cargo.toml, pom.xml, requirements.txt, Chart.yaml. Record the file and
+        the entry, as symbol or key.
+      confidence: 0.9
+      requires:
+        - path
+
+    code:
+      description: >
+        Source code. Record the file, the line range and the function, class
+        or constant, as symbol.
+      confidence: 0.6
+      requires:
+        - path
+
+    config:
+      description: >
+        Application configuration - YAML, JSON, .env and properties files,
+        CODEOWNERS. Record the file and the key.
+      confidence: 0.7
+      requires:
+        - path
+
+    infrastructure:
+      description: >
+        Infrastructure and deployment definitions - Terraform, Kubernetes
+        manifests, Helm values, Dockerfiles, CI pipelines. Record the file and
+        the resource, as symbol.
+      confidence: 0.75
+      requires:
+        - path
+
+    api:
+      description: >
+        An API - its specification (OpenAPI, GraphQL schema, protobuf) or a
+        live response. Record the method and the endpoint or route.
+      confidence: 0.75
+      requires:
+        - endpoint
+
+    runtime:
+      description: >
+        Seen in a running system - kubectl, a cloud console, logs, metrics or
+        traces. Record a URL, the endpoint, or the object (symbol) it showed.
+      confidence: 0.85
+      requiresAny:
+        - urls
+        - endpoint
+        - symbol
+
+    docs:
+      description: >
+        Documentation - a README, ADR, design doc, wiki page, runbook, ticket
+        or pull request. Record the file or the URL.
+      confidence: 0.6
+      requiresAny:
+        - path
+        - urls
+
 resourceTypes:
 
   repository:
@@ -101,6 +196,10 @@ resourceTypes:
       doNotConfuseWith:
         - service
         - repository
+
+    confidence:
+      manifest: 0.95
+      code: 0.75
 
   agent:
     description: >
@@ -212,6 +311,12 @@ resourceTypes:
         - system
         - service
 
+    confidence:
+      code: 0.4
+      config: 0.6
+      infrastructure: 0.85
+      runtime: 0.9
+
   datasource:
     description: >
       A source of information consumed by software or agents.
@@ -240,6 +345,12 @@ resourceTypes:
         - system
         - service
 
+    confidence:
+      code: 0.5
+      config: 0.65
+      infrastructure: 0.85
+      runtime: 0.9
+
   team:
     description: >
       An organisational team responsible for resources.
@@ -258,6 +369,11 @@ resourceTypes:
 
       doNotConfuseWith:
         - agent
+
+    confidence:
+      code: 0.3
+      config: 0.8
+      docs: 0.7
 
   decision:
     description: >
@@ -278,6 +394,11 @@ resourceTypes:
       doNotConfuseWith:
         - constraint
 
+    confidence:
+      code: 0.3
+      conversation: 0.85
+      docs: 0.8
+
   constraint:
     description: >
       A meaningful durable limitation affecting architecture, implementation,
@@ -297,6 +418,11 @@ resourceTypes:
 
       doNotConfuseWith:
         - decision
+
+    confidence:
+      code: 0.4
+      conversation: 0.85
+      docs: 0.75
 
   # --- Delivery ---------------------------------------------------------------
 
@@ -343,6 +469,10 @@ resourceTypes:
         - service
         - endpoint
 
+    confidence:
+      code: 0.75
+      api: 0.9
+
   pipeline:
     description: >
       An automated build, test, release or deployment workflow, e.g. a GitHub
@@ -376,6 +506,10 @@ resourceTypes:
       doNotConfuseWith:
         - system
         - test_suite
+
+    confidence:
+      code: 0.5
+      infrastructure: 0.9
 
   artifact:
     description: >
@@ -483,6 +617,10 @@ resourceTypes:
       doNotConfuseWith:
         - feature
 
+    confidence:
+      code: 0.7
+      config: 0.8
+
   test_suite:
     description: >
       A body of automated tests with a distinct purpose and runner - unit,
@@ -523,6 +661,9 @@ resourceTypes:
       doNotConfuseWith:
         - pipeline
 
+    confidence:
+      code: 0.85
+
   # --- Runtime and infrastructure ---------------------------------------------
 
   container:
@@ -553,6 +694,11 @@ resourceTypes:
         - artifact
         - pod
         - service
+
+    confidence:
+      code: 0.4
+      infrastructure: 0.85
+      runtime: 0.9
 
   pod:
     description: >
@@ -593,6 +739,12 @@ resourceTypes:
         - container
         - cluster
 
+    confidence:
+      code: 0.3
+      config: 0.4
+      infrastructure: 0.7
+      runtime: 0.9
+
   cluster:
     description: >
       A compute cluster workloads run on - a Kubernetes cluster, an ECS
@@ -632,6 +784,12 @@ resourceTypes:
         - environment
         - infrastructure
 
+    confidence:
+      code: 0.3
+      config: 0.4
+      infrastructure: 0.8
+      runtime: 0.9
+
   infrastructure:
     description: >
       A provisioned cloud or network resource that is not a data store or a
@@ -670,6 +828,12 @@ resourceTypes:
         - datasource
         - cluster
         - system
+
+    confidence:
+      code: 0.35
+      config: 0.5
+      infrastructure: 0.85
+      runtime: 0.9
 
   event_stream:
     description: >
@@ -735,6 +899,11 @@ resourceTypes:
       doNotConfuseWith:
         - api
 
+    confidence:
+      code: 0.75
+      api: 0.9
+      runtime: 0.9
+
   secret:
     description: >
       A credential or key software needs - an API key, token, certificate or
@@ -762,6 +931,12 @@ resourceTypes:
 
       doNotConfuseWith:
         - permit
+
+    confidence:
+      code: 0.3
+      config: 0.4
+      infrastructure: 0.6
+      runtime: 0.85
 
   # --- AI ---------------------------------------------------------------------
 
@@ -843,6 +1018,11 @@ resourceTypes:
       doNotConfuseWith:
         - postmortem
         - vulnerability
+
+    confidence:
+      code: 0.2
+      docs: 0.85
+      runtime: 0.9
 
   postmortem:
     description: >
@@ -1101,6 +1281,10 @@ resourceTypes:
         - constraint
         - compliance_requirement
 
+    confidence:
+      code: 0.3
+      docs: 0.8
+
   compliance_requirement:
     description: >
       A control or obligation from an external framework or regulation - a
@@ -1132,6 +1316,10 @@ resourceTypes:
       doNotConfuseWith:
         - policy
         - constraint
+
+    confidence:
+      code: 0.2
+      docs: 0.8
 
   permit:
     description: >
@@ -1183,6 +1371,10 @@ resourceTypes:
         - policy
         - secret
 
+    confidence:
+      code: 0.2
+      docs: 0.8
+
   # --- Knowledge and documentation --------------------------------------------
 
   architecture_record:
@@ -1224,6 +1416,10 @@ resourceTypes:
       doNotConfuseWith:
         - decision
         - document
+
+    confidence:
+      code: 0.3
+      docs: 0.9
 
   document:
     description: >
@@ -1503,6 +1699,12 @@ relationships:
     to:
       - team
 
+    confidence:
+      code: 0.3
+      config: 0.85
+      docs: 0.7
+      conversation: 0.8
+
   depends_on:
     description: >
       Represents a runtime, build, or operational dependency.
@@ -1541,12 +1743,23 @@ relationships:
       runtime:
         type: boolean
 
+    confidence:
+      manifest: 0.95
+      code: 0.65
+      config: 0.7
+      infrastructure: 0.8
+      runtime: 0.9
+
   uses:
     description: >
       Represents a resource consuming, invoking, or making use of another.
 
     from: "*"
     to: "*"
+
+    confidence:
+      manifest: 0.9
+      code: 0.65
 
   supersedes:
     description: >
@@ -1585,6 +1798,12 @@ relationships:
     to:
       - environment
       - cluster
+
+    confidence:
+      code: 0.35
+      config: 0.5
+      infrastructure: 0.85
+      runtime: 0.9
 
   # --- Structure ----------------------------------------------------------------
 
@@ -1668,6 +1887,10 @@ relationships:
       - api
       - endpoint
 
+    confidence:
+      code: 0.75
+      api: 0.9
+
   consumes:
     description: >
       A resource calls an API, reads from an event stream, or calls an
@@ -1717,6 +1940,12 @@ relationships:
       - cluster
       - infrastructure
 
+    confidence:
+      code: 0.3
+      config: 0.45
+      infrastructure: 0.85
+      runtime: 0.9
+
   runs_image:
     description: >
       A container or pod runs a built image.
@@ -1727,6 +1956,11 @@ relationships:
 
     to:
       - artifact
+
+    confidence:
+      code: 0.4
+      infrastructure: 0.85
+      runtime: 0.9
 
   hosted_on:
     description: >
@@ -1745,6 +1979,11 @@ relationships:
     to:
       - system
       - infrastructure
+
+    confidence:
+      code: 0.35
+      infrastructure: 0.85
+      runtime: 0.9
 
   provided_by:
     description: >
@@ -1861,6 +2100,9 @@ relationships:
       - feature
       - agent
       - requirement
+
+    confidence:
+      code: 0.85
 
   # --- Operations -----------------------------------------------------------------
 
