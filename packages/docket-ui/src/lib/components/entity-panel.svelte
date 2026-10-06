@@ -6,8 +6,9 @@
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { confidenceOf, evidenceOf, isUrl, linksOf, provenanceOf } from '$lib/model.js'
+  import { basisLabel, confidenceOf, evidenceOf, linksOf, provenanceOf } from '$lib/model.js'
   import type { UiEdge, UiEntity, UiGraph } from '$lib/types.js'
+  import EvidenceItem from './evidence-item.svelte'
   import Notes from './notes.svelte'
   import Value from './value.svelte'
 
@@ -23,7 +24,8 @@
   const byId = $derived(new Map(graph.entities.map((item) => [item.id, item])))
   const links = $derived(linksOf(graph, entity.id))
   const provenance = $derived(provenanceOf(entity))
-  const confidence = $derived(confidenceOf(provenance.confidence))
+  /** docket's computed confidence; a file's stated figure only when talking to a server without it. */
+  const confidence = $derived(entity.assessment ? entity.assessment.confidence : confidenceOf(provenance.confidence))
   const evidence = $derived(evidenceOf(entity))
   /** Provenance fields beyond the three every file may carry. */
   const otherProvenance = $derived(
@@ -71,62 +73,56 @@
     {/if}
   </header>
 
-  {#if Object.keys(provenance).length > 0 || evidence.length > 0}
-    <section class="flex flex-col gap-2">
-      <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Provenance</h3>
-      <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-sm">
-        {#if provenance.authority !== undefined}
-          <dt class="text-muted-foreground">Authority</dt>
-          <dd><Value value={provenance.authority} /></dd>
-        {/if}
-        {#if confidence !== null}
-          <dt class="text-muted-foreground">Confidence</dt>
-          <dd class="flex items-center gap-2">
-            <span class="bg-muted h-1.5 w-24 overflow-hidden rounded-full" aria-hidden="true">
-              <span class="bg-foreground/70 block h-full rounded-full" style="width: {confidence * 100}%"></span>
-            </span>
-            <span class="tabular-nums">{Math.round(confidence * 100)}%</span>
-            <span class="text-muted-foreground text-xs">{confidenceLabel(confidence)}</span>
-          </dd>
-        {/if}
-        {#if provenance.capturedBy !== undefined}
-          <dt class="text-muted-foreground">Captured by</dt>
-          <dd><Value value={provenance.capturedBy} /></dd>
-        {/if}
-        {#each otherProvenance as [key, value] (key)}
-          <dt class="text-muted-foreground">{key}</dt>
-          <dd class="min-w-0"><Value {value} /></dd>
-        {/each}
-      </dl>
-      {#if evidence.length > 0}
-        <div class="flex flex-col gap-1.5">
-          <div class="text-muted-foreground text-xs">Evidence ({evidence.length})</div>
-          <ul class="flex flex-col gap-1.5">
-            {#each evidence as item, index (index)}
-              <li class="bg-muted/50 rounded-md border px-2.5 py-1.5 text-xs">
-                {#if typeof item === 'string'}
-                  {#if isUrl(item)}
-                    <a class="break-all underline underline-offset-2" href={item} target="_blank" rel="noreferrer">{item}</a>
-                  {:else}
-                    <span class="break-words">{item}</span>
-                  {/if}
-                {:else}
-                  <dl class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
-                    {#each Object.entries(item) as [key, value] (key)}
-                      <dt class="text-muted-foreground">{key}</dt>
-                      <dd class="min-w-0"><Value {value} /></dd>
-                    {/each}
-                  </dl>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/if}
-    </section>
-  {:else}
-    <p class="text-muted-foreground text-xs">No provenance recorded: the file does not say where this came from.</p>
+  {#if entity.paths && entity.paths.length > 1}
+    <p class="text-muted-foreground -mt-3 text-xs">
+      Merged from {entity.paths.length} files:
+      {#each entity.paths as path, index (path)}<span class="font-mono">{path}</span>{index < entity.paths.length - 1 ? ', ' : ''}{/each}
+    </p>
   {/if}
+
+  <section class="flex flex-col gap-2">
+    <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Confidence & evidence</h3>
+    <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-sm">
+      {#if confidence !== null}
+        <dt class="text-muted-foreground">Confidence</dt>
+        <dd class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span class="bg-muted h-1.5 w-24 overflow-hidden rounded-full" aria-hidden="true">
+            <span class="bg-foreground/70 block h-full rounded-full" style="width: {confidence * 100}%"></span>
+          </span>
+          <span class="tabular-nums">{Math.round(confidence * 100)}%</span>
+          <span class="text-muted-foreground text-xs">
+            {confidenceLabel(confidence)}{entity.assessment ? ` · ${basisLabel(entity.assessment.basis)}` : ''}
+          </span>
+        </dd>
+      {/if}
+      {#if entity.assessment && entity.assessment.sources.length > 0}
+        <dt class="text-muted-foreground">Sources</dt>
+        <dd class="flex flex-wrap gap-1">
+          {#each entity.assessment.sources as source (source)}<Badge variant="secondary" class="font-mono text-[10px]">{source}</Badge>{/each}
+        </dd>
+      {/if}
+      {#if provenance.authority !== undefined}
+        <dt class="text-muted-foreground">Authority</dt>
+        <dd><Value value={provenance.authority} /></dd>
+      {/if}
+      {#if provenance.capturedBy !== undefined}
+        <dt class="text-muted-foreground">Captured by</dt>
+        <dd><Value value={provenance.capturedBy} /></dd>
+      {/if}
+      {#each otherProvenance as [key, value] (key)}
+        <dt class="text-muted-foreground">{key}</dt>
+        <dd class="min-w-0"><Value {value} /></dd>
+      {/each}
+    </dl>
+    {#if evidence.length > 0}
+      <div class="text-muted-foreground text-xs">Evidence ({evidence.length})</div>
+      <ul class="flex flex-col gap-1.5">
+        {#each evidence as item, index (index)}<li><EvidenceItem {item} /></li>{/each}
+      </ul>
+    {:else}
+      <p class="text-muted-foreground text-xs">No evidence recorded: nothing says where this was seen.</p>
+    {/if}
+  </section>
 
   {#if attributes.length > 0}
     <section class="flex flex-col gap-2">
@@ -161,7 +157,16 @@
                   <ArrowLeft class="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
                 {/if}
                 <span class="flex min-w-0 flex-col">
-                  <span class="text-muted-foreground font-mono text-xs">{edge.rel}</span>
+                  <span class="text-muted-foreground flex items-center gap-1.5 text-xs">
+                    <span class="font-mono">{edge.rel}</span>
+                    {#if edge.assessment}
+                      <span class="tabular-nums" title={basisLabel(edge.assessment.basis)}>
+                        · {Math.round(edge.assessment.confidence * 100)}%{edge.assessment.evidenceCount > 0
+                          ? ` · ${edge.assessment.evidenceCount} ${edge.assessment.evidenceCount === 1 ? 'observation' : 'observations'}`
+                          : ''}
+                      </span>
+                    {/if}
+                  </span>
                   <span class="flex items-center gap-1.5">
                     <span
                       class="size-2 shrink-0 rounded-full {end.entity ? '' : 'border border-dashed'}"

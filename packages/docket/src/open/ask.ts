@@ -10,13 +10,13 @@ import type { UiAnswer } from './types.js'
  * join what was found, read from the canonical files.
  */
 export const ask = async (cwd: string, query: string, limit: number): Promise<UiAnswer> => {
-  const [answer, { resolved, documents }] = await Promise.all([
+  const [answer, { resolved, entities, broken }] = await Promise.all([
     search(query, { cwd, limit }),
     validate({ cwd })
   ])
 
-  const edges = documents.flatMap((document) =>
-    document.links.map((link) => ({ source: document.id, rel: link.rel, target: link.target }))
+  const edges = entities.flatMap((entity) =>
+    entity.links.map((link) => ({ source: entity.id, rel: link.rel, target: link.target }))
   )
 
   // Most relevant first: the order the first answering source ranked them in.
@@ -33,6 +33,6 @@ export const ask = async (cwd: string, query: string, limit: number): Promise<Ui
     documents: answer.documents,
     paths: connectingPaths(edges, ranked),
     diagnostics: answer.diagnostics,
-    index: await indexStatus(resolved, documents)
+    index: await indexStatus(resolved, entities, broken)
   }
 }

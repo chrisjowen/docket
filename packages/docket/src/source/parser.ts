@@ -23,7 +23,7 @@ export interface ParseResult {
  * cache, which would otherwise keep every parsed file for the life of the
  * process and hand callers objects shared with that cache.
  */
-const MATTER_OPTIONS = { engines: { yaml: (source: string) => parseYaml(source) as object } }
+export const MATTER_OPTIONS = { engines: { yaml: (source: string) => parseYaml(source) as object } }
 
 const MENTION = /\[\[([^\]\n]+)\]\]/g
 

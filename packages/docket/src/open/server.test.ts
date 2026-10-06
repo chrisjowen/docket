@@ -26,10 +26,14 @@ links:
       criticality: high
 provenance:
   authority: code
-  confidence: 0.6
+  capturedBy: claude
 evidence:
-  - source: src/orders/handler.ts
-    seen: 2026-10-01
+  - source: code
+    path: src/orders/handler.ts
+    lines: 40-88
+    urls: https://example.com/orders/handler.ts#L40
+    observedAt: 2026-10-01
+reviewed_by: ops
 ---
 
 Handles orders for checkout. See [[team.payments]].
@@ -105,6 +109,8 @@ describe('the graph API', () => {
         source: 'service.orders',
         rel: 'owned_by',
         target: 'team.payments',
+        evidence: [],
+        assessment: expect.objectContaining({ basis: 'unevidenced' }),
         dangling: false
       },
       {
@@ -112,6 +118,8 @@ describe('the graph API', () => {
         rel: 'depends_on',
         target: 'datasource.ledger',
         attributes: { criticality: 'high' },
+        evidence: [],
+        assessment: expect.objectContaining({ basis: 'unevidenced' }),
         dangling: true
       }
     ])
@@ -129,11 +137,40 @@ describe('the graph API', () => {
       path: '.docket/resources/services/orders.md',
       tags: ['core'],
       mentions: ['team.payments'],
-      provenance: { authority: 'code', confidence: 0.6 }
+      provenance: { authority: 'code', capturedBy: 'claude' },
+      evidence: [
+        {
+          source: 'code',
+          path: 'src/orders/handler.ts',
+          lines: '40-88',
+          urls: ['https://example.com/orders/handler.ts#L40'],
+          observedAt: '2026-10-01'
+        }
+      ],
+      assessment: { basis: 'evidence', evidenceCount: 1, sources: ['code'], confidence: expect.any(Number) }
     })
     expect(orders?.content).toContain('Handles orders for checkout.')
-    expect(orders?.frontmatter.evidence).toEqual([
-      { source: 'src/orders/handler.ts', seen: '2026-10-01T00:00:00.000Z' }
+    expect(orders?.frontmatter.reviewed_by).toBe('ops')
+    expect(orders?.links.find((link) => link.rel === 'owned_by')?.assessment).toMatchObject({ basis: 'unevidenced' })
+  })
+
+  it('shows an id declared by several files as the one entity docket merges them into', async () => {
+    await write(
+      join(root, '.docket/notes/orders-seen-again.md'),
+      '---\nid: service.orders\ntype: service\ntitle: Orders API\nlinks:\n  - rel: owned_by\n    target: team.payments\n' +
+        '    evidence:\n      - source: config\n        path: CODEOWNERS\n        key: /services/orders\n---\n'
+    )
+
+    const graph = await getJson<UiGraph>('/api/graph')
+    const orders = graph.entities.filter((entity) => entity.id === 'service.orders')
+
+    expect(orders).toHaveLength(1)
+    expect(orders[0]?.paths).toEqual(['.docket/notes/orders-seen-again.md', '.docket/resources/services/orders.md'])
+    expect(graph.edges.filter((edge) => edge.source === 'service.orders' && edge.rel === 'owned_by')).toEqual([
+      expect.objectContaining({
+        evidence: [{ source: 'config', path: 'CODEOWNERS', key: '/services/orders' }],
+        assessment: expect.objectContaining({ basis: 'evidence', sources: ['config'] })
+      })
     ])
   })
 

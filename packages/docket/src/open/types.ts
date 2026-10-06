@@ -7,18 +7,37 @@
  * so fields added to the file format show up in the UI without a change here.
  */
 
+/** How far a resource or relationship can be trusted, as docket computed it from the evidence. */
+export interface UiAssessment {
+  /** 0 to 1. */
+  confidence: number
+  /** `evidence`: computed from observations. `stated`: the file's own figure. `unevidenced`: the ontology's default. */
+  basis: 'evidence' | 'stated' | 'unevidenced'
+  /** Distinct observations behind it. */
+  evidenceCount: number
+  /** Independent source kinds that corroborate it. */
+  sources: string[]
+}
+
+/** One observation: where it was seen - file, lines, endpoint, URLs - when, and by whom. */
+export type UiEvidence = Record<string, unknown>
+
 export interface UiLink {
   rel: string
   target: string
   attributes?: Record<string, unknown>
+  evidence?: UiEvidence[]
+  assessment?: UiAssessment
 }
 
 export interface UiEntity {
   id: string
   type: string
   title: string
-  /** Repo-relative path of the canonical file. */
+  /** Repo-relative path of the canonical file - the first, when several declare the id. */
   path: string
+  /** Every file that declares this id, merged into this entity. */
+  paths: string[]
   tags: string[]
   attributes: Record<string, unknown>
   links: UiLink[]
@@ -26,9 +45,13 @@ export interface UiEntity {
   mentions: string[]
   /** Markdown body, frontmatter stripped. */
   content: string
-  /** Where the knowledge came from and how much to trust it, when the file says. */
+  /** Who wrote it, when the file says. */
   provenance?: Record<string, unknown>
-  /** The file's frontmatter exactly as parsed, including fields docket does not model. */
+  /** Every observation of it, from all its files. */
+  evidence: UiEvidence[]
+  /** Its confidence, computed from the evidence. Absent when no ontology could be loaded. */
+  assessment?: UiAssessment
+  /** The first file's frontmatter exactly as parsed, including fields docket does not model. */
   frontmatter: Record<string, unknown>
 }
 
@@ -37,6 +60,8 @@ export interface UiEdge {
   rel: string
   target: string
   attributes?: Record<string, unknown>
+  evidence?: UiEvidence[]
+  assessment?: UiAssessment
   /** No file defines the target yet. */
   dangling: boolean
 }
@@ -58,7 +83,7 @@ export interface UiDiagnostic {
 export interface UiIndexStatus {
   /** The index was synced for the configured projections at least once. */
   synced: boolean
-  /** Documents added, changed or removed since the last sync. */
+  /** Entities added, changed or removed since the last sync. */
   behind: number
 }
 

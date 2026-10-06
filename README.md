@@ -58,8 +58,10 @@ only.
 - **Graph** - every entity and relationship as a force-directed graph,
   filtered by type and relationship. Links to entities no file defines yet
   show as dashed ghosts.
-- **Details** - an entity's frontmatter, notes, links in and out, and its
-  provenance: authority, confidence and evidence, whenever the file has them.
+- **Details** - an entity's frontmatter, notes and links in and out, with the
+  confidence docket computes for it and for each link, the sources that
+  corroborate it, and every piece of evidence - file and lines, endpoint,
+  URLs, when and by whom - merged from all the files that declare its id.
 - **Quick search** (`⌘K` or `/`) - instant type-ahead over ids, titles, types,
   tags, attributes, notes and relationship names. `type:service`,
   `rel:depends_on` and `tag:core` narrow it down; picking a result focuses

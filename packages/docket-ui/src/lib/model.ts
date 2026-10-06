@@ -212,11 +212,12 @@ function compare(a: string, b: string): number {
 export type Evidence = Record<string, unknown> | string
 
 /**
- * Evidence lives wherever the file format puts it - under `provenance` or at
- * the top level of the frontmatter. Read both, so the UI shows it whichever
- * way it lands.
+ * The entity's observations. docket hands them over merged from every file
+ * that declares the id; an older server without them leaves the frontmatter
+ * as the only place to look.
  */
 export const evidenceOf = (entity: UiEntity): Evidence[] => {
+  if (Array.isArray(entity.evidence)) return entity.evidence
   const found: unknown[] = []
   for (const holder of [entity.provenance, entity.frontmatter, entity.frontmatter.provenance]) {
     if (holder && typeof holder === 'object' && 'evidence' in holder) {
@@ -235,6 +236,27 @@ export const evidenceOf = (entity: UiEntity): Evidence[] => {
       return true
     })
 }
+
+/** Where an observation points, in one line: `src/a.ts:12-40 · handler`, `GET /v1/orders`. */
+export const evidenceLocation = (evidence: Record<string, unknown>): string => {
+  const text = (key: string): string => (typeof evidence[key] === 'string' ? (evidence[key] as string) : '')
+  const file = text('path') ? `${text('path')}${text('lines') ? `:${text('lines')}` : ''}` : ''
+  const endpoint = [text('method'), text('endpoint')].filter(Boolean).join(' ')
+  return [text('repository'), file, text('symbol'), text('key'), endpoint].filter(Boolean).join(' · ')
+}
+
+/** Fields `evidenceLocation`, the URL list and the byline already show. */
+export const EVIDENCE_SHOWN = new Set([
+  'source', 'repository', 'path', 'lines', 'symbol', 'key', 'method', 'endpoint', 'urls', 'observedAt', 'observedBy', 'note'
+])
+
+const BASIS_LABEL: Record<string, string> = {
+  evidence: 'from evidence',
+  stated: 'stated in the file',
+  unevidenced: 'default - no evidence'
+}
+
+export const basisLabel = (basis: string): string => BASIS_LABEL[basis] ?? basis
 
 /** The entity's provenance, from the model or straight from the frontmatter. */
 export const provenanceOf = (entity: UiEntity): Record<string, unknown> => {

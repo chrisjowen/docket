@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { blocks, evidenceOf, inline, neighbourhood, parseQuery, provenanceOf, quickSearch, typeSlots } from './model.js'
+import { blocks, evidenceLocation, evidenceOf, inline, neighbourhood, parseQuery, provenanceOf, quickSearch, typeSlots } from './model.js'
 import type { UiEntity, UiGraph } from './types.js'
 
 const entity = (id: string, overrides: Partial<UiEntity> = {}): UiEntity => ({
@@ -8,11 +8,13 @@ const entity = (id: string, overrides: Partial<UiEntity> = {}): UiEntity => ({
   type: id.split('.')[0] ?? 'thing',
   title: id,
   path: `.docket/${id}.md`,
+  paths: [`.docket/${id}.md`],
   tags: [],
   attributes: {},
   links: [],
   mentions: [],
   content: '',
+  evidence: [],
   frontmatter: {},
   ...overrides
 })
@@ -102,12 +104,26 @@ describe('neighbourhood', () => {
 })
 
 describe('provenance', () => {
-  it('reads evidence wherever the file puts it, once each', () => {
+  it('takes the merged evidence docket serves', () => {
+    const subject = entity('service.orders', {
+      evidence: [{ source: 'code', path: 'src/a.ts' }],
+      frontmatter: { evidence: [{ source: 'code', path: 'src/elsewhere.ts' }] }
+    })
+    expect(evidenceOf(subject)).toEqual([{ source: 'code', path: 'src/a.ts' }])
+  })
+
+  it('falls back to the frontmatter when the server sends no evidence, once each', () => {
     const subject = entity('service.orders', {
       provenance: { authority: 'code', evidence: [{ source: 'src/a.ts' }] },
       frontmatter: { provenance: { evidence: [{ source: 'src/a.ts' }] }, evidence: ['https://example.com/doc'] }
     })
+    delete (subject as Partial<UiEntity>).evidence
     expect(evidenceOf(subject)).toEqual([{ source: 'src/a.ts' }, 'https://example.com/doc'])
+  })
+
+  it('says where an observation points in one line', () => {
+    expect(evidenceLocation({ source: 'code', path: 'src/a.ts', lines: '12-40', symbol: 'handler' })).toBe('src/a.ts:12-40 · handler')
+    expect(evidenceLocation({ source: 'api', method: 'GET', endpoint: '/v1/orders' })).toBe('GET /v1/orders')
   })
 
   it('merges provenance from the model over the raw frontmatter', () => {
