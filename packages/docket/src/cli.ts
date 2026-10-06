@@ -8,6 +8,7 @@ import {
 } from './commands/ontology.js'
 import { rebuild } from './commands/rebuild.js'
 import { DEFAULT_SEARCH_LIMIT, search } from './commands/search.js'
+import { setup, type StepOutcome } from './commands/setup.js'
 import { sync } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
@@ -104,6 +105,39 @@ program
     for (const path of result.updated) console.log(`  updated ${path}`)
     for (const path of result.skipped) console.log(`  skipped ${path} (exists)`)
   })
+
+const MARK: Record<StepOutcome, string> = {
+  done: '✓',
+  skipped: '-',
+  failed: '✗',
+  manual: '!'
+}
+
+program
+  .command('setup')
+  .description('Install the Claude Code plugin and set up docket in this repository')
+  .option('--team', 'install the plugin for the repository, so everyone who clones it is offered it')
+  .option('-y, --yes', 'take the recommended answer to every question without asking')
+  .option('--no-init', 'do not offer to run docket init')
+  .option('--global', 'also install the CLI globally (npm install -g) without asking')
+  .option('--no-global', 'do not offer to install the CLI globally')
+  .action(
+    async (options: { team?: boolean; yes?: boolean; init: boolean; global?: boolean }) => {
+      const result = await setup({
+        team: options.team,
+        yes: options.yes,
+        init: options.init,
+        global: options.global
+      })
+      console.log(`\ndocket setup in ${result.projectRoot}`)
+      const width = widest(result.steps.map((step) => step.name))
+      for (const step of result.steps) {
+        console.log(`  ${MARK[step.outcome]} ${pad(step.name, width)}  ${step.detail}`)
+      }
+      if (result.next.length > 0) console.log(`\nNext:\n  ${result.next.join('\n  ')}`)
+      if (!result.ok) process.exitCode = 1
+    }
+  )
 
 program
   .command('watch')
