@@ -12,9 +12,10 @@ when it was run. They are now `docket`, `.docket/`, `.docket.yaml` and the
 The Claude plugin has also changed since (section 9). It was recorded at
 plugin version 0.1.0, when a `Stop` hook blocked the session after a turn and
 asked the model itself to review it. The review now runs in the background
-when a session ends: a `SessionEnd` hook starts a detached headless
-`claude -p` on a small model, over only the transcript lines no review has
-seen. The SessionStart sync no longer blocks either. Section 9 still shows
+as the session goes and when it ends: the `Stop`, `PreCompact` and
+`SessionEnd` hooks start a detached headless `claude -p` on a small model,
+over only the transcript lines no review has seen. The SessionStart sync no
+longer blocks either. Section 9 still shows
 what was run then; the plugin's own tests (`packages/claude-plugin/test/`)
 cover the hooks as they are now.
 
@@ -1274,9 +1275,10 @@ exit=0  (no JSON above)
 
 ### 9e. The Stop hook performs memory review
 
-> Superseded. The `Stop` hook and `stop-review.js` below no longer exist; the
-> review now runs in the background from a `SessionEnd` hook
-> (`session-end-review.js`). See the note at the top of this record.
+> Superseded. `stop-review.js` below no longer exists, and the `Stop` hook no
+> longer blocks the turn; the review now runs in the background from the
+> `Stop`, `PreCompact` and `SessionEnd` hooks (`review.js`). See the note at
+> the top of this record.
 
 The hook only fires for a substantial session, so feed it a fake transcript
 long enough to qualify:

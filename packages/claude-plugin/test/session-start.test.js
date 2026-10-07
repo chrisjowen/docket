@@ -31,6 +31,17 @@ describe("session-start hook", () => {
     assert.match(output.hookSpecificOutput.additionalContext, /docket search/);
   });
 
+  it("has Claude capture evidence as it works, without being asked", () => {
+    const box = setup();
+    const result = runHook(SCRIPT, input(box), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
+
+    const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
+    assert.match(context, /without being asked/);
+    assert.match(context, /`remember` skill/);
+    assert.match(context, /confirms or contradicts/);
+    assert.match(context, /add evidence to what the docket already has/);
+  });
+
   it("stays silent outside a docket repository", () => {
     const box = setup();
     const result = runHook(SCRIPT, input(box), box.env({ CLAUDE_PROJECT_DIR: box.dir }));

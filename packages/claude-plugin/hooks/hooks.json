@@ -1,5 +1,5 @@
 {
-  "description": "docket session context injection and end-of-session knowledge review",
+  "description": "docket session context injection and background evidence reviews during and at the end of the session",
   "hooks": {
     "SessionStart": [
       {
@@ -12,12 +12,33 @@
         ]
       }
     ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/review.js\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/review.js\""
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end-review.js\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/review.js\""
           }
         ]
       }

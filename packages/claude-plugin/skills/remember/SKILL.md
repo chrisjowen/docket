@@ -1,6 +1,6 @@
 ---
 name: remember
-description: Write durable knowledge into the docket under .docket/. Use when the user says "remember this", "capture this", "add this to the docket", "record this decision", "add this to memory", or otherwise asks for a fact, decision or constraint to be written down for future sessions, and when an end-of-session review finds durable knowledge worth capturing.
+description: Write durable knowledge and evidence into the docket under .docket/. Use proactively, without being asked, whenever the session establishes or sees durable project knowledge - the user states a decision, constraint, convention or owner; you settle a decision or uncover a constraint; or code, config or infrastructure you read shows a resource or dependency the docket lacks, or confirms or contradicts one it has. Also use when the user says "remember this", "capture this", "add this to the docket", "record this decision" or "add this to memory", and when a background review collects evidence from a session transcript.
 ---
 
 # Remember
@@ -8,6 +8,23 @@ description: Write durable knowledge into the docket under .docket/. Use when th
 Write durable knowledge to canonical Markdown under `.docket/`, with evidence
 saying exactly where each thing was seen. Use the `docket` skill for the CLI
 commands referenced here.
+
+## When to capture
+
+The docket is an evidence collector: it grows, and its confidence rises, from
+every sighting a session makes. Capture without being asked and without
+asking permission when:
+
+- the user states a decision, constraint, convention, owner or dependency
+- you settle a decision or uncover a constraint while working
+- code, config, manifests or infrastructure you read show a resource,
+  attribute or relationship the docket does not have yet
+- something you read confirms a docket entry (add a sighting) or contradicts
+  it (update the value, with evidence for the new one)
+
+Capture at a natural pause, after the step you are on, so the user's task
+keeps moving, and say in one line which file you wrote. An explicit "remember
+this" is not required; it only makes the capture certain.
 
 ## Procedure
 
@@ -158,6 +175,11 @@ add an entry to its `evidence` (or to the link's) and leave every earlier entry
 as it is - never edit, reorder or remove evidence, even when it looks stale.
 That is how a second, independent sighting raises its confidence.
 
+Record each place once per session. Before appending, check the entry's
+evidence: if it already has an entry from this session at the same location,
+leave it. A sighting from a different place, source or session is new evidence;
+the same file read twice in one session is not.
+
 Add a new fact as a new attribute or link. When a fact has changed, update the
 value and record the evidence for the new one. Do not create
 `agent.research-assistant-v2` unless it is genuinely a different resource.
@@ -181,7 +203,10 @@ remote projections. Record that a secret exists and where it is managed (for
 example, which vault or environment variable), never its value.
 
 Do not capture transient debugging state, speculation, temporary
-implementation details, or what nearby code already says plainly. When asked
-to, refuse politely, say why, and offer the durable version if there is one.
+implementation details, or line-level detail that nearby code already says
+plainly - a function's arguments, a loop's bounds. A resource, dependency or
+convention seen in code is worth capturing, with the code as its evidence.
+When asked to capture the noise, refuse politely, say why, and offer the
+durable version if there is one.
 
 Prefer one accurate update over several overlapping new files.

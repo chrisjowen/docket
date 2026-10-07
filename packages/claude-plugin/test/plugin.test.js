@@ -8,18 +8,28 @@ const { checkoutKey } = require("../scripts/common.js");
 const PLUGIN = path.join(__dirname, "..");
 
 describe("plugin wiring", () => {
-  it("reviews at session end, not after every turn", () => {
+  it("reviews after turns, before compaction and at session end, all through one script", () => {
     const { hooks } = JSON.parse(fs.readFileSync(path.join(PLUGIN, "hooks", "hooks.json"), "utf8"));
 
-    assert.equal(hooks.Stop, undefined);
-    const [command] = hooks.SessionEnd.flatMap((entry) => entry.hooks.map((hook) => hook.command));
-    assert.match(command, /scripts\/session-end-review\.js/);
+    for (const event of ["Stop", "PreCompact", "SessionEnd"]) {
+      const commands = hooks[event].flatMap((entry) => entry.hooks.map((hook) => hook.command));
+      assert.deepEqual(commands, ['node "${CLAUDE_PLUGIN_ROOT}/scripts/review.js"'], event);
+    }
     for (const entries of Object.values(hooks)) {
       for (const hook of entries.flatMap((entry) => entry.hooks)) {
         const script = /scripts\/([\w-]+\.js)/.exec(hook.command)[1];
         assert.ok(fs.existsSync(path.join(PLUGIN, "scripts", script)), `${script} exists`);
       }
     }
+  });
+
+  it("has Claude capture knowledge without being asked", () => {
+    const skill = fs.readFileSync(path.join(PLUGIN, "skills", "remember", "SKILL.md"), "utf8");
+    const description = /^description: (.*)$/m.exec(skill)[1];
+
+    assert.match(description, /proactively, without being asked/);
+    assert.match(description, /confirms or contradicts/);
+    assert.match(skill, /Record each place once per session/);
   });
 
   it("gives one checkout one lock however its path is spelled", (context) => {

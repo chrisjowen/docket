@@ -1,22 +1,54 @@
 #!/usr/bin/env node
-// SessionEnd hook (SPEC §55).
-// When a session ends, reviews the part of it no review has seen yet for
-// durable knowledge worth capturing. The review runs in the background: this
-// starts a detached runner (`review-runner.js`) that drives a headless
-// `claude -p` over the transcript, following the `remember` skill, and returns
-// at once so ending the session is never delayed. It does not create files
-// itself; the review agent exercises judgement.
+// Stop, PreCompact and SessionEnd hook (SPEC §55).
+// Collects evidence from the part of the session no review has seen yet, as
+// the session goes rather than only once it is over:
+//
+// - Stop, after a turn, once that part has grown by `DOCKET_REVIEW_EVERY`
+//   transcript lines (200 by default)
+// - PreCompact, before the conversation is summarised
+// - SessionEnd, for the tail
+//
+// Mid-session reviews skip while a review of the same session is still queued
+// or running; the session-end review always runs. The review runs in the
+// background: this starts a detached runner (`review-runner.js`) that drives a
+// headless `claude -p` over the transcript, following the `remember` skill, and
+// returns at once so no turn and no session end is ever delayed. It does not
+// create files itself; the review agent exercises judgement.
 
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { PLUGIN_BIN } = require("./cli.js");
-const { CACHE_DIR, DEFAULT_REVIEW_MODEL, checkoutKey, projectRoot, readJson, readStdin } = require("./common.js");
+const {
+  CACHE_DIR,
+  DEFAULT_REVIEW_MODEL,
+  checkoutKey,
+  isRunning,
+  projectRoot,
+  readJson,
+  readStdin,
+} = require("./common.js");
 
 const STATE_DIR = path.join(CACHE_DIR, "reviews");
 
-// Set in the review agent's environment so its own SessionEnd hook stays quiet.
+// Set in the review agent's environment so its own hooks stay quiet.
 const REVIEW_ENV = "DOCKET_REVIEW";
+
+/** Unreviewed transcript lines that make a Stop worth a review, unless `DOCKET_REVIEW_EVERY` says otherwise. */
+const DEFAULT_REVIEW_EVERY = 200;
+
+/**
+ * How many unreviewed lines this event needs before it starts a review. Only
+ * Stop waits for the session to grow; `DOCKET_REVIEW_EVERY=0` turns every
+ * mid-session review off, leaving the one at session end.
+ */
+function threshold(event) {
+  if (event === "SessionEnd") return 1;
+  const raw = process.env.DOCKET_REVIEW_EVERY;
+  const every = raw === undefined || raw === "" ? DEFAULT_REVIEW_EVERY : Number(raw);
+  if (!Number.isFinite(every) || every <= 0) return Infinity;
+  return event === "Stop" ? every : 1;
+}
 
 /** Lines in a JSONL file. Each entry ends with a newline, so count those. */
 function countLines(text) {
@@ -50,6 +82,10 @@ const input = readStdin();
 if (process.env[REVIEW_ENV]) process.exit(0);
 if (!input.transcript_path) process.exit(0);
 
+const event = input.hook_event_name || "SessionEnd";
+const every = threshold(event);
+if (every === Infinity) process.exit(0);
+
 const root = projectRoot(input);
 if (!fs.existsSync(path.join(root, ".docket"))) process.exit(0);
 
@@ -64,8 +100,11 @@ const lines = countLines(text);
 fs.mkdirSync(STATE_DIR, { recursive: true });
 const session = input.session_id || path.basename(input.transcript_path, ".jsonl");
 const stateFile = path.join(STATE_DIR, `${session}.json`);
+// The runner for this session that is queued or running, if any.
+const pendingFile = path.join(STATE_DIR, `${session}.pending`);
 const reviewed = Math.min(readJson(stateFile, { entries: 0 }).entries || 0, lines);
-if (lines <= reviewed) process.exit(0);
+if (lines - reviewed < every) process.exit(0);
+if (event !== "SessionEnd" && isRunning(readJson(pendingFile, {}).pid)) process.exit(0);
 if (!hasUserPrompt(text.split("\n").slice(reviewed, lines))) process.exit(0);
 
 // The plugin's own `docket` goes first on the reviewer's PATH, so the commands
@@ -78,7 +117,7 @@ const model = process.env.DOCKET_REVIEW_MODEL || DEFAULT_REVIEW_MODEL;
 const log = fs.openSync(path.join(STATE_DIR, `${session}.log`), "a");
 fs.writeSync(
   log,
-  `\n--- ${new Date().toISOString()} session end: queued lines ${reviewed + 1}-${lines} of ${root} on ${model}\n`,
+  `\n--- ${new Date().toISOString()} ${event}: queued lines ${reviewed + 1}-${lines} of ${root} on ${model}\n`,
 );
 
 const job = {
@@ -91,6 +130,7 @@ const job = {
   from: reviewed,
   to: lines,
   stateFile,
+  pendingFile,
   // One review per repository at a time; two agents editing .docket/ race.
   lockFile: path.join(STATE_DIR, `${checkoutKey(root)}.lock`),
 };
@@ -103,4 +143,5 @@ const child = spawn(process.execPath, [path.join(__dirname, "review-runner.js")]
 });
 child.on("error", () => {});
 child.unref();
+if (child.pid) fs.writeFileSync(pendingFile, JSON.stringify({ pid: child.pid }));
 process.exit(0);
