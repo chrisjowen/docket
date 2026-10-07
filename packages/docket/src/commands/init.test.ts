@@ -73,8 +73,16 @@ describe('init', () => {
 
     expect((await init({ cwd: root })).updated).toEqual(['.gitignore'])
     expect(await readFile(join(root, '.gitignore'), 'utf8')).toBe(
-      'node_modules\n.docket/.index/\n'
+      'node_modules\n.docket/.index/\n.docket/.cache/\n'
     )
     expect((await init({ cwd: root })).skipped).toContain('.gitignore')
+  })
+
+  it('adds only the entries an existing .gitignore lacks', async () => {
+    const root = await freshRoot()
+    await writeFile(join(root, '.gitignore'), '.docket/.index/\n')
+
+    expect((await init({ cwd: root })).updated).toEqual(['.gitignore'])
+    expect(await readFile(join(root, '.gitignore'), 'utf8')).toBe('.docket/.index/\n.docket/.cache/\n')
   })
 })

@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { blocks, evidenceLocation, inline, neighbourhood, parseQuery, quickSearch, slotColour, typeSlots } from './model.js'
-import type { UiEntity, UiGraph } from './types.js'
+import {
+  blocks,
+  boardAnswer,
+  citationsAsMentions,
+  evidenceLocation,
+  inline,
+  neighbourhood,
+  parseQuery,
+  quickSearch,
+  slotColour,
+  typeSlots
+} from './model.js'
+import type { UiAnswer, UiChatAnswer, UiEntity, UiGraph } from './types.js'
 
 const entity = (id: string, overrides: Partial<UiEntity> = {}): UiEntity => ({
   id,
@@ -169,5 +180,54 @@ describe('blocks', () => {
       { kind: 'link', text: 'https://y.dev/b', href: 'https://y.dev/b' },
       { kind: 'text', text: '.' }
     ])
+  })
+})
+
+describe('chat', () => {
+  const answer: UiAnswer = {
+    query: 'checkout',
+    sources: [],
+    documents: ['service.orders', 'team.payments', 'datasource.ledger'].map((id) => ({
+      id,
+      type: id.split('.')[0] ?? '',
+      title: id,
+      path: `${id}.md`,
+      foundBy: ['jsonl']
+    })),
+    paths: [
+      { nodes: ['service.orders', 'team.payments'], steps: [{ rel: 'owned_by', forward: true }] },
+      { nodes: ['service.orders', 'datasource.ledger'], steps: [{ rel: 'depends_on', forward: true }] }
+    ],
+    diagnostics: [],
+    index: { synced: true, behind: 0 }
+  }
+  const reply = (cited: string[] | null): UiChatAnswer => ({
+    query: 'checkout',
+    answer,
+    summary: cited && { text: '', cited, model: 'm', cached: false, createdAt: '' }
+  })
+
+  it('turns cited ids into mentions, leaving other brackets and links alone', () => {
+    expect(
+      citationsAsMentions('[service.orders] and [unknown], [[team.payments]], [a](https://x.y) and [team.payments].', new Set(['service.orders', 'team.payments', 'a']))
+    ).toBe('[[service.orders]] and [unknown], [[team.payments]], [a](https://x.y) and [[team.payments]].')
+    expect(citationsAsMentions('`service.orders` runs `npm test`', new Set(['service.orders']))).toBe('[[service.orders]] runs `npm test`')
+  })
+
+  it('turns ids grouped in one bracket into mentions', () => {
+    const cited = new Set(['service.orders', 'team.payments'])
+    expect(citationsAsMentions('Checkout [service.orders, team.payments].', cited)).toBe('Checkout [[service.orders]], [[team.payments]].')
+    expect(citationsAsMentions('[service.orders; unknown] and [a, b]', cited)).toBe('[[service.orders]]; unknown and [a, b]')
+  })
+
+  it('puts only the cited exhibits, and the paths between them, on the board', () => {
+    const board = boardAnswer(reply(['service.orders', 'team.payments']))
+    expect(board.documents.map((document) => document.id)).toEqual(['service.orders', 'team.payments'])
+    expect(board.paths).toEqual([answer.paths[0]])
+  })
+
+  it('shows everything found when there is no summary, or it cites nothing', () => {
+    expect(boardAnswer(reply(null))).toBe(answer)
+    expect(boardAnswer(reply([]))).toBe(answer)
   })
 })

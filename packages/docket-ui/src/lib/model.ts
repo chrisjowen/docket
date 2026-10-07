@@ -1,4 +1,4 @@
-import type { UiEdge, UiEntity, UiGraph } from './types.js'
+import type { UiAnswer, UiChatAnswer, UiEdge, UiEntity, UiGraph } from './types.js'
 
 /** Hand-picked categorical slots; types past these get generated colours. */
 export const SERIES_SLOTS = 8
@@ -353,4 +353,35 @@ export const blocks = (markdown: string): Block[] => {
   }
   flush()
   return result
+}
+
+// --- Chat ---------------------------------------------------------------------
+
+/**
+ * A summary's citations - `[id]`, grouped as `[a, b]` or `[a; b]`, or an id in
+ * backticks - as `[[id]]` mentions, so its text reads like any exhibit's notes
+ * with each cited exhibit one click away. Only ids it cites change: other
+ * brackets and code, and Markdown links, stay as they were.
+ */
+export const citationsAsMentions = (text: string, cited: ReadonlySet<string>): string =>
+  text.replace(/(?<!\[)\[([^[\]]+)\](?![\](])|`([^`\s]+)`/g, (whole, bracketed?: string, quoted?: string) => {
+    if (quoted !== undefined) return cited.has(quoted) ? `[[${quoted}]]` : whole
+    const parts = (bracketed ?? '').split(/([,;])/)
+    if (!parts.some((part) => cited.has(part.trim()))) return whole
+    return parts.map((part) => (cited.has(part.trim()) ? part.replace(part.trim(), `[[${part.trim()}]]`) : part)).join('')
+  })
+
+/**
+ * What the board shows for a chat reply: the exhibits its summary cites and
+ * the paths joining them - else, with no summary or no citations, everything
+ * search found, as Ask shows it.
+ */
+export const boardAnswer = (reply: UiChatAnswer): UiAnswer => {
+  const cited = new Set(reply.summary?.cited ?? [])
+  if (cited.size === 0) return reply.answer
+  return {
+    ...reply.answer,
+    documents: reply.answer.documents.filter((document) => cited.has(document.id)),
+    paths: reply.answer.paths.filter((path) => cited.has(path.nodes[0] ?? '') && cited.has(path.nodes.at(-1) ?? ''))
+  }
 }

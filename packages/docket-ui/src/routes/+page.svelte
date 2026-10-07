@@ -11,6 +11,7 @@
   import Sun from '@lucide/svelte/icons/sun'
   import X from '@lucide/svelte/icons/x'
   import AskPanel from '$lib/components/ask-panel.svelte'
+  import ChatPanel, { type ChatTurn } from '$lib/components/chat-panel.svelte'
   import EntityPanel from '$lib/components/entity-panel.svelte'
   import Filters from '$lib/components/filters.svelte'
   import GraphView, { type FocusRequest, type GraphLink, type GraphNode } from '$lib/components/graph-view.svelte'
@@ -28,8 +29,12 @@
   let loading = $state(false)
 
   let selected = $state<string | null>(null)
-  let tab = $state<'details' | 'ask'>('details')
+  let tab = $state<'details' | 'ask' | 'chat'>('details')
+  /** The answer the board scopes to: Ask's, or the latest chat reply's. */
   let answer = $state.raw<UiAnswer | null>(null)
+  /** Each panel keeps its own, so switching tabs loses neither. */
+  let askAnswer = $state.raw<UiAnswer | null>(null)
+  let turns = $state<ChatTurn[]>([])
   /** The board shows only what the answer cites - nothing else, not even faded. */
   let scoped = $state(false)
   /** A relationship picked in quick search: its two ends stay emphasised. */
@@ -387,7 +392,7 @@
             </span>
             <Button variant="outline" size="xs" onclick={showEverything}>Show all exhibits</Button>
           </div>
-        {:else if answer && tab === 'ask'}
+        {:else if answer && tab !== 'details'}
           <div class="bg-popover absolute top-3 left-3 flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs shadow-sm">
             <Button variant="outline" size="xs" onclick={showAnswer}>Show only the answer's exhibits</Button>
           </div>
@@ -432,6 +437,7 @@
               <Tabs.List class="flex-1">
                 <Tabs.Trigger value="details">Exhibit</Tabs.Trigger>
                 <Tabs.Trigger value="ask">Ask</Tabs.Trigger>
+                <Tabs.Trigger value="chat">Chat</Tabs.Trigger>
               </Tabs.List>
               <Button variant="ghost" size="icon-sm" aria-label="Collapse the case file" onclick={togglePanel}>
                 <PanelRightClose />
@@ -462,8 +468,19 @@
             </Tabs.Content>
             <Tabs.Content value="ask" class="min-h-0 flex-1">
               <ScrollArea class="h-full">
-                <AskPanel {graph} {answer} {onanswer} onselect={(id) => select(id, { focus: true, tab: 'details' })} />
+                <AskPanel
+                  {graph}
+                  answer={askAnswer}
+                  onanswer={(next) => {
+                    askAnswer = next
+                    onanswer(next)
+                  }}
+                  onselect={(id) => select(id, { focus: true, tab: 'details' })}
+                />
               </ScrollArea>
+            </Tabs.Content>
+            <Tabs.Content value="chat" class="min-h-0 flex-1">
+              <ChatPanel {graph} bind:turns onshow={onanswer} onselect={(id) => select(id, { focus: true, tab: 'details' })} />
             </Tabs.Content>
           </Tabs.Root>
         </aside>

@@ -10,6 +10,7 @@ source:
 
   exclude:
     - ".index/**"
+    - ".cache/**"
 
 ontology:
   file: .docket/entities.yaml
@@ -40,6 +41,10 @@ projections:
   # - type: neo4j
   #   url: bolt://localhost:7687
   #   passwordEnv: NEO4J_PASSWORD
+
+# Optional: a local Ollama model that summarizes answers in \`docket open\`'s chat.
+# summarize:
+#   model: "qwen2.5:7b"     # Ollama at http://localhost:11434
 `
 
 /**
@@ -71,5 +76,5 @@ export const DEFAULT_ONTOLOGY_PATH = fileURLToPath(
   new URL('../ontology/default-sdlc.yaml', import.meta.url)
 )
 
-/** Appended to an existing `.gitignore`. Projections are disposable. */
-export const GITIGNORE_ENTRY = '.docket/.index/'
+/** Appended to an existing `.gitignore`. Projections and cached answers are disposable. */
+export const GITIGNORE_ENTRIES = ['.docket/.index/', '.docket/.cache/']

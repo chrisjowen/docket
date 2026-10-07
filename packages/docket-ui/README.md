@@ -8,7 +8,8 @@ npm package ships.
 The API it reads is defined in
 [`packages/docket/src/open/types.ts`](../docket/src/open/types.ts):
 `GET /api/graph` for every entity and relationship, `GET /api/ask?q=` for
-`docket search` answers.
+`docket search` answers, and `GET /api/chat?q=` for those answers summarized
+by a model.
 
 Each resource type is drawn with its icon: the `icon` its ontology entry
 declares, else docket's built-in one for that type name, else a generic one.

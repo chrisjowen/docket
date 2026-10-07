@@ -139,3 +139,31 @@ export interface UiAnswer {
   diagnostics: UiDiagnostic[]
   index: UiIndexStatus
 }
+
+/** A model's account of what an answer found, citing the exhibits it rests on. */
+export interface UiSummary {
+  /** Prose, citing exhibits by id in square brackets: `[service.orders]`. */
+  text: string
+  /** Exhibits the text cites, in the order it first cites them. Only ids that were found. */
+  cited: string[]
+  /** The model that wrote it. */
+  model: string
+  /** Served from `.docket/.cache/` because neither the question nor its exhibits changed. */
+  cached: boolean
+  /** When the model wrote it. */
+  createdAt: string
+}
+
+/** `GET /api/chat?q=`: an answer, summarized when a model is configured. */
+export interface UiChatAnswer {
+  query: string
+  /** What `docket search` found - what the summary was built from. */
+  answer: UiAnswer
+  summary: UiSummary | null
+  /** Why there is no summary. */
+  notice?: {
+    /** `unconfigured`: no model to summarize with. `empty`: nothing found to summarize. `failed`: the model failed. */
+    reason: 'unconfigured' | 'empty' | 'failed'
+    message: string
+  }
+}

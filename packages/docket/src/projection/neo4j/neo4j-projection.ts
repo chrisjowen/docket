@@ -22,7 +22,7 @@ import {
   relationshipRows,
   type Neighbour
 } from './graph-model.js'
-import { ollamaChat, type Chat } from './ollama-chat.js'
+import { ollamaChat, type Chat } from '../../llm/ollama-chat.js'
 
 const FULLTEXT_INDEX = 'memory_text'
 /** How long a generated query may run before it is abandoned. */

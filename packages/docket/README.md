@@ -17,6 +17,7 @@ graphs are disposable projections rebuilt from them.
 .docket/decisions/          decisions and why
 .docket/constraints/        rules the system must obey
 .docket/.index/             projections: generated, gitignored, disposable
+.docket/.cache/             answers docket open's chat cached: gitignored, disposable
 ```
 
 Install the Claude Code plugin and set up the repository you are in, in one
@@ -35,7 +36,7 @@ npx docket validate --strict    # check files against the ontology
 npx docket sync                 # project changed files into .docket/.index
 npx docket watch                # reconcile continuously as files change
 npx docket search <query...>    # ask every searchable projection
-npx docket open                 # browse, search and ask in a web UI, served on all interfaces
+npx docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 npx docket ontology list        # what resource types and relationships exist
 ```
 

@@ -60,11 +60,12 @@ your-repo/
     ├── constraints/           rules the system must obey
     │   └── pci-scope.md
     ├── notes/                 anything else worth keeping
-    └── .index/                projections: generated, gitignored, disposable
-        ├── documents.jsonl
-        ├── nodes.jsonl
-        ├── edges.jsonl
-        └── manifest.json
+    ├── .index/                projections: generated, gitignored, disposable
+    │   ├── documents.jsonl
+    │   ├── nodes.jsonl
+    │   ├── edges.jsonl
+    │   └── manifest.json
+    └── .cache/                answers docket open's chat cached: gitignored, disposable
 ```
 
 Directories are only for people: an exhibit's identity is the `id` in its
@@ -234,7 +235,7 @@ docket sync                 # project changed files into .docket/.index
 docket rebuild              # reset and reproject everything
 docket watch                # reconcile continuously as files change
 docket search <query...>    # ask every projection that can search
-docket open                 # browse, search and ask in a web UI, served on all interfaces
+docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
 ```
@@ -250,8 +251,8 @@ docket ontology show service  # attributes, relationships and confidence by sour
 picks one, `--no-open` skips launching the browser). It reads the canonical
 files on every request, so it needs no projection beyond the default `jsonl`.
 It listens on all interfaces (`0.0.0.0`) and answers any Host, so anyone who
-can reach the machine on that port can read the repository's knowledge; the
-API only reads.
+can reach the machine on that port can read the repository's knowledge. The
+API never changes the canonical files; its one write is chat's answer cache.
 
 - **Graph** - every entity and relationship as a force-directed graph, each
   type drawn with its own icon and colour, filtered by type and relationship
@@ -271,6 +272,32 @@ API only reads.
   shows only the entities the answer cites until you show everything again.
   It answers from the projections, so run `docket sync` first; the UI says
   when the index is behind the files.
+- **Chat** - a conversation with the casebook. Each question runs the same
+  search as Ask, then a model summarizes what it found in a few sentences,
+  citing each exhibit it relies on; citations link to the exhibit, and the
+  graph shows only the exhibits cited (everything found when it cites none).
+  The model is a local Ollama one, set in `.docket.yaml`:
+
+  ```yaml
+  summarize:
+    model: "qwen2.5:7b"                # Ollama at http://localhost:11434
+    # url: http://localhost:11434
+    # timeoutMs: 60000
+  ```
+
+  Without `summarize` - or when the model fails - chat shows what search
+  found, unsummarized, and says how to configure a model.
+
+  Summaries are cached in `.docket/.cache/chat/`, one JSON file per question,
+  keyed by a hash of the question (ignoring case and spacing), the model, its
+  instructions, the content hash of every exhibit the summary was built from
+  and the relationship paths connecting them. Asking the same question again
+  returns the cached answer at once, marked as such, while those are
+  unchanged; editing any file that declares one of the exhibits, finding a
+  different set, a change in how they connect, or changing the model asks the
+  model afresh and replaces the entry. Like `.index`, the cache is
+  disposable: `docket init` adds `.docket/.cache/` to `.gitignore`, and
+  deleting it only costs the next answer a model call.
 
 The UI is a SvelteKit app in [`packages/docket-ui`](packages/docket-ui),
 built into the npm package, so `npm i -g @chrisjowen/docket` is all it needs.

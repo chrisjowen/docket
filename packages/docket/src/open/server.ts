@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 
 import { ask } from './ask.js'
+import { chat } from './chat.js'
 import { readGraph } from './graph.js'
 
 /** Tried first so the UI keeps one address between runs; any free port when it is taken. */
@@ -44,7 +45,8 @@ const MIME: Record<string, string> = {
 
 /**
  * All interfaces, so the UI is reachable from other machines on the network.
- * The API only reads, but it serves the repository's knowledge to whoever can reach it.
+ * The API never changes the canonical files - its one write is chat's answer
+ * cache - but it serves the repository's knowledge to whoever can reach it.
  */
 const HOST = '0.0.0.0'
 
@@ -74,15 +76,20 @@ const askLimit = (raw: string | null): number => {
   return Math.min(limit, MAX_ASK_LIMIT)
 }
 
+const question = (url: URL): string => {
+  const query = url.searchParams.get('q')?.trim() ?? ''
+  if (query === '') throw new HttpError(400, 'Ask something: the q parameter is empty.')
+  return query
+}
+
 const api = async (url: URL, cwd: string): Promise<unknown> => {
   switch (url.pathname) {
     case '/api/graph':
       return readGraph(cwd)
-    case '/api/ask': {
-      const query = url.searchParams.get('q')?.trim() ?? ''
-      if (query === '') throw new HttpError(400, 'Ask something: the q parameter is empty.')
-      return ask(cwd, query, askLimit(url.searchParams.get('limit')))
-    }
+    case '/api/ask':
+      return ask(cwd, question(url), askLimit(url.searchParams.get('limit')))
+    case '/api/chat':
+      return chat(cwd, question(url), askLimit(url.searchParams.get('limit')))
     default:
       throw new HttpError(404, `No API at ${url.pathname}`)
   }
@@ -173,9 +180,11 @@ const listen = (server: Server, port: number): Promise<void> =>
   })
 
 /**
- * Serves the built UI and a read-only JSON API over the repository: the graph
- * from the canonical files, and answers from the same search agents use. Every
- * request re-reads the files, so a refresh shows edits made since.
+ * Serves the built UI and a JSON API over the repository: the graph from the
+ * canonical files, answers from the same search agents use, and those answers
+ * summarized by a model. Every request re-reads the files, so a refresh shows
+ * edits made since. Nothing it does changes the files; summaries are kept in
+ * the docket's disposable `.cache/`.
  */
 export const startUiServer = async (options: UiServerOptions): Promise<UiServer> => {
   const context = { cwd: options.cwd, uiDir: resolve(options.uiDir) }
