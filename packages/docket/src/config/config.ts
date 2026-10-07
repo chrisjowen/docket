@@ -69,6 +69,16 @@ export const mem0ProjectionConfigSchema = z.discriminatedUnion('mode', [
   mem0OssSchema
 ])
 
+/** A local Ollama chat model. */
+export const ollamaModelSchema = z.object({
+  provider: z.literal('ollama').default('ollama'),
+  url: z.string().url().default('http://localhost:11434'),
+  model: z.string().min(1),
+  timeoutMs: z.number().int().positive().default(60_000)
+})
+
+export type OllamaModelConfig = z.infer<typeof ollamaModelSchema>
+
 /**
  * A Neo4j graph of the documents and their links. The password is read from the
  * environment, never from the file; with `passwordEnv` unset the driver
@@ -86,14 +96,7 @@ export const neo4jProjectionConfigSchema = z.object({
    * Answer searches by having a local Ollama model write a read-only Cypher
    * query against the graph's schema. Without it, search is full-text only.
    */
-  cypher: z
-    .object({
-      provider: z.literal('ollama').default('ollama'),
-      url: z.string().url().default('http://localhost:11434'),
-      model: z.string().min(1),
-      timeoutMs: z.number().int().positive().default(60_000)
-    })
-    .optional()
+  cypher: ollamaModelSchema.optional()
 })
 
 export type JsonlProjectionConfig = z.infer<typeof jsonlProjectionConfigSchema>
@@ -118,7 +121,7 @@ export const memoryConfigSchema = z.object({
     .object({
       root: z.string().default('.docket'),
       include: z.array(z.string()).default(['**/*.md']),
-      exclude: z.array(z.string()).default(['.index/**'])
+      exclude: z.array(z.string()).default(['.index/**', '.cache/**'])
     })
     .prefault({}),
   ontology: z
@@ -139,7 +142,13 @@ export const memoryConfigSchema = z.object({
     .prefault({}),
   projections: z.array(projectionConfigSchema).default([
     { type: 'jsonl', output: '.docket/.index' }
-  ])
+  ]),
+  /**
+   * The model `docket open`'s chat summarizes search results with. Unset, it
+   * borrows a `neo4j` projection's `cypher` model; with neither, chat shows
+   * the search results unsummarized.
+   */
+  summarize: ollamaModelSchema.optional()
 })
 
 export type MemoryConfig = z.infer<typeof memoryConfigSchema>

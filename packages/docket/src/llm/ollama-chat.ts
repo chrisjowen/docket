@@ -1,4 +1,8 @@
-import type { CypherPrompt } from './cypher-prompt.js'
+/** What a model is asked: its instructions, and the question. */
+export interface ChatPrompt {
+  system: string
+  user: string
+}
 
 export interface OllamaChatConfig {
   url: string
@@ -7,7 +11,7 @@ export interface OllamaChatConfig {
 }
 
 /** Sends a prompt, returns the model's reply text. */
-export type Chat = (prompt: CypherPrompt) => Promise<string>
+export type Chat = (prompt: ChatPrompt) => Promise<string>
 
 /** A local Ollama model, at temperature 0 so the same question reads the same way twice. */
 export const ollamaChat =

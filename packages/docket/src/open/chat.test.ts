@@ -1,0 +1,269 @@
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, relative } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+import { memoryConfigSchema } from '../config/config.js'
+import { init } from '../commands/init.js'
+import { sync } from '../commands/sync.js'
+import { citationsIn, summarizerOf } from './chat.js'
+import { startUiServer, type UiServer } from './server.js'
+import type { UiChatAnswer } from './types.js'
+
+const ORDERS = `---
+id: service.orders
+type: service
+title: Orders API
+links:
+  - rel: owned_by
+    target: team.payments
+---
+
+Handles orders for checkout.
+`
+
+const PAYMENTS = `---
+id: team.payments
+type: team
+title: Payments
+---
+
+The payments team owns checkout money movement.
+`
+
+const REPLY = 'Checkout runs on [service.orders], owned by [team.payments]. See also [service.imaginary].'
+
+/** A stand-in for Ollama's `/api/chat`, counting what it is asked. */
+interface FakeOllama {
+  url: string
+  prompts: { system: string; user: string }[]
+  /** What it answers next: a reply, or an HTTP status to fail with. */
+  respond: string | number
+  close(): Promise<void>
+}
+
+const fakeOllama = async (): Promise<FakeOllama> => {
+  const fake = { prompts: [], respond: REPLY } as unknown as FakeOllama
+  const server: Server = createServer((request, response) => {
+    let body = ''
+    request.on('data', (chunk: Buffer) => (body += chunk.toString()))
+    request.on('end', () => {
+      const { messages } = JSON.parse(body) as { messages: { content: string }[] }
+      fake.prompts.push({ system: messages[0]?.content ?? '', user: messages[1]?.content ?? '' })
+      if (typeof fake.respond === 'number') {
+        response.writeHead(fake.respond).end('model not found')
+        return
+      }
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ message: { role: 'assistant', content: fake.respond } }))
+    })
+  })
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+  fake.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  fake.close = () =>
+    new Promise((done) => {
+      server.closeAllConnections()
+      server.close(() => done())
+    })
+  return fake
+}
+
+let root: string
+let server: UiServer | undefined
+let ollama: FakeOllama
+
+const write = async (path: string, contents: string): Promise<void> => {
+  await mkdir(join(path, '..'), { recursive: true })
+  await writeFile(path, contents, 'utf8')
+}
+
+const chat = async (question: string): Promise<UiChatAnswer> => {
+  if (!server) throw new Error('server not started')
+  const response = await fetch(new URL(`/api/chat?q=${encodeURIComponent(question)}`, server.url))
+  expect(response.status).toBe(200)
+  return (await response.json()) as UiChatAnswer
+}
+
+const CACHE = '.docket/.cache/chat'
+
+const cacheFiles = async (): Promise<string[]> => readdir(join(root, CACHE)).catch(() => [])
+
+/** Every file under the root, with its contents, so a test can tell what a request wrote. */
+const snapshot = async (dir: string = root): Promise<Map<string, string>> => {
+  const files = new Map<string, string>()
+  for (const entry of await readdir(dir, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile()) continue
+    const path = join(entry.parentPath, entry.name)
+    files.set(relative(root, path), await readFile(path, 'utf8'))
+  }
+  return files
+}
+
+const configureModel = (model = 'fake-model'): Promise<void> =>
+  appendFile(join(root, '.docket.yaml'), `\nsummarize:\n  url: ${ollama.url}\n  model: ${model}\n`, 'utf8')
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'docket-chat-'))
+  await init({ cwd: root })
+  await write(join(root, '.docket/resources/services/orders.md'), ORDERS)
+  await write(join(root, '.docket/resources/teams/payments.md'), PAYMENTS)
+  await sync({ cwd: root })
+  ollama = await fakeOllama()
+  server = await startUiServer({ cwd: root, uiDir: join(root, 'ui'), port: 0 })
+})
+
+afterEach(async () => {
+  await server?.close()
+  server = undefined
+  await ollama.close()
+  await rm(root, { recursive: true, force: true })
+})
+
+describe('the chat API', () => {
+  it('summarizes what search found, citing only exhibits it was given', async () => {
+    await configureModel()
+
+    const reply = await chat('checkout')
+
+    expect(reply.answer.documents.map((document) => document.id).sort()).toEqual(['service.orders', 'team.payments'])
+    expect(reply.summary).toEqual({
+      text: REPLY,
+      cited: ['service.orders', 'team.payments'],
+      model: 'fake-model',
+      cached: false,
+      createdAt: expect.any(String)
+    })
+    expect(reply.notice).toBeUndefined()
+    expect(ollama.prompts).toHaveLength(1)
+    expect(ollama.prompts[0]?.user).toContain('Question: checkout')
+    expect(ollama.prompts[0]?.user).toContain('[service.orders] Orders API (service)')
+    expect(ollama.prompts[0]?.user).toContain('links: owned_by -> team.payments')
+  })
+
+  it('answers the same question again from the cache, without the model', async () => {
+    await configureModel()
+
+    const first = await chat('checkout')
+    const again = await chat('  Checkout ')
+
+    expect(again.summary).toEqual({ ...first.summary, cached: true })
+    expect(ollama.prompts).toHaveLength(1)
+    expect(await cacheFiles()).toHaveLength(1)
+  })
+
+  it('asks the model again for a different question', async () => {
+    await configureModel()
+
+    await chat('checkout')
+    const other = await chat('who owns checkout money movement')
+
+    expect(other.summary?.cached).toBe(false)
+    expect(ollama.prompts).toHaveLength(2)
+    expect(await cacheFiles()).toHaveLength(2)
+  })
+
+  it('throws the cached answer away when an exhibit it was built from changes', async () => {
+    await configureModel()
+    await chat('checkout')
+
+    await write(join(root, '.docket/resources/teams/payments.md'), PAYMENTS.replace('owns', 'runs'))
+    ollama.respond = 'Now [team.payments] runs it.'
+    const changed = await chat('checkout')
+
+    expect(changed.summary).toMatchObject({ text: 'Now [team.payments] runs it.', cited: ['team.payments'], cached: false })
+    expect(ollama.prompts).toHaveLength(2)
+    expect(ollama.prompts[1]?.user).toContain('The payments team runs checkout money movement.')
+    // Replaced, not kept beside it: one file per question.
+    expect(await cacheFiles()).toHaveLength(1)
+    expect((await chat('checkout')).summary).toMatchObject({ text: 'Now [team.payments] runs it.', cached: true })
+  })
+
+  it('throws the cached answer away when the model changes', async () => {
+    await configureModel('first-model')
+    await chat('checkout')
+
+    await write(join(root, '.docket.yaml'), (await readFile(join(root, '.docket.yaml'), 'utf8')).replace('first-model', 'second-model'))
+    const reply = await chat('checkout')
+
+    expect(reply.summary).toMatchObject({ model: 'second-model', cached: false })
+    expect(ollama.prompts).toHaveLength(2)
+  })
+
+  it('writes nothing but its own cache', async () => {
+    await configureModel()
+    const before = await snapshot()
+
+    await chat('checkout')
+
+    const after = await snapshot()
+    const written = [...after.keys()].filter((path) => before.get(path) !== after.get(path))
+    expect(written).toEqual([expect.stringMatching(/^\.docket\/\.cache\/chat\/[0-9a-f]{64}\.json$/)])
+    expect(JSON.parse(after.get(written[0] as string) as string)).toMatchObject({
+      question: 'checkout',
+      model: 'fake-model',
+      exhibits: expect.arrayContaining([{ id: 'service.orders', hash: expect.stringMatching(/^sha256:/) }]),
+      cited: ['service.orders', 'team.payments']
+    })
+  })
+
+  it('shows the search results, and how to configure a model, when none is configured', async () => {
+    const reply = await chat('checkout')
+
+    expect(reply.summary).toBeNull()
+    expect(reply.notice).toEqual({ reason: 'unconfigured', message: expect.stringContaining('summarize') })
+    expect(reply.answer.documents).toHaveLength(2)
+    expect(ollama.prompts).toHaveLength(0)
+    expect(await cacheFiles()).toEqual([])
+  })
+
+  it('reports a failing model without failing the answer, and caches nothing', async () => {
+    await configureModel()
+    ollama.respond = 500
+
+    const reply = await chat('checkout')
+
+    expect(reply.summary).toBeNull()
+    expect(reply.notice).toEqual({ reason: 'failed', message: expect.stringContaining('fake-model') })
+    expect(reply.answer.documents).toHaveLength(2)
+    expect(await cacheFiles()).toEqual([])
+  })
+
+  it('does not ask the model when nothing was found', async () => {
+    await configureModel()
+
+    const reply = await chat('zebra')
+
+    expect(reply.summary).toBeNull()
+    expect(reply.notice?.reason).toBe('empty')
+    expect(ollama.prompts).toHaveLength(0)
+  })
+
+  it('rejects an empty question', async () => {
+    expect((await fetch(new URL('/api/chat?q=', server?.url))).status).toBe(400)
+  })
+})
+
+describe('summarizerOf', () => {
+  const config = (extra: Record<string, unknown>) => memoryConfigSchema.parse({ version: 1, ...extra })
+
+  it('prefers `summarize`, else borrows the neo4j projection\'s cypher model', () => {
+    expect(summarizerOf(config({}))).toBeUndefined()
+    expect(summarizerOf(config({ projections: [{ type: 'neo4j', cypher: { model: 'cypher-model' } }] }))?.model).toBe(
+      'cypher-model'
+    )
+    expect(
+      summarizerOf(
+        config({ summarize: { model: 'summary-model' }, projections: [{ type: 'neo4j', cypher: { model: 'cypher-model' } }] })
+      )
+    ).toEqual({ provider: 'ollama', url: 'http://localhost:11434', model: 'summary-model', timeoutMs: 60_000 })
+  })
+})
+
+describe('citationsIn', () => {
+  it('keeps exhibits it knows, once each, in first-cited order', () => {
+    expect(citationsIn('[b] and [a], then [b] again, [c] and [ not an id ]', new Set(['a', 'b']))).toEqual(['b', 'a'])
+    expect(citationsIn('`c` relies on `b`, not `d`', new Set(['a', 'b', 'c']))).toEqual(['c', 'b'])
+  })
+})

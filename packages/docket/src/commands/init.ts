@@ -6,7 +6,7 @@ import {
   DEFAULT_CONFIG_YAML,
   DEFAULT_DIRECTORIES,
   DEFAULT_ONTOLOGY_PATH,
-  GITIGNORE_ENTRY
+  GITIGNORE_ENTRIES
 } from '../config/defaults.js'
 import { defaultConfig } from '../config/loader.js'
 
@@ -63,16 +63,18 @@ export const init = async (options: InitOptions = {}): Promise<InitResult> => {
   await write(join(projectRoot, CONFIG_FILENAME), DEFAULT_CONFIG_YAML)
   await write(ontologyPath, await readFile(DEFAULT_ONTOLOGY_PATH, 'utf8'))
 
-  // Projections are disposable, so keep them out of version control. Only
-  // amend a `.gitignore` that already exists - never create one.
+  // Projections and cached answers are disposable, so keep them out of version
+  // control. Only amend a `.gitignore` that already exists - never create one.
   const gitignore = join(projectRoot, '.gitignore')
   if (existsSync(gitignore)) {
     const contents = await readFile(gitignore, 'utf8')
-    if (contents.split('\n').some((line) => line.trim() === GITIGNORE_ENTRY)) {
+    const lines = new Set(contents.split('\n').map((line) => line.trim()))
+    const missing = GITIGNORE_ENTRIES.filter((entry) => !lines.has(entry))
+    if (missing.length === 0) {
       result.skipped.push('.gitignore')
     } else {
       const prefix = contents.length === 0 || contents.endsWith('\n') ? '' : '\n'
-      await appendFile(gitignore, `${prefix}${GITIGNORE_ENTRY}\n`, 'utf8')
+      await appendFile(gitignore, `${prefix}${missing.join('\n')}\n`, 'utf8')
       result.updated.push('.gitignore')
     }
   }

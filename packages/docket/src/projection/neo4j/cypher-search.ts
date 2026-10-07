@@ -3,7 +3,7 @@ import type { Node, Path, Record as Neo4jRecord, Relationship } from 'neo4j-driv
 import type { SearchHit } from '../projection.js'
 import { guardCypher, undirected } from './cypher-guard.js'
 import { buildCypherPrompt, type GraphSchema } from './cypher-prompt.js'
-import type { Chat } from './ollama-chat.js'
+import type { Chat } from '../../llm/ollama-chat.js'
 
 /** Rows a generated query may return. Enough to answer, not enough to dump the graph. */
 export const MAX_CYPHER_ROWS = 50

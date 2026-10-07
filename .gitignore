@@ -4,6 +4,7 @@ dist/
 .DS_Store
 # Derived, never canonical. Anchored patterns would miss examples/*/.docket/.
 **/.docket/.index/
+**/.docket/.cache/
 # The web UI's SvelteKit output; the docket build copies it into dist/ui.
 .svelte-kit/
 packages/docket-ui/build/
