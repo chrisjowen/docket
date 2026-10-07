@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -69,9 +69,49 @@ const fakeOllama = async (): Promise<FakeOllama> => {
   return fake
 }
 
+/**
+ * A stand-in for the `claude` CLI, put on a PATH that holds nothing else of
+ * Claude's, so the real one is never run. It keeps the arguments and stdin of
+ * its last call, counts its calls, and answers with `reply`, or exits with
+ * `code` after printing `stderr`, or sleeps for `sleep` seconds first.
+ */
+interface FakeClaude {
+  install(behaviour?: { reply?: string; code?: number; stderr?: string; sleep?: number }): Promise<void>
+  calls(): Promise<number>
+  args(): Promise<string[]>
+  stdin(): Promise<string>
+}
+
+const fakeClaude = (bin: string): FakeClaude => ({
+  install: async ({ reply = REPLY, code = 0, stderr = '', sleep = 0 } = {}) => {
+    await writeFile(join(bin, 'reply'), reply, 'utf8')
+    await writeFile(join(bin, 'stderr'), stderr, 'utf8')
+    const script = [
+      '#!/bin/sh',
+      'dir="$(dirname "$0")"',
+      'printf x >> "$dir/calls"',
+      ': > "$dir/args"',
+      'for arg in "$@"; do printf \'%s\\0\' "$arg" >> "$dir/args"; done',
+      'cat > "$dir/stdin"',
+      sleep > 0 ? `sleep ${sleep}` : '',
+      'cat "$dir/stderr" >&2',
+      code === 0 ? 'cat "$dir/reply"' : '',
+      `exit ${code}`
+    ].join('\n')
+    await writeFile(join(bin, 'claude'), `${script}\n`, 'utf8')
+    await chmod(join(bin, 'claude'), 0o755)
+  },
+  calls: async () => (await readFile(join(bin, 'calls'), 'utf8').catch(() => '')).length,
+  args: async () => (await readFile(join(bin, 'args'), 'utf8')).split('\0').slice(0, -1),
+  stdin: () => readFile(join(bin, 'stdin'), 'utf8')
+})
+
 let root: string
 let server: UiServer | undefined
 let ollama: FakeOllama
+let claude: FakeClaude
+let bin: string
+const PATH = process.env.PATH
 
 const write = async (path: string, contents: string): Promise<void> => {
   await mkdir(join(path, '..'), { recursive: true })
@@ -105,6 +145,9 @@ const configureModel = (model = 'fake-model'): Promise<void> =>
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'docket-chat-'))
+  bin = await mkdtemp(join(tmpdir(), 'docket-chat-bin-'))
+  process.env.PATH = `${bin}:/usr/bin:/bin`
+  claude = fakeClaude(bin)
   await init({ cwd: root })
   await write(join(root, '.docket/resources/services/orders.md'), ORDERS)
   await write(join(root, '.docket/resources/teams/payments.md'), PAYMENTS)
@@ -117,7 +160,9 @@ afterEach(async () => {
   await server?.close()
   server = undefined
   await ollama.close()
+  process.env.PATH = PATH
   await rm(root, { recursive: true, force: true })
+  await rm(bin, { recursive: true, force: true })
 })
 
 describe('the chat API', () => {
@@ -233,13 +278,97 @@ describe('the chat API', () => {
     })
   })
 
-  it('shows the search results, and how to configure a model, when none is configured', async () => {
+  it('summarizes with the claude CLI when no model is configured', async () => {
+    await claude.install()
+
+    const reply = await chat('checkout')
+
+    expect(reply.summary).toEqual({
+      text: REPLY,
+      cited: ['service.orders', 'team.payments'],
+      model: 'claude',
+      cached: false,
+      createdAt: expect.any(String)
+    })
+    expect(reply.notice).toBeUndefined()
+    const args = await claude.args()
+    expect(args.slice(0, 3)).toEqual(['-p', '--output-format', 'text'])
+    expect(args[args.indexOf('--system-prompt') + 1]).toContain('casebook')
+    expect(args[args.indexOf('--tools') + 1]).toBe('')
+    expect(args).toContain('--no-session-persistence')
+    expect(args).not.toContain('--model')
+    expect(await claude.stdin()).toContain('Question: checkout')
+    expect(await claude.stdin()).toContain('[service.orders] Orders API (service)')
+    expect(ollama.prompts).toHaveLength(0)
+
+    expect((await chat('checkout')).summary).toMatchObject({ model: 'claude', cached: true })
+    expect(await claude.calls()).toBe(1)
+  })
+
+  it('passes the question to claude as input, never through a shell', async () => {
+    await claude.install()
+    const question = `checkout "$(touch pwned)" \`touch pwned\`; touch pwned`
+
+    await chat(question)
+
+    expect(await claude.stdin()).toContain(`Question: ${question}`)
+    expect(await readdir(bin)).not.toContain('pwned')
+    expect(await readdir(tmpdir())).not.toContain('pwned')
+  })
+
+  it('passes a configured claude model on', async () => {
+    await claude.install()
+    await appendFile(join(root, '.docket.yaml'), '\nsummarize:\n  provider: claude\n  model: sonnet\n', 'utf8')
+
+    const reply = await chat('checkout')
+
+    expect(reply.summary).toMatchObject({ model: 'claude (sonnet)', cached: false })
+    const args = await claude.args()
+    expect(args[args.indexOf('--model') + 1]).toBe('sonnet')
+  })
+
+  it('does not return claude\'s cached answer once Ollama is configured instead', async () => {
+    await claude.install()
+    await chat('checkout')
+
+    await configureModel()
+    const reply = await chat('checkout')
+
+    expect(reply.summary).toMatchObject({ model: 'fake-model', cached: false })
+    expect(ollama.prompts).toHaveLength(1)
+    expect(await claude.calls()).toBe(1)
+  })
+
+  it('shows the search results, and how to get a model, when claude is not installed and none is configured', async () => {
     const reply = await chat('checkout')
 
     expect(reply.summary).toBeNull()
-    expect(reply.notice).toEqual({ reason: 'unconfigured', message: expect.stringContaining('summarize') })
+    expect(reply.notice).toEqual({ reason: 'unconfigured', message: expect.stringContaining('Claude Code is not installed') })
+    expect(reply.notice?.message).toContain('summarize')
     expect(reply.answer.documents).toHaveLength(2)
     expect(ollama.prompts).toHaveLength(0)
+    expect(await cacheFiles()).toEqual([])
+  })
+
+  it('reports claude failing, with what it said, and caches nothing', async () => {
+    await claude.install({ code: 1, stderr: 'Invalid API key - please run /login' })
+
+    const reply = await chat('checkout')
+
+    expect(reply.summary).toBeNull()
+    expect(reply.notice).toEqual({ reason: 'failed', message: expect.stringContaining('Invalid API key - please run /login') })
+    expect(reply.notice?.message).toContain('claude exited with 1')
+    expect(reply.answer.documents).toHaveLength(2)
+    expect(await cacheFiles()).toEqual([])
+  })
+
+  it('gives up on claude after its timeout', async () => {
+    await claude.install({ sleep: 5 })
+    await appendFile(join(root, '.docket.yaml'), '\nsummarize:\n  provider: claude\n  timeoutMs: 200\n', 'utf8')
+
+    const reply = await chat('checkout')
+
+    expect(reply.notice).toEqual({ reason: 'failed', message: expect.stringContaining('did not answer within 0.2s') })
     expect(await cacheFiles()).toEqual([])
   })
 

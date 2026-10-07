@@ -79,6 +79,24 @@ export const ollamaModelSchema = z.object({
 
 export type OllamaModelConfig = z.infer<typeof ollamaModelSchema>
 
+/** Claude Code's `claude` CLI, run in print mode with the user's own login. */
+export const claudeModelSchema = z.object({
+  provider: z.literal('claude'),
+  /** Passed as `--model`, e.g. `sonnet` or `haiku`. Unset, Claude Code picks. */
+  model: z.string().min(1).optional(),
+  timeoutMs: z.number().int().positive().default(120_000)
+})
+
+export type ClaudeModelConfig = z.infer<typeof claudeModelSchema>
+
+/**
+ * What summarizes `docket open`'s chat answers. Claude when unset; a section
+ * without `provider` is an Ollama model, as it was before Claude was the default.
+ */
+export const summarizeConfigSchema = z.union([claudeModelSchema, ollamaModelSchema]).prefault({ provider: 'claude' })
+
+export type SummarizeConfig = z.infer<typeof summarizeConfigSchema>
+
 /**
  * A Neo4j graph of the documents and their links. The password is read from the
  * environment, never from the file; with `passwordEnv` unset the driver
@@ -144,10 +162,10 @@ export const memoryConfigSchema = z.object({
     { type: 'jsonl', output: '.docket/.index' }
   ]),
   /**
-   * The model `docket open`'s chat summarizes search results with. Unset,
-   * chat shows the search results unsummarized.
+   * The model `docket open`'s chat summarizes search results with: the
+   * `claude` CLI unless an Ollama model is set here.
    */
-  summarize: ollamaModelSchema.optional()
+  summarize: summarizeConfigSchema
 })
 
 export type MemoryConfig = z.infer<typeof memoryConfigSchema>

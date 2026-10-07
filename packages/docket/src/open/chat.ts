@@ -1,4 +1,6 @@
-import { ollamaChat, type ChatPrompt } from '../llm/ollama-chat.js'
+import type { SummarizeConfig } from '../config/config.js'
+import { ClaudeNotFoundError, claudeChat } from '../llm/claude-chat.js'
+import { ollamaChat, type Chat, type ChatPrompt } from '../llm/ollama-chat.js'
 import type { MemoryEntity } from '../model/index.js'
 import { askCasebook } from './ask.js'
 import {
@@ -50,6 +52,29 @@ export const summaryPrompt = (question: string, exhibits: readonly MemoryEntity[
   return { system: SYSTEM, user: sections.join('\n\n') }
 }
 
+/** A configured model: how to ask it, and what it is called. */
+interface Summarizer {
+  /** Shown beside its summaries, e.g. `claude` or `qwen2.5:7b`. */
+  name: string
+  /** What cached summaries are keyed on, so switching model or provider never returns another's answer. */
+  identity: string
+  chat: Chat
+}
+
+const summarizerFor = (config: SummarizeConfig): Summarizer =>
+  config.provider === 'claude'
+    ? {
+        name: config.model ? `claude (${config.model})` : 'claude',
+        identity: `claude:${config.model ?? ''}`,
+        chat: claudeChat(config)
+      }
+    : { name: config.model, identity: `ollama:${config.url}:${config.model}`, chat: ollamaChat(config) }
+
+const NOT_INSTALLED =
+  'Claude Code is not installed, so here is what search found. Install it (https://claude.com/claude-code) ' +
+  'and log in to have answers summarized by the `claude` CLI, or add a `summarize` section to .docket.yaml - ' +
+  'e.g. `summarize: { model: "qwen2.5:7b" }` for Ollama at http://localhost:11434.'
+
 /**
  * Ids cited as `[id]`, grouped as `[a, b]` or `[a; b]` - or in backticks, as
  * models often write ids anyway - in first-cited order, keeping only exhibits
@@ -74,22 +99,7 @@ export const citationsIn = (text: string, exhibits: ReadonlySet<string>): string
  */
 export const chat = async (cwd: string, query: string, limit: number): Promise<UiChatAnswer> => {
   const { answer, resolved, entities } = await askCasebook(cwd, query, limit)
-  const model = resolved.config.summarize
-  if (!model) {
-    return {
-      query,
-      answer,
-      summary: null,
-      notice: {
-        reason: 'unconfigured',
-        message:
-          'No model is configured to summarize answers, so here is what search found. ' +
-          'Add a `summarize` section to .docket.yaml - e.g. `summarize: { model: "qwen2.5:7b" }` for Ollama at ' +
-          'http://localhost:11434 - to have answers summarized.'
-      }
-    }
-  }
-
+  const model = summarizerFor(resolved.config.summarize)
   const byId = new Map(entities.map((entity) => [entity.id, entity]))
   const exhibits = answer.documents.flatMap((document) => {
     const entity = byId.get(document.id)
@@ -100,7 +110,7 @@ export const chat = async (cwd: string, query: string, limit: number): Promise<U
   }
 
   const hashes: CachedExhibit[] = exhibits.map((entity) => ({ id: entity.id, hash: entity.hash }))
-  const key = summaryKey(query, { model: model.model, instructions: SYSTEM }, hashes, answer.paths)
+  const key = summaryKey(query, { model: model.identity, instructions: SYSTEM }, hashes, answer.paths)
   const dir = summaryCacheDir(resolved.memoryRoot)
   const cached = await readCachedSummary(dir, query, key)
   if (cached) {
@@ -113,22 +123,25 @@ export const chat = async (cwd: string, query: string, limit: number): Promise<U
 
   let text: string
   try {
-    text = (await ollamaChat(model)(summaryPrompt(query, exhibits, answer))).trim()
+    text = (await model.chat(summaryPrompt(query, exhibits, answer))).trim()
   } catch (cause) {
+    if (cause instanceof ClaudeNotFoundError) {
+      return { query, answer, summary: null, notice: { reason: 'unconfigured', message: NOT_INSTALLED } }
+    }
     return {
       query,
       answer,
       summary: null,
-      notice: { reason: 'failed', message: `Could not summarize with ${model.model}: ${cause instanceof Error ? cause.message : String(cause)}` }
+      notice: { reason: 'failed', message: `Could not summarize with ${model.name}: ${cause instanceof Error ? cause.message : String(cause)}` }
     }
   }
 
   const cited = citationsIn(text, new Set(hashes.map((exhibit) => exhibit.id)))
   const createdAt = new Date().toISOString()
   try {
-    await writeCachedSummary(dir, { key, question: query, model: model.model, exhibits: hashes, text, cited, createdAt })
+    await writeCachedSummary(dir, { key, question: query, model: model.name, exhibits: hashes, text, cited, createdAt })
   } catch {
     // A docket that cannot be written to still gets its answer, just not kept.
   }
-  return { query, answer, summary: { text, cited, model: model.model, cached: false, createdAt } }
+  return { query, answer, summary: { text, cited, model: model.name, cached: false, createdAt } }
 }

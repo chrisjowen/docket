@@ -42,7 +42,13 @@ projections:
   #   url: bolt://localhost:7687
   #   passwordEnv: NEO4J_PASSWORD
 
-# Optional: a local Ollama model that summarizes answers in \`docket open\`'s chat.
+# \`docket open\`'s chat summarizes answers with the \`claude\` CLI (Claude Code),
+# using your own login - nothing to set. To choose its model, or to use a local
+# Ollama model instead:
+# summarize:
+#   provider: claude
+#   model: sonnet           # passed as \`claude --model\`
+# or, for Ollama:
 # summarize:
 #   model: "qwen2.5:7b"     # Ollama at http://localhost:11434
 `
