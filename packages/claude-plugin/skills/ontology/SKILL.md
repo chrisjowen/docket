@@ -54,6 +54,8 @@ resourceTypes:
     description: >
       Runtime configurable feature controlling software behaviour.
 
+    icon: flag
+
     attributes:
       key:
         type: string
@@ -87,6 +89,10 @@ Rules:
   optionally with `enum:`. Do not invent a richer schema language.
 - A relationship declares `from` and `to` as lists of resource types, or `"*"`
   for any registered type. It may declare `attributes` with the same types.
+- `icon` is optional: the Lucide icon name (kebab-case, e.g. `server`) the
+  `docket open` web UI draws the type with. Give a new type one so it is
+  recognisable on the graph; `docket validate` warns about an icon docket does
+  not bundle, and the type is drawn with a generic one.
 - `description` and `extraction.instructions` are read by agents. Write them so
   a future agent can tell this type apart from its neighbours. Use
   `extraction.clues` and `extraction.doNotConfuseWith` where confusion is

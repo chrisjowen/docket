@@ -1,21 +1,58 @@
 import type { UiEdge, UiEntity, UiGraph } from './types.js'
 
-/** Categorical slots. More types than this share the neutral "other" colour. */
+/** Hand-picked categorical slots; types past these get generated colours. */
 export const SERIES_SLOTS = 8
 
 /**
- * One colour per type, by how many entities have it - most common first - so a
- * type keeps its colour however the view is filtered. Types past the eighth
- * get no slot: the label still names them, and colour never cycles.
+ * One slot per type, by how many entities have it - most common first - so a
+ * type keeps its colour however the view is filtered.
  */
-export const typeSlots = (entities: readonly UiEntity[]): Map<string, number | null> => {
+export const typeSlots = (entities: readonly UiEntity[]): Map<string, number> => {
   const counts = countBy(entities, (entity) => entity.type)
   const ordered = [...counts.entries()].sort(([a, x], [b, y]) => y - x || compare(a, b))
-  return new Map(ordered.map(([type], index) => [type, index < SERIES_SLOTS ? index + 1 : null]))
+  return new Map(ordered.map(([type], index) => [type, index + 1]))
 }
 
-export const slotColour = (slot: number | null | undefined): string =>
-  slot ? `var(--series-${slot})` : 'var(--graph-other)'
+/**
+ * Hue bands, in degrees, the palette leaves free - yellow-green, teal to sky,
+ * purple to magenta - so a generated colour never passes for a palette one.
+ */
+const FREE_HUES: readonly (readonly [number, number])[] = [
+  [175, 240],
+  [300, 340],
+  [95, 130]
+]
+const FREE_WIDTH = FREE_HUES.reduce((sum, [from, to]) => sum + to - from, 0)
+
+/** The golden ratio's fraction: successive positions land as far from all earlier ones as they can. */
+const GOLDEN = 0.618034
+
+/** Generated colours step lightness too, so two close hues still read apart. */
+const LIGHTNESS_STEPS = [0, 0.1, -0.08] as const
+
+const freeHue = (index: number): number => {
+  let offset = ((index * GOLDEN + 0.25) % 1) * FREE_WIDTH
+  for (const [from, to] of FREE_HUES) {
+    if (offset < to - from) return from + offset
+    offset -= to - from
+  }
+  return FREE_HUES[0]?.[0] ?? 0
+}
+
+/**
+ * A slot's colour. The first eight come from the palette; every one after gets
+ * its own hue in the bands the palette leaves free, at the lightness and
+ * chroma the theme sets, so no two types share a colour and colours never
+ * cycle.
+ */
+export const slotColour = (slot: number | undefined): string => {
+  if (!slot) return 'var(--graph-other)'
+  if (slot <= SERIES_SLOTS) return `var(--series-${slot})`
+  const index = slot - SERIES_SLOTS - 1
+  const step = LIGHTNESS_STEPS[index % LIGHTNESS_STEPS.length] ?? 0
+  const lightness = step === 0 ? 'var(--series-generated-l)' : `calc(var(--series-generated-l) + ${step})`
+  return `oklch(${lightness} var(--series-generated-c) ${freeHue(index).toFixed(1)})`
+}
 
 export const countBy = <T>(items: readonly T[], key: (item: T) => string): Map<string, number> => {
   const counts = new Map<string, number>()

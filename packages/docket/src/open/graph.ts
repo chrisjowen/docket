@@ -7,6 +7,7 @@ import { validate } from '../commands/validate.js'
 import { planProjection } from '../manifest/plan.js'
 import { loadManifestState } from '../manifest/state.js'
 import type { Assessment, MemoryEntity } from '../model/index.js'
+import { iconFor } from '../ontology/icons.js'
 import { MATTER_OPTIONS } from '../source/parser.js'
 import type { UiAssessment, UiEdge, UiEntity, UiGraph, UiIndexStatus } from './types.js'
 
@@ -107,7 +108,10 @@ export const readGraph = async (cwd: string): Promise<UiGraph> => {
     project: { name: basename(resolved.projectRoot), root: resolved.projectRoot },
     entities: entities.map((entity, index) => toEntity(entity, frontmatters[index] ?? {})),
     edges,
-    types: definitions(ontology?.resourceTypes),
+    types: definitions(ontology?.resourceTypes).map((type) => ({
+      ...type,
+      icon: iconFor(type.name, ontology?.resourceTypes[type.name]?.icon)
+    })),
     relationships: definitions(ontology?.relationships),
     diagnostics,
     index: await indexStatus(resolved, entities, broken)

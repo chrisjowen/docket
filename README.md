@@ -253,8 +253,9 @@ It listens on all interfaces (`0.0.0.0`) and answers any Host, so anyone who
 can reach the machine on that port can read the repository's knowledge; the
 API only reads.
 
-- **Graph** - every entity and relationship as a force-directed graph,
-  filtered by type and relationship. Links to entities no file defines yet
+- **Graph** - every entity and relationship as a force-directed graph, each
+  type drawn with its own icon and colour, filtered by type and relationship
+  (each with All / None switches). Links to entities no file defines yet
   show as dashed ghosts.
 - **Details** - an entity's frontmatter, notes and links in and out, with the
   confidence docket computes for it and for each link, the sources that
@@ -266,9 +267,10 @@ API only reads.
   `rel:depends_on` and `tag:core` narrow it down; picking a result focuses
   the graph on it.
 - **Ask** - a question answered by `docket search`, the same search agents
-  use, with the relationship paths that join what it found. It answers from
-  the projections, so run `docket sync` first; the UI says when the index is
-  behind the files.
+  use, with the relationship paths that join what it found. The graph then
+  shows only the entities the answer cites until you show everything again.
+  It answers from the projections, so run `docket sync` first; the UI says
+  when the index is behind the files.
 
 The UI is a SvelteKit app in [`packages/docket-ui`](packages/docket-ui),
 built into the npm package, so `npm i -g @chrisjowen/docket` is all it needs.

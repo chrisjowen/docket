@@ -307,6 +307,8 @@ resourceTypes:
     description: >
       Independently deployable or operated software capability.
 
+    icon: server
+
     attributes:
       language:
         type: string
@@ -338,6 +340,14 @@ resourceTypes:
         - library
         - repository
 ```
+
+`icon` is optional: the Lucide icon (https://lucide.dev/icons), by its
+kebab-case name, that `docket open` draws the type with. The web UI bundles a
+curated set - listed in `packages/docket/src/ontology/icons.ts` - and an icon
+outside it loads with an `unknown-icon` warning. A type without an icon uses
+docket's built-in icon for the starter ontology's type of that name, and
+otherwise a generic one, so ontologies written before `icon` existed still
+show every type.
 
 ---
 

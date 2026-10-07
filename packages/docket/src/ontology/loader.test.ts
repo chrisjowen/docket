@@ -69,6 +69,41 @@ describe('loadOntology', () => {
     ])
   })
 
+  it('accepts an icon per resource type and warns about one docket does not bundle', async () => {
+    const { ontology, diagnostics } = await loadOntology(
+      await resolvedFor(
+        [
+          'version: 1',
+          'resourceTypes:',
+          '  service:',
+          '    icon: server',
+          '  ledger:',
+          '    icon: piggy-bank',
+          'relationships: {}'
+        ].join('\n')
+      )
+    )
+
+    expect(ontology?.resourceTypes.service?.icon).toBe('server')
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        code: 'unknown-icon',
+        message: expect.stringContaining('resourceTypes.ledger.icon "piggy-bank"')
+      })
+    ])
+  })
+
+  it('rejects an icon that is not a kebab-case name', async () => {
+    const { ontology, diagnostics } = await loadOntology(
+      await resolvedFor(['version: 1', 'resourceTypes:', '  service:', '    icon: Server Rack', 'relationships: {}'].join('\n'))
+    )
+    expect(ontology).toBeNull()
+    expect(diagnostics).toEqual([
+      expect.objectContaining({ code: 'ontology-invalid', message: expect.stringContaining('resourceTypes.service.icon') })
+    ])
+  })
+
   it('rejects a confidence outside 0 to 1 and a location field evidence does not have', async () => {
     const { ontology, diagnostics } = await loadOntology(
       await resolvedFor(
