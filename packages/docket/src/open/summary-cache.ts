@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import { stableStringify } from '../model/stable-json.js'
 import { hashContent } from '../source/hashing.js'
+import type { UiPath } from './types.js'
 
 /** Bumped whenever the entry changes shape, so older answers are never misread. */
 const CACHE_VERSION = 1
@@ -15,7 +16,7 @@ export interface CachedExhibit {
 }
 
 export interface CachedSummary {
-  /** Hash of the question, the model and every exhibit the summary was built from. */
+  /** Hash of the question, the model, every exhibit the summary was built from and the paths between them. */
   key: string
   question: string
   model: string
@@ -32,13 +33,15 @@ export const normalizeQuestion = (question: string): string =>
 
 /**
  * What a summary depends on. Any change to the question, the model, its
- * instructions or one of the exhibits - an edit to any file declaring it, or a
- * different set found - gives a different key, and so a miss.
+ * instructions, one of the exhibits - an edit to any file declaring it, or a
+ * different set found - or the paths connecting them gives a different key,
+ * and so a miss.
  */
 export const summaryKey = (
   question: string,
   model: { model: string; instructions: string },
-  exhibits: readonly CachedExhibit[]
+  exhibits: readonly CachedExhibit[],
+  paths: readonly UiPath[]
 ): string =>
   hashContent(
     stableStringify({
@@ -46,7 +49,8 @@ export const summaryKey = (
       question: normalizeQuestion(question),
       model: model.model,
       instructions: model.instructions,
-      exhibits: [...exhibits].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      exhibits: [...exhibits].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+      paths
     })
   )
 

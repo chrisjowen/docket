@@ -180,6 +180,32 @@ describe('the chat API', () => {
     expect((await chat('checkout')).summary).toMatchObject({ text: 'Now [team.payments] runs it.', cached: true })
   })
 
+  it('throws the cached answer away when the exhibits become connected through an entity it did not find', async () => {
+    const ledger = (links: string): string =>
+      `---\nid: datasource.ledger\ntype: datasource\ntitle: Ledger\n${links}---\n\nRecords money movement.\n`
+    await write(
+      join(root, '.docket/resources/services/orders.md'),
+      ORDERS.replace('rel: owned_by\n    target: team.payments', 'rel: depends_on\n    target: datasource.ledger')
+    )
+    await write(join(root, '.docket/resources/datasources/ledger.md'), ledger(''))
+    await sync({ cwd: root })
+    await configureModel()
+
+    const first = await chat('checkout')
+    expect(first.answer.documents.map((document) => document.id).sort()).toEqual(['service.orders', 'team.payments'])
+    expect(first.answer.paths).toEqual([])
+
+    await write(join(root, '.docket/resources/datasources/ledger.md'), ledger('links:\n  - rel: owned_by\n    target: team.payments\n'))
+    const connected = await chat('checkout')
+
+    expect(connected.answer.documents.map((document) => document.id).sort()).toEqual(['service.orders', 'team.payments'])
+    expect(connected.answer.paths.map((path) => path.nodes)).toEqual([['service.orders', 'datasource.ledger', 'team.payments']])
+    expect(connected.summary?.cached).toBe(false)
+    expect(ollama.prompts).toHaveLength(2)
+    expect(ollama.prompts[1]?.user).toContain('How they connect:\nservice.orders -depends_on-> datasource.ledger -owned_by-> team.payments')
+    expect((await chat('checkout')).summary?.cached).toBe(true)
+  })
+
   it('throws the cached answer away when the model changes', async () => {
     await configureModel('first-model')
     await chat('checkout')
@@ -265,5 +291,14 @@ describe('citationsIn', () => {
   it('keeps exhibits it knows, once each, in first-cited order', () => {
     expect(citationsIn('[b] and [a], then [b] again, [c] and [ not an id ]', new Set(['a', 'b']))).toEqual(['b', 'a'])
     expect(citationsIn('`c` relies on `b`, not `d`', new Set(['a', 'b', 'c']))).toEqual(['c', 'b'])
+  })
+
+  it('reads ids grouped in one bracket', () => {
+    expect(citationsIn('Checkout [service.orders, team.payments] and [c; a]', new Set(['a', 'c', 'service.orders', 'team.payments']))).toEqual([
+      'service.orders',
+      'team.payments',
+      'c',
+      'a'
+    ])
   })
 })

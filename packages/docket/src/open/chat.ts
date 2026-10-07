@@ -60,24 +60,26 @@ export const summaryPrompt = (question: string, exhibits: readonly MemoryEntity[
 }
 
 /**
- * Ids cited as `[id]` - or in backticks, as models often write ids anyway -
- * in first-cited order, keeping only exhibits the model was given.
+ * Ids cited as `[id]`, grouped as `[a, b]` or `[a; b]` - or in backticks, as
+ * models often write ids anyway - in first-cited order, keeping only exhibits
+ * the model was given.
  */
 export const citationsIn = (text: string, exhibits: ReadonlySet<string>): string[] => {
   const cited = new Set<string>()
-  for (const match of text.matchAll(/\[([^[\]\s]+)\]|`([^`\s]+)`/g)) {
-    const id = (match[1] ?? match[2]) as string
-    if (exhibits.has(id)) cited.add(id)
+  for (const match of text.matchAll(/\[([^[\]]+)\]|`([^`\s]+)`/g)) {
+    for (const id of (match[1] ?? match[2] ?? '').split(/[,;]/).map((part) => part.trim())) {
+      if (exhibits.has(id)) cited.add(id)
+    }
   }
   return [...cited]
 }
 
 /**
  * Asks the casebook, then has a model summarize what was found, citing the
- * exhibits. A summary is kept in `.docket/.cache/` against the question and
- * the hash of every exhibit it was built from, so asking again returns it
- * unchanged - without the model - until the question or one of those exhibits
- * changes. The cache is the only thing this writes.
+ * exhibits. A summary is kept in `.docket/.cache/` against the question, the
+ * hash of every exhibit it was built from and the paths connecting them, so
+ * asking again returns it unchanged - without the model - until the question,
+ * one of those exhibits or a connection between them changes. The cache is the only thing this writes.
  */
 export const chat = async (cwd: string, query: string, limit: number): Promise<UiChatAnswer> => {
   const { answer, resolved, entities } = await askCasebook(cwd, query, limit)
@@ -107,7 +109,7 @@ export const chat = async (cwd: string, query: string, limit: number): Promise<U
   }
 
   const hashes: CachedExhibit[] = exhibits.map((entity) => ({ id: entity.id, hash: entity.hash }))
-  const key = summaryKey(query, { model: model.model, instructions: SYSTEM }, hashes)
+  const key = summaryKey(query, { model: model.model, instructions: SYSTEM }, hashes, answer.paths)
   const dir = summaryCacheDir(resolved.memoryRoot)
   const cached = await readCachedSummary(dir, query, key)
   if (cached) {

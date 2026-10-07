@@ -8,21 +8,26 @@ import { readCachedSummary, summaryKey, writeCachedSummary, type CachedSummary }
 const MODEL = { model: 'qwen2.5:7b', instructions: 'Cite exhibits.' }
 const ORDERS = { id: 'service.orders', hash: 'sha256:1' }
 const PAYMENTS = { id: 'team.payments', hash: 'sha256:2' }
+const PATH = { nodes: ['service.orders', 'team.payments'], steps: [{ rel: 'owned_by', forward: true }] }
 
 describe('summaryKey', () => {
-  const key = summaryKey('What does checkout use?', MODEL, [ORDERS, PAYMENTS])
+  const key = summaryKey('What does checkout use?', MODEL, [ORDERS, PAYMENTS], [PATH])
 
   it('ignores case, spacing and the order exhibits were found in', () => {
-    expect(summaryKey('  what does   CHECKOUT use? ', MODEL, [PAYMENTS, ORDERS])).toBe(key)
+    expect(summaryKey('  what does   CHECKOUT use? ', MODEL, [PAYMENTS, ORDERS], [PATH])).toBe(key)
   })
 
-  it('changes with the question, an exhibit, the set of exhibits, the model or its instructions', () => {
+  it('changes with the question, an exhibit, the set of exhibits, the model, its instructions or the paths between the exhibits', () => {
     const others = [
-      summaryKey('What does billing use?', MODEL, [ORDERS, PAYMENTS]),
-      summaryKey('What does checkout use?', MODEL, [ORDERS, { ...PAYMENTS, hash: 'sha256:3' }]),
-      summaryKey('What does checkout use?', MODEL, [ORDERS]),
-      summaryKey('What does checkout use?', { ...MODEL, model: 'llama3' }, [ORDERS, PAYMENTS]),
-      summaryKey('What does checkout use?', { ...MODEL, instructions: 'Be terse.' }, [ORDERS, PAYMENTS])
+      summaryKey('What does billing use?', MODEL, [ORDERS, PAYMENTS], [PATH]),
+      summaryKey('What does checkout use?', MODEL, [ORDERS, { ...PAYMENTS, hash: 'sha256:3' }], [PATH]),
+      summaryKey('What does checkout use?', MODEL, [ORDERS], [PATH]),
+      summaryKey('What does checkout use?', { ...MODEL, model: 'llama3' }, [ORDERS, PAYMENTS], [PATH]),
+      summaryKey('What does checkout use?', { ...MODEL, instructions: 'Be terse.' }, [ORDERS, PAYMENTS], [PATH]),
+      summaryKey('What does checkout use?', MODEL, [ORDERS, PAYMENTS], []),
+      summaryKey('What does checkout use?', MODEL, [ORDERS, PAYMENTS], [
+        { nodes: ['service.orders', 'datasource.ledger', 'team.payments'], steps: [{ rel: 'depends_on', forward: true }, { rel: 'owned_by', forward: false }] }
+      ])
     ]
     expect(new Set([key, ...others]).size).toBe(others.length + 1)
   })

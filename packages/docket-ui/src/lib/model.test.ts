@@ -214,6 +214,12 @@ describe('chat', () => {
     expect(citationsAsMentions('`service.orders` runs `npm test`', new Set(['service.orders']))).toBe('[[service.orders]] runs `npm test`')
   })
 
+  it('turns ids grouped in one bracket into mentions', () => {
+    const cited = new Set(['service.orders', 'team.payments'])
+    expect(citationsAsMentions('Checkout [service.orders, team.payments].', cited)).toBe('Checkout [[service.orders]], [[team.payments]].')
+    expect(citationsAsMentions('[service.orders; unknown] and [a, b]', cited)).toBe('[[service.orders]]; unknown and [a, b]')
+  })
+
   it('puts only the cited exhibits, and the paths between them, on the board', () => {
     const board = boardAnswer(reply(['service.orders', 'team.payments']))
     expect(board.documents.map((document) => document.id)).toEqual(['service.orders', 'team.payments'])

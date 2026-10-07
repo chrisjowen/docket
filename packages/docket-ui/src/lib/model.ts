@@ -358,15 +358,17 @@ export const blocks = (markdown: string): Block[] => {
 // --- Chat ---------------------------------------------------------------------
 
 /**
- * A summary's citations - `[id]`, or an id in backticks - as `[[id]]`
- * mentions, so its text reads like any exhibit's notes with each cited exhibit
- * one click away. Only ids it cites change: other brackets and code, and
- * Markdown links, stay as they were.
+ * A summary's citations - `[id]`, grouped as `[a, b]` or `[a; b]`, or an id in
+ * backticks - as `[[id]]` mentions, so its text reads like any exhibit's notes
+ * with each cited exhibit one click away. Only ids it cites change: other
+ * brackets and code, and Markdown links, stay as they were.
  */
 export const citationsAsMentions = (text: string, cited: ReadonlySet<string>): string =>
-  text.replace(/(?<!\[)\[([^[\]\s]+)\](?![\](])|`([^`\s]+)`/g, (whole, bracketed?: string, quoted?: string) => {
-    const id = bracketed ?? quoted ?? ''
-    return cited.has(id) ? `[[${id}]]` : whole
+  text.replace(/(?<!\[)\[([^[\]]+)\](?![\](])|`([^`\s]+)`/g, (whole, bracketed?: string, quoted?: string) => {
+    if (quoted !== undefined) return cited.has(quoted) ? `[[${quoted}]]` : whole
+    const parts = (bracketed ?? '').split(/([,;])/)
+    if (!parts.some((part) => cited.has(part.trim()))) return whole
+    return parts.map((part) => (cited.has(part.trim()) ? part.replace(part.trim(), `[[${part.trim()}]]`) : part)).join('')
   })
 
 /**
