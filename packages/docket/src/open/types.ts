@@ -154,7 +154,7 @@ export interface UiSummary {
   createdAt: string
 }
 
-/** `GET /api/chat?q=`: an answer, summarized when a model is configured. */
+/** `GET /api/chat?q=`: an answer, summarized by a model - `claude` unless another is configured. */
 export interface UiChatAnswer {
   query: string
   /** What `docket search` found - what the summary was built from. */
@@ -162,7 +162,7 @@ export interface UiChatAnswer {
   summary: UiSummary | null
   /** Why there is no summary. */
   notice?: {
-    /** `unconfigured`: no model to summarize with. `empty`: nothing found to summarize. `failed`: the model failed. */
+    /** `unconfigured`: no model to summarize with - `claude` is not installed and no other is set. `empty`: nothing found to summarize. `failed`: the model failed. */
     reason: 'unconfigured' | 'empty' | 'failed'
     message: string
   }

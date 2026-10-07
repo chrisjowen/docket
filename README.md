@@ -276,28 +276,42 @@ API never changes the canonical files; its one write is chat's answer cache.
   search as Ask, then a model summarizes what it found in a few sentences,
   citing each exhibit it relies on; citations link to the exhibit, and the
   graph shows only the exhibits cited (everything found when it cites none).
-  The model is a local Ollama one, set in `.docket.yaml`:
+  The model is Claude, through the `claude` CLI from
+  [Claude Code](https://claude.com/claude-code) - nothing to configure, it uses
+  your own login. docket runs it in print mode (`claude -p`) with the
+  question on stdin, no tools, no MCP servers and no saved session, and gives
+  up after two minutes. To pick its model, or to summarize with a local
+  Ollama model instead, set `summarize` in `.docket.yaml`:
+
+  ```yaml
+  summarize:
+    provider: claude
+    model: sonnet                      # passed as `claude --model`; unset, Claude Code picks
+    # command: claude                  # the executable, if not `claude` on PATH
+    # timeoutMs: 120000
+  ```
 
   ```yaml
   summarize:
     model: "qwen2.5:7b"                # Ollama at http://localhost:11434
+    # provider: ollama                 # the default when `provider` is left out
     # url: http://localhost:11434
     # timeoutMs: 60000
   ```
 
-  Without `summarize` - or when the model fails - chat shows what search
-  found, unsummarized, and says how to configure a model.
+  When `claude` is not installed and no Ollama model is set - or when the
+  model fails - chat shows what search found, unsummarized, and says why.
 
   Summaries are cached in `.docket/.cache/chat/`, one JSON file per question,
-  keyed by a hash of the question (ignoring case and spacing), the model, its
-  instructions, the content hash of every exhibit the summary was built from
-  and the relationship paths connecting them. Asking the same question again
-  returns the cached answer at once, marked as such, while those are
-  unchanged; editing any file that declares one of the exhibits, finding a
-  different set, a change in how they connect, or changing the model asks the
-  model afresh and replaces the entry. Like `.index`, the cache is
-  disposable: `docket init` adds `.docket/.cache/` to `.gitignore`, and
-  deleting it only costs the next answer a model call.
+  keyed by a hash of the question (ignoring case and spacing), the model and
+  its provider, its instructions, the content hash of every exhibit the
+  summary was built from and the relationship paths connecting them. Asking
+  the same question again returns the cached answer at once, marked as such,
+  while those are unchanged; editing any file that declares one of the
+  exhibits, finding a different set, a change in how they connect, or
+  changing the model or provider asks the model afresh and replaces the entry.
+  Like `.index`, the cache is disposable: `docket init` adds `.docket/.cache/`
+  to `.gitignore`, and deleting it only costs the next answer a model call.
 
 The UI is a SvelteKit app in [`packages/docket-ui`](packages/docket-ui),
 built into the npm package, so `npm i -g @chrisjowen/docket` is all it needs.
