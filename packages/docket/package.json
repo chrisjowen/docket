@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
   "keywords": [
     "knowledge",
