@@ -23,8 +23,20 @@ When durable project knowledge is needed, run \`docket search <query>\`
 the path) and read the canonical files it points to. Grep \`.docket/\` only if
 the CLI is unavailable or finds nothing.
 
-When durable project knowledge is established or materially changed,
-capture it by updating canonical files under \`.docket/\`.
+The docket collects evidence continuously. Capture project knowledge as you
+come across it, with the \`remember\` skill, without being asked and without
+asking permission:
+
+- the user states a decision, constraint, convention or owner
+- you settle a decision or uncover a constraint
+- the code, config or infrastructure you read shows a resource, attribute or
+  dependency the docket lacks, or confirms or contradicts one it has
+
+Search first, and add evidence to what the docket already has rather than
+writing a new file. Capture at a natural pause, after the step you are on, and
+say in one line what you wrote. Skip transient debugging state, speculation
+and secrets. A background review also collects evidence from the transcript
+as the session goes, so keep your attention on the task.
 
 Never edit \`.docket/.index/\`; it is generated.`;
 

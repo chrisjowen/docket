@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Runs one background review, detached from the session that asked for it
-// (see session-end-review.js, which passes the job in DOCKET_REVIEW_JOB).
+// (see review.js, which passes the job in DOCKET_REVIEW_JOB).
 //
 // It waits its turn on the repository's review lock, so a session that ends
 // while another session's review is running is reviewed afterwards rather than
 // skipped. The transcript lines count as reviewed only once `claude` exits
 // cleanly, so a missing, signed-out or failing `claude` leaves them for the
-// next review of that session.
+// next review of that session. While it lives, its pid in the session's
+// pending file stops mid-session hooks from queueing another.
 
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
@@ -19,7 +20,10 @@ const LOCK_POLL_MS = Number(process.env.DOCKET_REVIEW_LOCK_POLL_MS) || 5000;
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
-const prompt = (job, from) => `You are reviewing a finished stretch of a Claude Code session for durable project knowledge.
+const prompt = (job, from) => `You are collecting evidence for the docket from a stretch of a Claude Code session.
+The docket is an evidence collector: every time a session sees something about
+this project, that sighting is worth recording, so the docket grows and its
+confidence rises session by session without anyone asking.
 
 The session transcript is JSONL at:
 ${job.transcript}
@@ -29,17 +33,20 @@ Read them in chunks with the Read tool (offset/limit).
 
 Read \`.docket/entities.yaml\`.
 
-Determine whether that stretch established or materially changed:
+Collect from that stretch, as the ontology defines them:
 
-- resource instances
-- attributes
-- relationships
-- architectural decisions
-- durable constraints
-- significant conventions
+- resources the session saw in the files it read, the commands it ran and the
+  URLs it opened - services, APIs, datasources, pipelines, environments and the
+  rest - with their attributes
+- relationships between them: ownership, dependency, use, deployment
+- decisions, durable constraints and conventions the session settled or the
+  user stated
+- anything already in the docket that the session saw again, confirmed or
+  contradicted
 
-If so, update the canonical \`.docket/\` files, following the \`remember\` skill.
-Check the existing docket first; the session may already have captured it.
+Capture them in the canonical \`.docket/\` files, following the \`remember\`
+skill. Run \`docket search\` for each subject first; the session may already
+have captured it.
 Run the CLI as \`docket\`, or as \`${NPX_DOCKET}\` if \`docket\` is not found.
 
 Record evidence for every resource and every link you write, as the
@@ -52,7 +59,11 @@ read, the command it ran, the URL it opened. Use \`observedBy: claude\`,
 confidence; docket computes it from the evidence.
 
 When the docket already has a resource or link the session saw again, append an
-evidence entry to it. Never edit or remove existing evidence.
+evidence entry to it rather than creating another file. Never edit or remove
+existing evidence. Record each place once per session: if an entry from session
+\`${job.session}\` already points at the same location, leave it. When the
+stretch shows a fact has changed, update the value and record evidence for the
+new one.
 
 Write a body that describes the resource properly - what it is and does, how
 it is used or configured, and how it was found - not a one-line label.
@@ -68,7 +79,9 @@ it is managed, never its value.
 If an important concept cannot be represented by the current ontology,
 extend \`.docket/entities.yaml\` conservatively first.
 
-Edit nothing outside \`.docket/\`. If nothing qualifies, say so in one line and stop.`;
+Edit nothing outside \`.docket/\`. Only when the stretch saw nothing about the
+project at all - no file, config, command or statement worth a sighting - say
+so in one line and stop.`;
 
 function claudeArgs(job, from) {
   return [
@@ -132,10 +145,7 @@ function runClaude(args, cwd) {
   });
 }
 
-async function main() {
-  const job = JSON.parse(process.env.DOCKET_REVIEW_JOB);
-  delete process.env.DOCKET_REVIEW_JOB;
-
+async function main(job) {
   const deadline = Date.now() + LOCK_WAIT_MS;
   while (!tryLock(job.lockFile)) {
     if (Date.now() > deadline) {
@@ -165,7 +175,18 @@ async function main() {
   }
 }
 
-main().catch((cause) => {
-  log(`review failed: ${cause && cause.stack ? cause.stack : cause}`);
-  process.exitCode = 1;
-});
+function clearPending(pendingFile) {
+  try {
+    if (readJson(pendingFile, null)?.pid === process.pid) fs.unlinkSync(pendingFile);
+  } catch {}
+}
+
+const job = JSON.parse(process.env.DOCKET_REVIEW_JOB);
+delete process.env.DOCKET_REVIEW_JOB;
+
+main(job)
+  .catch((cause) => {
+    log(`review failed: ${cause && cause.stack ? cause.stack : cause}`);
+    process.exitCode = 1;
+  })
+  .finally(() => clearPending(job.pendingFile));

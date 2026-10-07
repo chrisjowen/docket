@@ -8,12 +8,13 @@ const { checkoutKey } = require("../scripts/common.js");
 const PLUGIN = path.join(__dirname, "..");
 
 describe("plugin wiring", () => {
-  it("reviews at session end, not after every turn", () => {
+  it("reviews after turns, before compaction and at session end, all through one script", () => {
     const { hooks } = JSON.parse(fs.readFileSync(path.join(PLUGIN, "hooks", "hooks.json"), "utf8"));
 
-    assert.equal(hooks.Stop, undefined);
-    const [command] = hooks.SessionEnd.flatMap((entry) => entry.hooks.map((hook) => hook.command));
-    assert.match(command, /scripts\/session-end-review\.js/);
+    for (const event of ["Stop", "PreCompact", "SessionEnd"]) {
+      const commands = hooks[event].flatMap((entry) => entry.hooks.map((hook) => hook.command));
+      assert.deepEqual(commands, ['node "${CLAUDE_PLUGIN_ROOT}/scripts/review.js"'], event);
+    }
     for (const entries of Object.values(hooks)) {
       for (const hook of entries.flatMap((entry) => entry.hooks)) {
         const script = /scripts\/([\w-]+\.js)/.exec(hook.command)[1];

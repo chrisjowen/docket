@@ -34,9 +34,10 @@ to **keep it current**.
 - 🔎 **Search before grep.** `docket search` asks every projection at once and points
   straight at the canonical file. Out of the box that is a keyword index; configure
   mem0 or Neo4j and it asks semantic vectors or a knowledge graph as well.
-- ✍️ **Knowledge captured as you work.** When a session settles a decision or uncovers a
-  constraint, it gets written down. The end-of-session review runs **in the background**
-  on a small model, so it never interrupts you.
+- ✍️ **Evidence collected as you work, without being asked.** When a session settles a
+  decision, uncovers a constraint or reads code that shows a dependency, it gets written
+  down, and what the docket already knows gains another sighting. Reviews run **in the
+  background** on a small model as the session goes, so they never interrupt you.
 - 📐 **Structured, not a junk drawer.** Your repo defines its own ontology in
   `.docket/entities.yaml`. Claude follows it, and extends it deliberately when something
   new doesn't fit.
@@ -94,19 +95,45 @@ an unbumped change never reaches installed copies.
 | Piece | What it does |
 |---|---|
 | **`docket` skill** | Using the `docket` CLI: search, ontology, validate, sync |
-| **`remember` skill** | Writing to the docket well: procedure, file format, evidence, what's worth keeping |
+| **`remember` skill** | Writing to the docket well: when to capture unasked, procedure, file format, evidence, what's worth keeping |
 | **`ontology` skill** | Inspecting and extending `.docket/entities.yaml` |
 | **`docket` on the path** | The plugin's `bin/docket`: the project's or your CLI, else the pinned release through `npx` |
-| **SessionStart hook** | Injects docket context and starts a best-effort `docket sync` in the background |
-| **SessionEnd hook** | Starts a background review of the session and captures durable knowledge in `.docket/` |
+| **SessionStart hook** | Injects docket context, including when to capture without being asked, and starts a best-effort `docket sync` in the background |
+| **Stop, PreCompact and SessionEnd hooks** | Start a background review of the unreviewed part of the session, which collects evidence into `.docket/` |
+
+### Capturing without being asked
+
+The docket is an evidence collector, so Claude does not wait for "remember this". The
+session-start context and the `remember` skill tell it to capture, at a natural pause in
+the task and with a one-line note of what it wrote, whenever:
+
+- you state a decision, constraint, convention or owner
+- it settles a decision or uncovers a constraint
+- code, config or infrastructure it reads shows a resource or dependency the docket
+  lacks, or confirms or contradicts one it has
+
+It searches first and adds evidence to what the docket already has rather than writing
+another file, and records each place once per session, so captures do not pile up as
+duplicates. Whatever the session itself does not capture, the background review does.
 
 ### The background review
 
-When a session ends, the SessionEnd hook starts a detached, headless `claude -p` and
-returns straight away. The review agent:
+A detached, headless `claude -p` collects evidence from the session transcript as the
+session goes. The hooks start one and return straight away:
+
+- **after a turn** (Stop), once the session has grown by 200 transcript lines since the
+  last review
+- **before compaction** (PreCompact), for whatever is unreviewed
+- **at session end** (SessionEnd), for the tail
+
+A turn or compaction does not queue a review while one of the same session is still
+queued or running; the next one picks up what it did not cover. The review agent:
 
 - reads only the transcript lines no earlier review has seen, so a resumed session is
   reviewed from where the last review stopped, and nothing is reviewed twice
+- records what the session saw - the resources in the files it read, the commands it ran
+  and the URLs it opened, their relationships, and the decisions, constraints and
+  conventions it settled - not only what it set out to change
 - follows the `remember` skill and checks the existing docket before writing
 - records where everything it captures was seen - the file, lines and symbol, the
   config key, the API endpoint, the URL, or what you said - with the session and date
@@ -121,14 +148,17 @@ returns straight away. The review agent:
 - leaves no session behind in your `/resume` list
 
 Lines count as reviewed only once a review succeeds, so a missing, signed-out or failing
-`claude` leaves them for the next time that session ends. A session in which you never
+`claude` leaves them for the next review of that session. A session in which you never
 typed a prompt is not reviewed at all. Logs land in `~/.cache/docket/reviews/`.
 
-**Cost.** One review per session, on Claude Haiku by default. Its input is the
-unreviewed part of the transcript plus `.docket/entities.yaml` (the default ontology is
-about 40 KB), so a review typically reads tens of thousands of tokens, and more after a
-long session. At Haiku's $1 per million input tokens that is a few cents per session;
-on a subscription it counts towards your usage like any other Claude Code session.
+**Cost.** One review per 200 transcript lines or so, plus one at the end, on Claude
+Haiku by default; a short session gets just the one at the end. Each reads its stretch
+of the transcript plus `.docket/entities.yaml` (the default ontology is about 40 KB), so
+a review typically reads tens of thousands of tokens. Every transcript line is read
+once, so a long session costs a few more ontology reads than it did with a single
+review, not a re-read of the whole session. At Haiku's $1 per million input tokens that
+is a few cents per review; on a subscription it counts towards your usage like any other
+Claude Code session.
 
 **Model.** Set `DOCKET_REVIEW_MODEL` to any model name or alias `claude --model`
 accepts, for example `DOCKET_REVIEW_MODEL=sonnet`.

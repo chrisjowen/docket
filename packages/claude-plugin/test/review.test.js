@@ -6,7 +6,7 @@ const { NPX_DOCKET, PLUGIN_BIN } = require("../scripts/cli.js");
 const { checkoutKey } = require("../scripts/common.js");
 const { runHook, sandbox, sleep, transcriptLines, until } = require("./helpers.js");
 
-const SCRIPT = "session-end-review.js";
+const SCRIPT = "review.js";
 const SESSION = "session-1";
 
 const sandboxes = [];
@@ -42,7 +42,7 @@ async function reviewed(box, calls = 1) {
 const promptOf = (call) => call.argv[call.argv.indexOf("-p") + 1];
 const flag = (call, name) => call.argv[call.argv.indexOf(name) + 1];
 
-describe("session-end review hook", () => {
+describe("review hook at session end", () => {
   it("returns at once and reviews the session in the background", async () => {
     const { box, transcript, input } = setup();
     fs.writeFileSync(transcript, transcriptLines(3));
@@ -166,6 +166,8 @@ describe("session-end review hook", () => {
     assert.match(prompt, /observedAt: \d{4}-\d{2}-\d{2}/);
     assert.match(prompt, /Never write a\s+confidence/);
     assert.match(prompt, /append an\s+evidence entry/);
+    assert.match(prompt, /Record each place once per session/);
+    assert.match(prompt, /files it read, the commands it ran/);
     const allowed = call.argv.slice(call.argv.indexOf("--allowedTools") + 1);
     assert.ok(allowed.includes("Bash(git rev-parse *)"));
     assert.ok(allowed.includes("Bash(git remote get-url *)"));
@@ -241,5 +243,90 @@ describe("session-end review hook", () => {
 
     await reviewed(box);
     assert.deepEqual(box.reviewState(SESSION), { entries: 3 });
+  });
+});
+
+describe("review hook during the session", () => {
+  const stop = (input) => input({ hook_event_name: "Stop", reason: undefined, stop_hook_active: false });
+
+  it("reviews after a turn once enough of the session is unreviewed", async () => {
+    const { box, transcript, input } = setup();
+    fs.writeFileSync(transcript, transcriptLines(199));
+    runHook(SCRIPT, stop(input), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
+    await sleep(500);
+    assert.deepEqual(box.readCalls(), [], "199 lines is not enough");
+
+    fs.appendFileSync(transcript, transcriptLines(1, { from: 199, prompt: false }));
+    const result = runHook(SCRIPT, stop(input), box.env({ CLAUDE_PROJECT_DIR: box.repo, FAKE_SLEEP_MS: "2000" }));
+    assert.equal(result.status, 0);
+    assert.ok(result.elapsedMs < 2000, `hook took ${result.elapsedMs} ms`);
+    assert.equal(result.stdout, "", "a Stop hook that prints nothing never blocks the turn");
+
+    const [call] = await reviewed(box);
+    assert.match(promptOf(call), /Review only lines 1 to 200;/);
+    assert.deepEqual(box.reviewState(SESSION), { entries: 200 });
+  });
+
+  it("counts only unreviewed lines toward the next review", async () => {
+    const { box, transcript, input } = setup();
+    fs.writeFileSync(transcript, transcriptLines(250));
+    fs.mkdirSync(box.reviewDir, { recursive: true });
+    fs.writeFileSync(path.join(box.reviewDir, `${SESSION}.json`), JSON.stringify({ entries: 100 }));
+
+    runHook(SCRIPT, stop(input), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
+    await sleep(500);
+    assert.deepEqual(box.readCalls(), []);
+
+    fs.appendFileSync(transcript, transcriptLines(50, { from: 250 }));
+    runHook(SCRIPT, stop(input), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
+    const [call] = await reviewed(box);
+    assert.match(promptOf(call), /Review only lines 101 to 300;/);
+  });
+
+  it("does not queue a second review of a session while one is pending", async () => {
+    const { box, transcript, input } = setup();
+    fs.writeFileSync(transcript, transcriptLines(5));
+    const env = box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_STOP_LINES: "5", FAKE_SLEEP_MS: "1500" });
+
+    runHook(SCRIPT, stop(input), env);
+    await until(() => box.readCalls().length > 0, "the first review to start");
+    fs.appendFileSync(transcript, transcriptLines(5, { from: 5 }));
+    runHook(SCRIPT, stop(input), env);
+    runHook(SCRIPT, input({ hook_event_name: "PreCompact", trigger: "auto" }), env);
+    await reviewed(box);
+    await sleep(500);
+    assert.equal(box.readCalls().length, 1);
+    assert.deepEqual(box.reviewState(SESSION), { entries: 5 });
+
+    // Once it is done, the next turn picks up what it did not cover.
+    runHook(SCRIPT, stop(input), env);
+    const [, next] = await reviewed(box, 2);
+    assert.match(promptOf(next), /Review only lines 6 to 10;/);
+  });
+
+  it("still reviews the tail at session end while a review is pending", async () => {
+    const { box, transcript, input } = setup();
+    fs.writeFileSync(transcript, transcriptLines(5));
+    const env = box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_STOP_LINES: "5", FAKE_SLEEP_MS: "1000" });
+
+    runHook(SCRIPT, stop(input), env);
+    await until(() => box.readCalls().length > 0, "the first review to start");
+    fs.appendFileSync(transcript, transcriptLines(2, { from: 5 }));
+    runHook(SCRIPT, input(), env);
+
+    const [, tail] = await reviewed(box, 2);
+    assert.match(promptOf(tail), /Review only lines 6 to 7;/);
+    assert.deepEqual(box.reviewState(SESSION), { entries: 7 });
+  });
+
+  it("reviews whatever is unreviewed before the conversation is compacted", async () => {
+    const { box, transcript, input } = setup();
+    fs.writeFileSync(transcript, transcriptLines(3));
+
+    const precompact = input({ hook_event_name: "PreCompact", trigger: "auto" });
+    runHook(SCRIPT, precompact, box.env({ CLAUDE_PROJECT_DIR: box.repo }));
+
+    const [call] = await reviewed(box);
+    assert.match(promptOf(call), /Review only lines 1 to 3;/);
   });
 });
