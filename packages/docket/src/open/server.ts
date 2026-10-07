@@ -42,10 +42,11 @@ const MIME: Record<string, string> = {
   '.map': 'application/json; charset=utf-8'
 }
 
-/** Loopback only: the UI serves the repository's knowledge to whoever can reach it. */
-const HOST = '127.0.0.1'
-
-const LOOPBACK_NAMES = new Set(['localhost', '127.0.0.1'])
+/**
+ * All interfaces, so the UI is reachable from other machines on the network.
+ * The API only reads, but it serves the repository's knowledge to whoever can reach it.
+ */
+const HOST = '0.0.0.0'
 
 class HttpError extends Error {
   constructor(
@@ -62,23 +63,6 @@ const sendJson = (response: ServerResponse, status: number, body: unknown): void
     'cache-control': 'no-store'
   })
   response.end(JSON.stringify(body))
-}
-
-/**
- * A page on another site can make the browser send requests here, and DNS
- * rebinding can make them look same-origin. Answering only requests addressed
- * to a loopback name stops both.
- */
-const addressedToUs = (request: IncomingMessage): boolean => {
-  const header = request.headers.host
-  if (!header) return false
-  let hostname: string
-  try {
-    hostname = new URL(`http://${header}`).hostname
-  } catch {
-    return false
-  }
-  return LOOPBACK_NAMES.has(hostname)
 }
 
 const askLimit = (raw: string | null): number => {
@@ -138,10 +122,6 @@ const handle = async (
   response: ServerResponse,
   options: { cwd: string; uiDir: string }
 ): Promise<void> => {
-  if (!addressedToUs(request)) {
-    sendJson(response, 403, { error: 'docket open only answers requests addressed to localhost.' })
-    return
-  }
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     response.writeHead(405, { allow: 'GET, HEAD' })
     response.end()

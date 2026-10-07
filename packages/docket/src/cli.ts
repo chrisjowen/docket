@@ -238,7 +238,7 @@ program
 
 program
   .command('open')
-  .description('Browse, search and ask about the knowledge in a local web UI')
+  .description('Browse, search and ask about the knowledge in a web UI')
   .option('-p, --port <port>', 'port to serve on (default: 4380, or any free port when taken)')
   .option('--no-open', 'print the address without opening a browser')
   .action(async (options: { port?: string; open: boolean }) => {
@@ -251,7 +251,7 @@ program
     }
     const handle = await open({ port })
     console.log(`docket UI for ${handle.resolved.projectRoot}`)
-    console.log(`  ${handle.url}`)
+    console.log(`  ${handle.url}  (listening on all interfaces)`)
     console.log('Press Ctrl-C to stop.')
     if (options.open) openBrowser(handle.url)
 

@@ -19,7 +19,7 @@ export interface OpenHandle extends UiServer {
 }
 
 /**
- * Serve the web UI for this repository on a local port. Long-running: the
+ * Serve the web UI for this repository on every network interface. Long-running: the
  * returned handle is the only way it stops. Reads only - it never syncs,
  * writes a file or touches a projection beyond searching it.
  */
