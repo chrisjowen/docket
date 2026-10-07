@@ -103,7 +103,7 @@
           </p>
           <p class="text-xs">
             Answers are kept in <code class="font-mono">.docket/.cache/</code>: asking again returns the same answer until the
-            question or one of its exhibits changes.
+            question, one of its exhibits or the relationship paths connecting them change.
           </p>
         </div>
       {/if}

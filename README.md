@@ -285,17 +285,17 @@ API never changes the canonical files; its one write is chat's answer cache.
     # timeoutMs: 60000
   ```
 
-  Without `summarize`, chat uses a `neo4j` projection's `cypher` model when
-  there is one. With neither - or when the model fails - chat shows what
-  search found, unsummarized, and says how to configure a model.
+  Without `summarize` - or when the model fails - chat shows what search
+  found, unsummarized, and says how to configure a model.
 
   Summaries are cached in `.docket/.cache/chat/`, one JSON file per question,
   keyed by a hash of the question (ignoring case and spacing), the model, its
-  instructions and the content hash of every exhibit the summary was built
-  from. Asking the same question again returns the cached answer at once,
-  marked as such, while those exhibits are unchanged; editing any file that
-  declares one of them, finding a different set, or changing the model asks
-  the model afresh and replaces the entry. Like `.index`, the cache is
+  instructions, the content hash of every exhibit the summary was built from
+  and the relationship paths connecting them. Asking the same question again
+  returns the cached answer at once, marked as such, while those are
+  unchanged; editing any file that declares one of the exhibits, finding a
+  different set, a change in how they connect, or changing the model asks the
+  model afresh and replaces the entry. Like `.index`, the cache is
   disposable: `docket init` adds `.docket/.cache/` to `.gitignore`, and
   deleting it only costs the next answer a model call.
 

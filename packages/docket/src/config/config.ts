@@ -144,9 +144,8 @@ export const memoryConfigSchema = z.object({
     { type: 'jsonl', output: '.docket/.index' }
   ]),
   /**
-   * The model `docket open`'s chat summarizes search results with. Unset, it
-   * borrows a `neo4j` projection's `cypher` model; with neither, chat shows
-   * the search results unsummarized.
+   * The model `docket open`'s chat summarizes search results with. Unset,
+   * chat shows the search results unsummarized.
    */
   summarize: ollamaModelSchema.optional()
 })

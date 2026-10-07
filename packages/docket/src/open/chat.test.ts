@@ -5,10 +5,9 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { memoryConfigSchema } from '../config/config.js'
 import { init } from '../commands/init.js'
 import { sync } from '../commands/sync.js'
-import { citationsIn, summarizerOf } from './chat.js'
+import { citationsIn } from './chat.js'
 import { startUiServer, type UiServer } from './server.js'
 import type { UiChatAnswer } from './types.js'
 
@@ -268,22 +267,6 @@ describe('the chat API', () => {
 
   it('rejects an empty question', async () => {
     expect((await fetch(new URL('/api/chat?q=', server?.url))).status).toBe(400)
-  })
-})
-
-describe('summarizerOf', () => {
-  const config = (extra: Record<string, unknown>) => memoryConfigSchema.parse({ version: 1, ...extra })
-
-  it('prefers `summarize`, else borrows the neo4j projection\'s cypher model', () => {
-    expect(summarizerOf(config({}))).toBeUndefined()
-    expect(summarizerOf(config({ projections: [{ type: 'neo4j', cypher: { model: 'cypher-model' } }] }))?.model).toBe(
-      'cypher-model'
-    )
-    expect(
-      summarizerOf(
-        config({ summarize: { model: 'summary-model' }, projections: [{ type: 'neo4j', cypher: { model: 'cypher-model' } }] })
-      )
-    ).toEqual({ provider: 'ollama', url: 'http://localhost:11434', model: 'summary-model', timeoutMs: 60_000 })
   })
 })
 

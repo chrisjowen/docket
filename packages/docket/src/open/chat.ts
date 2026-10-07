@@ -1,4 +1,3 @@
-import type { MemoryConfig, OllamaModelConfig } from '../config/config.js'
 import { ollamaChat, type ChatPrompt } from '../llm/ollama-chat.js'
 import type { MemoryEntity } from '../model/index.js'
 import { askCasebook } from './ask.js'
@@ -13,14 +12,6 @@ import type { UiAnswer, UiChatAnswer } from './types.js'
 
 /** An exhibit's notes beyond this are cut: the model needs the gist, not the whole file. */
 const MAX_NOTES = 1_500
-
-/**
- * The model chat summarizes with: `summarize`, else the one a `neo4j`
- * projection already writes Cypher with, else none.
- */
-export const summarizerOf = (config: MemoryConfig): OllamaModelConfig | undefined =>
-  config.summarize ??
-  config.projections.flatMap((projection) => (projection.type === 'neo4j' && projection.cypher ? [projection.cypher] : []))[0]
 
 const SYSTEM = `You answer questions about a software project from its casebook: exhibits, each a record of one service, team, datasource, decision or other resource, with the relationships it declares.
 
@@ -83,7 +74,7 @@ export const citationsIn = (text: string, exhibits: ReadonlySet<string>): string
  */
 export const chat = async (cwd: string, query: string, limit: number): Promise<UiChatAnswer> => {
   const { answer, resolved, entities } = await askCasebook(cwd, query, limit)
-  const model = summarizerOf(resolved.config)
+  const model = resolved.config.summarize
   if (!model) {
     return {
       query,
