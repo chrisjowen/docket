@@ -65,7 +65,7 @@ const summarizerFor = (config: SummarizeConfig): Summarizer =>
   config.provider === 'claude'
     ? {
         name: config.model ? `claude (${config.model})` : 'claude',
-        identity: `claude:${config.command}:${config.model ?? ''}`,
+        identity: `claude:${config.model ?? ''}`,
         chat: claudeChat(config)
       }
     : { name: config.model, identity: `ollama:${config.url}:${config.model}`, chat: ollamaChat(config) }

@@ -287,7 +287,6 @@ API never changes the canonical files; its one write is chat's answer cache.
   summarize:
     provider: claude
     model: sonnet                      # passed as `claude --model`; unset, Claude Code picks
-    # command: claude                  # the executable, if not `claude` on PATH
     # timeoutMs: 120000
   ```
 

@@ -4,8 +4,6 @@ import { tmpdir } from 'node:os'
 import type { Chat } from './ollama-chat.js'
 
 export interface ClaudeChatConfig {
-  /** The Claude Code executable, looked up on PATH unless it is a path. */
-  command: string
   /** Passed as `--model` when set; else Claude Code's own default. */
   model?: string | undefined
   timeoutMs: number
@@ -13,8 +11,8 @@ export interface ClaudeChatConfig {
 
 /** `claude` could not be started at all - most likely Claude Code is not installed. */
 export class ClaudeNotFoundError extends Error {
-  constructor(readonly command: string) {
-    super(`${command} was not found on PATH`)
+  constructor() {
+    super('claude was not found on PATH')
   }
 }
 
@@ -40,7 +38,7 @@ export const claudeChat =
         '--no-session-persistence',
         ...(config.model ? ['--model', config.model] : [])
       ]
-      const child = spawn(config.command, args, { cwd: tmpdir(), stdio: ['pipe', 'pipe', 'pipe'] })
+      const child = spawn('claude', args, { cwd: tmpdir(), stdio: ['pipe', 'pipe', 'pipe'] })
 
       let stdout = ''
       let stderr = ''
@@ -56,19 +54,19 @@ export const claudeChat =
       // Given up on at once: anything it started may hold its output open long after.
       const timer = setTimeout(() => {
         child.kill('SIGTERM')
-        settle(() => fail(new Error(`${config.command} did not answer within ${config.timeoutMs / 1000}s`)))
+        settle(() => fail(new Error(`claude did not answer within ${config.timeoutMs / 1000}s`)))
       }, config.timeoutMs)
 
       child.on('error', (cause: NodeJS.ErrnoException) =>
-        settle(() => fail(cause.code === 'ENOENT' ? new ClaudeNotFoundError(config.command) : cause))
+        settle(() => fail(cause.code === 'ENOENT' ? new ClaudeNotFoundError() : cause))
       )
       child.on('close', (code, signal) =>
         settle(() => {
           if (code !== 0) {
             const said = (stderr.trim() || stdout.trim()).slice(-500)
-            fail(new Error(`${config.command} exited with ${code ?? signal}${said ? `: ${said}` : ''}`))
+            fail(new Error(`claude exited with ${code ?? signal}${said ? `: ${said}` : ''}`))
           } else if (stdout.trim() === '') {
-            fail(new Error(`${config.command} returned no reply`))
+            fail(new Error(`claude returned no reply`))
           } else {
             done(stdout)
           }

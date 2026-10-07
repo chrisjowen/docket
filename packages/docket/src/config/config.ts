@@ -82,7 +82,6 @@ export type OllamaModelConfig = z.infer<typeof ollamaModelSchema>
 /** Claude Code's `claude` CLI, run in print mode with the user's own login. */
 export const claudeModelSchema = z.object({
   provider: z.literal('claude'),
-  command: z.string().min(1).default('claude'),
   /** Passed as `--model`, e.g. `sonnet` or `haiku`. Unset, Claude Code picks. */
   model: z.string().min(1).optional(),
   timeoutMs: z.number().int().positive().default(120_000)

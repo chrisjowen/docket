@@ -48,6 +48,7 @@ projections:
 # summarize:
 #   provider: claude
 #   model: sonnet           # passed as \`claude --model\`
+# or, for Ollama:
 # summarize:
 #   model: "qwen2.5:7b"     # Ollama at http://localhost:11434
 `
