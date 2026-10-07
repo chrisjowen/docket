@@ -283,20 +283,10 @@ describe("review hook during the session", () => {
     assert.match(promptOf(call), /Review only lines 101 to 300;/);
   });
 
-  it("takes how often to review from DOCKET_REVIEW_EVERY", async () => {
-    const { box, transcript, input } = setup();
-    fs.writeFileSync(transcript, transcriptLines(5));
-
-    runHook(SCRIPT, stop(input), box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_EVERY: "5" }));
-
-    const [call] = await reviewed(box);
-    assert.match(promptOf(call), /Review only lines 1 to 5;/);
-  });
-
   it("does not queue a second review of a session while one is pending", async () => {
     const { box, transcript, input } = setup();
     fs.writeFileSync(transcript, transcriptLines(5));
-    const env = box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_EVERY: "5", FAKE_SLEEP_MS: "1500" });
+    const env = box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_STOP_LINES: "5", FAKE_SLEEP_MS: "1500" });
 
     runHook(SCRIPT, stop(input), env);
     await until(() => box.readCalls().length > 0, "the first review to start");
@@ -317,7 +307,7 @@ describe("review hook during the session", () => {
   it("still reviews the tail at session end while a review is pending", async () => {
     const { box, transcript, input } = setup();
     fs.writeFileSync(transcript, transcriptLines(5));
-    const env = box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_EVERY: "5", FAKE_SLEEP_MS: "1000" });
+    const env = box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_STOP_LINES: "5", FAKE_SLEEP_MS: "1000" });
 
     runHook(SCRIPT, stop(input), env);
     await until(() => box.readCalls().length > 0, "the first review to start");
@@ -338,20 +328,5 @@ describe("review hook during the session", () => {
 
     const [call] = await reviewed(box);
     assert.match(promptOf(call), /Review only lines 1 to 3;/);
-  });
-
-  it("leaves only the session-end review when DOCKET_REVIEW_EVERY is 0", async () => {
-    const { box, transcript, input } = setup();
-    fs.writeFileSync(transcript, transcriptLines(500));
-    const env = box.env({ CLAUDE_PROJECT_DIR: box.repo, DOCKET_REVIEW_EVERY: "0" });
-
-    runHook(SCRIPT, stop(input), env);
-    runHook(SCRIPT, input({ hook_event_name: "PreCompact", trigger: "manual" }), env);
-    await sleep(500);
-    assert.deepEqual(box.readCalls(), []);
-
-    runHook(SCRIPT, input(), env);
-    const [call] = await reviewed(box);
-    assert.match(promptOf(call), /Review only lines 1 to 500;/);
   });
 });

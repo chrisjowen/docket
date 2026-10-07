@@ -160,11 +160,6 @@ review, not a re-read of the whole session. At Haiku's $1 per million input toke
 is a few cents per review; on a subscription it counts towards your usage like any other
 Claude Code session.
 
-**How often.** Set `DOCKET_REVIEW_EVERY` to the number of new transcript lines that
-make a turn worth a review, for example `DOCKET_REVIEW_EVERY=500` for fewer reviews.
-`DOCKET_REVIEW_EVERY=0` turns the reviews during a session off and leaves the one at
-session end.
-
 **Model.** Set `DOCKET_REVIEW_MODEL` to any model name or alias `claude --model`
 accepts, for example `DOCKET_REVIEW_MODEL=sonnet`.
 

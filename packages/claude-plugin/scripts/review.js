@@ -3,8 +3,7 @@
 // Collects evidence from the part of the session no review has seen yet, as
 // the session goes rather than only once it is over:
 //
-// - Stop, after a turn, once that part has grown by `DOCKET_REVIEW_EVERY`
-//   transcript lines (200 by default)
+// - Stop, after a turn, once that part has grown by 200 transcript lines
 // - PreCompact, before the conversation is summarised
 // - SessionEnd, for the tail
 //
@@ -34,20 +33,12 @@ const STATE_DIR = path.join(CACHE_DIR, "reviews");
 // Set in the review agent's environment so its own hooks stay quiet.
 const REVIEW_ENV = "DOCKET_REVIEW";
 
-/** Unreviewed transcript lines that make a Stop worth a review, unless `DOCKET_REVIEW_EVERY` says otherwise. */
-const DEFAULT_REVIEW_EVERY = 200;
+/** Unreviewed transcript lines that make a Stop worth a review. */
+const REVIEW_EVERY = Number(process.env.DOCKET_REVIEW_STOP_LINES) || 200;
 
-/**
- * How many unreviewed lines this event needs before it starts a review. Only
- * Stop waits for the session to grow; `DOCKET_REVIEW_EVERY=0` turns every
- * mid-session review off, leaving the one at session end.
- */
+/** How many unreviewed lines this event needs before it starts a review. Only Stop waits for the session to grow. */
 function threshold(event) {
-  if (event === "SessionEnd") return 1;
-  const raw = process.env.DOCKET_REVIEW_EVERY;
-  const every = raw === undefined || raw === "" ? DEFAULT_REVIEW_EVERY : Number(raw);
-  if (!Number.isFinite(every) || every <= 0) return Infinity;
-  return event === "Stop" ? every : 1;
+  return event === "Stop" ? REVIEW_EVERY : 1;
 }
 
 /** Lines in a JSONL file. Each entry ends with a newline, so count those. */
@@ -84,7 +75,6 @@ if (!input.transcript_path) process.exit(0);
 
 const event = input.hook_event_name || "SessionEnd";
 const every = threshold(event);
-if (every === Infinity) process.exit(0);
 
 const root = projectRoot(input);
 if (!fs.existsSync(path.join(root, ".docket"))) process.exit(0);

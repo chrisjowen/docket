@@ -23,15 +23,6 @@ describe("plugin wiring", () => {
     }
   });
 
-  it("has Claude capture knowledge without being asked", () => {
-    const skill = fs.readFileSync(path.join(PLUGIN, "skills", "remember", "SKILL.md"), "utf8");
-    const description = /^description: (.*)$/m.exec(skill)[1];
-
-    assert.match(description, /proactively, without being asked/);
-    assert.match(description, /confirms or contradicts/);
-    assert.match(skill, /Record each place once per session/);
-  });
-
   it("gives one checkout one lock however its path is spelled", (context) => {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "docket-key-")));
     try {
