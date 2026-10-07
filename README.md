@@ -1,26 +1,171 @@
+<p align="center">
+  <img src="docs/assets/docket-hero.svg" alt="A manila case file labelled .docket/ holding a Markdown exhibit stamped EVIDENCE, beside a cork board of exhibit cards joined by red string" width="100%">
+</p>
+
 <h1 align="center">docket</h1>
 
-<h3 align="center">Your repo remembers. So does Claude.</h3>
+<h3 align="center">The casebook of evidence for your repository.</h3>
 
 <p align="center">
-  Capture and classify project knowledge in your repository, and a
-  <a href="packages/claude-plugin/README.md">Claude Code plugin</a> that reads it first and
-  keeps it current.
+  Every claim about your system, entered as an exhibit and cited to its source,
+  kept in the repo, and a
+  <a href="packages/claude-plugin/README.md">Claude Code plugin</a> that reads the
+  case file first and enters new evidence as it works.
+</p>
+
+<p align="center">
+  <a href="#the-case-file">The case file</a> ·
+  <a href="#an-exhibit">An exhibit</a> ·
+  <a href="#how-to-use-it">How to use it</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#browse-it-docket-open">Browse it</a>
 </p>
 
 ---
 
-Canonical knowledge is plain Markdown with YAML frontmatter, committed to the repo
-under `.docket/`. Everything else — indexes, graphs, caches — is a disposable
-projection that can be deleted and rebuilt byte-for-byte:
+Which services exist, who owns them, what depends on what, why the datastore
+decision went the way it did: that knowledge is usually hearsay, scattered
+across people's heads, stale wikis and chat threads. docket keeps it on the
+record. Each fact is an **exhibit**, a plain Markdown file with YAML
+frontmatter under `.docket/`, and each claim in it cites its **evidence**:
+the file and lines, manifest key, endpoint, URL or conversation it was seen in.
+docket weighs that evidence into a confidence score; nobody writes one by hand.
+
+The files are the record. Indexes, vector stores and graphs are disposable
+projections of them, deleted and rebuilt byte-for-byte whenever you like:
 
 ```bash
 rm -rf .docket/.index
 docket rebuild
 ```
 
-A repo-defined ontology at `.docket/entities.yaml` says what resource types and
-relationships mean. Humans and agents edit the same files.
+## The case file
+
+`docket init` opens the case: a config file at the root and a `.docket/` tree
+beside your code. Humans and agents edit the same files, and Git keeps the
+history.
+
+```text
+your-repo/
+├── .docket.yaml               config: where the case file lives, which projections to feed
+└── .docket/
+    ├── entities.yaml          the ontology: resource types, relationships, evidence sources
+    ├── resources/             exhibits, one Markdown file per thing
+    │   ├── services/orders.md         id: service.orders
+    │   ├── teams/platform-engineering.md
+    │   ├── datasources/orders-db.md
+    │   └── ...                repositories, libraries, agents, systems, environments
+    ├── decisions/             why things are the way they are, losers included
+    │   └── orders-on-postgres.md
+    ├── constraints/           rules the system must obey
+    │   └── pci-scope.md
+    ├── notes/                 anything else worth keeping
+    └── .index/                projections: generated, gitignored, disposable
+        ├── documents.jsonl
+        ├── nodes.jsonl
+        ├── edges.jsonl
+        └── manifest.json
+```
+
+Directories are only for people: an exhibit's identity is the `id` in its
+frontmatter, never its path, so files can move freely. The ontology in
+`entities.yaml` is per-repository. It starts as the default SDLC ontology
+(services, APIs, pipelines, clusters, incidents, runbooks, policies, teams,
+decisions, constraints and more) and you extend it when your case needs a type
+it does not have. [`examples/acme-platform`](examples/acme-platform) is a
+complete worked case file: 21 resources and 37 links.
+
+## An exhibit
+
+```markdown
+---
+id: service.conversation-api          # <type>.<semantic-name>; never changes when the file moves
+type: service                         # a resource type from entities.yaml
+title: Conversation API
+
+attributes:
+  language: typescript
+  lifecycle: active
+
+links:                                # typed relationships to other exhibits
+  - rel: owned_by
+    target: team.platform
+
+  - rel: depends_on
+    target: datasource.sessions
+    attributes:
+      criticality: high
+      runtime: true
+    evidence:                         # where this link was seen
+      - source: code
+        path: src/store/sessions.ts
+        lines: 12-40
+        observedAt: 2026-10-05
+        observedBy: claude
+
+evidence:                             # where the service itself was seen
+  - source: manifest
+    path: services/conversation-api/package.json
+    key: name
+    observedAt: 2026-10-05
+    observedBy: claude
+---
+
+# Conversation API
+
+Handles conversation persistence and retrieval.
+```
+
+Only `id`, `type` and `title` are required. Links may point at exhibits no
+file defines yet: the graph is built incrementally, so a dangling reference is
+a warning until you ask for `--strict`. See
+[Evidence and confidence](#evidence-and-confidence) for how evidence becomes a
+score.
+
+## How to use it
+
+**1. Open the case.** From the root of your repository:
+
+```bash
+npx @chrisjowen/docket setup
+```
+
+This installs the Claude Code plugin, offers to run `docket init` to create
+`.docket.yaml`, `.docket/` and the default ontology, and offers to install the
+`docket` CLI globally. Restart Claude Code to load the plugin.
+[Install](#install) covers teams, CI and doing it by hand.
+
+**2. Enter evidence.** Ask Claude to "remember" a fact, decision or constraint,
+or let it notice one: the plugin's `remember` skill writes the exhibit and cites
+where it saw it, and an end-of-session review captures what a session settled.
+You can write or edit exhibits by hand just as well. Either way, check them
+against the ontology:
+
+```bash
+docket validate --strict
+```
+
+**3. Index the record.** Projections are what make the case file searchable:
+
+```bash
+docket sync         # project changed files into .docket/.index (and mem0 or Neo4j, if configured)
+docket watch        # or keep projecting continuously as files change
+docket rebuild      # throw every projection away and rebuild it from the files
+```
+
+**4. Question the witness.** Search every projection at once; each hit points
+at its canonical file:
+
+```bash
+docket search who owns checkout
+docket ontology show service    # a service's attributes, links and what each source is worth
+```
+
+The plugin teaches Claude to ask the docket before it greps the code.
+
+**5. Review the case.** `docket open` serves a web UI to browse the graph, read
+each exhibit with its evidence and confidence, and ask questions. See
+[Browse it](#browse-it-docket-open).
 
 ## Install
 
@@ -78,7 +223,7 @@ npx docket init
 The command is `docket`; run it through `npx` (or a `package.json` script) when
 it is installed as a dev dependency. The plugin uses this copy first.
 
-## Use
+## Command reference
 
 ```bash
 docket setup                # install the Claude Code plugin and set up this repository
@@ -95,6 +240,10 @@ docket ontology show service  # attributes, relationships and confidence by sour
 ```
 
 ## Browse it: `docket open`
+
+<p align="center">
+  <img src="docs/assets/docket-open.png" alt="docket open showing the acme-platform example: the Research Assistant agent selected in the relationship graph, with its confidence, sources and three pieces of evidence in the details panel" width="100%">
+</p>
 
 `docket open` serves a web UI for the repository on port 4380 and prints
 `http://127.0.0.1:4380/` (or any free port when that one is taken; `--port`
@@ -123,38 +272,6 @@ API only reads.
 
 The UI is a SvelteKit app in [`packages/docket-ui`](packages/docket-ui),
 built into the npm package, so `npm i -g @chrisjowen/docket` is all it needs.
-
-## A docket file
-
-```markdown
----
-id: service.conversation-api
-type: service
-title: Conversation API
-
-attributes:
-  language: typescript
-  lifecycle: active
-
-links:
-  - rel: owned_by
-    target: team.platform
-
-  - rel: depends_on
-    target: datasource.sessions
-    attributes:
-      criticality: high
-      runtime: true
----
-
-# Conversation API
-
-Handles conversation persistence and retrieval.
-```
-
-`id` is `<type>.<semantic-name>` and never depends on the file's path — moving
-the file does not change what it identifies. Only `id`, `type` and `title` are
-required.
 
 ## Evidence and confidence
 
@@ -383,3 +500,10 @@ creates a public `0.0.0-stage` placeholder version on npm.
 
 Check what a release will contain with `npm pack --dry-run` in
 `packages/docket`.
+
+---
+
+<sub>The case-file illustration at the top, `docs/assets/docket-hero.svg`, is
+original artwork drawn for this repository; it uses no third-party images. The
+`docket open` screenshot shows the [`examples/acme-platform`](examples/acme-platform)
+case file.</sub>
