@@ -64,7 +64,7 @@ const get = async (path: string): Promise<Response> => {
 
 const getJson = async <T>(path: string): Promise<T> => (await get(path)).json() as Promise<T>
 
-/** fetch() will not send a forged Host header, so this goes through node:http. */
+/** fetch() will not send an arbitrary Host header, so this goes through node:http. */
 const statusWithHost = (host: string): Promise<number> =>
   new Promise((done, fail) => {
     const call = request(
@@ -243,9 +243,10 @@ describe('the web UI', () => {
     expect((await get('/%2e%2e/secret.txt')).status).toBe(404)
   })
 
-  it('answers only requests addressed to localhost, and only reads', async () => {
+  it('answers requests addressed to any host, and only reads', async () => {
     expect(await statusWithHost(`localhost:${server?.port}`)).toBe(200)
-    expect(await statusWithHost('evil.example')).toBe(403)
+    expect(await statusWithHost(`192.168.1.20:${server?.port}`)).toBe(200)
+    expect(await statusWithHost('docket.example')).toBe(200)
 
     const post = await fetch(new URL('/api/graph', server?.url), { method: 'POST' })
     expect(post.status).toBe(405)

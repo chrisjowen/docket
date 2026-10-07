@@ -20,7 +20,7 @@ npx docket validate --strict    # check files against the ontology
 npx docket sync                 # project changed files into .docket/.index
 npx docket watch                # reconcile continuously as files change
 npx docket search <query...>    # ask every searchable projection
-npx docket open                 # browse, search and ask in a local web UI
+npx docket open                 # browse, search and ask in a web UI, served on all interfaces
 npx docket ontology list        # what resource types and relationships exist
 ```
 
