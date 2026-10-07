@@ -1,8 +1,23 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/chrisjowen/docket/main/docs/assets/docket-hero.svg" alt="A manila case file labelled .docket/ holding a Markdown exhibit stamped EVIDENCE, beside a cork board of exhibit cards joined by red string" width="100%">
+</p>
+
 # @chrisjowen/docket
 
-Capture and classify project knowledge as typed Markdown in your repository.
-Files under `.docket/` are the source of truth; indexes, vectors and graphs are
-disposable projections rebuilt from them.
+The casebook of evidence for your repository. Each fact about your system is an
+exhibit: a typed Markdown file under `.docket/` whose claims cite where they were
+seen - file and lines, manifest key, URL or conversation - and docket weighs that
+evidence into a confidence score. The files are the record; indexes, vectors and
+graphs are disposable projections rebuilt from them.
+
+```text
+.docket.yaml                config: where the case file lives, which projections to feed
+.docket/entities.yaml       the ontology: resource types, relationships, evidence sources
+.docket/resources/...       exhibits, one Markdown file per service, team, datasource...
+.docket/decisions/          decisions and why
+.docket/constraints/        rules the system must obey
+.docket/.index/             projections: generated, gitignored, disposable
+```
 
 Install the Claude Code plugin and set up the repository you are in, in one
 command (`--team` installs the plugin for everyone who clones the repository):
@@ -26,6 +41,8 @@ npx docket ontology list        # what resource types and relationships exist
 
 Requires Node 22 or later. mem0 and Neo4j projections need the optional
 `mem0ai` and `neo4j-driver` packages.
+
+![docket open: the relationship graph with an exhibit's evidence and confidence](https://raw.githubusercontent.com/chrisjowen/docket/main/docs/assets/docket-open.png)
 
 Documentation, the file format and the Claude Code plugin:
 <https://github.com/chrisjowen/docket>
