@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { DEFAULT_ONTOLOGY_PATH } from '../config/defaults.js'
+import { DEFAULT_TYPE_ICONS, isIconName } from './icons.js'
 import { ontologySchema } from '../model/ontology.js'
 import { parseMemoryFile } from '../source/parser.js'
 import { validateDocuments } from './validator.js'
@@ -85,6 +86,15 @@ describe('default-sdlc.yaml', () => {
       expect(definition.description, name).toBeTruthy()
       expect(definition.extraction?.instructions, name).toBeTruthy()
     }
+  })
+
+  it('gives every resource type a bundled icon, the same one docket falls back to', async () => {
+    const ontology = await load()
+    for (const [name, definition] of Object.entries(ontology.resourceTypes)) {
+      expect(definition.icon && isIconName(definition.icon), name).toBe(true)
+      expect(definition.icon, name).toBe(DEFAULT_TYPE_ICONS[name])
+    }
+    expect(Object.keys(DEFAULT_TYPE_ICONS).sort()).toEqual(Object.keys(ontology.resourceTypes).sort())
   })
 
   it('points every "do not confuse with" at a registered type', async () => {

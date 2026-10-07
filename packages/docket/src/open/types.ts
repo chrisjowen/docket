@@ -71,6 +71,11 @@ export interface UiDefinition {
   description?: string
 }
 
+export interface UiTypeDefinition extends UiDefinition {
+  /** The Lucide icon to draw it with: its own, else docket's built-in one for the name, else a generic one. */
+  icon: string
+}
+
 export interface UiDiagnostic {
   severity: 'error' | 'warning'
   code: string
@@ -93,7 +98,7 @@ export interface UiGraph {
   entities: UiEntity[]
   edges: UiEdge[]
   /** Resource types and relationships the ontology registers, for labels and descriptions. */
-  types: UiDefinition[]
+  types: UiTypeDefinition[]
   relationships: UiDefinition[]
   diagnostics: UiDiagnostic[]
   index: UiIndexStatus

@@ -42,6 +42,7 @@
   import Plus from '@lucide/svelte/icons/plus'
   import Maximize from '@lucide/svelte/icons/maximize'
   import { Button } from '$lib/components/ui/button/index.js'
+  import type { TypeStyle } from '$lib/type-style.js'
 
   interface Node extends SimulationNodeDatum, GraphNode {
     degree: number
@@ -57,15 +58,18 @@
   interface Props {
     nodes: GraphNode[]
     links: GraphLink[]
-    colourOf: (type: string) => string
+    colourOf: TypeStyle['colour']
+    iconOf: TypeStyle['icon']
     selected: string | null
     /** Entities and links to keep at full strength; everything else fades. Null: all. */
     emphasis: { nodes: Set<string>; links: Set<string> } | null
     focus: FocusRequest | null
     onselect: (id: string | null) => void
+    /** What to say when nothing is drawn. */
+    emptyHint?: string
   }
 
-  let { nodes, links, colourOf, selected, emphasis, focus, onselect }: Props = $props()
+  let { nodes, links, colourOf, iconOf, selected, emphasis, focus, onselect, emptyHint = 'Switch exhibit types on in the index, or find one with search.' }: Props = $props()
 
   let svg = $state<SVGSVGElement>()
   let width = $state(0)
@@ -94,8 +98,9 @@
   const linkPool = new Map<string, Link>()
   let laidOut = false
 
+  // Big enough to carry the type's icon, growing with how much cites it.
   const radius = (node: Pick<Node, 'degree' | 'ghost'>): number =>
-    node.ghost ? 5 : 6 + Math.min(10, Math.sqrt(node.degree) * 2.2)
+    node.ghost ? 6 : 11 + Math.min(9, Math.sqrt(node.degree) * 2)
 
   // Only new input rebuilds: the rebuild itself reads and bumps the tick.
   $effect(() => {
@@ -305,9 +310,13 @@
     {height}
     class="bg-graph-surface block cursor-grab select-none active:cursor-grabbing"
     role="img"
-    aria-label="Graph of entities and their relationships"
+    aria-label="Evidence board: exhibits and the relationships between them"
   >
     <defs>
+      <!-- Faint ruling, like the pages of a case file. -->
+      <pattern id="ruled" width="28" height="28" patternUnits="userSpaceOnUse">
+        <path d="M0 27.5H28" style="stroke: var(--graph-rule)" />
+      </pattern>
       <marker id="arrow" viewBox="0 -4 8 8" refX="8" refY="0" markerWidth="7" markerHeight="7" orient="auto">
         <path d="M0,-4L8,0L0,4" style="fill: var(--graph-edge)" />
       </marker>
@@ -316,7 +325,7 @@
       </marker>
     </defs>
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-    <rect {width} {height} fill="transparent" onclick={() => onselect(null)} />
+    <rect {width} {height} fill="url(#ruled)" onclick={() => onselect(null)} />
     <g transform={transform.toString()}>
       {#each simLinks as link (link.key)}
         {@const line = segment(link, tick)}
@@ -367,12 +376,15 @@
           onpointerleave={() => (hovered = null)}
         >
           {#if node.id === selected}
-            <circle r={r + 4 / transform.k} fill="none" stroke-width="2" vector-effect="non-scaling-stroke" style="stroke: var(--foreground)" />
+            <circle r={r + 4 / transform.k} fill="none" stroke-width="2.5" vector-effect="non-scaling-stroke" style="stroke: var(--gilt)" />
           {/if}
           {#if node.ghost}
             <circle {r} stroke-width="1.5" stroke-dasharray="2 2" vector-effect="non-scaling-stroke" style="fill: var(--graph-surface); stroke: var(--graph-other)" />
           {:else}
+            {@const Icon = iconOf(node.type)}
+            {@const size = r * 1.15}
             <circle {r} stroke-width="2" vector-effect="non-scaling-stroke" style="fill: {colourOf(node.type)}; stroke: var(--graph-surface)" />
+            <Icon x={-size / 2} y={-size / 2} size={size} color="#fff" strokeWidth={2.25} class="pointer-events-none" aria-hidden="true" />
           {/if}
           <!-- A hit target bigger than the mark. -->
           <circle r={r + 6} fill="transparent" />
@@ -398,10 +410,10 @@
     >
       <div class="font-medium">{tooltip.node.ghost ? tooltip.node.id : tooltip.node.title}</div>
       <div class="text-muted-foreground font-mono text-[11px]">
-        {tooltip.node.ghost ? 'not defined by any file yet' : tooltip.node.id}
+        {tooltip.node.ghost ? 'no file in the casebook defines it yet' : tooltip.node.id}
       </div>
       <div class="text-muted-foreground mt-0.5">
-        {tooltip.node.ghost ? 'unresolved link target' : tooltip.node.type} · {tooltip.node.degree}
+        {tooltip.node.ghost ? 'unresolved reference' : tooltip.node.type} · {tooltip.node.degree}
         {tooltip.node.degree === 1 ? 'link' : 'links'}
       </div>
     </div>
@@ -416,8 +428,11 @@
   </div>
 
   {#if nodes.length === 0}
-    <div class="text-muted-foreground absolute inset-0 grid place-items-center text-sm">
-      Nothing to show with these filters.
+    <div class="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center">
+      <div class="flex max-w-xs flex-col gap-1">
+        <p class="font-serif text-lg">No exhibits on the board</p>
+        <p class="text-muted-foreground text-sm">{emptyHint}</p>
+      </div>
     </div>
   {/if}
 </div>

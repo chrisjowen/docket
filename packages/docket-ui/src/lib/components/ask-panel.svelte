@@ -9,10 +9,10 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import type { UiAnswer, UiGraph } from '$lib/types.js'
+  import TypeMark from './type-mark.svelte'
 
   interface Props {
     graph: UiGraph
-    colourOf: (type: string) => string
     onselect: (id: string) => void
     /** Called with each new answer, or null when it is cleared. */
     onanswer: (answer: UiAnswer | null) => void
@@ -20,7 +20,7 @@
     answer: UiAnswer | null
   }
 
-  let { graph, colourOf, onselect, onanswer, answer }: Props = $props()
+  let { graph, onselect, onanswer, answer }: Props = $props()
 
   // Starts from the kept answer; edits are the viewer's own from then on.
   let question = $state(untrack(() => answer?.query ?? ''))
@@ -63,7 +63,7 @@
 
 <div class="flex flex-col gap-4 p-4">
   <form class="flex flex-col gap-2" onsubmit={submit}>
-    <label for="ask" class="text-sm font-medium">Ask about this repository</label>
+    <label for="ask" class="section-title">Ask the casebook</label>
     <div class="flex gap-2">
       <Input id="ask" bind:value={question} placeholder="What does checkout depend on?" autocomplete="off" />
       <Button type="submit" disabled={loading || question.trim() === ''}>
@@ -74,6 +74,7 @@
     <p class="text-muted-foreground text-xs">
       Answered by <code class="font-mono">docket search</code> - every searchable projection in
       <code class="font-mono">.docket.yaml</code>, the same search agents use - with the relationships joining what it finds.
+      The board then shows only the exhibits the answer cites.
     </p>
   </form>
 
@@ -101,7 +102,7 @@
     {/if}
 
     <section class="flex flex-col gap-2">
-      <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Found ({ranked.length})</h3>
+      <h3 class="section-title">Exhibits found ({ranked.length})</h3>
       {#if ranked.length === 0}
         <p class="text-muted-foreground text-sm">Nothing matched “{answer.query}”.</p>
       {:else}
@@ -113,7 +114,7 @@
                 class="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm"
                 onclick={() => onselect(document.id)}
               >
-                <span class="size-2.5 shrink-0 rounded-full" style="background: {colourOf(document.type)}"></span>
+                <TypeMark type={document.type} />
                 <span class="flex min-w-0 flex-1 flex-col">
                   <span class="truncate">{document.title}</span>
                   <span class="text-muted-foreground truncate font-mono text-xs">{document.id}</span>
@@ -130,7 +131,7 @@
 
     {#if answer.paths.length > 0}
       <section class="flex flex-col gap-2">
-        <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">How they connect</h3>
+        <h3 class="section-title">How they connect</h3>
         <ul class="flex flex-col gap-2">
           {#each answer.paths as path, index (index)}
             <li class="flex flex-wrap items-center gap-1 rounded-md border px-2 py-1.5 text-xs">
@@ -154,7 +155,7 @@
     {/if}
 
     <section class="flex flex-col gap-2">
-      <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">By source</h3>
+      <h3 class="section-title">By source</h3>
       {#if answer.sources.length === 0}
         <p class="text-muted-foreground text-sm">No configured projection can search.</p>
       {/if}

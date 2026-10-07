@@ -11,6 +11,7 @@ import {
   ontologySchema,
   warning
 } from '../model/index.js'
+import { FALLBACK_ICON, isIconName } from './icons.js'
 
 export interface LoadedOntology {
   /** `null` when the file is missing, unparseable, or fails the schema. */
@@ -77,7 +78,10 @@ export const loadOntology = async (
     }
   }
 
-  return { ontology: parsed.data, diagnostics: checkConfidenceRules(parsed.data, path) }
+  return {
+    ontology: parsed.data,
+    diagnostics: [...checkConfidenceRules(parsed.data, path), ...checkIcons(parsed.data, path)]
+  }
 }
 
 /**
@@ -103,3 +107,15 @@ const checkConfidenceRules = (ontology: Ontology, path: string): Diagnostic[] =>
     ...check('relationships', ontology.relationships)
   ]
 }
+
+/** An icon the UI does not bundle cannot be drawn, so the type falls back to a generic one. */
+const checkIcons = (ontology: Ontology, path: string): Diagnostic[] =>
+  Object.entries(ontology.resourceTypes)
+    .filter(([, definition]) => definition.icon !== undefined && !isIconName(definition.icon))
+    .map(([name, definition]) =>
+      warning(
+        'unknown-icon',
+        `resourceTypes.${name}.icon "${definition.icon}" is not an icon docket bundles; it is drawn as "${FALLBACK_ICON}".`,
+        { path }
+      )
+    )

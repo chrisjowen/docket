@@ -4,6 +4,8 @@
 # operations, security and compliance, knowledge, planning and the
 # organisations around a project. Remove what a repository never uses, or
 # extend it - adding a type here is all that is required, no CLI change.
+# A type's `icon` names the Lucide icon (https://lucide.dev/icons) that
+# `docket open` draws it with; see docs/SPEC.md for the icons docket bundles.
 #
 # Read this file before performing structured memory extraction.
 
@@ -110,6 +112,8 @@ resourceTypes:
     description: >
       A source-code repository.
 
+    icon: folder-git-2
+
     attributes:
       url:
         type: string
@@ -137,6 +141,8 @@ resourceTypes:
   service:
     description: >
       Independently deployable or operated software capability.
+
+    icon: server
 
     attributes:
       language:
@@ -170,6 +176,8 @@ resourceTypes:
     description: >
       Reusable code consumed by other software rather than deployed
       independently.
+
+    icon: library
 
     attributes:
       language:
@@ -205,6 +213,8 @@ resourceTypes:
     description: >
       An AI or autonomous software agent.
 
+    icon: bot
+
     attributes:
       package:
         type: string
@@ -234,6 +244,8 @@ resourceTypes:
   system:
     description: >
       An internal or external technical system.
+
+    icon: boxes
 
     attributes:
       category:
@@ -285,6 +297,8 @@ resourceTypes:
     description: >
       An execution or deployment environment.
 
+    icon: globe
+
     attributes:
       environmentType:
         type: string
@@ -321,6 +335,8 @@ resourceTypes:
     description: >
       A source of information consumed by software or agents.
 
+    icon: database
+
     attributes:
       zone:
         type: string
@@ -355,6 +371,8 @@ resourceTypes:
     description: >
       An organisational team responsible for resources.
 
+    icon: users
+
     extraction:
       instructions: >
         Capture a team when a named group of people owns or operates
@@ -378,6 +396,8 @@ resourceTypes:
   decision:
     description: >
       A durable technical or architectural decision.
+
+    icon: gavel
 
     extraction:
       instructions: >
@@ -403,6 +423,8 @@ resourceTypes:
     description: >
       A meaningful durable limitation affecting architecture, implementation,
       deployment, security, operations, or development.
+
+    icon: lock
 
     extraction:
       instructions: >
@@ -431,6 +453,8 @@ resourceTypes:
       An interface a service or agent exposes for others to call or subscribe
       to - an HTTP, GraphQL or gRPC API, a websocket protocol, or an event
       contract.
+
+    icon: plug
 
     attributes:
       protocol:
@@ -478,6 +502,8 @@ resourceTypes:
       An automated build, test, release or deployment workflow, e.g. a GitHub
       Actions workflow or a Jenkins job.
 
+    icon: workflow
+
     attributes:
       provider:
         type: string
@@ -516,6 +542,8 @@ resourceTypes:
       A versioned output of a build - a container image, a published package,
       a binary or a bundle.
 
+    icon: package
+
     attributes:
       kind:
         type: string
@@ -553,6 +581,8 @@ resourceTypes:
     description: >
       A named, versioned delivery of software to its users or environments.
 
+    icon: rocket
+
     attributes:
       version:
         type: string
@@ -588,6 +618,8 @@ resourceTypes:
     description: >
       A runtime switch that controls whether or how software behaviour is
       enabled.
+
+    icon: flag
 
     attributes:
       key:
@@ -626,6 +658,8 @@ resourceTypes:
       A body of automated tests with a distinct purpose and runner - unit,
       integration, end-to-end, contract, performance, security or
       accessibility.
+
+    icon: flask-conical
 
     attributes:
       kind:
@@ -671,6 +705,8 @@ resourceTypes:
       A container definition that runs software - a Docker Compose service, a
       container in a pod spec, a standalone container.
 
+    icon: container
+
     attributes:
       image:
         type: string
@@ -704,6 +740,8 @@ resourceTypes:
     description: >
       A Kubernetes pod or pod-managing workload - Deployment, StatefulSet,
       DaemonSet, Job or CronJob.
+
+    icon: box
 
     attributes:
       kind:
@@ -749,6 +787,8 @@ resourceTypes:
     description: >
       A compute cluster workloads run on - a Kubernetes cluster, an ECS
       cluster, a Nomad cluster, a fleet of VMs.
+
+    icon: network
 
     attributes:
       platform:
@@ -796,6 +836,8 @@ resourceTypes:
       compute cluster - a bucket, VPC, load balancer, CDN, DNS zone or IAM
       role.
 
+    icon: cloud
+
     attributes:
       provider:
         type: string
@@ -839,6 +881,8 @@ resourceTypes:
     description: >
       A queue, topic or stream messages are published to and consumed from.
 
+    icon: radio
+
     attributes:
       kind:
         type: string
@@ -872,6 +916,8 @@ resourceTypes:
     description: >
       A network address software is reached at - a public URL, an internal
       hostname, a webhook receiver.
+
+    icon: link
 
     attributes:
       url:
@@ -909,6 +955,8 @@ resourceTypes:
       A credential or key software needs - an API key, token, certificate or
       password - recorded by name and location only.
 
+    icon: key-round
+
     attributes:
       store:
         type: string
@@ -945,6 +993,8 @@ resourceTypes:
       A machine learning or language model software or agents call - hosted
       or local.
 
+    icon: brain
+
     attributes:
       provider:
         type: string
@@ -977,6 +1027,8 @@ resourceTypes:
   incident:
     description: >
       An unplanned disruption or degradation of a service, and its handling.
+
+    icon: siren
 
     attributes:
       severity:
@@ -1029,6 +1081,8 @@ resourceTypes:
       The written analysis of an incident - timeline, causes, and follow-up
       actions.
 
+    icon: file-search
+
     attributes:
       date:
         type: string
@@ -1055,6 +1109,8 @@ resourceTypes:
     description: >
       Step-by-step operational instructions for a known task or failure.
 
+    icon: book-open
+
     attributes:
       path:
         type: string
@@ -1079,6 +1135,8 @@ resourceTypes:
   alert:
     description: >
       A monitoring rule that notifies people when a condition holds.
+
+    icon: bell
 
     attributes:
       tool:
@@ -1115,6 +1173,8 @@ resourceTypes:
       A service level objective - a target for a measured indicator over a
       window.
 
+    icon: gauge
+
     attributes:
       target:
         type: number
@@ -1146,6 +1206,8 @@ resourceTypes:
     description: >
       A monitoring or analytics dashboard people use to understand a system.
 
+    icon: layout-dashboard
+
     attributes:
       tool:
         type: string
@@ -1171,6 +1233,8 @@ resourceTypes:
     description: >
       A security weakness found in software or configuration - a CVE, an
       audit or pen-test finding.
+
+    icon: bug
 
     attributes:
       cve:
@@ -1213,6 +1277,8 @@ resourceTypes:
     description: >
       A recognised risk to delivery, operations, security or the business,
       with its likelihood and impact.
+
+    icon: triangle-alert
 
     attributes:
       likelihood:
@@ -1257,6 +1323,8 @@ resourceTypes:
       A formal rule an organisation has adopted - security, data retention,
       access, change management, acceptable use.
 
+    icon: scroll-text
+
     attributes:
       scope:
         type: string
@@ -1289,6 +1357,8 @@ resourceTypes:
     description: >
       A control or obligation from an external framework or regulation - a
       SOC 2 control, a GDPR article, a PCI DSS requirement.
+
+    icon: badge-check
 
     attributes:
       framework:
@@ -1326,6 +1396,8 @@ resourceTypes:
       A formal authorisation needed to build, deploy, operate or access
       something - a regulatory licence, a security or change approval, a data
       processing agreement, an access grant.
+
+    icon: stamp
 
     attributes:
       kind:
@@ -1382,6 +1454,8 @@ resourceTypes:
       A numbered architecture decision record (ADR) document - the written
       record of a decision, with its context and consequences.
 
+    icon: drafting-compass
+
     attributes:
       number:
         type: number
@@ -1425,6 +1499,8 @@ resourceTypes:
     description: >
       A durable written artefact that is not an ADR, runbook or postmortem - a
       design doc, RFC, spec, guide or report, in a repository or a wiki.
+
+    icon: file-text
 
     attributes:
       kind:
@@ -1470,6 +1546,8 @@ resourceTypes:
       A body of planned work with a goal - an initiative, project, epic,
       milestone or OKR.
 
+    icon: briefcase
+
     attributes:
       kind:
         type: string
@@ -1513,6 +1591,8 @@ resourceTypes:
     description: >
       A user-facing capability of the product.
 
+    icon: sparkles
+
     attributes:
       status:
         type: string
@@ -1542,6 +1622,8 @@ resourceTypes:
     description: >
       A stated need the software must meet - functional, non-functional or
       contractual.
+
+    icon: list-checks
 
     attributes:
       priority:
@@ -1574,6 +1656,8 @@ resourceTypes:
   work_item:
     description: >
       A tracked unit of work - a story, bug, task or spike in an issue tracker.
+
+    icon: clipboard-list
 
     attributes:
       key:
@@ -1618,6 +1702,8 @@ resourceTypes:
     description: >
       An external organisation the project deals with - a vendor, customer,
       partner or regulator.
+
+    icon: building
 
     attributes:
       kind:

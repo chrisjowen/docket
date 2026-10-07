@@ -3,32 +3,42 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* shadcn-svelte tokens (zinc), plus the graph's categorical series. */
+/*
+ * A bound casebook: bottle-green cloth spine with gilt lettering, pages of
+ * cool paper ruled faintly for the evidence board. shadcn-svelte tokens map
+ * onto it, plus the graph's categorical series.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.985 0.002 90);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
+  --radius: 0.375rem;
+  --background: #f4f5ef;
+  --foreground: #1a1e1b;
+  --card: #fbfbf7;
+  --card-foreground: #1a1e1b;
+  --popover: #fbfbf7;
+  --popover-foreground: #1a1e1b;
+  --primary: #1f3b2d;
+  --primary-foreground: #f4f1e4;
+  --secondary: #e6e9df;
+  --secondary-foreground: #1f3b2d;
+  --muted: #e9ebe2;
+  --muted-foreground: #5d665f;
+  --accent: #e3e7da;
+  --accent-foreground: #1f3b2d;
+  --destructive: #a8322b;
+  --border: #d9dbd0;
+  --input: #cfd3c6;
+  --ring: #b08d3c;
 
-  --graph-surface: #fcfcfb;
-  --graph-edge: #c3c2b7;
-  --graph-label: #52514e;
-  --graph-other: #898781;
+  --spine: #1f3b2d;
+  --spine-foreground: #ece6d2;
+  --spine-muted: #a9b5a6;
+  --gilt: #b08d3c;
+
+  --graph-surface: #f8f8f3;
+  --graph-rule: #e7e8df;
+  --graph-edge: #bfc2b5;
+  --graph-label: #4b524c;
+  --graph-other: #8a8d84;
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
@@ -37,32 +47,41 @@
   --series-6: #008300;
   --series-7: #4a3aa7;
   --series-8: #e34948;
+  /* Types past the palette get generated hues at this lightness and chroma. */
+  --series-generated-l: 0.58;
+  --series-generated-c: 0.15;
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
+  --background: #111713;
+  --foreground: #e8ebe4;
+  --card: #18201b;
+  --card-foreground: #e8ebe4;
+  --popover: #18201b;
+  --popover-foreground: #e8ebe4;
+  --primary: #d9c58f;
+  --primary-foreground: #142019;
+  --secondary: #223029;
+  --secondary-foreground: #e8ebe4;
+  --muted: #1e2922;
+  --muted-foreground: #9aa69d;
+  --accent: #26352c;
+  --accent-foreground: #e8ebe4;
+  --destructive: #e0675e;
+  --border: #2a362f;
+  --input: #34423a;
+  --ring: #c9a752;
 
-  --graph-surface: #1a1a19;
-  --graph-edge: #4a4a46;
-  --graph-label: #c3c2b7;
-  --graph-other: #898781;
+  --spine: #0c120e;
+  --spine-foreground: #e4d9b4;
+  --spine-muted: #8d9a90;
+  --gilt: #c9a752;
+
+  --graph-surface: #141b16;
+  --graph-rule: #1b241e;
+  --graph-edge: #46524a;
+  --graph-label: #bfc6bc;
+  --graph-other: #7f877f;
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-3: #199e70;
@@ -71,6 +90,8 @@
   --series-6: #008300;
   --series-7: #9085e9;
   --series-8: #e66767;
+  --series-generated-l: 0.66;
+  --series-generated-c: 0.14;
 }
 
 @theme inline {
@@ -97,6 +118,11 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-graph-surface: var(--graph-surface);
+  --color-spine: var(--spine);
+  --color-spine-foreground: var(--spine-foreground);
+  --color-spine-muted: var(--spine-muted);
+  --color-gilt: var(--gilt);
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
 }
 
 @layer base {
@@ -108,4 +134,13 @@
     @apply h-full overflow-hidden bg-background text-foreground;
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   }
+}
+
+/* Section heads in the side panels: set like a casebook's running heads. */
+@utility section-title {
+  font-family: var(--font-serif);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--foreground);
 }

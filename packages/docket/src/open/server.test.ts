@@ -124,6 +124,7 @@ describe('the graph API', () => {
       }
     ])
     expect(graph.types.map((type) => type.name)).toContain('service')
+    expect(graph.types.find((type) => type.name === 'service')?.icon).toBe('server')
     expect(graph.relationships.map((relationship) => relationship.name)).toContain('owned_by')
     expect(graph.index).toEqual({ synced: true, behind: 0 })
   })

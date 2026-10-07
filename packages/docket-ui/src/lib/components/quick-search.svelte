@@ -4,15 +4,15 @@
   import { Kbd } from '$lib/components/ui/kbd/index.js'
   import { quickSearch, type QuickResult } from '$lib/model.js'
   import type { UiEdge, UiGraph } from '$lib/types.js'
+  import TypeMark from './type-mark.svelte'
 
   interface Props {
     graph: UiGraph
-    colourOf: (type: string) => string
     onentity: (id: string) => void
     onrelationship: (edge: UiEdge) => void
   }
 
-  let { graph, colourOf, onentity, onrelationship }: Props = $props()
+  let { graph, onentity, onrelationship }: Props = $props()
 
   let input: HTMLInputElement | undefined = $state()
   let text = $state('')
@@ -90,8 +90,8 @@
     aria-expanded={open && results.length > 0}
     aria-controls="quick-results"
     aria-activedescendant={open && results.length > 0 ? `quick-${active}` : undefined}
-    aria-label="Quick search entities and relationships"
-    placeholder="Search entities and relationships…  type: rel: tag:"
+    aria-label="Search exhibits and relationships"
+    placeholder="Search exhibits and relationships…  type: rel: tag:"
     autocomplete="off"
     spellcheck="false"
     class="border-input bg-background placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-lg border pr-14 pl-8 text-sm outline-none focus-visible:ring-3"
@@ -109,7 +109,7 @@
       class="bg-popover text-popover-foreground absolute top-full right-0 left-0 z-30 mt-1 max-h-[60vh] overflow-y-auto rounded-lg border p-1 shadow-lg"
     >
       {#if results.length === 0}
-        <div class="text-muted-foreground px-3 py-6 text-center text-sm">No entity or relationship matches.</div>
+        <div class="text-muted-foreground px-3 py-6 text-center text-sm">No exhibit or relationship matches.</div>
       {/if}
       {#each results as result, index (index)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -124,7 +124,7 @@
           onmouseenter={() => (active = index)}
         >
           {#if result.kind === 'entity'}
-            <span class="size-2.5 shrink-0 rounded-full" style="background: {colourOf(result.entity.type)}"></span>
+            <TypeMark type={result.entity.type} />
             <span class="flex min-w-0 flex-1 flex-col">
               <span class="truncate">{result.entity.title}</span>
               {#if result.snippet}
@@ -137,7 +137,7 @@
           {:else}
             {@const edge = result.edge}
             <span class="flex min-w-0 flex-1 items-center gap-1.5">
-              <span class="size-2 shrink-0 rounded-full" style="background: {colourOf(typeOf.get(edge.source) ?? '')}"></span>
+              <TypeMark type={typeOf.get(edge.source) ?? null} size="sm" />
               <span class="truncate">{titles.get(edge.source) ?? edge.source}</span>
               <span class="text-muted-foreground inline-flex shrink-0 items-center gap-0.5 font-mono text-xs">
                 {edge.rel}<ArrowRight class="size-3" />
@@ -150,7 +150,7 @@
       {/each}
       {#if results.length > 0}
         <div class="text-muted-foreground border-t px-2 pt-1.5 pb-1 text-[11px]">
-          ↑↓ to move · Enter to show on the graph · {results[active]?.kind === 'entity'
+          ↑↓ to move · Enter to show on the board · {results[active]?.kind === 'entity'
             ? `matched ${FIELD_LABEL[(results[active] as Extract<QuickResult, { kind: 'entity' }>).field]}`
             : 'relationship'}
         </div>

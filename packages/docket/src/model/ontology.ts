@@ -36,6 +36,8 @@ export type ConfidenceRules = Record<string, number>
 
 export interface ResourceTypeDefinition {
   description?: string
+  /** A Lucide icon name, such as `server`, that `docket open` draws the type with. */
+  icon?: string
   attributes?: Record<string, AttributeDefinition>
   extraction?: ExtractionGuidance
   confidence?: ConfidenceRules
@@ -97,6 +99,10 @@ export const confidenceRulesSchema = z.record(z.string(), probability)
 
 export const resourceTypeDefinitionSchema = z.object({
   description: z.string().optional(),
+  icon: z
+    .string()
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'must be a Lucide icon name in kebab-case, such as "server"')
+    .optional(),
   attributes: z.record(z.string(), attributeDefinitionSchema).optional(),
   extraction: extractionGuidanceSchema.optional(),
   confidence: confidenceRulesSchema.optional()

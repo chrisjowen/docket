@@ -10,16 +10,16 @@
   import type { UiEdge, UiEntity, UiGraph } from '$lib/types.js'
   import EvidenceItem from './evidence-item.svelte'
   import Notes from './notes.svelte'
+  import TypeMark from './type-mark.svelte'
   import Value from './value.svelte'
 
   interface Props {
     graph: UiGraph
     entity: UiEntity
-    colourOf: (type: string) => string
     onselect: (id: string) => void
   }
 
-  let { graph, entity, colourOf, onselect }: Props = $props()
+  let { graph, entity, onselect }: Props = $props()
 
   const byId = $derived(new Map(graph.entities.map((item) => [item.id, item])))
   const links = $derived(linksOf(graph, entity.id))
@@ -53,10 +53,10 @@
 <div class="flex flex-col gap-5 p-4">
   <header class="flex flex-col gap-2">
     <div class="flex items-center gap-2">
-      <span class="size-2.5 shrink-0 rounded-full" style="background: {colourOf(entity.type)}"></span>
-      <span class="text-muted-foreground text-xs font-medium tracking-wide uppercase">{entity.type}</span>
+      <TypeMark type={entity.type} size="lg" />
+      <span class="text-muted-foreground text-sm">Exhibit, {entity.type.replaceAll('_', ' ')}</span>
     </div>
-    <h2 class="text-lg leading-snug font-semibold">{entity.title}</h2>
+    <h2 class="font-serif text-2xl leading-tight font-semibold">{entity.title}</h2>
     <div class="flex items-center gap-1">
       <code class="bg-muted truncate rounded px-1.5 py-0.5 font-mono text-xs">{entity.id}</code>
       <Button variant="ghost" size="icon-xs" aria-label="Copy id" onclick={() => copy(entity.id)}><Copy /></Button>
@@ -80,7 +80,7 @@
   {/if}
 
   <section class="flex flex-col gap-2">
-    <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Confidence & evidence</h3>
+    <h3 class="section-title">Evidence and confidence</h3>
     <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-sm">
       {#if confidence !== null}
         <dt class="text-muted-foreground">Confidence</dt>
@@ -119,13 +119,13 @@
         {#each evidence as item, index (index)}<li><EvidenceItem {item} /></li>{/each}
       </ul>
     {:else}
-      <p class="text-muted-foreground text-xs">No evidence recorded: nothing says where this was seen.</p>
+      <p class="text-muted-foreground text-xs">No evidence on file: nothing records where this was seen.</p>
     {/if}
   </section>
 
   {#if attributes.length > 0}
     <section class="flex flex-col gap-2">
-      <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Attributes</h3>
+      <h3 class="section-title">Attributes</h3>
       <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-sm">
         {#each attributes as [key, value] (key)}
           <dt class="text-muted-foreground font-mono text-xs">{key}</dt>
@@ -137,7 +137,7 @@
 
   {#snippet linkList(title: string, edges: UiEdge[], direction: 'out' | 'in')}
     <section class="flex flex-col gap-2">
-      <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">{title} ({edges.length})</h3>
+      <h3 class="section-title">{title} ({edges.length})</h3>
       {#if edges.length === 0}
         <p class="text-muted-foreground text-xs">None.</p>
       {:else}
@@ -167,10 +167,7 @@
                     {/if}
                   </span>
                   <span class="flex items-center gap-1.5">
-                    <span
-                      class="size-2 shrink-0 rounded-full {end.entity ? '' : 'border border-dashed'}"
-                      style={end.entity ? `background: ${colourOf(end.entity.type)}` : 'border-color: var(--graph-other)'}
-                    ></span>
+                    <TypeMark type={end.entity?.type ?? null} size="sm" />
                     <span class="truncate">{end.entity?.title ?? end.id}</span>
                     {#if !end.entity}<Badge variant="outline" class="text-[10px]">unresolved</Badge>{/if}
                   </span>
@@ -200,20 +197,20 @@
     </section>
   {/snippet}
 
-  {@render linkList('Links out', links.outgoing, 'out')}
-  {@render linkList('Links in', links.incoming, 'in')}
+  {@render linkList('Cites', links.outgoing, 'out')}
+  {@render linkList('Cited by', links.incoming, 'in')}
 
   {#if entity.content.trim().length > 0}
     <Separator />
     <section class="flex flex-col gap-2">
-      <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Notes</h3>
+      <h3 class="section-title">Notes</h3>
       <Notes content={entity.content} titleOf={(id) => byId.get(id)?.title} {onselect} />
     </section>
   {/if}
 
   {#if extraFrontmatter.length > 0}
     <section class="flex flex-col gap-2">
-      <h3 class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Other frontmatter</h3>
+      <h3 class="section-title">Other frontmatter</h3>
       <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-sm">
         {#each extraFrontmatter as [key, value] (key)}
           <dt class="text-muted-foreground font-mono text-xs">{key}</dt>
@@ -224,7 +221,7 @@
   {/if}
 
   <details class="text-sm">
-    <summary class="text-muted-foreground cursor-pointer text-xs font-medium tracking-wide uppercase">Raw frontmatter</summary>
+    <summary class="section-title cursor-pointer">Raw frontmatter</summary>
     <pre class="bg-muted mt-2 overflow-x-auto rounded-md p-3 font-mono text-xs">{JSON.stringify(entity.frontmatter, null, 2)}</pre>
   </details>
 </div>

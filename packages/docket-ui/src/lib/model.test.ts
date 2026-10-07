@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { blocks, evidenceLocation, inline, neighbourhood, parseQuery, quickSearch, typeSlots } from './model.js'
+import { blocks, evidenceLocation, inline, neighbourhood, parseQuery, quickSearch, slotColour, typeSlots } from './model.js'
 import type { UiEntity, UiGraph } from './types.js'
 
 const entity = (id: string, overrides: Partial<UiEntity> = {}): UiEntity => ({
@@ -94,12 +94,27 @@ describe('quickSearch', () => {
 })
 
 describe('typeSlots', () => {
-  it('colours the commonest types first, and never cycles past the palette', () => {
+  it('gives the commonest types the first slots, and every type a slot', () => {
     const many = Array.from({ length: 10 }, (_, index) => entity(`t${index}.x`, { type: `t${index}` }))
     const slots = typeSlots([...many, entity('t9.y', { type: 't9' })])
     expect(slots.get('t9')).toBe(1)
     expect(slots.get('t0')).toBe(2)
-    expect([...slots.values()].filter((slot) => slot === null)).toHaveLength(2)
+    expect([...slots.values()].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  })
+})
+
+describe('slotColour', () => {
+  it('uses the palette, then a distinct generated colour for every slot past it', () => {
+    expect(slotColour(1)).toBe('var(--series-1)')
+    expect(slotColour(8)).toBe('var(--series-8)')
+    const generated = Array.from({ length: 50 }, (_, index) => slotColour(index + 9))
+    expect(new Set(generated).size).toBe(50)
+    expect(generated.every((colour) => colour.startsWith('oklch('))).toBe(true)
+    expect(slotColour(9)).toBe(slotColour(9))
+  })
+
+  it('leaves what has no slot neutral', () => {
+    expect(slotColour(undefined)).toBe('var(--graph-other)')
   })
 })
 
