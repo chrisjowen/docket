@@ -44,62 +44,11 @@
   let showProblems = $state(false)
   let dark = $state(false)
 
-  // The case file: wide enough to read, resizable, and out of the way when collapsed.
-  const PANEL_MIN = 360
-  const PANEL_DEFAULT = 540
+  // The case file: wide enough to read, and out of the way when collapsed.
   let panelOpen = $state(true)
-  let panelWidth = $state(PANEL_DEFAULT)
-  const panelMax = (): number => Math.max(PANEL_MIN, Math.min(960, Math.round(window.innerWidth * 0.65)))
-
-  function savePanel(): void {
-    try {
-      localStorage.setItem('docket-panel', JSON.stringify({ open: panelOpen, width: panelWidth }))
-    } catch {
-      // Private windows may refuse; the layout still works for this visit.
-    }
-  }
-
-  function restorePanel(): void {
-    try {
-      const saved = JSON.parse(localStorage.getItem('docket-panel') ?? 'null') as { open?: unknown; width?: unknown } | null
-      if (typeof saved?.open === 'boolean') panelOpen = saved.open
-      if (typeof saved?.width === 'number') panelWidth = Math.min(panelMax(), Math.max(PANEL_MIN, saved.width))
-    } catch {
-      // Nothing saved, or storage is blocked: keep the defaults.
-    }
-  }
 
   function togglePanel(): void {
     panelOpen = !panelOpen
-    savePanel()
-  }
-
-  /** Drag the case file's left edge to resize it. */
-  function resizePanel(event: PointerEvent): void {
-    event.preventDefault()
-    const handle = event.currentTarget as HTMLElement
-    handle.setPointerCapture(event.pointerId)
-    const move = (next: PointerEvent) => {
-      panelWidth = Math.min(panelMax(), Math.max(PANEL_MIN, window.innerWidth - next.clientX))
-    }
-    const end = () => {
-      handle.removeEventListener('pointermove', move)
-      handle.removeEventListener('pointerup', end)
-      handle.removeEventListener('pointercancel', end)
-      savePanel()
-    }
-    handle.addEventListener('pointermove', move)
-    handle.addEventListener('pointerup', end)
-    handle.addEventListener('pointercancel', end)
-  }
-
-  function nudgePanel(event: KeyboardEvent): void {
-    const step = event.shiftKey ? 80 : 20
-    if (event.key === 'ArrowLeft') panelWidth = Math.min(panelMax(), panelWidth + step)
-    else if (event.key === 'ArrowRight') panelWidth = Math.max(PANEL_MIN, panelWidth - step)
-    else return
-    event.preventDefault()
-    savePanel()
   }
 
   async function load(): Promise<void> {
@@ -129,7 +78,6 @@
 
   onMount(() => {
     dark = document.documentElement.classList.contains('dark')
-    restorePanel()
     selected = fromHash()
     void load().then(() => {
       if (selected) request([selected])
@@ -420,7 +368,7 @@
         </aside>
       {/if}
 
-      <main class="relative min-h-0 min-w-0">
+      <main class="relative min-h-0 min-w-0 lg:col-start-2">
         <GraphView
           {nodes}
           {links}
@@ -477,25 +425,8 @@
         <aside
           id="case-file"
           aria-label="Case file"
-          class="bg-background absolute inset-x-0 bottom-0 flex max-h-[60%] min-h-0 flex-col border-t shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.25)] lg:relative lg:max-h-none lg:w-(--panel) lg:max-w-[65vw] lg:border-t-0 lg:border-l lg:shadow-none"
-          style="--panel: {panelWidth}px"
+          class="bg-background absolute inset-x-0 bottom-0 flex max-h-[60%] min-h-0 flex-col border-t shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.25)] lg:relative lg:col-start-3 lg:max-h-none lg:w-[540px] lg:max-w-[65vw] lg:border-t-0 lg:border-l lg:shadow-none"
         >
-          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize the case file"
-            aria-valuenow={panelWidth}
-            aria-valuemin={PANEL_MIN}
-            tabindex="0"
-            class="hover:bg-gilt/40 focus-visible:bg-gilt/60 absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize outline-none lg:block"
-            onpointerdown={resizePanel}
-            onkeydown={nudgePanel}
-            ondblclick={() => {
-              panelWidth = PANEL_DEFAULT
-              savePanel()
-            }}
-          ></div>
           <Tabs.Root bind:value={tab} class="flex min-h-0 flex-1 flex-col gap-0">
             <div class="flex items-center gap-2 border-b px-3 py-2">
               <Tabs.List class="flex-1">
