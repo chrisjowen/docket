@@ -89,18 +89,20 @@ docket sync                 # project changed files into .docket/.index
 docket rebuild              # reset and reproject everything
 docket watch                # reconcile continuously as files change
 docket search <query...>    # ask every projection that can search
-docket open                 # browse, search and ask in a local web UI
+docket open                 # browse, search and ask in a web UI, served on all interfaces
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
 ```
 
 ## Browse it: `docket open`
 
-`docket open` serves a web UI for the repository on `http://127.0.0.1:4380/`
-(or any free port when that one is taken; `--port` picks one, `--no-open`
-skips launching the browser). It reads the canonical files on every request,
-so it needs no projection beyond the default `jsonl`, and listens on loopback
-only.
+`docket open` serves a web UI for the repository on port 4380 and prints
+`http://127.0.0.1:4380/` (or any free port when that one is taken; `--port`
+picks one, `--no-open` skips launching the browser). It reads the canonical
+files on every request, so it needs no projection beyond the default `jsonl`.
+It listens on all interfaces (`0.0.0.0`) and answers any Host, so anyone who
+can reach the machine on that port can read the repository's knowledge; the
+API only reads.
 
 - **Graph** - every entity and relationship as a force-directed graph,
   filtered by type and relationship. Links to entities no file defines yet
