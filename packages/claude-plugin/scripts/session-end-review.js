@@ -10,15 +10,8 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const {
-  CACHE_DIR,
-  DEFAULT_REVIEW_MODEL,
-  checkoutKey,
-  localDocketBin,
-  projectRoot,
-  readJson,
-  readStdin,
-} = require("./common.js");
+const { PLUGIN_BIN } = require("./cli.js");
+const { CACHE_DIR, DEFAULT_REVIEW_MODEL, checkoutKey, projectRoot, readJson, readStdin } = require("./common.js");
 
 const STATE_DIR = path.join(CACHE_DIR, "reviews");
 
@@ -75,11 +68,10 @@ const reviewed = Math.min(readJson(stateFile, { entries: 0 }).entries || 0, line
 if (lines <= reviewed) process.exit(0);
 if (!hasUserPrompt(text.split("\n").slice(reviewed, lines))) process.exit(0);
 
-// The project's own CLI goes first on the reviewer's PATH, so the `docket`
-// commands the `remember` skill asks for resolve without a global install.
-const bin = localDocketBin(root);
-const env = { ...process.env, [REVIEW_ENV]: "1" };
-if (bin) env.PATH = `${path.dirname(bin)}${path.delimiter}${env.PATH || ""}`;
+// The plugin's own `docket` goes first on the reviewer's PATH, so the commands
+// the `remember` skill asks for resolve without any install: it runs the
+// project's CLI, an installed one, or the pinned release through npx.
+const env = { ...process.env, [REVIEW_ENV]: "1", PATH: `${PLUGIN_BIN}${path.delimiter}${process.env.PATH || ""}` };
 
 const model = process.env.DOCKET_REVIEW_MODEL || DEFAULT_REVIEW_MODEL;
 

@@ -12,7 +12,7 @@ when it grows.
 ## Procedure
 
 1. Read `.docket/entities.yaml` in full. `docket ontology list` and
-   `docket ontology show <type>` are available if the CLI is installed.
+   `docket ontology show <type>` summarise it (see the `docket` skill).
 2. Prefer reuse. Check for semantic duplication before adding anything. Add a
    new resource type only when an important durable concept cannot be
    represented accurately using existing types.

@@ -10,6 +10,7 @@
 
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const { NPX_DOCKET } = require("./cli.js");
 const { isRunning, readJson } = require("./common.js");
 
 // ponytail: a fixed wait. A review that outlasts it is skipped, not queued.
@@ -39,7 +40,7 @@ Determine whether that stretch established or materially changed:
 
 If so, update the canonical \`.docket/\` files, following the \`remember\` skill.
 Check the existing docket first; the session may already have captured it.
-Run the CLI as \`docket\`, or as \`npx --no-install docket\` if \`docket\` is not found.
+Run the CLI as \`docket\`, or as \`${NPX_DOCKET}\` if \`docket\` is not found.
 
 Record evidence for every resource and every link you write, as the
 \`remember\` skill describes: the source kind and the exact place the session
@@ -84,7 +85,7 @@ function claudeArgs(job, from) {
     "Glob",
     "Skill",
     "Bash(docket *)",
-    "Bash(npx --no-install docket *)",
+    `Bash(${NPX_DOCKET} *)`,
     // Read-only, for pinning evidence to a commit and building permalinks.
     "Bash(git rev-parse *)",
     "Bash(git remote get-url *)",

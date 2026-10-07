@@ -4,6 +4,15 @@ Capture and classify project knowledge as typed Markdown in your repository.
 Files under `.docket/` are the source of truth; indexes, vectors and graphs are
 disposable projections rebuilt from them.
 
+Install the Claude Code plugin and set up the repository you are in, in one
+command (`--team` installs the plugin for everyone who clones the repository):
+
+```bash
+npx @chrisjowen/docket setup
+```
+
+Or use the CLI on its own:
+
 ```bash
 npm install --save-dev @chrisjowen/docket
 npx docket init                 # scaffold .docket.yaml, .docket/ and the default ontology

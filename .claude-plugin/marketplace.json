@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Local-first project knowledge capture and classification for Claude Code",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "plugins": [
     {
       "name": "docket",
       "description": "Local-first project knowledge, captured and classified as Markdown: skills to capture and extend project knowledge as canonical Markdown, and hooks that inject it at session start and review it at session end",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "source": "./packages/claude-plugin",
       "category": "productivity"
     }

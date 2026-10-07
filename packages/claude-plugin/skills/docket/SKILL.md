@@ -10,8 +10,11 @@ checks it against the ontology in `.docket/entities.yaml`, and keeps the
 projections in `.docket/.index/` in step with it. The CLI never writes docket
 files; to capture something, use the `remember` skill.
 
-If `docket` is not on the path, try `npx --no-install docket`. If neither
-works, do not install it: read and grep `.docket/` directly.
+This plugin puts `docket` on the Bash path. It runs the project's own or an
+installed CLI, or else the CLI release this plugin pins, through npx, so
+nothing needs installing. If `docket` is not found, run
+`"${CLAUDE_SKILL_DIR}/../../bin/docket"` in its place. If that fails too, do
+not install anything: read and grep `.docket/` directly.
 
 ## Find what is known
 
