@@ -7,7 +7,8 @@ import { assertAdapterContract, fakeServices } from '@docket/contracts/testing'
 import { describe, expect, it } from 'vitest'
 
 import { init } from '../commands/init.js'
-import { compatDefinitions } from './compat.js'
+import { V1_PROJECTION_MODULES } from '../config/config.js'
+import { standardDistribution } from './distribution.js'
 import { loadAdapterDefinition } from './loader.js'
 
 const FIXTURES = dirname(fileURLToPath(new URL('../../test/fixtures/adapters/fake-local.mjs', import.meta.url)))
@@ -20,43 +21,21 @@ describe('adapter contract', () => {
     expect(report.checks.map((check) => check.name)).toContain('query.ask returns a valid answer')
   })
 
-  it('holds for the v1 jsonl projection through its compatibility definition', async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), 'docket-compat-')))
+  it('holds for the jsonl adapter docket serves v1 jsonl projections with', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'docket-jsonl-')))
     await init({ cwd: root })
-    const { jsonl } = compatDefinitions({ projectRoot: root, memoryRoot: join(root, '.docket'), stateRoot: join(root, '.docket', '.index') })
+    const jsonl = await loadAdapterDefinition(V1_PROJECTION_MODULES.jsonl, {
+      id: 'jsonl',
+      projectRoot: root,
+      distribution: standardDistribution
+    })
 
     const report = await assertAdapterContract(jsonl, {
       config: { type: 'jsonl', output: '.docket/.index' },
       invalidConfig: { type: 'neo4j' },
       services: fakeServices({ projectRoot: root })
     })
-    expect(report.checks.map((check) => check.name)).toEqual([
-      'definition envelope',
-      'validateConfig accepts the config',
-      'validateConfig rejects the invalid config',
-      'create resolves to an adapter',
-      'describe',
-      'status',
-      'projection.apply acknowledges every change',
-      'projection.apply replays the same batch',
-      'projection.flush',
-      'projection.reset',
-      'query.ask returns a valid answer',
-      'close'
-    ])
-  })
-
-  it('accepts the v1 `file` alias for jsonl, and every v1 mem0 and neo4j config', () => {
-    const definitions = compatDefinitions({ projectRoot: '/repo', memoryRoot: '/repo/.docket', stateRoot: '/repo/.docket/.index' })
-    expect(definitions.jsonl.validateConfig({ type: 'file' })).toEqual({ type: 'jsonl', output: '.docket/.index' })
-    expect(definitions.mem0.validateConfig({ type: 'mem0', mode: 'server', url: 'http://localhost:8888' })).toMatchObject({
-      mode: 'server',
-      apiKeyEnv: 'MEM0_API_KEY'
-    })
-    expect(definitions.neo4j.validateConfig({ type: 'neo4j', url: 'neo4j+s://graph.example', scope: 'payments' })).toMatchObject({
-      url: 'neo4j+s://graph.example',
-      scope: 'payments'
-    })
-    expect(() => definitions.neo4j.validateConfig({ type: 'jsonl' })).toThrow('expected a neo4j projection, got jsonl')
+    expect(report.checks.every((check) => check.ok)).toBe(true)
+    expect(report.checks.map((check) => check.name)).toContain('query.ask returns a valid answer')
   })
 })

@@ -50,16 +50,7 @@ describe('loadConfig', () => {
     expect(resolved.config.projections).toEqual([{ type: 'jsonl', output: '.docket/.out' }])
   })
 
-  it('accepts a hosted mem0 projection with the key read from the environment', async () => {
-    const resolved = await loadYaml(
-      'projections:\n  - type: mem0\n    mode: platform\n    scope:\n      userId: platform-team\n'
-    )
-    expect(resolved.config.projections).toEqual([
-      { type: 'mem0', mode: 'platform', apiKeyEnv: 'MEM0_API_KEY', scope: { userId: 'platform-team' } }
-    ])
-  })
-
-  it('passes a self-hosted mem0 config through untouched', async () => {
+  it("passes a projection's settings through untouched, for its adapter to validate", async () => {
     const resolved = await loadYaml(
       'projections:\n  - type: mem0\n    mode: oss\n    config:\n      vectorStore:\n        provider: qdrant\n        config: { host: localhost, port: 6333 }\n'
     )
@@ -72,11 +63,8 @@ describe('loadConfig', () => {
     ])
   })
 
-  it('rejects a mem0 projection without a mode or with an empty scope', async () => {
-    await expect(loadYaml('projections:\n  - type: mem0\n')).rejects.toThrow(/Invalid/)
-    await expect(
-      loadYaml('projections:\n  - type: mem0\n    mode: oss\n    scope: {}\n')
-    ).rejects.toThrow(/Invalid/)
+  it('rejects a projection type no adapter serves', async () => {
+    await expect(loadYaml('projections:\n  - type: kuzu\n')).rejects.toThrow(/Invalid/)
   })
 
   it('keeps the manifest in state.dir, apart from any projection', () => {
@@ -118,7 +106,7 @@ describe('runtimes in .docket.yaml', () => {
       }
     })
     expect(resolved.config.projections).toEqual([
-      { type: 'neo4j', url: 'bolt://127.0.0.1:17687', username: 'neo4j', runtime: 'graph-dev' }
+      { type: 'neo4j', url: 'bolt://127.0.0.1:17687', runtime: 'graph-dev' }
     ])
   })
 

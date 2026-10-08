@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { INDEX, makeRepo, memory, readJsonl, removeRepo, write } from './helpers.js'
-import type { DocumentRecord } from '../src/projection/jsonl/jsonl-projection.js'
+import type { DocumentRecord } from '@docket/adapter-jsonl'
 
 /**
  * Spec §73 states the target is 10-10,000 memory documents on a developer

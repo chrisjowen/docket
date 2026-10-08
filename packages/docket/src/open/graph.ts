@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import matter from 'gray-matter'
 
+import { openDocket } from '../adapters/docket.js'
 import type { ResolvedConfig } from '../config/config.js'
 import { validate } from '../commands/validate.js'
 import { planProjection } from '../manifest/plan.js'
@@ -58,14 +59,21 @@ const toEntity = (entity: MemoryEntity, frontmatter: Record<string, unknown>): U
 /**
  * How many entities the index has not caught up with - the same plan `sync`
  * would carry out. Search answers from the index, so a lagging one explains a
- * search that misses what the graph shows.
+ * search that misses what the graph shows. Projections whose adapters cannot
+ * be loaded have synced nothing; searching says why.
  */
 export const indexStatus = async (
   resolved: ResolvedConfig,
   entities: readonly MemoryEntity[],
   broken: ReadonlySet<string>
 ): Promise<UiIndexStatus> => {
-  const state = await loadManifestState(resolved)
+  let projections: string
+  try {
+    projections = (await openDocket(resolved)).projectionsFingerprint
+  } catch {
+    return { synced: false, behind: entities.length }
+  }
+  const state = await loadManifestState(resolved, projections)
   if (state.stale) return { synced: false, behind: entities.length }
   const plan = planProjection(entities, broken, state.manifest.documents)
   return { synced: true, behind: plan.upserts.length + plan.removals.length }

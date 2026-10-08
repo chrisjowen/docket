@@ -1,0 +1,37 @@
+{
+  "name": "@docket/adapter-neo4j",
+  "version": "0.0.0",
+  "private": true,
+  "description": "docket's Neo4j adapter: entities as a typed graph, searched full-text or through generated read-only Cypher.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "prepare": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@docket/adapter-kit": "workspace:*",
+    "@docket/contracts": "workspace:*",
+    "neo4j-driver": "^6.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,15 +1,15 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { entityProjectionAdapter, type EntityProjection } from '@docket/adapter-kit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import { init } from '../commands/init.js'
 import type { Diagnostic } from '../model/diagnostic.js'
-import { projectionAdapter } from '../adapters/compat.js'
+import { openDocket } from '../adapters/docket.js'
 import { ProjectionManager } from '../projection/manager.js'
-import type { MemoryProjection } from '../projection/projection.js'
 import { createReconciler, type WatchEvent } from './reconciler.js'
 
 const memoryFile = (id: string, type: string, title: string): string =>
@@ -18,6 +18,7 @@ const memoryFile = (id: string, type: string, title: string): string =>
 interface Harness {
   resolved: ResolvedConfig
   manager: ProjectionManager
+  projections: string
   projection: {
     upsert: ReturnType<typeof vi.fn>
     remove: ReturnType<typeof vi.fn>
@@ -40,8 +41,9 @@ const harness = async (): Promise<Harness> => {
     flush: vi.fn(async () => {})
   }
   const manager = new ProjectionManager([
-    { id: 'fake', adapter: projectionAdapter({ name: 'fake', ...projection } satisfies MemoryProjection) }
+    { id: 'fake', adapter: entityProjectionAdapter({ name: 'fake', ...projection } satisfies EntityProjection, { version: '0.0.0' }) }
   ])
+  const { projectionsFingerprint } = await openDocket(resolved)
   const events: WatchEvent[] = []
 
   const path = (relativePath: string): string =>
@@ -52,9 +54,8 @@ const harness = async (): Promise<Harness> => {
     manager,
     projection,
     events,
-    reconciler: createReconciler(resolved, manager, (event) =>
-      events.push(event)
-    ),
+    projections: projectionsFingerprint,
+    reconciler: createReconciler(resolved, manager, (event) => events.push(event), projectionsFingerprint),
     async write(relativePath, contents) {
       const file = path(relativePath)
       await mkdir(dirname(file), { recursive: true })
@@ -409,7 +410,7 @@ describe('createReconciler', () => {
     await h.reconciler.sync()
 
     // A restarted watcher knows the manifest but has read no files yet.
-    const restarted = createReconciler(h.resolved, h.manager, () => {})
+    const restarted = createReconciler(h.resolved, h.manager, () => {}, h.projections)
     const a = await h.write('a.md', memoryFile('service.orders', 'service', 'Order Service'))
     await restarted.reconcile(a)
 

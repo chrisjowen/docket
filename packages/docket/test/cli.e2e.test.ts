@@ -1,4 +1,4 @@
-import { rm } from 'node:fs/promises'
+import { rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -6,7 +6,7 @@ import type {
   DocumentRecord,
   EdgeRecord,
   NodeRecord
-} from '../src/projection/jsonl/jsonl-projection.js'
+} from '@docket/adapter-jsonl'
 import {
   INDEX,
   indexFiles,
@@ -329,6 +329,21 @@ evidence:
     const result = await memory(root, 'sync')
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('docket init')
+  })
+
+  it('says why each configured adapter failed to start', async () => {
+    root = await makeRepo('memory-e2e')
+    await writeFile(
+      join(root, '.docket.yaml'),
+      'version: 1\nprojections:\n  - type: jsonl\n  - type: mem0\n    mode: platform\n    apiKeyEnv: DOCKET_E2E_UNSET_MEM0_KEY\n',
+      'utf8'
+    )
+
+    const result = await memory(root, 'sync')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain(
+      'projection init failed: mem0\n  The mem0 projection is in platform mode but DOCKET_E2E_UNSET_MEM0_KEY is not set.'
+    )
   })
 
   it('rebuilds into an index directory that does not exist yet', async () => {

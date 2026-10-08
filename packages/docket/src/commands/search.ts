@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
 
+import type { SearchHit } from '@docket/adapter-kit'
 import type { AdapterAnswer, AskRequest, MemoryAdapter } from '@docket/contracts'
 
 import { DEFAULT_SCOPE, openDocket } from '../adapters/docket.js'
 import { warning, type Diagnostic } from '../model/index.js'
-import type { SearchHit } from '../projection/projection.js'
 import { validate } from './validate.js'
 
 /** Search sets no deadline of its own; this only bounds an adapter that honours one. */

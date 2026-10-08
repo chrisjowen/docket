@@ -512,8 +512,30 @@ whole repository.
 New engines plug in as memory adapters, through the contracts in
 [`packages/contracts`](packages/contracts) (`@docket/contracts`, not published
 on its own; its code ships bundled inside `@chrisjowen/docket`, which also
-exports its types). The three projections above already run through it, wrapped as
-compatibility adapters, and a program can open a docket with more:
+exports its types). The three projections above are adapters too, each its own
+package with its own configuration and driver dependency:
+[`@docket/adapter-jsonl`](packages/adapter-jsonl),
+[`@docket/adapter-neo4j`](packages/adapter-neo4j) and
+[`@docket/adapter-mem0`](packages/adapter-mem0), sharing
+[`@docket/adapter-kit`](packages/adapter-kit). docket's core imports none of
+them: a `projections` entry's `type` names the adapter package that reads the
+rest of the entry, loaded only when it is configured.
+
+The standard `@chrisjowen/docket` package ships all three, bundled in
+`dist/bundled`, so existing `.docket.yaml` files keep working unchanged. The
+drivers stay optional: install `neo4j-driver` or `mem0ai` next to docket only
+for the projection you configure. A jsonl-only project needs neither, nor
+Docker, Python or network access. A project's own install of an adapter
+package (from a private registry or a workspace) is used in preference to the
+bundled copy. For a minimal core, build docket with only the adapters you want
+bundled — `DOCKET_BUNDLED_ADAPTERS=jsonl pnpm build`, or empty for none. The
+`@docket/adapter-*` packages are not published to npm, so a project using a
+minimal core cannot `npm install` the adapters it left out: a configured
+adapter that is neither installed nor bundled fails with an error saying it is
+not included in this build, and that a build with `DOCKET_BUNDLED_ADAPTERS`
+unset or listing it includes it.
+
+A program can open a docket with more adapters:
 
 ```ts
 import { createDocket } from '@chrisjowen/docket'
@@ -605,10 +627,10 @@ Agents never write to an index. See its
 ```bash
 pnpm install
 pnpm typecheck   # sources and tests
-pnpm build       # the adapter contracts and the web UI first, then docket,
-                 # which ships a copy of the UI; the end-to-end tests run
-                 # the built CLI, so build first
-pnpm test        # the contracts', the CLI's and the plugin's suites
+pnpm build       # the adapter contracts, kit and adapters and the web UI
+                 # first, then docket, which ships copies of them; the
+                 # end-to-end tests run the built CLI, so build first
+pnpm test        # the contracts', adapters', CLI's and plugin's suites
 ```
 
 To work on the web UI with hot reload, run `docket open --no-open` in a

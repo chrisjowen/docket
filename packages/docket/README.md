@@ -40,8 +40,9 @@ npx docket open                 # browse, search, ask and chat in a web UI, serv
 npx docket ontology list        # what resource types and relationships exist
 ```
 
-Requires Node 22 or later. mem0 and Neo4j projections need the optional
-`mem0ai` and `neo4j-driver` packages.
+Requires Node 22 or later. The jsonl, mem0 and Neo4j adapters ship with the
+package; mem0 and Neo4j projections also need the optional `mem0ai` and
+`neo4j-driver` packages installed next to it.
 
 ![docket open: the relationship graph with an exhibit's evidence and confidence](https://raw.githubusercontent.com/chrisjowen/docket/main/docs/assets/docket-open.png)
 

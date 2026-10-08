@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { init } from '../commands/init.js'
 import { createDocket } from './docket.js'
+import { standardDistribution } from './distribution.js'
 import { loadAdapterDefinition } from './loader.js'
 
 const FAKE_LOCAL = fileURLToPath(new URL('../../test/fixtures/adapters/fake-local.mjs', import.meta.url))
@@ -178,7 +179,7 @@ describe('adapter definitions', () => {
 describe('createDocket', () => {
   const fake = async (): Promise<AdapterDefinition> => ((await import(FAKE_LOCAL)) as { default: AdapterDefinition }).default
 
-  it('wraps the v1 projections as compatibility adapters', async () => {
+  it('serves the v1 projections with their adapter packages', async () => {
     const { root } = await project()
     await writeFile(
       join(root, '.docket.yaml'),
@@ -187,8 +188,8 @@ describe('createDocket', () => {
     )
     const docket = await createDocket({ projectRoot: root })
     expect(docket.adapters.map((slot) => [slot.id, slot.name, slot.source])).toEqual([
-      ['jsonl', 'jsonl', 'builtin:jsonl'],
-      ['jsonl#2', 'jsonl', 'builtin:jsonl']
+      ['jsonl', 'jsonl', '@docket/adapter-jsonl'],
+      ['jsonl#2', 'jsonl', '@docket/adapter-jsonl']
     ])
     const adapter = await docket.adapters[0]!.create()
     expect(adapter.describe()).toMatchObject({ name: 'jsonl', inputs: ['entity'], resultKinds: ['entities'] })
@@ -268,5 +269,104 @@ describe('createDocket', () => {
       'default',
       expect.objectContaining({ kind: 'entity', id: 'service.orders', title: 'Orders', scope: 'default' })
     )
+  })
+})
+
+describe('v1 projections', () => {
+  const v1Config = (projections: string): string => `version: 1\nprojections:\n${projections}`
+
+  it('load the neo4j and mem0 adapters without their drivers until an instance is created', async () => {
+    const { root } = await project()
+    await writeFile(
+      join(root, '.docket.yaml'),
+      v1Config('  - type: neo4j\n    passwordEnv: NEO4J_PASSWORD\n  - type: mem0\n    mode: server\n    url: http://localhost:8888\n'),
+      'utf8'
+    )
+    const docket = await createDocket({ projectRoot: root })
+    expect(docket.adapters.map((slot) => [slot.id, slot.name, slot.source])).toEqual([
+      ['neo4j', 'neo4j', '@docket/adapter-neo4j'],
+      ['mem0', 'mem0', '@docket/adapter-mem0']
+    ])
+  })
+
+  it('reject an adapter configuration with an instance-specific error', async () => {
+    const { root } = await project()
+    await writeFile(join(root, '.docket.yaml'), v1Config('  - type: mem0\n    mode: server\n'), 'utf8')
+    await expect(createDocket({ projectRoot: root })).rejects.toThrow(/^Adapter "mem0" \(mem0\) rejected its configuration: /)
+  })
+
+  it("prefer the project's own install of an adapter package to docket's copy", async () => {
+    const { root } = await project()
+    const packageDir = join(root, 'node_modules', '@docket', 'adapter-jsonl')
+    await write(join(packageDir, 'package.json'), JSON.stringify({ name: '@docket/adapter-jsonl', type: 'module', exports: './index.mjs' }))
+    await write(
+      join(packageDir, 'index.mjs'),
+      "export default { apiVersion: 1, name: 'project-jsonl', validateConfig: (config) => config, async create() { throw new Error('unused') } }\n"
+    )
+    const docket = await createDocket({ projectRoot: root })
+    expect(docket.adapters.map((slot) => [slot.id, slot.name])).toEqual([['jsonl', 'project-jsonl']])
+  })
+
+  it('say how to get an adapter package a minimal docket was built without', async () => {
+    const { root } = await project()
+    await writeFile(join(root, '.docket.yaml'), v1Config('  - type: neo4j\n'), 'utf8')
+    const minimal = { packages: standardDistribution.packages, find: () => undefined }
+    await expect(createDocket({ projectRoot: root, distribution: minimal })).rejects.toThrow(
+      'Adapter "neo4j" module "@docket/adapter-neo4j" is not included in this build of docket. ' +
+        'The standard @chrisjowen/docket CLI bundles the jsonl, neo4j and mem0 adapters; ' +
+        'a docket build includes neo4j when DOCKET_BUNDLED_ADAPTERS is unset or lists it.'
+    )
+  })
+
+  it('keep the manifest fingerprint they had before moving into adapter packages', async () => {
+    const { root } = await project()
+    // Recorded with docket 0.3.1, whose core parsed every projection itself:
+    // the same configuration must not force a rebuild after upgrading.
+    expect((await createDocket({ projectRoot: root })).projectionsFingerprint).toBe(
+      'sha256:5d74288ec45676e8b952515b25e67fdd81f0277c48ab79f297b261d60a32cf68'
+    )
+    await writeFile(
+      join(root, '.docket.yaml'),
+      v1Config(
+        [
+          '  - type: file',
+          '  - type: neo4j',
+          '    passwordEnv: NEO4J_PASSWORD',
+          '    cypher: { model: "qwen2.5:7b" }',
+          '  - type: mem0',
+          '    mode: platform',
+          '  - type: mem0',
+          '    mode: server',
+          '    url: http://localhost:8888',
+          '    minScore: 0.3',
+          '    scope: { agentId: docket }',
+          '  - type: mem0',
+          '    mode: oss',
+          '    config: { vectorStore: { provider: qdrant } }',
+          ''
+        ].join('\n')
+      ),
+      'utf8'
+    )
+    expect((await createDocket({ projectRoot: root })).projectionsFingerprint).toBe(
+      'sha256:95b63ed86b9899d353e6acb5c79eabc2d31302a9464006795b1aaa303f0e7ac7'
+    )
+  })
+
+  it('leave the manifest fingerprint unchanged when a projection names a runtime', async () => {
+    const { root } = await project()
+    const projection = '  - type: mem0\n    mode: server\n    url: http://localhost:8888\n'
+    await writeFile(join(root, '.docket.yaml'), v1Config(projection), 'utf8')
+    const before = (await createDocket({ projectRoot: root })).projectionsFingerprint
+
+    await writeFile(
+      join(root, '.docket.yaml'),
+      v1Config(`${projection}    runtime: local\n`) +
+        'runtimes:\n  local:\n    provider: docker-compose\n    composeFile: compose.yaml\n    projectName: docket-local\n',
+      'utf8'
+    )
+    const docket = await createDocket({ projectRoot: root })
+    expect(docket.resolved.config.projections[0]?.runtime).toBe('local')
+    expect(docket.projectionsFingerprint).toBe(before)
   })
 })

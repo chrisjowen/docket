@@ -15,4 +15,4 @@ that boundary.
   supply what it needs.
 
 A private workspace package: it is not published on its own. `@chrisjowen/docket` bundles
-its runtime code and types (not `testing`) into its own `dist/contracts`.
+its runtime code and types (not `testing`) into its own `dist/bundled/contracts`.

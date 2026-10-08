@@ -15,6 +15,20 @@ export interface ModuleResolutionContext {
   /** Directory holding `.docket.yaml`. Relative paths and packages resolve from here, whatever the working directory. */
   projectRoot: string
   typescript?: TypeScriptRunner | undefined
+  /**
+   * Where docket's own copies of adapter packages are, for a package the
+   * project does not install. Asked only after the project, so a project's own
+   * install always wins.
+   */
+  distribution?: AdapterDistribution | undefined
+}
+
+/** The adapter packages a docket installation ships with. */
+export interface AdapterDistribution {
+  /** Every package the standard distribution ships, whether or not this installation kept it. */
+  readonly packages: readonly string[]
+  /** This installation's copy of `name`: its package directory, or `undefined` when it has none. */
+  find(name: string): string | undefined
 }
 
 export type ResolvedModule =
@@ -31,8 +45,9 @@ const isPathReference = (specifier: string): boolean =>
 /**
  * Where an adapter module reference points (docs/adapter-spec.md §4): a
  * compiled `.js`/`.mjs` file relative to `.docket.yaml`, a `.ts` file when a
- * runner is configured, or an npm package installed in the project. Never
- * installs anything: a missing module is an error that says how to fix it.
+ * runner is configured, or an npm package installed in the project - or, for
+ * the adapters docket ships with, docket's own copy. Never installs anything:
+ * a missing module is an error that says how to fix it.
  */
 export const resolveAdapterModule = (specifier: string, context: ModuleResolutionContext): ResolvedModule => {
   const label = `Adapter "${context.id}" module "${specifier}"`
@@ -57,8 +72,16 @@ export const resolveAdapterModule = (specifier: string, context: ModuleResolutio
   }
 
   const { name, subpath } = splitPackageSpecifier(specifier)
-  const packageDir = findPackageDir(name, context.projectRoot)
+  const packageDir = findPackageDir(name, context.projectRoot) ?? context.distribution?.find(name)
   if (packageDir === undefined) {
+    if (context.distribution?.packages.includes(name)) {
+      // docket's own adapter packages are not published: only a docket build ships them.
+      const adapter = name.replace(/^@docket\/adapter-/, '')
+      throw new Error(
+        `${label} is not included in this build of docket. The standard @chrisjowen/docket CLI bundles the ` +
+          `jsonl, neo4j and mem0 adapters; a docket build includes ${adapter} when DOCKET_BUNDLED_ADAPTERS is unset or lists it.`
+      )
+    }
     throw new Error(
       `${label} is not installed in ${context.projectRoot}. Install it in the project ` +
         `(e.g. \`npm install ${name}\`); docket never installs packages itself.`
@@ -86,7 +109,7 @@ export const splitPackageSpecifier = (specifier: string): { name: string; subpat
 }
 
 /** The package's directory in the nearest `node_modules` from `fromDir` upward - Node's own lookup order. */
-const findPackageDir = (name: string, fromDir: string): string | undefined => {
+export const findPackageDir = (name: string, fromDir: string): string | undefined => {
   let dir = resolve(fromDir)
   for (;;) {
     const candidate = join(dir, 'node_modules', name)
