@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { sampleBatch, sampleEntity } from './testing.js'
+import { sampleBatch, sampleDocument, sampleEntity, sampleObservation } from './testing.js'
 import type { AdapterAnswer } from './types.js'
 import {
   ContractError,
@@ -116,6 +116,17 @@ describe('validateCanonicalInput', () => {
         entityRefs: []
       }).kind
     ).toBe('document')
+  })
+
+  it('takes an observation without an observed time, and with its provenance', () => {
+    const { observedAt: _unknown, ...unseen } = sampleObservation()
+    expect(validateCanonicalInput(unseen)).not.toHaveProperty('observedAt')
+    expect(validateCanonicalInput(sampleObservation())).toMatchObject({ recordedIn: ['.docket/resources/services/orders.md'] })
+    expect(validateCanonicalInput(sampleDocument())).toMatchObject({ source: { startLine: 6, endLine: 7 } })
+    expect(() => validateCanonicalInput(sampleObservation({ observedAt: '' }))).toThrow(/observedAt/)
+    expect(() =>
+      validateCanonicalInput(sampleObservation({ relationship: { source: 'service.orders', rel: '', target: 'x' } }))
+    ).toThrow(/relationship\.rel/)
   })
 })
 

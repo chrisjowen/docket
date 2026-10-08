@@ -14,11 +14,12 @@ import { rebuild } from './commands/rebuild.js'
 import { runtimeDown, runtimePlan, runtimeStatus, runtimeUp } from './commands/runtime.js'
 import { DEFAULT_SEARCH_LIMIT, search } from './commands/search.js'
 import { setup, type StepOutcome } from './commands/setup.js'
-import { sync } from './commands/sync.js'
+import { failureOf, sync, SyncError, type SyncResult } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
 import { confidenceModel, observationConfidence } from './evidence/confidence.js'
 import { openBrowser } from './open/browser.js'
+import type { RecordRef, TargetReport } from './projection/manager.js'
 import {
   hasErrors,
   type Diagnostic,
@@ -160,27 +161,85 @@ program
     process.once('SIGTERM', stop)
   })
 
+const collect = (value: string, previous: string[]): string[] => [...previous, value]
+
+/** `3`, or `5 (3 entity, 2 document)` when an instance takes more than one kind. */
+const counted = (refs: readonly RecordRef[], inputs: readonly string[]): string => {
+  if (inputs.length <= 1 || refs.length === 0) return String(refs.length)
+  const kinds = inputs
+    .map((kind) => [kind, refs.filter((ref) => ref.kind === kind).length] as const)
+    .filter(([, count]) => count > 0)
+  return `${refs.length} (${kinds.map(([kind, count]) => `${count} ${kind}`).join(', ')})`
+}
+
+/** Why an instance's manifest was not simply its own, current one. */
+const manifestNote = (target: TargetReport): string => {
+  switch (target.origin) {
+    case 'migrated':
+      return ' - carried over from the shared manifest'
+    case 'adopted':
+      return ' - carried over from a renamed instance'
+    case 'reconfigured':
+      return ' - reset: its endpoint, scope or configuration changed'
+    case 'created':
+    case 'current':
+    case 'rebuilt':
+      return ''
+  }
+}
+
+/** One line per adapter instance; any that failed is reported on stderr, and fails the command. */
+const reportSync = (result: SyncResult, fresh: boolean): void => {
+  for (const target of result.adapters) {
+    const failed = target.error !== undefined || target.failed.length > 0
+    if (target.error === undefined) {
+      const projected = counted(target.upserted, target.inputs)
+      console.log(
+        fresh
+          ? `${failed ? '!' : '✓'} ${target.id}: ${projected} projected from scratch`
+          : `${failed ? '!' : '✓'} ${target.id}: ${projected} projected, ${counted(target.removed, target.inputs)} removed, ` +
+              `${target.unchanged} unchanged${manifestNote(target)}`
+      )
+    }
+    if (failed) console.error(`✗ ${target.id}: ${failureOf(target)}`)
+  }
+  if (result.adapters.length === 0) console.log('✓ no adapter is enabled for projection')
+  report(result.diagnostics)
+}
+
+/** Runs a sync, reporting every instance - including when some failed, after the rest synced. */
+const runSync = async (run: () => Promise<SyncResult>, fresh: boolean): Promise<void> => {
+  try {
+    reportSync(await run(), fresh)
+  } catch (cause) {
+    if (!(cause instanceof SyncError)) throw cause
+    reportSync(cause.result, fresh)
+    process.exitCode = 1
+  }
+}
+
 program
   .command('sync')
-  .description('Reconcile the projections with the canonical files')
+  .description('Reconcile the adapter instances with the canonical files')
   .option('--strict', 'treat unresolved references as errors')
-  .action(async (options: { strict?: boolean }) => {
-    const result = await sync({ strict: options.strict })
-    console.log(
-      `✓ ${result.upserted.length} projected, ${result.removed.length} removed, ` +
-        `${result.unchanged} unchanged`
+  .option('-a, --adapter <id>', 'sync only this adapter instance (repeatable)', collect, [])
+  .action(async (options: { strict?: boolean; adapter: string[] }) => {
+    await runSync(
+      () => sync({ strict: options.strict, adapters: options.adapter.length > 0 ? options.adapter : undefined }),
+      false
     )
-    report(result.diagnostics)
   })
 
 program
   .command('rebuild')
-  .description('Drop every projection and reproject from the canonical files')
+  .description('Reset adapter instances and reproject them from the canonical files')
   .option('--strict', 'treat unresolved references as errors')
-  .action(async (options: { strict?: boolean }) => {
-    const result = await rebuild({ strict: options.strict })
-    console.log(`✓ ${result.upserted.length} projected from scratch`)
-    report(result.diagnostics)
+  .option('-a, --adapter <id>', 'rebuild only this adapter instance (repeatable); the others are left as they are', collect, [])
+  .action(async (options: { strict?: boolean; adapter: string[] }) => {
+    await runSync(
+      () => rebuild({ strict: options.strict, adapters: options.adapter.length > 0 ? options.adapter : undefined }),
+      true
+    )
   })
 
 program

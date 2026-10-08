@@ -20,11 +20,12 @@ describe('aggregate', () => {
       links: [{ rel: 'runs_in', target: 'cluster.prod' }]
     })
     const { entities, diagnostics } = aggregate([document], model)
+    const { bodyLine: _bodyLine, ...described } = document
 
     expect(diagnostics).toEqual([])
     expect(entities).toEqual([
       {
-        ...document,
+        ...described,
         paths: [document.path],
         hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
         // A pod read from code is weak evidence until something else confirms it.

@@ -64,7 +64,8 @@ your-repo/
     │   ├── documents.jsonl
     │   ├── nodes.jsonl
     │   ├── edges.jsonl
-    │   └── manifest.json
+    │   ├── manifests/         what sync handed each adapter instance: local.json, ...
+    │   └── adapters/          state an adapter instance keeps for itself, if any
     └── .cache/                answers docket open's chat cached: gitignored, disposable
 ```
 
@@ -232,7 +233,9 @@ docket init                 # scaffold .docket.yaml, .docket/ and the default on
 docket validate             # check files against the ontology
 docket validate --strict    # unresolved links become errors
 docket sync                 # project changed files into .docket/.index
+docket sync --adapter <id>  # sync only that adapter instance (repeatable)
 docket rebuild              # reset and reproject everything
+docket rebuild --adapter <id>  # reset and reproject only that instance, in its own namespace
 docket watch                # reconcile continuously as files change
 docket search <query...>    # ask every projection that can search
 docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
@@ -430,9 +433,22 @@ projection, and `docket search` asks each one enabled for query.
                                           └──► neo4j  → a Neo4j graph
 ```
 
-Every projection receives merged entities — one per id, however many files
-declare it — each resource and link carrying its evidence, evidence count,
-corroborating source kinds and confidence.
+An adapter declares which canonical inputs it takes, and is handed only those
+([`docs/adapter-spec.md`](docs/adapter-spec.md) §8):
+
+- **entity** — one per id, however many files declare it, each resource and
+  link carrying its evidence, evidence count, corroborating source kinds and
+  confidence. Its id and revision (the merged hash) are what they always were.
+  The bundled jsonl, mem0 and neo4j adapters take entities only.
+- **observation** — one per distinct evidence record, of a resource or of one
+  of its links: what was seen, its source locations (`path` and `lines`), the
+  canonical files that record it, and `observedAt` only when the record states
+  one. Canonical evidence records no event time, so none is given; a file's
+  modification time is never used as one. Its id is its entity's id and a hash
+  of the record, so a corrected record replaces the old observation.
+- **document** — one per canonical file with a Markdown body: the text, the
+  entities it declares and `[[mentions]]`, and the span of the file it is,
+  `startLine` to `endLine` at the file's hash.
 
 ### Configuring adapters
 
@@ -603,15 +619,44 @@ adapters:
 
 `uri` is also accepted as `url`, its name in version 1 entries.
 
-The manifest that makes sync skip unchanged resources lives in `state.dir`
-(default `.docket/.index`), independent of any adapter. A resource is
-reprojected whenever what it projects changes — one of its files, or a
-confidence rule in the ontology. Adding, removing or reconfiguring an adapter
-enabled for projection makes the next sync reproject everything, so a newly
-added mem0 receives the whole repository. Renaming an instance of a bundled
-adapter (jsonl, mem0, neo4j), or adding one that only answers queries, does
-not. Renaming an instance of any other module does, because its state
-directory moves with its id.
+### Sync manifests
+
+Each adapter instance enabled for projection has its own manifest,
+`<state.dir>/manifests/<id>.json` (default `.docket/.index`), recording the
+revision of every input it acknowledged and the files behind each entity. Sync
+plans each instance against its own manifest, so an input is handed again
+whenever its revision changes — one of its files, or a confidence rule in the
+ontology — and an instance that is behind catches up on its own.
+
+- **Failures stay with their instance.** Instances sync concurrently and
+  independently. A manifest is written only after its instance flushed, and
+  only with what the instance's `ApplyReceipt` acknowledged: a change it
+  failed, or left out of the receipt, keeps its previous entry and is retried
+  (once more in the same pass when retryable, then on the next sync). An
+  instance that cannot be reached, or throws, is reported and its manifest
+  left as it was; every other instance still syncs. `docket sync` then exits
+  non-zero, naming what failed.
+- **Batches are not transactions.** Changes are handed over in batches of up
+  to 100, each carrying the checkpoint the instance is at once every change in
+  it is acknowledged — a hash identifying exactly the records it then holds.
+  Replaying a change an instance already applied must not duplicate it, which
+  is how a pass that failed before its manifest was written recovers.
+- **Configuration is fingerprinted.** A manifest is tied to its instance's
+  module, configuration (as the adapter read it) and scope. Changing an
+  instance's endpoint, scope or any setting makes its next sync reset that
+  instance's own namespace — never a shared store globally — and project
+  everything into it; other instances are untouched. Adding an instance
+  projects everything into it alone. Renaming an instance of a bundled adapter
+  (jsonl, mem0, neo4j) keeps its manifest; renaming an instance of any other
+  module starts it afresh, because its state directory moves with its id.
+- **Upgrading reprojects nothing.** Earlier versions kept one manifest,
+  `<state.dir>/manifest.json`, for every projection together. When an
+  instance has no manifest of its own and that file was written for exactly
+  the projections configured now, the instance takes its entity records over
+  and is not reset; input kinds it never received before are projected as
+  new. The shared file is deleted once every configured instance has its own.
+  If the projections changed in the same upgrade, the shared file vouches for
+  none of them, and each instance is reset and reprojected as on a first sync.
 
 ### Writing an adapter
 

@@ -268,7 +268,7 @@ describe('rebuild determinism (spec §72)', () => {
     expect(Object.keys(before)).toEqual([
       'documents.jsonl',
       'edges.jsonl',
-      'manifest.json',
+      'manifests/local.json',
       'nodes.jsonl'
     ])
 

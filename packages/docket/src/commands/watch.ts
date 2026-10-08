@@ -67,10 +67,20 @@ export const watch = async (
   const report = options.report ?? consoleReporter
 
   const docket = await openDocket(resolved)
-  const manager = await ProjectionManager.open(docket.adapters)
+  const manager = await ProjectionManager.forDocket(docket)
+  // A watcher runs for hours: an instance that cannot start now would never
+  // be synced, so it fails to start rather than watching without it.
+  const failures = manager.failures
+  if (failures.length > 0) {
+    await manager.close()
+    throw new AggregateError(
+      failures.map(({ id, error }) => new Error(`${id}: ${error}`)),
+      `projection init failed: ${failures.map(({ id }) => id).join(', ')}`
+    )
+  }
 
   report({ kind: 'watching', root: resolved.memoryRoot })
-  const reconciler = createReconciler(resolved, manager, report, docket.projectionsFingerprint)
+  const reconciler = createReconciler(resolved, manager, report)
   await reconciler.sync()
 
   const fail = (cause: unknown): void => {
@@ -95,7 +105,12 @@ export const watch = async (
 
   let closing: Promise<void> | undefined
   const close = (): Promise<void> => {
-    closing ??= watcher.close().then(() => manager.close())
+    closing ??= watcher
+      .close()
+      .then(() => manager.close())
+      .then((failures) => {
+        for (const { id, error } of failures) fail(new Error(`adapter ${id}: ${error}`))
+      })
     return closing
   }
 

@@ -61,7 +61,7 @@ describe('performance expectations (spec §73)', () => {
       expect(cold).toBeLessThan(COLD_SYNC_BUDGET_MS)
       // A completed pass records what it projected, which is what lets the next
       // one converge instead of starting over.
-      expect(existsSync(join(repo, INDEX, 'manifest.json'))).toBe(true)
+      expect(existsSync(join(repo, INDEX, 'manifests', 'local.json'))).toBe(true)
 
       expect(await readJsonl<DocumentRecord>(repo, 'documents.jsonl')).toHaveLength(
         DOCUMENTS

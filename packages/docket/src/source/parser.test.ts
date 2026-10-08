@@ -76,6 +76,15 @@ describe('parseMemoryFile', () => {
     expect(document?.content.trim()).toMatch(/^# Conversation API/)
   })
 
+  it('records the line the body starts on, so a span of the body is a span of the file', () => {
+    const raw = '---\nid: service.a\ntype: service\ntitle: A\n---\n\nFirst.\nSecond.\n'
+    const document = parseMemoryFile(raw, 'a.md').document
+    expect(document?.bodyLine).toBe(6)
+    expect(raw.split('\n')[(document?.bodyLine ?? 0) - 1]).toBe('')
+    expect(parseMemoryFile('---\nid: service.a\ntype: service\ntitle: A\n---\nAt once.\n', 'a.md').document?.bodyLine).toBe(6)
+    expect(parseMemoryFile('---\r\nid: service.a\r\ntype: service\r\ntitle: A\r\n---\r\nBody\r\n', 'a.md').document?.bodyLine).toBe(6)
+  })
+
   it('preserves the full frontmatter of the spec example', () => {
     const { document, diagnostics } = parseMemoryFile(FULL, 'agents/ra.md')
     expect(diagnostics).toEqual([])

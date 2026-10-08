@@ -52,6 +52,7 @@ const doc = (
   attributes,
   links,
   content: '',
+  bodyLine: 1,
   mentions: [],
   evidence: [],
   index: DEFAULT_INDEX_FLAGS

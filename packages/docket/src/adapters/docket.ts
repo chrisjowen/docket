@@ -29,7 +29,7 @@ import {
 import { loadConfig } from '../config/loader.js'
 import { validate } from '../commands/validate.js'
 import { hashContent } from '../source/hashing.js'
-import { toEntityInput } from './compat.js'
+import { canonicalState } from '../sync/inputs.js'
 import { standardDistribution } from './distribution.js'
 import { loadAdapterDefinition } from './loader.js'
 import type { AdapterDistribution, TypeScriptRunner } from './resolve-module.js'
@@ -74,6 +74,17 @@ export interface AdapterSlot {
   /** Where the definition came from: a module reference, or `registration`. */
   readonly source: string
   readonly roles: readonly AdapterRole[]
+  /**
+   * Hash of the instance's module, its configuration as the adapter read it
+   * and its scope - what it projects into. Sync's manifest for the instance
+   * is tied to it, so a changed endpoint, scope or setting invalidates what
+   * the manifest says the instance holds. A bundled adapter's instance id is
+   * not part of it, so a renamed instance keeps its manifest; any other
+   * module's is, as its state root moves with its id.
+   */
+  readonly fingerprint: string
+  /** The Docket scope it projects and answers for. */
+  readonly scope: string
   /**
    * Creates a fresh instance whose ports and answers are validated at runtime
    * and whose disabled roles are absent. The caller closes it.
@@ -198,6 +209,19 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
       name: definition.name,
       source: entry.source,
       roles: [...roles],
+      fingerprint: hashContent(
+        stableStringify({
+          // A bundled adapter keeps nothing under its state root, so a renamed
+          // instance still writes where it did; any other module's state root
+          // moves with its id.
+          ...(STANDARD_MODULES.has(entry.source) ? {} : { id: entry.id }),
+          module: entry.source,
+          definition: definition.name,
+          config,
+          scope: services.scope
+        })
+      ),
+      scope: services.scope,
       create: async () => guard(entry.id, roles, validateMemoryAdapter(await definition.create(config, services)))
     }
   })
@@ -217,18 +241,22 @@ const stderrLogger = (id: string): AdapterLogger => {
   return { debug: () => {}, info: () => {}, warn: write, error: write }
 }
 
-/** The project's entities, read and merged on first use. v1 canonical files hold entities only. */
+/**
+ * The project's canonical inputs - entities, the observations their evidence
+ * records and their files' bodies as documents - read on first use, exactly
+ * as sync derives them.
+ */
 const projectCanonicalReader = (resolved: ResolvedConfig): CanonicalReader => {
-  let entities: Promise<CanonicalInput[]> | undefined
+  let inputs: Promise<CanonicalInput[]> | undefined
   const load = (): Promise<CanonicalInput[]> => {
-    entities ??= validate({ cwd: resolved.projectRoot }).then(({ entities }) =>
-      entities.map((entity) => toEntityInput(entity, DEFAULT_SCOPE))
+    inputs ??= validate({ cwd: resolved.projectRoot }).then(({ entities, documents }) =>
+      canonicalState(entities, documents, DEFAULT_SCOPE).inputs.map(({ input }) => input)
     )
-    return entities
+    return inputs
   }
   return {
-    get: async (kind, id) => (kind === 'entity' ? (await load()).find((record) => record.id === id) : undefined),
-    list: async (kind) => (kind === 'entity' ? load() : [])
+    get: async (kind, id) => (await load()).find((record) => record.kind === kind && record.id === id),
+    list: async (kind) => (await load()).filter((record) => record.kind === kind)
   }
 }
 

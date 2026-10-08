@@ -40,6 +40,8 @@ export const extractMentions = (body: string): string[] => {
   return [...seen]
 }
 
+const lineCount = (text: string): number => text.split('\n').length - 1
+
 const KNOWN_EVIDENCE_FIELDS = new Set(MEMORY_EVIDENCE_FIELDS)
 
 /**
@@ -123,6 +125,8 @@ export const parseMemoryFile = (
           : { ...link, evidence: knownEvidence(evidence, `links[${index}].evidence`, relativePath, diagnostics) }
       ),
       content: body,
+      // gray-matter's body is what follows the frontmatter, so it ends the raw file.
+      bodyLine: lineCount(raw.slice(0, raw.length - body.length)) + 1,
       mentions: extractMentions(body),
       evidence: knownEvidence(fm.evidence, 'evidence', relativePath, diagnostics),
       provenance: fm.provenance,
