@@ -175,7 +175,12 @@ class ProjectionTarget {
       this.checkpoint = Checkpoint.of(records)
 
       if (this.reset) {
-        await writeAdapterManifest(stateRootOf(this.context.resolved), { ...this.manifest, owners: {} })
+        await writeAdapterManifest(stateRootOf(this.context.resolved), {
+          ...this.manifest,
+          fingerprint: `reset-pending:${this.slot.fingerprint}`,
+          owners: {},
+          records: emptyRecords()
+        })
         await this.port?.reset(this.slot.scope)
       }
       this.opened = true

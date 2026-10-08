@@ -45,6 +45,7 @@ const fakeAdapter = (
   overrides: {
     apply?: (batch: ProjectionBatch) => Promise<ApplyReceipt>
     flush?: () => Promise<void>
+    reset?: (scope: string) => Promise<void>
   } = {}
 ): MemoryAdapter => ({
   describe: () => ({ name: 'fake', version: '1.0.0', inputs, resultKinds: [], rebuild: 'deterministic' }),
@@ -65,10 +66,12 @@ const fakeAdapter = (
       (async () => {
         store.flushes += 1
       }),
-    reset: async (scope) => {
-      store.resets.push(scope)
-      store.records.clear()
-    }
+    reset:
+      overrides.reset ??
+      (async (scope) => {
+        store.resets.push(scope)
+        store.records.clear()
+      })
   },
   close: async () => {
     store.closed = true
@@ -218,6 +221,7 @@ describe('ProjectionManager', () => {
     const [failed] = await pass(slots, stateOf(ORDERS))
     expect(failed?.error).toBe('could not record what it holds: disk full')
     expect((await readAdapterManifest(stateRootOf(resolved), 'graph'))?.records).toEqual(emptyRecords())
+    expect((await readAdapterManifest(stateRootOf(resolved), 'graph'))?.fingerprint).not.toBe('fingerprint-graph')
 
     flushFails = false
     const [replayed] = await pass(slots, stateOf(ORDERS))
@@ -336,7 +340,34 @@ describe('ProjectionManager', () => {
     expect(local.resets).toEqual(['default'])
   })
 
-  it('never leaves a manifest vouching for what a rebuild reset but could not record', async () => {
+  it('resets again after a reset that threw, rather than trusting what it left', async () => {
+    const store = newStore()
+    let resetFails = false
+    const adapter = fakeAdapter(['entity', 'observation', 'document'], store, {
+      reset: async (scope) => {
+        if (resetFails) throw new Error('unreachable')
+        store.resets.push(scope)
+        store.records.clear()
+      }
+    })
+    const slots = (fingerprint: string) => [slotOf('graph', async () => adapter, { fingerprint })]
+    await pass(slots('endpoint-a'), stateOf(ORDERS, BILLING))
+
+    resetFails = true
+    const [failed] = await pass(slots('endpoint-b'), stateOf(ORDERS))
+    expect([failed?.origin, failed?.error]).toEqual(['reconfigured', 'unreachable'])
+
+    resetFails = false
+    const [retried] = await pass(slots('endpoint-b'), stateOf(ORDERS))
+    expect([retried?.origin, retried?.reset, retried?.upserted.length]).toEqual(['reconfigured', true, 3])
+    expect(store.resets).toEqual(['default', 'default'])
+    expect([...store.records.keys()].some((record) => record.includes('service.billing'))).toBe(false)
+
+    const [settled] = await pass(slots('endpoint-b'), stateOf(ORDERS))
+    expect([settled?.origin, settled?.reset, settled?.upserted.length]).toEqual(['current', false, 0])
+  })
+
+  it('resets and replays everything after a rebuild whose flush failed', async () => {
     const store = newStore()
     let flushFails = false
     const adapter = fakeAdapter(['entity', 'observation', 'document'], store, {
@@ -346,21 +377,30 @@ describe('ProjectionManager', () => {
     })
     const slots = [slotOf('graph', async () => adapter)]
     await pass(slots, stateOf(ORDERS))
-    expect(store.records.size).toBe(3)
 
     flushFails = true
-    const manager = await open(slots, new Set(['graph']))
-    expect(store.records.size).toBe(0)
-    expect((await readAdapterManifest(stateRootOf(resolved), 'graph'))?.records).toEqual(emptyRecords())
-    await manager.apply(stateOf(ORDERS), new Set())
-    expect(await manager.commit()).toEqual([{ id: 'graph', error: 'could not record what it holds: disk full' }])
-    await manager.close()
+    const [failed] = await pass(slots, stateOf(ORDERS), new Set(['graph']))
+    expect(failed?.error).toBe('could not record what it holds: disk full')
     store.records.clear()
 
     flushFails = false
     const [synced] = await pass(slots, stateOf(ORDERS))
-    expect(synced?.origin).toBe('current')
-    expect(synced?.upserted).toHaveLength(3)
+    expect([synced?.origin, synced?.reset, synced?.upserted.length, synced?.unchanged]).toEqual(['reconfigured', true, 3, 0])
+    expect(store.records.size).toBe(3)
+  })
+
+  it('resets again after a rebuild interrupted before it recorded anything', async () => {
+    const store = newStore()
+    const slots = [slotOf('graph', async () => fakeAdapter(['entity', 'observation', 'document'], store))]
+    await pass(slots, stateOf(ORDERS))
+
+    const interrupted = await open(slots, new Set(['graph']))
+    await interrupted.apply(stateOf(ORDERS), new Set())
+    store.records.clear()
+
+    const [synced] = await pass(slots, stateOf(ORDERS))
+    expect([synced?.origin, synced?.reset, synced?.upserted.length]).toEqual(['reconfigured', true, 3])
+    expect(store.resets).toEqual(['default', 'default', 'default'])
     expect(store.records.size).toBe(3)
   })
 
