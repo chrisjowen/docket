@@ -118,8 +118,10 @@ export const composeRuntime = (context: ComposeRuntimeContext): ComposeRuntime =
     // Read-only, and by Compose's project label rather than through the file,
     // so checking needs none of the file's variables - secrets included - set.
     status: ['ps', '--all', '--filter', `label=${PROJECT_LABEL}=${config.projectName}`, '--format', STATUS_FORMAT],
-    down: [...base, 'down', ...services],
-    destroyVolumes: [...base, 'down', '--volumes', ...services]
+    // By project name without `--file`, so Compose finds the containers by
+    // label and stopping needs none of the file's variables set either.
+    down: ['compose', '--project-name', config.projectName, 'down', ...services],
+    destroyVolumes: ['compose', '--project-name', config.projectName, 'down', '--volumes', ...services]
   }
 
   const run = async (operation: string, argv: readonly string[], stream = false): Promise<CommandOutcome> => {

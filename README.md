@@ -574,9 +574,10 @@ all go in the Compose file.
 - `docket runtime status <id>` lists the project's containers by Compose
   label (`docker ps`), so it changes nothing and needs none of the Compose
   file's variables set.
-- `docket runtime down <id>` runs `docker compose down`, which keeps named
-  volumes. Only `--destroy-volumes` adds `--volumes`; `docket rebuild` never
-  touches containers or volumes.
+- `docket runtime down <id>` runs `docker compose --project-name <projectName>
+  down` without the Compose file, so it too needs none of the file's variables
+  set, and keeps named volumes. Only `--destroy-volumes` adds `--volumes`;
+  `docket rebuild` never touches containers or volumes.
 
 ## Claude Code plugin
 

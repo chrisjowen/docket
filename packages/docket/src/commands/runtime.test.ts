@@ -87,9 +87,8 @@ describe('docket runtime', () => {
     await runtimeDown('vectors-dev', { cwd: root, runner })
     expect(calls.map((call) => call.args.slice(0, 4))).toEqual([
       ['ps', '--all', '--filter', 'label=com.docker.compose.project=docket-vectors'],
-      ['compose', '--file', join(root, 'infra', 'vectors.compose.yaml'), '--project-name']
+      ['compose', '--project-name', 'docket-vectors', 'down']
     ])
-    expect(calls[1]?.args.slice(4)).toEqual(['docket-vectors', 'down'])
   })
 
   it('lists the configured runtimes when asked for one that is not', async () => {

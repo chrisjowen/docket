@@ -135,8 +135,8 @@ describe('docket runtime end to end', () => {
     expect(await dockerCalls()).toEqual([
       `${compose} up --detach --pull never --no-build graph`,
       `ps --all --filter label=com.docker.compose.project=docket-payments --format {{.Label "com.docker.compose.service"}}\t{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Image}}`,
-      `${compose} down graph`,
-      `${compose} down --volumes graph`
+      'compose --project-name docket-payments down graph',
+      'compose --project-name docket-payments down --volumes graph'
     ])
   })
 

@@ -92,13 +92,13 @@ describe('docker-compose runtime down', () => {
   it('stops the services and keeps their volumes', async () => {
     const { calls, runner } = fakeRunner()
     await runtime({}, runner).down()
-    expect(calls).toEqual([{ command: 'docker', args: [...base(), 'down', 'graph'], cwd: root, stream: true }])
+    expect(calls).toEqual([{ command: 'docker', args: ['compose', '--project-name', 'docket-payments', 'down', 'graph'], cwd: root, stream: true }])
   })
 
   it('deletes volumes only when asked by name', async () => {
     const { calls, runner } = fakeRunner()
     await runtime({}, runner).down({ destroyVolumes: true })
-    expect(calls[0]?.args).toEqual([...base(), 'down', '--volumes', 'graph'])
+    expect(calls[0]?.args).toEqual(['compose', '--project-name', 'docket-payments', 'down', '--volumes', 'graph'])
   })
 })
 
@@ -197,8 +197,8 @@ describe('docker-compose runtime plan', () => {
     expect(plan.operations.up.command).toBe(
       `docker compose --file ${composeFile} --project-name docket-payments up --detach --pull never --no-build graph`
     )
-    expect(plan.operations.down.command).not.toContain('--volumes')
-    expect(plan.operations.destroyVolumes.command).toContain('down --volumes graph')
+    expect(plan.operations.down.command).toBe('docker compose --project-name docket-payments down graph')
+    expect(plan.operations.destroyVolumes.command).toBe('docker compose --project-name docket-payments down --volumes graph')
     expect(JSON.stringify(plan)).not.toContain('s3cret-value')
   })
 
