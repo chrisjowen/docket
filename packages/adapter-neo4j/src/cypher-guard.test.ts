@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { guardCypher, undirected } from './cypher-guard.js'
+import { guardCypher, scopeProblem, undirected } from './cypher-guard.js'
 
 describe('guardCypher', () => {
   it('accepts a read query and caps its rows', () => {
@@ -51,5 +51,28 @@ describe('guardCypher', () => {
       'MATCH (a)-[r:USES]-(b)--(c)--(d) RETURN a'
     )
     expect(undirected("MATCH (s) WHERE s.title = 'a->b' RETURN s")).toBe("MATCH (s) WHERE s.title = 'a->b' RETURN s")
+  })
+})
+
+describe('scopeProblem', () => {
+  it.each([
+    'MATCH (s:Memory:Service {scope: $scope})-[r:DEPENDS_ON]->(d:Memory) RETURN s, r, d',
+    'MATCH (s:Memory {scope: $scope}) WITH s MATCH (s)-[r]->(t) RETURN count(t)',
+    'MATCH (s:Memory) WHERE s.scope = $scope RETURN count(s) AS services',
+    'MATCH (a:Memory {scope: $scope}), (b:Memory {scope: $scope}) RETURN a, b',
+    'MATCH (s:Memory {scope: $scope}) WITH s AS service MATCH (service)-->(x) RETURN x',
+    'MATCH p = (a:Memory {scope: $scope})-[*1..3]-(b) RETURN p',
+    "MATCH (d:Memory:Deployment {scope: $scope}) WHERE d.title CONTAINS ',' RETURN count(d)"
+  ])('accepts a query anchored in scope: %s', (query) => {
+    expect(scopeProblem(query)).toBeUndefined()
+  })
+
+  it.each([
+    ['MATCH (s:Memory:Service) RETURN count(s)', /never binds \$scope/],
+    ['MATCH (s:Memory {scope: $scope}), (d:Memory:Deployment) RETURN count(d)', /\(d:Memory:Deployment\) is not bound/],
+    ['MATCH (s:Memory {scope: $scope}) MATCH (x)-[r]->(y) RETURN count(r)', /\(x\)-\[r\]->\(y\) is not bound/],
+    ["MATCH (s:Memory) WHERE s.title = '$scope' RETURN s", /never binds \$scope/]
+  ])('rejects a pattern that could read another scope: %s', (query, reason) => {
+    expect(scopeProblem(query)).toMatch(reason)
   })
 })

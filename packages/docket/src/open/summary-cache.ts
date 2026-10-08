@@ -6,8 +6,8 @@ import { stableStringify } from '@docket/adapter-kit'
 import { hashContent } from '../source/hashing.js'
 import type { UiPath } from './types.js'
 
-/** Bumped whenever the entry changes shape, so older answers are never misread. */
-const CACHE_VERSION = 1
+/** Bumped whenever the entry or its key changes shape, so older answers are never misread. */
+const CACHE_VERSION = 2
 
 /** An exhibit a summary was built from, as it was then. */
 export interface CachedExhibit {
@@ -17,15 +17,34 @@ export interface CachedExhibit {
 }
 
 export interface CachedSummary {
-  /** Hash of the question, the model, every exhibit the summary was built from and the paths between them. */
+  /** Hash of everything the summary was written from: see `summaryKey`. */
   key: string
   question: string
   model: string
+  /** The adapter instances whose answers it was written from. */
+  adapters?: string[]
   exhibits: CachedExhibit[]
   text: string
   /** The exhibits the summary cites, in the order it first cites them. */
   cited: string[]
+  /** The evidence it cites, as namespaced in the answer it was written from. */
+  citedEvidence?: string[]
   createdAt: string
+}
+
+/** What a summary is written from, besides the question and the model. */
+export interface SummaryInputs {
+  /** How the question was read: scope, time zone, the day it was asked in that zone, the conversation before it. */
+  context?: unknown
+  /**
+   * Each adapter asked: its configuration fingerprint, the checkpoint it
+   * answered at and a hash of its answer - or how it failed.
+   */
+  adapters?: readonly unknown[]
+  exhibits: readonly CachedExhibit[]
+  /** The canonical records the evidence points at, at the revisions the files hold them. */
+  sources?: readonly unknown[]
+  paths: readonly UiPath[]
 }
 
 /** Case and spacing do not make a different question. */
@@ -33,25 +52,23 @@ export const normalizeQuestion = (question: string): string =>
   question.trim().replace(/\s+/g, ' ').toLowerCase()
 
 /**
- * What a summary depends on. Any change to the question, the model, its
- * instructions, one of the exhibits - an edit to any file declaring it, or a
- * different set found - or the paths connecting them gives a different key,
- * and so a miss.
+ * What a summary depends on (docs/adapter-spec.md §10): the question and how
+ * it was read, each adapter's configuration, checkpoint and answer, the source
+ * revisions of the exhibits and evidence, the paths connecting them, the model
+ * and its instructions. A change to any gives a different key, and so a miss.
  */
-export const summaryKey = (
-  question: string,
-  model: { model: string; instructions: string },
-  exhibits: readonly CachedExhibit[],
-  paths: readonly UiPath[]
-): string =>
+export const summaryKey = (question: string, model: { model: string; instructions: string }, inputs: SummaryInputs): string =>
   hashContent(
     stableStringify({
       version: CACHE_VERSION,
       question: normalizeQuestion(question),
+      context: inputs.context ?? null,
       model: model.model,
       instructions: model.instructions,
-      exhibits: [...exhibits].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
-      paths
+      adapters: inputs.adapters ?? [],
+      exhibits: [...inputs.exhibits].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+      sources: inputs.sources ?? [],
+      paths: inputs.paths
     })
   )
 

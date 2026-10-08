@@ -16,7 +16,7 @@
     {#each [...new Set(ids)] as id (id)}
       {@const evidence = result.evidence.get(id)}
       {#if evidence}
-        {@const standing = standingOf(evidence, view.casebook)}
+        {@const standing = standingOf(evidence, view.casebook, result.references?.[evidence.id])}
         <button
           type="button"
           class="hover:bg-muted rounded border px-1 font-mono text-[10px] leading-4 {standing === 'canonical'

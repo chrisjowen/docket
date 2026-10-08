@@ -243,7 +243,9 @@ describe.skipIf(!URL)('neo4j projection', () => {
         {
           id: 'service.api',
           score: expect.any(Number),
-          detail: 'depends_on → datasource.postgres; ← uses service.web'
+          detail: 'depends_on → datasource.postgres; ← uses service.web',
+          revision: 'sha256:api',
+          passage: { text: 'Takes orders and stores them.' }
         }
       ]
     })
@@ -302,8 +304,8 @@ describe.skipIf(!URL)('neo4j projection', () => {
       expect(answer).toEqual({
         note: `cypher: ${cypher}\nLIMIT 50`,
         hits: [
-          { id: 'service.api', detail: 'service.api deployed_to → environment.local' },
-          { id: 'environment.local', detail: 'service.api deployed_to → environment.local' }
+          { id: 'service.api', detail: 'service.api deployed_to → environment.local', revision: 'sha256:api' },
+          { id: 'environment.local', detail: 'service.api deployed_to → environment.local', revision: 'sha256:api' }
         ]
       })
       // The model is shown this graph's schema, not a generic one.
@@ -316,29 +318,74 @@ describe.skipIf(!URL)('neo4j projection', () => {
       )
 
       expect((await graph.search?.('which services', 10))?.hits).toEqual([
-        { id: 'service.api', detail: 'service.api, Orders API' }
+        { id: 'service.api', detail: 'service.api, Orders API', revision: 'sha256:api' }
       ])
     })
 
     it('leaves out a detail that would only repeat the id', async () => {
       const { projection: graph } = await withModel('MATCH (s:Memory:Service {scope: $scope}) RETURN s')
 
-      expect((await graph.search?.('which services', 10))?.hits).toEqual([{ id: 'service.api' }])
+      expect((await graph.search?.('which services', 10))?.hits).toEqual([{ id: 'service.api', revision: 'sha256:api' }])
     })
 
-    it('never answers with nodes from another scope, whatever the query asks for', async () => {
+    it('refuses a query that could read another scope, before running it', async () => {
       const { projection: graph } = await withModel('MATCH (n:Memory) RETURN n')
       const mine = scope
       scope = `${mine}-other`
       await (await open()).upsert(makeDocument({ id: 'service.elsewhere', links: [] }))
       scope = mine
 
-      const ids = (await graph.search?.('everything', 10))?.hits.map((hit) => hit.id).sort()
+      const answer = await graph.search?.('everything', 10)
 
-      expect(ids).toEqual(['environment.local', 'service.api'])
+      expect(answer?.hits).toEqual([])
+      expect(answer?.note).toMatch(/beyond this scope[\s\S]*full-text/)
       scope = `${mine}-other`
       await read('MATCH (n:Memory {scope: $scope}) DETACH DELETE n')
       scope = mine
+    })
+
+    it('answers a count with the count, exhaustively, never with documents', async () => {
+      const { projection: graph } = await withModel(
+        'MATCH (s:Memory:Service {scope: $scope})-[:DEPLOYED_TO]->(e:Memory {scope: $scope}) RETURN count(e) AS deployments'
+      )
+      const now = new Date()
+      const request = {
+        requestId: 'r1',
+        question: 'how many deployments?',
+        context: { scope: 'default', now: now.toISOString(), timezone: 'UTC' },
+        budget: { maxResults: 10, maxEvidenceBytes: 10_000, deadline: new Date(now.getTime() + 30_000).toISOString() }
+      }
+
+      const answer = await graph.answer?.(request)
+
+      expect(answer?.blocks).toEqual([{ kind: 'metric', id: 'metric-1', label: 'deployments', value: 1, evidenceIds: ['row-1'] }])
+      expect(answer?.coverage).toEqual({ mode: 'exhaustive', truncated: false, scope: 'default' })
+    })
+
+    it('answers grouped values as a typed table, keeping each row', async () => {
+      const { projection: graph } = await withModel(
+        'MATCH (s:Memory {scope: $scope}) RETURN s.id AS id, s.title AS title, s.evidenceCount AS evidence ORDER BY id'
+      )
+      const now = new Date()
+      const answer = await graph.answer?.({
+        requestId: 'r2',
+        question: 'list everything',
+        context: { scope: 'default', now: now.toISOString(), timezone: 'UTC' },
+        budget: { maxResults: 10, maxEvidenceBytes: 10_000, deadline: new Date(now.getTime() + 30_000).toISOString() }
+      })
+
+      expect(answer?.blocks[0]).toMatchObject({
+        kind: 'table',
+        columns: [
+          { key: 'id', type: 'string' },
+          { key: 'title', type: 'string' },
+          { key: 'evidence', type: 'integer' }
+        ],
+        rows: [
+          { cells: { id: 'environment.local', title: 'Local', evidence: 0 } },
+          { cells: { id: 'service.api', title: 'Orders API', evidence: 0 } }
+        ]
+      })
     })
 
     it('falls back to full-text, saying why, when the query is refused', async () => {

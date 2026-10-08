@@ -192,7 +192,7 @@ describe('createDocket', () => {
       ['jsonl#2', 'jsonl', '@docket/adapter-jsonl']
     ])
     const adapter = await docket.adapters[0]!.create()
-    expect(adapter.describe()).toMatchObject({ name: 'jsonl', inputs: ['entity'], resultKinds: ['entities'] })
+    expect(adapter.describe()).toMatchObject({ name: 'jsonl', inputs: ['entity'], resultKinds: ['entities', 'passages'] })
     expect(await adapter.status()).toMatchObject({ state: 'ready' })
     await adapter.close()
   })

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { readCachedSummary, summaryKey, writeCachedSummary, type CachedSummary } from './summary-cache.js'
+import { readCachedSummary, summaryKey, writeCachedSummary, type CachedSummary, type SummaryInputs } from './summary-cache.js'
 
 const MODEL = { model: 'qwen2.5:7b', instructions: 'Cite exhibits.' }
 const ORDERS = { id: 'service.orders', hash: 'sha256:1' }
@@ -11,23 +11,39 @@ const PAYMENTS = { id: 'team.payments', hash: 'sha256:2' }
 const PATH = { nodes: ['service.orders', 'team.payments'], steps: [{ rel: 'owned_by', forward: true }] }
 
 describe('summaryKey', () => {
-  const key = summaryKey('What does checkout use?', MODEL, [ORDERS, PAYMENTS], [PATH])
+  const CONTEXT = { scope: 'default', timezone: 'UTC', day: '2026-10-09' }
+  const ADAPTERS = [{ id: 'local', fingerprint: 'sha256:f', checkpoint: 'records:1', answer: 'sha256:a' }]
+  const SOURCES = [{ kind: 'document', id: 'a.md', revision: 'sha256:d' }]
+  const inputs = (overrides: Partial<SummaryInputs> = {}): SummaryInputs => ({
+    context: CONTEXT,
+    adapters: ADAPTERS,
+    exhibits: [ORDERS, PAYMENTS],
+    sources: SOURCES,
+    paths: [PATH],
+    ...overrides
+  })
+  const key = summaryKey('What does checkout use?', MODEL, inputs())
 
   it('ignores case, spacing and the order exhibits were found in', () => {
-    expect(summaryKey('  what does   CHECKOUT use? ', MODEL, [PAYMENTS, ORDERS], [PATH])).toBe(key)
+    expect(summaryKey('  what does   CHECKOUT use? ', MODEL, inputs({ exhibits: [PAYMENTS, ORDERS] }))).toBe(key)
   })
 
-  it('changes with the question, an exhibit, the set of exhibits, the model, its instructions or the paths between the exhibits', () => {
+  it('changes with the question, its context, an adapter, an exhibit, a source revision, the model, its instructions or the paths', () => {
     const others = [
-      summaryKey('What does billing use?', MODEL, [ORDERS, PAYMENTS], [PATH]),
-      summaryKey('What does checkout use?', MODEL, [ORDERS, { ...PAYMENTS, hash: 'sha256:3' }], [PATH]),
-      summaryKey('What does checkout use?', MODEL, [ORDERS], [PATH]),
-      summaryKey('What does checkout use?', { ...MODEL, model: 'llama3' }, [ORDERS, PAYMENTS], [PATH]),
-      summaryKey('What does checkout use?', { ...MODEL, instructions: 'Be terse.' }, [ORDERS, PAYMENTS], [PATH]),
-      summaryKey('What does checkout use?', MODEL, [ORDERS, PAYMENTS], []),
-      summaryKey('What does checkout use?', MODEL, [ORDERS, PAYMENTS], [
-        { nodes: ['service.orders', 'datasource.ledger', 'team.payments'], steps: [{ rel: 'depends_on', forward: true }, { rel: 'owned_by', forward: false }] }
-      ])
+      summaryKey('What does billing use?', MODEL, inputs()),
+      summaryKey('What does checkout use?', MODEL, inputs({ context: { ...CONTEXT, day: '2026-10-10' } })),
+      summaryKey('What does checkout use?', MODEL, inputs({ adapters: [{ ...ADAPTERS[0], checkpoint: 'records:2' }] })),
+      summaryKey('What does checkout use?', MODEL, inputs({ adapters: [{ ...ADAPTERS[0], fingerprint: 'sha256:g' }] })),
+      summaryKey('What does checkout use?', MODEL, inputs({ adapters: [{ ...ADAPTERS[0], answer: 'sha256:b' }] })),
+      summaryKey('What does checkout use?', MODEL, inputs({ exhibits: [ORDERS, { ...PAYMENTS, hash: 'sha256:3' }] })),
+      summaryKey('What does checkout use?', MODEL, inputs({ exhibits: [ORDERS] })),
+      summaryKey('What does checkout use?', MODEL, inputs({ sources: [{ ...SOURCES[0], revision: 'sha256:e' }] })),
+      summaryKey('What does checkout use?', { ...MODEL, model: 'llama3' }, inputs()),
+      summaryKey('What does checkout use?', { ...MODEL, instructions: 'Be terse.' }, inputs()),
+      summaryKey('What does checkout use?', MODEL, inputs({ paths: [] })),
+      summaryKey('What does checkout use?', MODEL, inputs({
+        paths: [{ nodes: ['service.orders', 'datasource.ledger', 'team.payments'], steps: [{ rel: 'depends_on', forward: true }, { rel: 'owned_by', forward: false }] }]
+      }))
     ]
     expect(new Set([key, ...others]).size).toBe(others.length + 1)
   })

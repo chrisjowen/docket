@@ -35,7 +35,7 @@ describe('search', () => {
     const result = await search('minio uploads', { cwd: root })
 
     expect(result.sources).toEqual([
-      { name: 'jsonl', hits: [{ id: 'decision.minio', score: expect.any(Number) }] }
+      { name: 'jsonl', hits: [{ id: 'decision.minio', score: expect.any(Number) }], note: expect.stringContaining('BM25') }
     ])
     expect(result.documents).toEqual([
       {

@@ -318,8 +318,9 @@ describe('rebuild determinism (spec §72)', () => {
     expect(b['nodes.jsonl']).toBe(a['nodes.jsonl'])
     expect(b['edges.jsonl']).toBe(a['edges.jsonl'])
 
+    // An entity's revision is its merged hash, which covers its paths too.
     const withoutPath = (records: DocumentRecord[]): unknown[] =>
-      records.map(({ path, paths, ...rest }) => rest)
+      records.map(({ path, paths, revision, ...rest }) => rest)
     expect(withoutPath(await readJsonl(reverse, 'documents.jsonl'))).toEqual(
       withoutPath(await readJsonl(forward, 'documents.jsonl'))
     )

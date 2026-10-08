@@ -35,7 +35,9 @@ npx docket init                 # scaffold .docket.yaml, .docket/ and the defaul
 npx docket validate --strict    # check files against the ontology
 npx docket sync                 # project changed files into .docket/.index
 npx docket watch                # reconcile continuously as files change
-npx docket search <query...>    # ask every searchable projection
+npx docket ask <question...>    # ask the adapters: each answer with its evidence, and a summary
+npx docket search <query...>    # the documents each adapter found
+npx docket adapters status      # each adapter's health and how far its index lags the files
 npx docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 npx docket ontology list        # what resource types and relationships exist
 npx docket adapter add neo4j    # set up an adapter: asks, shows the plan, applies it once confirmed

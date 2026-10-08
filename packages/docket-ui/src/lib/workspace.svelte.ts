@@ -91,9 +91,12 @@ export class AskSession {
   }
 
   cancel(): void {
+    const pending = this.pending
     this.#controller?.abort()
     this.#controller = null
     this.pending = null
+    // Aborting the request already tells the server; saying so by id also reaches it through a proxy.
+    if (pending) void this.#client.cancel(pending.requestId)
   }
 
   readonly evidence: EvidenceIndex = $derived(this.outcome ? evidenceIndex(this.outcome) : new Map())

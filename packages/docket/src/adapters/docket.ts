@@ -33,6 +33,8 @@ import { canonicalState } from '../sync/inputs.js'
 import { standardDistribution } from './distribution.js'
 import { loadAdapterDefinition } from './loader.js'
 import type { AdapterDistribution, TypeScriptRunner } from './resolve-module.js'
+import type { AskInput } from '../query/ask.js'
+import type { CoordinatedAnswer } from '../query/wire.js'
 
 /**
  * The Docket scope everything runs in. v1 configuration has no scope of its
@@ -102,6 +104,11 @@ export interface Docket {
    * v1 file and its v2 migration hash alike, so migrating reprojects nothing.
    */
   readonly projectionsFingerprint: string
+  /**
+   * Puts a question to the adapters enabled for query through the shared
+   * coordinator, reading the canonical files afresh (docs/adapter-spec.md §10, §12).
+   */
+  ask(input: AskInput): Promise<CoordinatedAnswer>
 }
 
 export interface OpenDocketOptions {
@@ -226,7 +233,13 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
     }
   })
 
-  return { resolved, adapters, projectionsFingerprint: hashContent(stableStringify(fingerprinted)) }
+  return {
+    resolved,
+    adapters,
+    projectionsFingerprint: hashContent(stableStringify(fingerprinted)),
+    // Loaded on first use: the coordinator itself opens dockets.
+    ask: async (input) => (await (await import('../query/ask.js')).askProject(resolved.projectRoot, input, options)).answer
+  }
 }
 
 const checkId = (id: string): void => {

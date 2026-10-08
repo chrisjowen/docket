@@ -1,148 +1,18 @@
-import { ollamaChat, type Chat, type ChatPrompt } from '@docket/adapter-kit'
+import { askProject } from '../query/ask.js'
+import { toLegacyChat } from '../query/legacy.js'
+import { indexStatus } from './graph.js'
+import type { UiChatAnswer } from './types.js'
 
-import type { SummarizeConfig } from '../config/config.js'
-import { ClaudeNotFoundError, claudeChat } from '../llm/claude-chat.js'
-import type { MemoryEntity } from '../model/index.js'
-import { askCasebook } from './ask.js'
-import {
-  readCachedSummary,
-  summaryCacheDir,
-  summaryKey,
-  writeCachedSummary,
-  type CachedExhibit
-} from './summary-cache.js'
-import type { UiAnswer, UiChatAnswer } from './types.js'
-
-/** An exhibit's notes beyond this are cut: the model needs the gist, not the whole file. */
-const MAX_NOTES = 1_500
-
-const SYSTEM = `You answer questions about a software project from its casebook: exhibits, each a record of one service, team, datasource, decision or other resource, with the relationships it declares.
-
-Rules:
-- Use only the exhibits given. When they do not answer the question, say so plainly.
-- Cite every exhibit you rely on by its id in square brackets, exactly as given, e.g.
-  "Checkout runs on the Orders API [service.orders], owned by Payments [team.payments]."
-- Be brief: a short paragraph, or a few bullet points when listing things.
-- No preamble, and do not restate the question.`
-
-const describe = (entity: MemoryEntity): string => {
-  const lines = [`[${entity.id}] ${entity.title} (${entity.type})`]
-  if (entity.tags.length > 0) lines.push(`tags: ${entity.tags.join(', ')}`)
-  if (Object.keys(entity.attributes).length > 0) lines.push(`attributes: ${JSON.stringify(entity.attributes)}`)
-  if (entity.links.length > 0) {
-    lines.push(`links: ${entity.links.map((link) => `${link.rel} -> ${link.target}`).join('; ')}`)
-  }
-  const notes = entity.content.trim()
-  if (notes) lines.push(`notes: ${notes.length > MAX_NOTES ? `${notes.slice(0, MAX_NOTES)}…` : notes}`)
-  return lines.join('\n')
-}
-
-export const summaryPrompt = (question: string, exhibits: readonly MemoryEntity[], answer: UiAnswer): ChatPrompt => {
-  const sections = [`Question: ${question}`, `Exhibits:\n\n${exhibits.map(describe).join('\n\n')}`]
-  if (answer.paths.length > 0) {
-    const walked = answer.paths.map((path) =>
-      path.nodes
-        .map((id, index) => {
-          const step = path.steps[index]
-          return step ? `${id} ${step.forward ? `-${step.rel}->` : `<-${step.rel}-`} ` : id
-        })
-        .join('')
-    )
-    sections.push(`How they connect:\n${walked.join('\n')}`)
-  }
-  return { system: SYSTEM, user: sections.join('\n\n') }
-}
-
-/** A configured model: how to ask it, and what it is called. */
-interface Summarizer {
-  /** Shown beside its summaries, e.g. `claude` or `qwen2.5:7b`. */
-  name: string
-  /** What cached summaries are keyed on, so switching model or provider never returns another's answer. */
-  identity: string
-  chat: Chat
-}
-
-const summarizerFor = (config: SummarizeConfig): Summarizer =>
-  config.provider === 'claude'
-    ? {
-        name: config.model ? `claude (${config.model})` : 'claude',
-        identity: `claude:${config.model ?? ''}`,
-        chat: claudeChat(config)
-      }
-    : { name: config.model, identity: `ollama:${config.url}:${config.model}`, chat: ollamaChat(config) }
-
-const NOT_INSTALLED =
-  'Claude Code is not installed, so here is what search found. Install it (https://claude.com/claude-code) ' +
-  'and log in to have answers summarized by the `claude` CLI, or add a `summarize` section to .docket.yaml - ' +
-  'e.g. `summarize: { model: "qwen2.5:7b" }` for Ollama at http://localhost:11434.'
+export { citationsIn } from '../query/synthesis.js'
 
 /**
- * Ids cited as `[id]`, grouped as `[a, b]` or `[a; b]` - or in backticks, as
- * models often write ids anyway - in first-cited order, keeping only exhibits
- * the model was given.
- */
-export const citationsIn = (text: string, exhibits: ReadonlySet<string>): string[] => {
-  const cited = new Set<string>()
-  for (const match of text.matchAll(/\[([^[\]]+)\]|`([^`\s]+)`/g)) {
-    for (const id of (match[1] ?? match[2] ?? '').split(/[,;]/).map((part) => part.trim())) {
-      if (exhibits.has(id)) cited.add(id)
-    }
-  }
-  return [...cited]
-}
-
-/**
- * Asks the casebook, then has a model summarize what was found, citing the
- * exhibits. A summary is kept in `.docket/.cache/` against the question, the
- * hash of every exhibit it was built from and the paths connecting them, so
- * asking again returns it unchanged - without the model - until the question,
- * one of those exhibits or a connection between them changes. The cache is the only thing this writes.
+ * The legacy `GET /api/chat` reply, translated from the coordinator's answer
+ * with synthesis on: the legacy answer, and the model's summary of it citing
+ * the exhibits. Summaries are cached in `.docket/.cache/chat/` - the one thing
+ * this writes.
  */
 export const chat = async (cwd: string, query: string, limit: number): Promise<UiChatAnswer> => {
-  const { answer, resolved, entities } = await askCasebook(cwd, query, limit)
-  const model = summarizerFor(resolved.config.summarize)
-  const byId = new Map(entities.map((entity) => [entity.id, entity]))
-  const exhibits = answer.documents.flatMap((document) => {
-    const entity = byId.get(document.id)
-    return entity ? [entity] : []
-  })
-  if (exhibits.length === 0) {
-    return { query, answer, summary: null, notice: { reason: 'empty', message: 'Nothing in the casebook matched, so there is nothing to summarize.' } }
-  }
-
-  const hashes: CachedExhibit[] = exhibits.map((entity) => ({ id: entity.id, hash: entity.hash }))
-  const key = summaryKey(query, { model: model.identity, instructions: SYSTEM }, hashes, answer.paths)
-  const dir = summaryCacheDir(resolved.memoryRoot)
-  const cached = await readCachedSummary(dir, query, key)
-  if (cached) {
-    return {
-      query,
-      answer,
-      summary: { text: cached.text, cited: cached.cited, model: cached.model, cached: true, createdAt: cached.createdAt }
-    }
-  }
-
-  let text: string
-  try {
-    text = (await model.chat(summaryPrompt(query, exhibits, answer))).trim()
-  } catch (cause) {
-    if (cause instanceof ClaudeNotFoundError) {
-      return { query, answer, summary: null, notice: { reason: 'unconfigured', message: NOT_INSTALLED } }
-    }
-    return {
-      query,
-      answer,
-      summary: null,
-      notice: { reason: 'failed', message: `Could not summarize with ${model.name}: ${cause instanceof Error ? cause.message : String(cause)}` }
-    }
-  }
-
-  const cited = citationsIn(text, new Set(hashes.map((exhibit) => exhibit.id)))
-  const createdAt = new Date().toISOString()
-  try {
-    await writeCachedSummary(dir, { key, question: query, model: model.name, exhibits: hashes, text, cited, createdAt })
-  } catch {
-    // A docket that cannot be written to still gets its answer, just not kept.
-  }
-  return { query, answer, summary: { text, cited, model: model.name, cached: false, createdAt } }
+  const outcome = await askProject(cwd, { question: query, maxResults: limit, synthesis: true })
+  const { resolved, entities, documents, broken } = outcome.snapshot
+  return toLegacyChat(outcome, await indexStatus(resolved, entities, documents, broken))
 }

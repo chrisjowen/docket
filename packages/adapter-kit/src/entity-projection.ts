@@ -5,9 +5,13 @@ import type {
   AdapterServices,
   ApplyReceipt,
   AskRequest,
+  CanonicalReference,
   EntityInput,
   MemoryAdapter,
-  ProjectionBatch
+  ProjectionBatch,
+  ResultBlock,
+  ResultKind,
+  RetrievedEvidence
 } from '@docket/contracts'
 
 /**
@@ -23,6 +27,10 @@ export interface SearchHit {
   score?: number
   /** Why it matched, in the projection's own words - e.g. a graph path. */
   detail?: string
+  /** The revision of the entity the projection holds, when it keeps one - so an index behind the files shows. */
+  revision?: string
+  /** What matched, verbatim from what the projection holds: shown as a passage, with the entity as its source. */
+  passage?: { text: string; nativeId?: string }
 }
 
 /** A projection's answer to a search. */
@@ -69,8 +77,84 @@ export interface EntityProjection {
   /** Documents relevant to `query`, most relevant first. Optional: not every view can search. */
   search?(query: string, limit: number): Promise<SearchAnswer>
 
+  /**
+   * Answers a question in full - tables, counts, graphs, passages - in place
+   * of `search`, for a projection whose engine can do more than rank
+   * documents. Optional; declare what it returns in `resultKinds`.
+   */
+  answer?(request: AskRequest): Promise<AdapterAnswer>
+
+  /** The block kinds `answer` returns. */
+  readonly resultKinds?: readonly ResultKind[]
+
   /** Releases resources. Flushes first, so nothing buffered is lost. */
   close?(): Promise<void>
+}
+
+const bytes = (text: string): number => Buffer.byteLength(text, 'utf8')
+
+/**
+ * A search's hits as an answer: the entities in one block, in the
+ * projection's order with its scores and details, and each hit's passage as
+ * evidence shown in a passages block - within the request's result and
+ * evidence budgets. A ranked search is a top-k, never a count.
+ */
+export const searchAnswer = (
+  search: SearchAnswer,
+  request: Pick<AskRequest, 'context' | 'budget'>,
+  interpretation: Partial<AdapterAnswer['interpretation']> = {}
+): AdapterAnswer => {
+  const { maxResults, maxEvidenceBytes } = request.budget
+  const hits = search.hits.slice(0, maxResults)
+  const evidence: RetrievedEvidence[] = []
+  let used = 0
+  let truncated = search.hits.length >= maxResults
+  const refOf = (hit: SearchHit): CanonicalReference => ({
+    kind: 'entity',
+    id: hit.id,
+    ...(hit.revision !== undefined ? { revision: hit.revision } : {})
+  })
+  for (const hit of hits) {
+    if (hit.passage === undefined || hit.passage.text.trim() === '') continue
+    const size = bytes(hit.passage.text)
+    if (used + size > maxEvidenceBytes) {
+      truncated = true
+      continue
+    }
+    used += size
+    evidence.push({
+      id: `passage-${evidence.length + 1}`,
+      ...(hit.passage.nativeId !== undefined ? { nativeId: hit.passage.nativeId } : {}),
+      kind: 'passage',
+      text: hit.passage.text,
+      canonicalRefs: [refOf(hit)],
+      ...(hit.score !== undefined && Number.isFinite(hit.score) ? { score: hit.score } : {})
+    })
+  }
+
+  const blocks: ResultBlock[] = []
+  if (hits.length > 0) {
+    blocks.push({
+      kind: 'entities',
+      id: 'hits',
+      evidenceIds: evidence.map((item) => item.id),
+      entities: hits.map((hit) => ({
+        ref: refOf(hit),
+        ...(hit.score !== undefined && Number.isFinite(hit.score) ? { score: hit.score } : {}),
+        ...(hit.detail !== undefined ? { detail: hit.detail } : {})
+      }))
+    })
+  }
+  if (evidence.length > 0) blocks.push({ kind: 'passages', id: 'passages', evidenceIds: evidence.map((item) => item.id) })
+
+  return {
+    // The note says how the projection read the query - e.g. the Cypher it ran.
+    interpretation: { description: search.note ?? '', assumptions: [], ...interpretation },
+    blocks,
+    evidence,
+    coverage: { mode: 'top-k', truncated, scope: request.context.scope },
+    diagnostics: []
+  }
 }
 
 export interface EntityProjectionAdapterOptions {
@@ -81,7 +165,8 @@ export interface EntityProjectionAdapterOptions {
 
 /**
  * Presents an `EntityProjection` as a `MemoryAdapter`: entity inputs only,
- * and a query port answering with one entities block when it can search.
+ * and a query port answering with its own `answer`, or else with its search
+ * hits as an entities block and their passages.
  * Errors propagate as they always have; a batch that throws acknowledges
  * nothing, and replaying it is safe because upserts and removes are idempotent.
  */
@@ -113,36 +198,16 @@ export const entityProjectionAdapter = (
     return receipt
   }
 
-  const ask = async (request: AskRequest): Promise<AdapterAnswer> => {
-    const limit = request.budget.maxResults
-    const answer = await search!(request.question, limit)
-    return {
-      // The note says how the projection read the query - e.g. the Cypher it ran.
-      interpretation: { description: answer.note ?? '', assumptions: [] },
-      blocks: [
-        {
-          kind: 'entities',
-          id: 'hits',
-          evidenceIds: [],
-          entities: answer.hits.map((hit) => ({
-            ref: { kind: 'entity', id: hit.id },
-            ...(hit.score !== undefined && Number.isFinite(hit.score) ? { score: hit.score } : {}),
-            ...(hit.detail !== undefined ? { detail: hit.detail } : {})
-          }))
-        }
-      ],
-      evidence: [],
-      coverage: { mode: 'top-k', truncated: answer.hits.length >= limit, scope: request.context.scope },
-      diagnostics: []
-    }
-  }
+  const answer = projection.answer?.bind(projection)
+  const ask = async (request: AskRequest): Promise<AdapterAnswer> =>
+    answer ? answer(request) : searchAnswer(await search!(request.question, request.budget.maxResults), request)
 
   return {
     describe: () => ({
       name: projection.name,
       version: options.version,
       inputs: ['entity'],
-      resultKinds: search ? ['entities'] : [],
+      resultKinds: answer ? [...(projection.resultKinds ?? [])] : search ? ['entities', 'passages'] : [],
       rebuild: options.rebuild ?? 'deterministic'
     }),
     status: async () => ({ state: 'ready', message: `${projection.name} projection; its health is not probed` }),
@@ -152,7 +217,7 @@ export const entityProjectionAdapter = (
       // An entity projection holds one namespace, set in its own config.
       reset: async () => projection.reset?.()
     },
-    ...(search ? { query: { ask } } : {}),
+    ...(answer || search ? { query: { ask } } : {}),
     close: async () => projection.close?.()
   }
 }
