@@ -1,6 +1,8 @@
 import { resolve } from 'node:path'
 import { z } from 'zod'
 
+import { runtimeReferenceSchema, runtimesConfigSchema } from '../runtime/config.js'
+
 /** Writes the normalized model as JSONL - a readable debug view of what projections receive. */
 export const jsonlProjectionConfigSchema = z.object({
   type: z.literal('jsonl'),
@@ -133,6 +135,12 @@ export const projectionConfigSchema = z.preprocess(
 
 export type ProjectionConfig = z.infer<typeof projectionConfigSchema>
 
+/**
+ * A `projections` entry: the projection's own config plus the instance-level
+ * `runtime` reference, which the projection never sees (adapter spec §6).
+ */
+export const projectionEntrySchema = z.intersection(projectionConfigSchema, runtimeReferenceSchema)
+
 export const memoryConfigSchema = z.object({
   version: z.literal(1),
   source: z
@@ -158,14 +166,26 @@ export const memoryConfigSchema = z.object({
       debounceMs: z.number().int().positive().default(300)
     })
     .prefault({}),
-  projections: z.array(projectionConfigSchema).default([
+  projections: z.array(projectionEntrySchema).default([
     { type: 'jsonl', output: '.docket/.index' }
   ]),
+  /** Local resources `docket runtime` manages, by id. Nothing else acts on them. */
+  runtimes: runtimesConfigSchema.default({}),
   /**
    * The model `docket open`'s chat summarizes search results with: the
    * `claude` CLI unless an Ollama model is set here.
    */
   summarize: summarizeConfigSchema
+}).superRefine((config, context) => {
+  config.projections.forEach((projection, index) => {
+    if (projection.runtime !== undefined && !Object.hasOwn(config.runtimes, projection.runtime)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['projections', index, 'runtime'],
+        message: `runtime "${projection.runtime}" is not defined under runtimes`
+      })
+    }
+  })
 })
 
 export type MemoryConfig = z.infer<typeof memoryConfigSchema>

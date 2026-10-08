@@ -109,19 +109,15 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
 
   const pending: { id: string; source: string; definition: unknown; config: unknown; roles?: AdapterRole[] | undefined }[] = []
 
-  // Two projections of one type would share a name; number the repeats so
-  // their answers stay apart, as `docket search` always has.
-  const seen = new Map<string, number>()
-  for (const config of resolved.config.projections) {
-    const count = (seen.get(config.type) ?? 0) + 1
-    seen.set(config.type, count)
+  const projectionIds = projectionInstanceIds(resolved.config.projections)
+  resolved.config.projections.forEach((config, index) => {
     pending.push({
-      id: count === 1 ? config.type : `${config.type}#${count}`,
+      id: projectionIds[index]!,
       source: `builtin:${config.type}`,
       definition: builtins[config.type],
       config
     })
-  }
+  })
 
   for (const reference of options.adapters ?? []) {
     checkId(reference.id)
@@ -184,6 +180,20 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
   })
 
   return { resolved, adapters }
+}
+
+/**
+ * The instance id of each v1 projection: its type. Two projections of one
+ * type would share a name; number the repeats so their answers stay apart,
+ * as `docket search` always has.
+ */
+export const projectionInstanceIds = (projections: readonly { type: string }[]): string[] => {
+  const seen = new Map<string, number>()
+  return projections.map(({ type }) => {
+    const count = (seen.get(type) ?? 0) + 1
+    seen.set(type, count)
+    return count === 1 ? type : `${type}#${count}`
+  })
 }
 
 const checkId = (id: string): void => {

@@ -238,6 +238,10 @@ docket search <query...>    # ask every projection that can search
 docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
+docket runtime plan <id>    # validate a runtimes entry and show what it would run, secrets redacted
+docket runtime up <id>      # start its containers, pulling only as its pullPolicy allows
+docket runtime status <id>  # state and health of its containers, changing nothing
+docket runtime down <id>    # stop and remove its containers; volumes are kept (--destroy-volumes deletes them)
 ```
 
 ## Browse it: `docket open`
@@ -512,6 +516,68 @@ const docket = await createDocket({
 docket never installs an adapter package, and runs a `.ts` adapter only with a
 TypeScript runner passed as `typescript`. Configuring adapters in
 `.docket.yaml` is the next step of [`docs/adapter-spec.md`](docs/adapter-spec.md).
+
+## Local runtimes
+
+A projection connects to a service; docket does not start one unless asked.
+Hosted and already-running services need nothing more, and no command but
+`docket runtime` ever calls Docker - not sync, watch, search, `open` or
+loading an adapter, even with a `runtimes` section configured.
+
+To have docket manage local containers explicitly, write your own Compose file
+with the images you approve, and name it in a `runtimes` group. A projection's
+`runtime:` says which group it connects to:
+
+```yaml
+projections:
+  - type: neo4j
+    url: bolt://127.0.0.1:17687
+    passwordEnv: DOCKET_GRAPH_PASSWORD
+    runtime: graph-dev
+
+runtimes:
+  graph-dev:
+    provider: docker-compose
+    composeFile: ./infra/docket-memory.compose.yaml   # relative to .docket.yaml
+    projectName: docket-payments
+    pullPolicy: never        # never (default) | missing | always
+    services: [graph]        # default: every service in the file
+```
+
+```yaml
+# infra/docket-memory.compose.yaml - yours; docket never writes or rewrites it
+services:
+  graph:
+    image: ${DOCKET_NEO4J_IMAGE:?Set the approved image reference}
+    ports:
+      - "127.0.0.1:17687:7687"
+    environment:
+      NEO4J_AUTH: ${DOCKET_NEO4J_AUTH:?Set the local authentication value}
+    volumes:
+      - graph-data:/data
+volumes:
+  graph-data: {}
+```
+
+docket has no images of its own: the image is exactly what the Compose file
+resolves, an internal registry tag or digest included, and registry logins are
+Docker's own. Commands, entrypoints, health checks, networks and extra services
+all go in the Compose file.
+
+- `docket runtime plan <id>` checks the group and the Compose file (through
+  `docker compose config`, which starts nothing) and prints each service's
+  image, ports, volumes and environment variable names - never their values -
+  with the exact commands `up`, `status` and `down` run.
+- `docket runtime up <id>` runs `docker compose up --detach --pull <pullPolicy>
+  --no-build`: Compose enforces the pull policy, and a Compose too old to
+  support it fails rather than pulling. docket never builds images.
+- `docket runtime status <id>` lists the project's containers by Compose
+  label (`docker ps`), so it changes nothing and needs none of the Compose
+  file's variables set.
+- `docket runtime down <id>` runs `docker compose --project-name <projectName>
+  down` without the Compose file, so it too needs none of the file's variables
+  set, and keeps named volumes. Only `--destroy-volumes` adds `--volumes`;
+  `docket rebuild` never touches containers or volumes.
 
 ## Claude Code plugin
 
