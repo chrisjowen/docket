@@ -491,7 +491,27 @@ confidence rule in the ontology. Adding, removing or reconfiguring a projection
 makes the next sync reproject everything, so a newly added mem0 receives the
 whole repository.
 
-New projections plug in through the `MemoryProjection` interface.
+New engines plug in as memory adapters, through the contracts in
+[`packages/contracts`](packages/contracts) (`@docket/contracts`, not published
+on its own; its code ships bundled inside `@chrisjowen/docket`, which also
+exports its types). The three projections above already run through it, wrapped as
+compatibility adapters, and a program can open a docket with more:
+
+```ts
+import { createDocket } from '@chrisjowen/docket'
+
+const docket = await createDocket({
+  projectRoot,
+  // A compiled module relative to .docket.yaml, or a package installed in the project.
+  adapters: [{ id: 'company-memory', module: './tools/docket/company-memory.mjs', config }],
+  // Or a definition passed in directly.
+  registrations: [{ id: 'other-memory', definition, config }]
+})
+```
+
+docket never installs an adapter package, and runs a `.ts` adapter only with a
+TypeScript runner passed as `typescript`. Configuring adapters in
+`.docket.yaml` is the next step of [`docs/adapter-spec.md`](docs/adapter-spec.md).
 
 ## Claude Code plugin
 
@@ -505,9 +525,10 @@ Agents never write to an index. See its
 ```bash
 pnpm install
 pnpm typecheck   # sources and tests
-pnpm build       # the web UI first, then docket, which ships a copy of it;
-                 # the end-to-end tests run the built CLI, so build first
-pnpm test        # the CLI's suite and the plugin's hook tests
+pnpm build       # the adapter contracts and the web UI first, then docket,
+                 # which ships a copy of the UI; the end-to-end tests run
+                 # the built CLI, so build first
+pnpm test        # the contracts', the CLI's and the plugin's suites
 ```
 
 To work on the web UI with hot reload, run `docket open --no-open` in a

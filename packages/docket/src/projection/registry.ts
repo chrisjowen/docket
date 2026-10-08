@@ -5,8 +5,9 @@ import { createNeo4jProjection } from './neo4j/neo4j-projection.js'
 import type { MemoryProjection } from './projection.js'
 
 /**
- * Built-in registry (spec §44). Dynamic package loading - e.g.
- * `type: "@company/memory-kuzu"` - would be a fallback on this lookup miss.
+ * Built-in registry (spec §44): the projection a v1 config entry names. The
+ * compatibility adapter definitions in `adapters/compat.ts` create projections
+ * through it; other adapters are loaded as modules (docs/adapter-spec.md §4).
  */
 export function createProjection(config: ProjectionConfig): MemoryProjection {
   switch (config.type) {
@@ -21,8 +22,4 @@ export function createProjection(config: ProjectionConfig): MemoryProjection {
       throw new Error(`Unknown projection type "${String(type)}". Known types: jsonl, mem0, neo4j.`)
     }
   }
-}
-
-export function createProjections(configs: readonly ProjectionConfig[]): MemoryProjection[] {
-  return configs.map(createProjection)
 }

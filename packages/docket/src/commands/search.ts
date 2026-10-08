@@ -1,8 +1,14 @@
-import { stateRootOf } from '../config/config.js'
+import { randomUUID } from 'node:crypto'
+
+import type { AdapterAnswer, AskRequest, MemoryAdapter } from '@docket/contracts'
+
+import { DEFAULT_SCOPE, openDocket } from '../adapters/docket.js'
 import { warning, type Diagnostic } from '../model/index.js'
-import type { MemoryProjection, SearchHit } from '../projection/projection.js'
-import { createProjections } from '../projection/registry.js'
+import type { SearchHit } from '../projection/projection.js'
 import { validate } from './validate.js'
+
+/** Search sets no deadline of its own; this only bounds an adapter that honours one. */
+const SEARCH_DEADLINE_MS = 10 * 60_000
 
 export const DEFAULT_SEARCH_LIMIT = 10
 
@@ -61,26 +67,24 @@ export const search = async (
   const known = new Map(scanned.documents.map((document) => [document.id, document]))
   const entities = new Map(scanned.entities.map((entity) => [entity.id, entity]))
 
-  const projections = createProjections(resolved.config.projections)
-  const context = {
-    projectRoot: resolved.projectRoot,
-    memoryRoot: resolved.memoryRoot,
-    stateRoot: stateRootOf(resolved)
-  }
-  const names = uniqueNames(projections)
+  // Every configured adapter enabled for query, asked through the adapter
+  // contract (docs/adapter-spec.md §15 step 1).
+  const docket = await openDocket(resolved)
+  const slots = docket.adapters.filter((slot) => slot.roles.includes('query'))
 
   const answers = await Promise.all(
-    projections.map(async (projection, index): Promise<SourceResult | null> => {
-      if (!projection.search) return null
-      const name = names[index] ?? projection.name
+    slots.map(async (slot): Promise<SourceResult | null> => {
+      let adapter: MemoryAdapter | undefined
       try {
-        await projection.init?.(context)
-        const answer = await projection.search(query, limit)
-        return { name, hits: answer.hits, ...(answer.note ? { note: answer.note } : {}) }
+        adapter = await slot.create()
+        if (!adapter.query) return null
+        const answer = await adapter.query.ask(askRequest(query, limit))
+        const note = answer.interpretation.description
+        return { name: slot.id, hits: hitsOf(answer), ...(note ? { note } : {}) }
       } catch (cause) {
-        return { name, hits: [], error: cause instanceof Error ? cause.message : String(cause) }
+        return { name: slot.id, hits: [], error: cause instanceof Error ? cause.message : String(cause) }
       } finally {
-        await projection.close?.().catch(() => undefined)
+        await adapter?.close().catch(() => undefined)
       }
     })
   )
@@ -133,12 +137,32 @@ export const search = async (
   return { query, sources, documents, diagnostics }
 }
 
-/** Two projections of one type would share a name; number the repeats so answers stay apart. */
-const uniqueNames = (projections: readonly MemoryProjection[]): string[] => {
-  const seen = new Map<string, number>()
-  return projections.map((projection) => {
-    const count = (seen.get(projection.name) ?? 0) + 1
-    seen.set(projection.name, count)
-    return count === 1 ? projection.name : `${projection.name}#${count}`
-  })
+const askRequest = (question: string, limit: number): AskRequest => {
+  const now = new Date()
+  return {
+    requestId: randomUUID(),
+    question,
+    context: {
+      scope: DEFAULT_SCOPE,
+      now: now.toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    },
+    budget: {
+      maxResults: limit,
+      maxEvidenceBytes: Number.MAX_SAFE_INTEGER,
+      deadline: new Date(now.getTime() + SEARCH_DEADLINE_MS).toISOString()
+    }
+  }
 }
+
+/** The documents an answer's entity blocks name, in its own order and terms. */
+const hitsOf = (answer: AdapterAnswer): SearchHit[] =>
+  answer.blocks.flatMap((block) =>
+    block.kind === 'entities'
+      ? block.entities.filter((item) => item.ref.kind === 'entity').map((item) => ({
+          id: item.ref.id,
+          ...(item.score !== undefined ? { score: item.score } : {}),
+          ...(item.detail !== undefined ? { detail: item.detail } : {})
+        }))
+      : []
+  )

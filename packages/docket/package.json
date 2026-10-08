@@ -20,6 +20,15 @@
     "directory": "packages/docket"
   },
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "docket": "./dist/cli.js"
   },
@@ -33,7 +42,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json && mkdir -p dist/ontology && cp src/ontology/*.yaml dist/ontology/ && node scripts/copy-ui.mjs",
+    "build": "rm -rf dist && tsc -p tsconfig.json && node scripts/bundle-contracts.mjs && mkdir -p dist/ontology && cp src/ontology/*.yaml dist/ontology/ && node scripts/copy-ui.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
@@ -59,6 +68,7 @@
     }
   },
   "devDependencies": {
+    "@docket/contracts": "workspace:*",
     "@qdrant/js-client-rest": "^1.18.0",
     "@types/node": "^22.10.2",
     "mem0ai": "^3.3.1",

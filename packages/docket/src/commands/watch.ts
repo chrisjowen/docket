@@ -1,8 +1,8 @@
-import { stateRootOf, type ResolvedConfig } from '../config/config.js'
+import { openDocket } from '../adapters/docket.js'
+import type { ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import { error } from '../model/diagnostic.js'
 import { ProjectionManager } from '../projection/manager.js'
-import { createProjections } from '../projection/registry.js'
 import {
   createReconciler,
   type WatchEvent,
@@ -66,14 +66,7 @@ export const watch = async (
   const resolved = await loadConfig(options.cwd)
   const report = options.report ?? consoleReporter
 
-  const manager = new ProjectionManager(
-    createProjections(resolved.config.projections)
-  )
-  await manager.init({
-    projectRoot: resolved.projectRoot,
-    memoryRoot: resolved.memoryRoot,
-    stateRoot: stateRootOf(resolved)
-  })
+  const manager = await ProjectionManager.open((await openDocket(resolved)).adapters)
 
   report({ kind: 'watching', root: resolved.memoryRoot })
   const reconciler = createReconciler(resolved, manager, report)

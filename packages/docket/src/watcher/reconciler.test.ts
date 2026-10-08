@@ -7,6 +7,7 @@ import type { ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import { init } from '../commands/init.js'
 import type { Diagnostic } from '../model/diagnostic.js'
+import { projectionAdapter } from '../adapters/compat.js'
 import { ProjectionManager } from '../projection/manager.js'
 import type { MemoryProjection } from '../projection/projection.js'
 import { createReconciler, type WatchEvent } from './reconciler.js'
@@ -39,7 +40,7 @@ const harness = async (): Promise<Harness> => {
     flush: vi.fn(async () => {})
   }
   const manager = new ProjectionManager([
-    { name: 'fake', ...projection } satisfies MemoryProjection
+    { id: 'fake', adapter: projectionAdapter({ name: 'fake', ...projection } satisfies MemoryProjection) }
   ])
   const events: WatchEvent[] = []
 

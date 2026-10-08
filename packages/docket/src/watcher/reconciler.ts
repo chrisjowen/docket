@@ -167,7 +167,7 @@ export const createReconciler = (
 
     for (const id of plan.removals) {
       const entry = projected[id]
-      await manager.remove(id)
+      await manager.remove(id, entry?.hash)
       delete projected[id]
       dirty = true
       pending.push({ kind: 'removed', id, path: entry?.path ?? '' })
