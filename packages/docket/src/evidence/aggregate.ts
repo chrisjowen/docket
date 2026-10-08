@@ -1,3 +1,5 @@
+import { stableStringify } from '@docket/adapter-kit'
+
 import {
   type Diagnostic,
   type EntityLink,
@@ -7,7 +9,6 @@ import {
   error,
   warning
 } from '../model/index.js'
-import { stableStringify } from '../model/stable-json.js'
 import { hashContent } from '../source/hashing.js'
 import { assess, type ConfidenceModel } from './confidence.js'
 

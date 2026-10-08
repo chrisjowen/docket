@@ -1,7 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { stableStringify } from '../model/stable-json.js'
+import { stableStringify } from '@docket/adapter-kit'
+
 import { hashContent } from '../source/hashing.js'
 import type { UiPath } from './types.js'
 

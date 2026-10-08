@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.28.2",
   "scripts": {
-    "build": "pnpm --filter @docket/contracts build && pnpm --filter @chrisjowen/docket-ui build && pnpm --filter @chrisjowen/docket build",
+    "build": "pnpm --filter \"@docket/*\" build && pnpm --filter @chrisjowen/docket-ui build && pnpm --filter @chrisjowen/docket build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   }

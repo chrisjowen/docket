@@ -1,5 +1,7 @@
-import { open, readFile, mkdir, rename } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+import { writeFileAtomic } from '@docket/adapter-kit'
 
 export const MANIFEST_FILENAME = 'manifest.json'
 export const MANIFEST_VERSION = 1
@@ -79,23 +81,4 @@ export async function writeManifest(outputDir: string, manifest: IndexManifest):
     2
   )
   await writeFileAtomic(manifestPath(outputDir), `${serialized}\n`)
-}
-
-/**
- * Temp file + rename, because rename is atomic on the same filesystem: a crash
- * mid-write leaves the previous index intact rather than a half-written one
- * (spec §68). Lives here as the lowest-level index writer; the projections
- * depend on the manifest, never the other way round.
- */
-export async function writeFileAtomic(filePath: string, contents: string): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true })
-  const temporary = `${filePath}.${process.pid}.tmp`
-  const handle = await open(temporary, 'w')
-  try {
-    await handle.writeFile(contents, 'utf8')
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-  await rename(temporary, filePath)
 }

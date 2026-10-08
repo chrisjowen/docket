@@ -6,7 +6,7 @@ import type {
   DocumentRecord,
   EdgeRecord,
   NodeRecord
-} from '../src/projection/jsonl/jsonl-projection.js'
+} from '@docket/adapter-jsonl'
 import {
   INDEX,
   indexDigests,

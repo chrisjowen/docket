@@ -14,5 +14,5 @@ export {
   type OpenDocketOptions
 } from './adapters/docket.js'
 export { loadAdapterDefinition } from './adapters/loader.js'
-export type { TypeScriptRunner } from './adapters/resolve-module.js'
+export type { AdapterDistribution, TypeScriptRunner } from './adapters/resolve-module.js'
 export type * from '@docket/contracts'

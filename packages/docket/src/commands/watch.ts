@@ -66,10 +66,11 @@ export const watch = async (
   const resolved = await loadConfig(options.cwd)
   const report = options.report ?? consoleReporter
 
-  const manager = await ProjectionManager.open((await openDocket(resolved)).adapters)
+  const docket = await openDocket(resolved)
+  const manager = await ProjectionManager.open(docket.adapters)
 
   report({ kind: 'watching', root: resolved.memoryRoot })
-  const reconciler = createReconciler(resolved, manager, report)
+  const reconciler = createReconciler(resolved, manager, report, docket.projectionsFingerprint)
   await reconciler.sync()
 
   const fail = (cause: unknown): void => {

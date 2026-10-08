@@ -8,7 +8,7 @@ import type {
   DocumentRecord,
   EdgeRecord,
   NodeRecord
-} from '../src/projection/jsonl/jsonl-projection.js'
+} from '@docket/adapter-jsonl'
 import type { WatchEvent } from '../src/watcher/reconciler.js'
 import {
   CLI,

@@ -1,15 +1,20 @@
+import { entityProjectionAdapter, type EntityProjection } from '@docket/adapter-kit'
+import type { MemoryAdapter } from '@docket/contracts'
 import { describe, expect, it, vi } from 'vitest'
 
 import { entityOf, makeDocument } from '../../test/entities.js'
-import { projectionAdapter } from '../adapters/compat.js'
+import { toEntityInput } from '../adapters/compat.js'
 import type { AdapterSlot } from '../adapters/docket.js'
 import { ProjectionManager } from './manager.js'
-import type { MemoryProjection } from './projection.js'
-import { createProjection } from './registry.js'
 
 const document = entityOf(makeDocument({ id: 'agent.a', title: 'A', path: '.docket/a.md' }))
+/** What a projection receives for `document`. */
+const input = toEntityInput(document, 'default')
 
-function fakeProjection(name: string, overrides: Partial<MemoryProjection> = {}): MemoryProjection {
+const projectionAdapter = (projection: EntityProjection): MemoryAdapter =>
+  entityProjectionAdapter(projection, { version: '0.0.0' })
+
+function fakeProjection(name: string, overrides: Partial<EntityProjection> = {}): EntityProjection {
   return {
     name,
     init: vi.fn(async () => {}),
@@ -21,10 +26,10 @@ function fakeProjection(name: string, overrides: Partial<MemoryProjection> = {})
   }
 }
 
-const managed = (...projections: MemoryProjection[]) =>
+const managed = (...projections: EntityProjection[]) =>
   projections.map((projection) => ({ id: projection.name, adapter: projectionAdapter(projection) }))
 
-const slot = (id: string, create: () => Promise<ReturnType<typeof projectionAdapter>>): AdapterSlot => ({
+const slot = (id: string, create: () => Promise<MemoryAdapter>): AdapterSlot => ({
   id,
   name: id,
   source: 'registration',
@@ -44,7 +49,7 @@ describe('ProjectionManager', () => {
     await manager.close()
 
     for (const projection of [a, b]) {
-      expect(projection.upsert).toHaveBeenCalledWith(document)
+      expect(projection.upsert).toHaveBeenCalledWith(input)
       expect(projection.remove).toHaveBeenCalledWith('agent.a')
       expect(projection.reset).toHaveBeenCalled()
       expect(projection.close).toHaveBeenCalled()
@@ -52,7 +57,7 @@ describe('ProjectionManager', () => {
   })
 
   it('tolerates projections without optional hooks', async () => {
-    const minimal: MemoryProjection = {
+    const minimal: EntityProjection = {
       name: 'minimal',
       upsert: vi.fn(async () => {}),
       remove: vi.fn(async () => {})
@@ -71,7 +76,7 @@ describe('ProjectionManager', () => {
     const manager = new ProjectionManager(managed(failing, healthy))
 
     await expect(manager.upsert(document)).rejects.toThrow(/projection upsert failed: failing/)
-    expect(healthy.upsert).toHaveBeenCalledWith(document)
+    expect(healthy.upsert).toHaveBeenCalledWith(input)
   })
 
   it('treats failed and unacknowledged changes as failures', async () => {
@@ -131,20 +136,5 @@ describe('ProjectionManager', () => {
     const create = vi.fn(async () => projectionAdapter(fakeProjection('query-only')))
     await ProjectionManager.open([{ ...slot('query-only', create), roles: ['query'] }])
     expect(create).not.toHaveBeenCalled()
-  })
-})
-
-describe('registry', () => {
-  it('creates the built-in projections', () => {
-    expect(createProjection({ type: 'jsonl', output: '.docket/.index' }).name).toBe('jsonl')
-    expect(
-      createProjection({ type: 'mem0', mode: 'oss', config: {} }).name
-    ).toBe('mem0')
-  })
-
-  it('rejects an unknown projection type', () => {
-    expect(() =>
-      createProjection({ type: 'kuzu', output: 'x' } as unknown as { type: 'jsonl'; output: string })
-    ).toThrow(/Unknown projection type "kuzu"/)
   })
 })

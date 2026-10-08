@@ -434,9 +434,19 @@ ontologyCommand
     }
   })
 
+/**
+ * An error as one line, and for several adapters failing at once each one's
+ * own cause beneath it - the part that says what to install or set.
+ */
+const describeFailure = (cause: unknown, indent = ''): string => {
+  const line = `${indent}${cause instanceof Error ? cause.message : String(cause)}`
+  if (!(cause instanceof AggregateError)) return line
+  return [line, ...cause.errors.map((inner: unknown) => describeFailure(inner, `${indent}  `))].join('\n')
+}
+
 try {
   await program.parseAsync(process.argv)
 } catch (cause) {
-  console.error(cause instanceof Error ? cause.message : String(cause))
+  console.error(describeFailure(cause))
   process.exitCode = 1
 }

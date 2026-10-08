@@ -17,12 +17,16 @@ import {
   type MemoryAdapter
 } from '@docket/contracts'
 
-import { stateRootOf, type ResolvedConfig } from '../config/config.js'
+import { stableStringify } from '@docket/adapter-kit'
+
+import { stateRootOf, V1_PROJECTION_MODULES, type ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import { validate } from '../commands/validate.js'
-import { compatDefinitions, toEntityInput } from './compat.js'
+import { hashContent } from '../source/hashing.js'
+import { toEntityInput } from './compat.js'
+import { standardDistribution } from './distribution.js'
 import { loadAdapterDefinition } from './loader.js'
-import type { TypeScriptRunner } from './resolve-module.js'
+import type { AdapterDistribution, TypeScriptRunner } from './resolve-module.js'
 
 /**
  * The Docket scope everything runs in. v1 configuration has no scope of its
@@ -61,7 +65,7 @@ export interface AdapterSlot {
   readonly id: string
   /** The definition's name. */
   readonly name: string
-  /** Where the definition came from: `builtin:<type>`, a module reference, or `registration`. */
+  /** Where the definition came from: a module reference, or `registration`. */
   readonly source: string
   readonly roles: readonly AdapterRole[]
   /**
@@ -74,6 +78,12 @@ export interface AdapterSlot {
 export interface Docket {
   readonly resolved: ResolvedConfig
   readonly adapters: readonly AdapterSlot[]
+  /**
+   * The v1 projections as their adapters read them, hashed: changes whenever
+   * one is added, removed or reconfigured, so sync's manifest knows when it
+   * no longer vouches for what they hold.
+   */
+  readonly projectionsFingerprint: string
 }
 
 export interface OpenDocketOptions {
@@ -83,6 +93,8 @@ export interface OpenDocketOptions {
   typescript?: TypeScriptRunner | undefined
   /** Read-only canonical access handed to adapters. Defaults to the project's own files. */
   canonical?: CanonicalReader | undefined
+  /** The adapter packages this docket ships with. Defaults to the standard distribution's. */
+  distribution?: AdapterDistribution | undefined
 }
 
 export interface CreateDocketOptions extends OpenDocketOptions {
@@ -92,43 +104,46 @@ export interface CreateDocketOptions extends OpenDocketOptions {
 
 /**
  * Opens the project's docket: the v1 projections its `.docket.yaml`
- * configures, through compatibility definitions, then any adapters loaded by
+ * configures, each served by its adapter package, then any adapters loaded by
  * module reference or registered directly - all driven through the adapter
- * contract (docs/adapter-spec.md §4, §12).
+ * contract (docs/adapter-spec.md §4, §12, §15 step 2).
  */
 export const createDocket = async (options: CreateDocketOptions = {}): Promise<Docket> =>
   openDocket(await loadConfig(options.projectRoot), options)
 
 /** `createDocket` for a config already loaded. */
 export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOptions = {}): Promise<Docket> => {
-  const builtins = compatDefinitions({
-    projectRoot: resolved.projectRoot,
-    memoryRoot: resolved.memoryRoot,
-    stateRoot: stateRootOf(resolved)
-  })
+  const load = (id: string, module: string): Promise<AdapterDefinition> =>
+    loadAdapterDefinition(module, {
+      id,
+      projectRoot: resolved.projectRoot,
+      typescript: options.typescript,
+      distribution: options.distribution ?? standardDistribution
+    })
 
-  const pending: { id: string; source: string; definition: unknown; config: unknown; roles?: AdapterRole[] | undefined }[] = []
+  const pending: {
+    id: string
+    source: string
+    definition: unknown
+    config: unknown
+    roles?: AdapterRole[] | undefined
+    v1?: true
+  }[] = []
 
   const projectionIds = projectionInstanceIds(resolved.config.projections)
-  resolved.config.projections.forEach((config, index) => {
-    pending.push({
-      id: projectionIds[index]!,
-      source: `builtin:${config.type}`,
-      definition: builtins[config.type],
-      config
-    })
-  })
+  for (const [index, { runtime: _runtime, ...config }] of resolved.config.projections.entries()) {
+    // The runtime reference is the docket's, not the projection's (adapter spec §6).
+    const id = projectionIds[index]!
+    const module = V1_PROJECTION_MODULES[config.type]
+    pending.push({ id, source: module, definition: await load(id, module), config, v1: true })
+  }
 
   for (const reference of options.adapters ?? []) {
     checkId(reference.id)
     pending.push({
       id: reference.id,
       source: reference.module,
-      definition: await loadAdapterDefinition(reference.module, {
-        id: reference.id,
-        projectRoot: resolved.projectRoot,
-        typescript: options.typescript
-      }),
+      definition: await load(reference.id, reference.module),
       config: reference.config,
       roles: reference.roles
     })
@@ -140,6 +155,7 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
 
   const ids = new Set<string>()
   const canonical = options.canonical ?? projectCanonicalReader(resolved)
+  const v1Configs: unknown[] = []
   const adapters = pending.map((entry): AdapterSlot => {
     checkId(entry.id)
     if (ids.has(entry.id)) throw new Error(`Adapter id "${entry.id}" is used more than once; instance ids must be unique.`)
@@ -155,6 +171,7 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
         { cause }
       )
     }
+    if (entry.v1) v1Configs.push(config)
 
     const roles = entry.roles ?? ALL_ROLES
     for (const role of roles) {
@@ -179,7 +196,7 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
     }
   })
 
-  return { resolved, adapters }
+  return { resolved, adapters, projectionsFingerprint: hashContent(stableStringify(v1Configs)) }
 }
 
 /**

@@ -1,6 +1,7 @@
+import { ollamaChat, type Chat, type ChatPrompt } from '@docket/adapter-kit'
+
 import type { SummarizeConfig } from '../config/config.js'
 import { ClaudeNotFoundError, claudeChat } from '../llm/claude-chat.js'
-import { ollamaChat, type Chat, type ChatPrompt } from '../llm/ollama-chat.js'
 import type { MemoryEntity } from '../model/index.js'
 import { askCasebook } from './ask.js'
 import {

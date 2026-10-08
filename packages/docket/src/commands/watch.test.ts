@@ -18,7 +18,7 @@ import {
   EDGES_FILENAME,
   type DocumentRecord,
   type EdgeRecord
-} from '../projection/jsonl/jsonl-projection.js'
+} from '@docket/adapter-jsonl'
 import type { WatchEvent } from '../watcher/reconciler.js'
 import { init } from './init.js'
 import { watch, type WatchHandle } from './watch.js'

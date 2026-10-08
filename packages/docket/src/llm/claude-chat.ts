@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 
-import type { Chat } from './ollama-chat.js'
+import type { Chat } from '@docket/adapter-kit'
 
 export interface ClaudeChatConfig {
   /** Passed as `--model` when set; else Claude Code's own default. */

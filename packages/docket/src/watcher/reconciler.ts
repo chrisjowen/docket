@@ -75,7 +75,9 @@ const NO_ONTOLOGY: Ontology = { version: 1, resourceTypes: {}, relationships: {}
 export const createReconciler = (
   resolved: ResolvedConfig,
   manager: ProjectionManager,
-  report: WatchReporter
+  report: WatchReporter,
+  /** The docket's `projectionsFingerprint`, which the manifest is kept under. */
+  projections: string
 ): Reconciler => {
   const files = new Map<string, SourceFile>()
   let projected: IndexManifest['documents'] = {}
@@ -104,7 +106,7 @@ export const createReconciler = (
   const seed = async (): Promise<void> => {
     if (seeded) return
     seeded = true
-    const { manifest, stale } = await loadManifestState(resolved)
+    const { manifest, stale } = await loadManifestState(resolved, projections)
     if (stale) await manager.reset()
     projected = { ...manifest.documents }
   }
@@ -135,7 +137,7 @@ export const createReconciler = (
   const commit = async (): Promise<void> => {
     if (!dirty) return
     await manager.flush()
-    await saveManifest(resolved, projected)
+    await saveManifest(resolved, projections, projected)
     dirty = false
     const committed = pending
     pending = []

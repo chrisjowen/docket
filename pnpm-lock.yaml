@@ -8,6 +8,103 @@ importers:
 
   .: {}
 
+  packages/adapter-jsonl:
+    dependencies:
+      '@docket/adapter-kit':
+        specifier: workspace:*
+        version: link:../adapter-kit
+      '@docket/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
+  packages/adapter-kit:
+    dependencies:
+      '@docket/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
+  packages/adapter-mem0:
+    dependencies:
+      '@docket/adapter-kit':
+        specifier: workspace:*
+        version: link:../adapter-kit
+      '@docket/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      mem0ai:
+        specifier: ^3.3.1
+        version: 3.3.1(@cloudflare/workers-types@4.20260702.1)(@qdrant/js-client-rest@1.18.0(typescript@5.9.3))(better-sqlite3@12.11.1)(compromise@14.17.0)(ollama@0.5.18)
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.5
+    devDependencies:
+      '@qdrant/js-client-rest':
+        specifier: ^1.18.0
+        version: 1.18.0(typescript@5.9.3)
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      ollama:
+        specifier: ^0.5.18
+        version: 0.5.18
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
+  packages/adapter-neo4j:
+    dependencies:
+      '@docket/adapter-kit':
+        specifier: workspace:*
+        version: link:../adapter-kit
+      '@docket/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      neo4j-driver:
+        specifier: ^6.2.0
+        version: 6.2.0
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
   packages/claude-plugin: {}
 
   packages/contracts:
@@ -37,6 +134,12 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
+      mem0ai:
+        specifier: ^3.3.1
+        version: 3.3.1(@cloudflare/workers-types@4.20260702.1)(@qdrant/js-client-rest@1.18.0(typescript@5.9.3))(better-sqlite3@12.11.1)(compromise@14.17.0)(ollama@0.5.18)
+      neo4j-driver:
+        specifier: ^6.0.0
+        version: 6.2.0
       yaml:
         specifier: ^2.8.1
         version: 2.9.1
@@ -44,24 +147,24 @@ importers:
         specifier: ^4.1.12
         version: 4.6.5
     devDependencies:
+      '@docket/adapter-jsonl':
+        specifier: workspace:*
+        version: link:../adapter-jsonl
+      '@docket/adapter-kit':
+        specifier: workspace:*
+        version: link:../adapter-kit
+      '@docket/adapter-mem0':
+        specifier: workspace:*
+        version: link:../adapter-mem0
+      '@docket/adapter-neo4j':
+        specifier: workspace:*
+        version: link:../adapter-neo4j
       '@docket/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@qdrant/js-client-rest':
-        specifier: ^1.18.0
-        version: 1.18.0(typescript@5.9.3)
       '@types/node':
         specifier: ^22.10.2
         version: 22.20.4
-      mem0ai:
-        specifier: ^3.3.1
-        version: 3.3.1(@cloudflare/workers-types@4.20260702.1)(@qdrant/js-client-rest@1.18.0(typescript@5.9.3))(better-sqlite3@12.11.1)(compromise@14.17.0)(ollama@0.5.18)
-      neo4j-driver:
-        specifier: ^6.2.0
-        version: 6.2.0
-      ollama:
-        specifier: ^0.5.18
-        version: 0.5.18
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

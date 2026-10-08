@@ -43,7 +43,7 @@ export const reconcile = async (
   if (ontology === null) return result
 
   // The configured projections, created and driven through the adapter
-  // contract (docs/adapter-spec.md §15 step 1).
+  // contract (docs/adapter-spec.md §15).
   const docket = await openDocket(resolved)
   const manager = await ProjectionManager.open(docket.adapters)
 
@@ -51,7 +51,7 @@ export const reconcile = async (
   // so that case is a rebuild too - e.g. mem0 just added to the config.
   const state = options.fresh
     ? { manifest: emptyManifest(), stale: true }
-    : await loadManifestState(resolved)
+    : await loadManifestState(resolved, docket.projectionsFingerprint)
   if (state.stale) await manager.reset()
 
   // Projections receive entities - every file that declares an id, merged -
@@ -65,7 +65,7 @@ export const reconcile = async (
     // Once per pass, and before the manifest: the manifest vouches for what
     // the projections hold, so it must never get ahead of them.
     await manager.flush()
-    await saveManifest(resolved, plan.next)
+    await saveManifest(resolved, docket.projectionsFingerprint, plan.next)
   } finally {
     await manager.close()
   }
