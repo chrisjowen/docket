@@ -7,6 +7,7 @@ import {
   emptyRecords,
   listAdapterManifests,
   readAdapterManifest,
+  resetPendingFingerprint,
   type AdapterManifest
 } from './adapter-manifest.js'
 import { entryPaths, manifestPath, readManifest } from './manifest.js'
@@ -22,9 +23,11 @@ import { entryPaths, manifestPath, readManifest } from './manifest.js'
  *   this instance's exact module, configuration and scope - a renamed instance.
  * - `created`: none was found, so nothing is known of what the instance holds.
  * - `reconfigured`: its own, written for another endpoint, scope or configuration.
+ * - `interrupted`: its own, left by a reset or rebuild that never finished -
+ *   one that threw, was interrupted, or whose flush failed.
  * - `rebuilt`: `docket rebuild` discards it.
  */
-export type ManifestOrigin = 'current' | 'migrated' | 'adopted' | 'created' | 'reconfigured' | 'rebuilt'
+export type ManifestOrigin = 'current' | 'migrated' | 'adopted' | 'created' | 'reconfigured' | 'interrupted' | 'rebuilt'
 
 /** What identifies an adapter instance's manifest. */
 export interface ManifestIdentity {
@@ -121,7 +124,8 @@ export const loadAdapterManifests = async (
       continue
     }
     if (own) {
-      loaded.set(identity.id, { manifest: empty(identity), origin: 'reconfigured', reset: true })
+      const interrupted = own.fingerprint === resetPendingFingerprint(identity.fingerprint) && own.scope === identity.scope
+      loaded.set(identity.id, { manifest: empty(identity), origin: interrupted ? 'interrupted' : 'reconfigured', reset: true })
       continue
     }
 

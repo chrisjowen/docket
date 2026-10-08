@@ -49,6 +49,9 @@ export interface AdapterManifest {
   records: Record<InputKind, Record<string, RecordEntry>>
 }
 
+/** The fingerprint a manifest carries while its instance's reset is unfinished: it matches no configuration. */
+export const resetPendingFingerprint = (fingerprint: string): string => `reset-pending:${fingerprint}`
+
 export const emptyRecords = (): AdapterManifest['records'] => ({ entity: {}, observation: {}, document: {} })
 
 export const manifestsDir = (stateRoot: string): string => join(stateRoot, MANIFESTS_DIRNAME)

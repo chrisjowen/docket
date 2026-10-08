@@ -15,6 +15,7 @@ import {
   emptyRecords,
   INPUT_KINDS,
   removeAdapterManifest,
+  resetPendingFingerprint,
   writeAdapterManifest,
   type AdapterManifest
 } from '../manifest/adapter-manifest.js'
@@ -177,7 +178,7 @@ class ProjectionTarget {
       if (this.reset) {
         await writeAdapterManifest(stateRootOf(this.context.resolved), {
           ...this.manifest,
-          fingerprint: `reset-pending:${this.slot.fingerprint}`,
+          fingerprint: resetPendingFingerprint(this.slot.fingerprint),
           owners: {},
           records: emptyRecords()
         })

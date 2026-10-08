@@ -359,7 +359,7 @@ describe('ProjectionManager', () => {
 
     resetFails = false
     const [retried] = await pass(slots('endpoint-b'), stateOf(ORDERS))
-    expect([retried?.origin, retried?.reset, retried?.upserted.length]).toEqual(['reconfigured', true, 3])
+    expect([retried?.origin, retried?.reset, retried?.upserted.length]).toEqual(['interrupted', true, 3])
     expect(store.resets).toEqual(['default', 'default'])
     expect([...store.records.keys()].some((record) => record.includes('service.billing'))).toBe(false)
 
@@ -385,7 +385,7 @@ describe('ProjectionManager', () => {
 
     flushFails = false
     const [synced] = await pass(slots, stateOf(ORDERS))
-    expect([synced?.origin, synced?.reset, synced?.upserted.length, synced?.unchanged]).toEqual(['reconfigured', true, 3, 0])
+    expect([synced?.origin, synced?.reset, synced?.upserted.length, synced?.unchanged]).toEqual(['interrupted', true, 3, 0])
     expect(store.records.size).toBe(3)
   })
 
@@ -399,7 +399,7 @@ describe('ProjectionManager', () => {
     store.records.clear()
 
     const [synced] = await pass(slots, stateOf(ORDERS))
-    expect([synced?.origin, synced?.reset, synced?.upserted.length]).toEqual(['reconfigured', true, 3])
+    expect([synced?.origin, synced?.reset, synced?.upserted.length]).toEqual(['interrupted', true, 3])
     expect(store.resets).toEqual(['default', 'default', 'default'])
     expect(store.records.size).toBe(3)
   })

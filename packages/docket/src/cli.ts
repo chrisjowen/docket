@@ -181,6 +181,8 @@ const manifestNote = (target: TargetReport): string => {
       return ' - carried over from a renamed instance'
     case 'reconfigured':
       return ' - reset: its endpoint, scope or configuration changed'
+    case 'interrupted':
+      return ' - reset: an earlier reset or rebuild did not finish'
     case 'created':
     case 'current':
     case 'rebuilt':
