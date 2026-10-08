@@ -1,0 +1,106 @@
+[
+  {
+    "args": [
+      "version"
+    ],
+    "code": 0,
+    "stdout": "memvid-cli 2.0.140\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "create",
+      "<state>/<creating>"
+    ],
+    "code": 0,
+    "stdout": "✓ Created memory at <state>/<creating>\n  Tier: Free\n  Capacity: 50.0 MB (52428800 bytes)\n  Size: 70.4 KB\n  Indexes: lexical | vector\n\nNext steps:\n  memvid put <state>/<creating> --input <file>     # Add content\n  memvid find <state>/<creating> --query <text>    # Search\n  memvid stats <state>/<creating>                  # View stats\n\nTip: Bind to a dashboard memory to unlock your plan's capacity:\n     memvid tickets sync <state>/<creating> --memory-id <MEMORY_ID>\nDocumentation: https://docs.memvid.com/cli/tickets-and-capacity\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "put",
+      "<state>/memory.mv2",
+      "--json",
+      "--uri",
+      "mv2://docket/contract-test/entity/service.orders/sha256%3A0001",
+      "--title",
+      "Orders",
+      "--track",
+      "docket",
+      "--kind",
+      "entity",
+      "--allow-duplicate",
+      "--no-embedding",
+      "--no-auto-tag",
+      "--no-extract-dates",
+      "--no-extract-triplets",
+      "--no-enrich",
+      "--lock-timeout",
+      "5000"
+    ],
+    "input": "# Orders\nservice service.orders\n\nTakes and fulfils customer orders. Stores them in the orders database.\n\nLinks:\n- depends_on datasource.orders-db\n\nTags: payments\n",
+    "code": 0,
+    "stdout": "{\n  \"processed\": 1,\n  \"ingested\": 1,\n  \"skipped\": 0,\n  \"bytes_input\": 162,\n  \"bytes_input_human\": \"162 B\",\n  \"bytes_stored\": 126,\n  \"bytes_stored_human\": \"126 B\",\n  \"reduction_percent\": 22.22222222222222,\n  \"embedded_documents\": 0,\n  \"embedding\": {\n    \"enabled\": false,\n    \"mode\": \"none\",\n    \"runtime_dimension\": null\n  },\n  \"tables\": {\n    \"enabled\": false,\n    \"extracted\": 0,\n    \"tables\": []\n  },\n  \"enrichment\": {\n    \"enabled\": false,\n    \"cards_extracted\": 0\n  },\n  \"capacity_reached\": false,\n  \"warnings\": [],\n  \"extraction\": {\n    \"total_duration_ms\": null,\n    \"total_pages_processed\": null\n  },\n  \"memory\": {\n    \"path\": \"<state>/memory.mv2\",\n    \"frame_count\": 1,\n    \"size_bytes\": 79547,\n    \"tier\": \"Free\"\n  },\n  \"reports\": [\n    {\n      \"seq\": 2,\n      \"uri\": \"mv2://docket/contract-test/entity/service.orders/sha256%3A0001\",\n      \"title\": \"Orders\",\n      \"original_bytes\": 162,\n      \"original_bytes_human\": \"162 B\",\n      \"stored_bytes\": 126,\n      \"stored_bytes_human\": \"126 B\",\n      \"compressed\": true,\n      \"mime\": \"text/plain\",\n      \"source\": null,\n      \"metadata\": {\n        \"mime\": \"text/plain\",\n        \"bytes\": 162,\n        \"hash\": \"7be04fb8a4930354bce82a805a324d5f273c359be49d740271c9ce7657f01273\",\n        \"width\": null,\n        \"height\": null,\n        \"colors\": null,\n        \"caption\": \"# Orders\",\n        \"exif\": null,\n        \"audio\": null,\n        \"media\": null\n      },\n      \"extraction\": {\n        \"status\": \"ok\",\n        \"reader\": \"bytes\",\n        \"duration_ms\": null,\n        \"pages_processed\": null,\n        \"warnings\": []\n      }\n    }\n  ]\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/contract-test/entity/service.orders/sha256%3A0001",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 0,\n    \"status\": \"active\",\n    \"timestamp\": 1791473820,\n    \"kind\": \"entity\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/contract-test/entity/service.orders/sha256%3A0001\",\n    \"title\": \"Orders\",\n    \"payload_length\": 0,\n    \"canonical_encoding\": \"Plain\",\n    \"canonical_length\": 0,\n    \"role\": \"Document\",\n    \"parent_id\": null,\n    \"chunk_index\": null,\n    \"chunk_count\": null,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"# Orders\\nservice service.orders\\nTakes and fulfils customer orders. Stores them in the orders database.\\nLinks:\\n- depends_on datasource.orders-db\\nTags: payments\\ntitle: Orders\\nuri: mv2://docket/contract-test/entity/service.orders/sha256%3A0001\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":162,\\\"hash\\\":\\\"7be04fb8a4930354bce82a805a324d5f273c359be49d740271c9ce7657f01273\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 162,\n      \"hash\": \"7be04fb8a4930354bce82a805a324d5f273c359be49d740271c9ce7657f01273\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"# Orders\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": \"7be04fb8a4930354bce82a805a324d5f273c359be49d740271c9ce7657f01273\",\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1200,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "timeline",
+      "<state>/memory.mv2",
+      "--json",
+      "--limit",
+      "1000000"
+    ],
+    "code": 0,
+    "stdout": "[\n  {\n    \"frame_id\": 0,\n    \"timestamp\": 1791473820,\n    \"preview\": \"# Orders\\nservice service.orders\\nTakes and fulfils customer orders. Stores them in the orders database.\\nLinks:\\n- depends_\",\n    \"uri\": \"mv2://docket/contract-test/entity/service.orders/sha256%3A0001\"\n  }\n]\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "0",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 0,\n  \"sequence\": 4,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "which OR service OR takes OR orders",
+      "--scope",
+      "mv2://docket/contract-test/",
+      "--top-k",
+      "10",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--snippet-chars",
+      "4000",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"version\": \"mv2.result.v2\",\n  \"query\": \"which OR service OR takes OR orders\",\n  \"metadata\": {\n    \"elapsed_ms\": 0,\n    \"total_hits\": 0,\n    \"next_cursor\": null,\n    \"engine\": \"tantivy\",\n    \"params\": {\n      \"top_k\": 10,\n      \"snippet_chars\": 4000,\n      \"mode\": \"text\",\n      \"additional_params\": {}\n    }\n  },\n  \"hits\": [],\n  \"context\": \"\"\n}\n",
+    "stderr": ""
+  }
+]

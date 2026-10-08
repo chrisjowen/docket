@@ -1,0 +1,110 @@
+[
+  {
+    "tool": "mempalace_list_wings",
+    "args": {},
+    "result": {
+      "error": "Chroma database missing",
+      "details": "Could not open missing database at <state>/palace/chroma.sqlite3.",
+      "hint": "Run: mempalace status or mempalace repair-status for diagnostics.",
+      "backend": "chroma"
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-contract",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "error": "Chroma database missing",
+      "details": "Could not open missing database at <state>/palace/chroma.sqlite3.",
+      "hint": "Run: mempalace status or mempalace repair-status for diagnostics.",
+      "backend": "chroma"
+    }
+  },
+  {
+    "tool": "mempalace_add_drawer",
+    "args": {
+      "wing": "docket-contract",
+      "room": "service",
+      "content": "docket entity service.orders (revision sha256:0001)\n\n# Orders\nservice service.orders\n\nTakes and fulfils customer orders. Stores them in the orders database.\n\nLinks:\n- depends_on datasource.orders-db\n\nTags: payments\n",
+      "source_file": "docket:docket-contract:entity:service.orders:sha256%3A0001",
+      "added_by": "docket"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-contract_service_5f74faa641455a1965c348c3",
+      "wing": "docket-contract",
+      "room": "service",
+      "chunks": 1
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-contract",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "drawers": [
+        {
+          "drawer_id": "drawer_docket-contract_service_5f74faa641455a1965c348c3",
+          "wing": "docket-contract",
+          "room": "service",
+          "content_preview": "docket entity service.orders (revision sha256:0001)\n\n# Orders\nservice service.orders\n\nTakes and fulfils customer orders. Stores them in the orders database.\n\nLinks:\n- depends_on datasource.orders-db\n\n...",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:25.277032",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:25.277032",
+            "room": "service",
+            "source_file": "docket:docket-contract:entity:service.orders:sha256%3A0001",
+            "wing": "docket-contract"
+          }
+        }
+      ],
+      "total": 1,
+      "count": 1,
+      "offset": 0,
+      "limit": 100
+    }
+  },
+  {
+    "tool": "mempalace_delete_drawer",
+    "args": {
+      "drawer_id": "drawer_docket-contract_service_5f74faa641455a1965c348c3"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-contract_service_5f74faa641455a1965c348c3",
+      "deleted_ids": [
+        "drawer_docket-contract_service_5f74faa641455a1965c348c3"
+      ],
+      "chunks_deleted": 1,
+      "closets_deleted": 0
+    }
+  },
+  {
+    "tool": "mempalace_search",
+    "args": {
+      "query": "Which service takes orders?",
+      "wing": "docket-contract",
+      "limit": 10
+    },
+    "result": {
+      "query": "Which service takes orders?",
+      "filters": {
+        "wing": "docket-contract",
+        "room": null,
+        "source_file": null,
+        "since": null,
+        "before": null
+      },
+      "total_before_filter": 0,
+      "results": []
+    }
+  }
+]

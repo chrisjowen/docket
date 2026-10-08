@@ -1,0 +1,692 @@
+[
+  {
+    "args": [
+      "version"
+    ],
+    "code": 0,
+    "stdout": "memvid-cli 2.0.140\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "create",
+      "<state>/<creating>"
+    ],
+    "code": 0,
+    "stdout": "✓ Created memory at <state>/<creating>\n  Tier: Free\n  Capacity: 50.0 MB (52428800 bytes)\n  Size: 70.4 KB\n  Indexes: lexical | vector\n\nNext steps:\n  memvid put <state>/<creating> --input <file>     # Add content\n  memvid find <state>/<creating> --query <text>    # Search\n  memvid stats <state>/<creating>                  # View stats\n\nTip: Bind to a dashboard memory to unlock your plan's capacity:\n     memvid tickets sync <state>/<creating> --memory-id <MEMORY_ID>\nDocumentation: https://docs.memvid.com/cli/tickets-and-capacity\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "put",
+      "<state>/memory.mv2",
+      "--json",
+      "--uri",
+      "mv2://docket/default/entity/service.orders/r1",
+      "--title",
+      "Orders",
+      "--track",
+      "docket",
+      "--kind",
+      "entity",
+      "--allow-duplicate",
+      "--no-embedding",
+      "--no-auto-tag",
+      "--no-extract-dates",
+      "--no-extract-triplets",
+      "--no-enrich",
+      "--lock-timeout",
+      "5000"
+    ],
+    "input": "# Orders\nservice service.orders\n\nTakes and fulfils customer orders.\n",
+    "code": 0,
+    "stdout": "{\n  \"processed\": 1,\n  \"ingested\": 1,\n  \"skipped\": 0,\n  \"bytes_input\": 68,\n  \"bytes_input_human\": \"68 B\",\n  \"bytes_stored\": 77,\n  \"bytes_stored_human\": \"77 B\",\n  \"reduction_percent\": null,\n  \"embedded_documents\": 0,\n  \"embedding\": {\n    \"enabled\": false,\n    \"mode\": \"none\",\n    \"runtime_dimension\": null\n  },\n  \"tables\": {\n    \"enabled\": false,\n    \"extracted\": 0,\n    \"tables\": []\n  },\n  \"enrichment\": {\n    \"enabled\": false,\n    \"cards_extracted\": 0\n  },\n  \"capacity_reached\": false,\n  \"warnings\": [],\n  \"extraction\": {\n    \"total_duration_ms\": null,\n    \"total_pages_processed\": null\n  },\n  \"memory\": {\n    \"path\": \"<state>/memory.mv2\",\n    \"frame_count\": 1,\n    \"size_bytes\": 79078,\n    \"tier\": \"Free\"\n  },\n  \"reports\": [\n    {\n      \"seq\": 2,\n      \"uri\": \"mv2://docket/default/entity/service.orders/r1\",\n      \"title\": \"Orders\",\n      \"original_bytes\": 68,\n      \"original_bytes_human\": \"68 B\",\n      \"stored_bytes\": 77,\n      \"stored_bytes_human\": \"77 B\",\n      \"compressed\": true,\n      \"mime\": \"text/plain\",\n      \"source\": null,\n      \"metadata\": {\n        \"mime\": \"text/plain\",\n        \"bytes\": 68,\n        \"hash\": \"ffd47aa8ebfe392cfdb315fe93f46f4c0909d303c4043c92853a3eb97662582b\",\n        \"width\": null,\n        \"height\": null,\n        \"colors\": null,\n        \"caption\": \"# Orders\",\n        \"exif\": null,\n        \"audio\": null,\n        \"media\": null\n      },\n      \"extraction\": {\n        \"status\": \"ok\",\n        \"reader\": \"bytes\",\n        \"duration_ms\": null,\n        \"pages_processed\": null,\n        \"warnings\": []\n      }\n    }\n  ]\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/entity/service.orders/r1",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 0,\n    \"status\": \"active\",\n    \"timestamp\": 1791473821,\n    \"kind\": \"entity\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/entity/service.orders/r1\",\n    \"title\": \"Orders\",\n    \"payload_length\": 0,\n    \"canonical_encoding\": \"Plain\",\n    \"canonical_length\": 0,\n    \"role\": \"Document\",\n    \"parent_id\": null,\n    \"chunk_index\": null,\n    \"chunk_count\": null,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"# Orders\\nservice service.orders\\nTakes and fulfils customer orders.\\ntitle: Orders\\nuri: mv2://docket/default/entity/service.orders/r1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"ffd47aa8ebfe392cfdb315fe93f46f4c0909d303c4043c92853a3eb97662582b\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 68,\n      \"hash\": \"ffd47aa8ebfe392cfdb315fe93f46f4c0909d303c4043c92853a3eb97662582b\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"# Orders\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": \"ffd47aa8ebfe392cfdb315fe93f46f4c0909d303c4043c92853a3eb97662582b\",\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1200,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "put",
+      "<state>/memory.mv2",
+      "--json",
+      "--uri",
+      "mv2://docket/default/entity/service.billing/b1",
+      "--title",
+      "Billing",
+      "--track",
+      "docket",
+      "--kind",
+      "entity",
+      "--allow-duplicate",
+      "--no-embedding",
+      "--no-auto-tag",
+      "--no-extract-dates",
+      "--no-extract-triplets",
+      "--no-enrich",
+      "--lock-timeout",
+      "5000"
+    ],
+    "input": "# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+    "code": 0,
+    "stdout": "{\n  \"processed\": 1,\n  \"ingested\": 1,\n  \"skipped\": 0,\n  \"bytes_input\": 68,\n  \"bytes_input_human\": \"68 B\",\n  \"bytes_stored\": 73,\n  \"bytes_stored_human\": \"73 B\",\n  \"reduction_percent\": null,\n  \"embedded_documents\": 0,\n  \"embedding\": {\n    \"enabled\": false,\n    \"mode\": \"none\",\n    \"runtime_dimension\": null\n  },\n  \"tables\": {\n    \"enabled\": false,\n    \"extracted\": 0,\n    \"tables\": []\n  },\n  \"enrichment\": {\n    \"enabled\": false,\n    \"cards_extracted\": 0\n  },\n  \"capacity_reached\": false,\n  \"warnings\": [],\n  \"extraction\": {\n    \"total_duration_ms\": null,\n    \"total_pages_processed\": null\n  },\n  \"memory\": {\n    \"path\": \"<state>/memory.mv2\",\n    \"frame_count\": 2,\n    \"size_bytes\": 85430,\n    \"tier\": \"Free\"\n  },\n  \"reports\": [\n    {\n      \"seq\": 4,\n      \"uri\": \"mv2://docket/default/entity/service.billing/b1\",\n      \"title\": \"Billing\",\n      \"original_bytes\": 68,\n      \"original_bytes_human\": \"68 B\",\n      \"stored_bytes\": 73,\n      \"stored_bytes_human\": \"73 B\",\n      \"compressed\": true,\n      \"mime\": \"text/plain\",\n      \"source\": null,\n      \"metadata\": {\n        \"mime\": \"text/plain\",\n        \"bytes\": 68,\n        \"hash\": \"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\",\n        \"width\": null,\n        \"height\": null,\n        \"colors\": null,\n        \"caption\": \"# Billing\",\n        \"exif\": null,\n        \"audio\": null,\n        \"media\": null\n      },\n      \"extraction\": {\n        \"status\": \"ok\",\n        \"reader\": \"bytes\",\n        \"duration_ms\": null,\n        \"pages_processed\": null,\n        \"warnings\": []\n      }\n    }\n  ]\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/entity/service.billing/b1",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 1,\n    \"status\": \"active\",\n    \"timestamp\": 1791473821,\n    \"kind\": \"entity\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/entity/service.billing/b1\",\n    \"title\": \"Billing\",\n    \"payload_length\": 0,\n    \"canonical_encoding\": \"Plain\",\n    \"canonical_length\": 0,\n    \"role\": \"Document\",\n    \"parent_id\": null,\n    \"chunk_index\": null,\n    \"chunk_count\": null,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 68,\n      \"hash\": \"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"# Billing\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": \"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\",\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1200,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "put",
+      "<state>/memory.mv2",
+      "--json",
+      "--uri",
+      "mv2://docket/default/document/doc.ledger/d1",
+      "--title",
+      "Paragraph 0: the orders service talks to billing about invoice number 0.",
+      "--track",
+      "docket",
+      "--kind",
+      "document",
+      "--allow-duplicate",
+      "--no-embedding",
+      "--no-auto-tag",
+      "--no-extract-dates",
+      "--no-extract-triplets",
+      "--no-enrich",
+      "--lock-timeout",
+      "5000"
+    ],
+    "input": "Paragraph 0: the orders service talks to billing about invoice number 0.\nParagraph 1: the orders service talks to billing about invoice number 1.\nParagraph 2: the orders service talks to billing about invoice number 2.\nParagraph 3: the orders service talks to billing about invoice number 3.\nParagraph 4: the orders service talks to billing about invoice number 4.\nParagraph 5: the orders service talks to billing about invoice number 5.\nParagraph 6: the orders service talks to billing about invoice number 6.\nParagraph 7: the orders service talks to billing about invoice number 7.\nParagraph 8: the orders service talks to billing about invoice number 8.\nParagraph 9: the orders service talks to billing about invoice number 9.\nParagraph 10: the orders service talks to billing about invoice number 10.\nParagraph 11: the orders service talks to billing about invoice number 11.\nParagraph 12: the orders service talks to billing about invoice number 12.\nParagraph 13: the orders service talks to billing about invoice number 13.\nParagraph 14: the orders service talks to billing about invoice number 14.\nParagraph 15: the orders service talks to billing about invoice number 15.\nParagraph 16: the orders service talks to billing about invoice number 16.\nParagraph 17: the orders service talks to billing about invoice number 17.\nParagraph 18: the orders service talks to billing about invoice number 18.\nParagraph 19: the orders service talks to billing about invoice number 19.\nParagraph 20: the orders service talks to billing about invoice number 20.\nParagraph 21: the orders service talks to billing about invoice number 21.\nParagraph 22: the orders service talks to billing about invoice number 22.\nParagraph 23: the orders service talks to billing about invoice number 23.\nParagraph 24: the orders service talks to billing about invoice number 24.\nParagraph 25: the orders service talks to billing about invoice number 25.\nParagraph 26: the orders service talks to billing about invoice number 26.\nParagraph 27: the orders service talks to billing about invoice number 27.\nParagraph 28: the orders service talks to billing about invoice number 28.\nParagraph 29: the orders service talks to billing about invoice number 29.\nParagraph 30: the orders service talks to billing about invoice number 30.\nParagraph 31: the orders service talks to billing about invoice number 31.\nParagraph 32: the orders service talks to billing about invoice number 32.\nParagraph 33: the orders service talks to billing about invoice number 33.\nParagraph 34: the orders service talks to billing about invoice number 34.\nParagraph 35: the orders service talks to billing about invoice number 35.\nParagraph 36: the orders service talks to billing about invoice number 36.\nParagraph 37: the orders service talks to billing about invoice number 37.\nParagraph 38: the orders service talks to billing about invoice number 38.\nParagraph 39: the orders service talks to billing about invoice number 39.\nParagraph 40: we chose Postgres for the ledger because of serializable isolation.\nParagraph 41: the orders service talks to billing about invoice number 41.\nParagraph 42: the orders service talks to billing about invoice number 42.\nParagraph 43: the orders service talks to billing about invoice number 43.\nParagraph 44: the orders service talks to billing about invoice number 44.\nParagraph 45: the orders service talks to billing about invoice number 45.\nParagraph 46: the orders service talks to billing about invoice number 46.\nParagraph 47: the orders service talks to billing about invoice number 47.\nParagraph 48: the orders service talks to billing about invoice number 48.\nParagraph 49: the orders service talks to billing about invoice number 49.\nParagraph 50: the orders service talks to billing about invoice number 50.\nParagraph 51: the orders service talks to billing about invoice number 51.\nParagraph 52: the orders service talks to billing about invoice number 52.\nParagraph 53: the orders service talks to billing about invoice number 53.\nParagraph 54: the orders service talks to billing about invoice number 54.\nParagraph 55: the orders service talks to billing about invoice number 55.\nParagraph 56: the orders service talks to billing about invoice number 56.\nParagraph 57: the orders service talks to billing about invoice number 57.\nParagraph 58: the orders service talks to billing about invoice number 58.\nParagraph 59: the orders service talks to billing about invoice number 59.",
+    "code": 0,
+    "stdout": "{\n  \"processed\": 1,\n  \"ingested\": 1,\n  \"skipped\": 0,\n  \"bytes_input\": 4486,\n  \"bytes_input_human\": \"4.4 KB\",\n  \"bytes_stored\": 308,\n  \"bytes_stored_human\": \"308 B\",\n  \"reduction_percent\": 93.13419527418635,\n  \"embedded_documents\": 0,\n  \"embedding\": {\n    \"enabled\": false,\n    \"mode\": \"none\",\n    \"runtime_dimension\": null\n  },\n  \"tables\": {\n    \"enabled\": false,\n    \"extracted\": 0,\n    \"tables\": []\n  },\n  \"enrichment\": {\n    \"enabled\": false,\n    \"cards_extracted\": 0\n  },\n  \"capacity_reached\": false,\n  \"warnings\": [],\n  \"extraction\": {\n    \"total_duration_ms\": null,\n    \"total_pages_processed\": null\n  },\n  \"memory\": {\n    \"path\": \"<state>/memory.mv2\",\n    \"frame_count\": 7,\n    \"size_bytes\": 108485,\n    \"tier\": \"Free\"\n  },\n  \"reports\": [\n    {\n      \"seq\": 6,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n      \"original_bytes\": 4486,\n      \"original_bytes_human\": \"4.4 KB\",\n      \"stored_bytes\": 308,\n      \"stored_bytes_human\": \"308 B\",\n      \"compressed\": true,\n      \"mime\": \"text/plain\",\n      \"source\": null,\n      \"metadata\": {\n        \"mime\": \"text/plain\",\n        \"bytes\": 4486,\n        \"hash\": \"5592246ef37b00164fb1c6c3727f088882600df4597197241993079c48ffc07e\",\n        \"width\": null,\n        \"height\": null,\n        \"colors\": null,\n        \"caption\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n        \"exif\": null,\n        \"audio\": null,\n        \"media\": null\n      },\n      \"extraction\": {\n        \"status\": \"ok\",\n        \"reader\": \"bytes\",\n        \"duration_ms\": null,\n        \"pages_processed\": null,\n        \"warnings\": []\n      }\n    }\n  ]\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/document/doc.ledger/d1",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 2,\n    \"status\": \"active\",\n    \"timestamp\": 1791473822,\n    \"kind\": \"document\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/document/doc.ledger/d1\",\n    \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n    \"payload_length\": 0,\n    \"canonical_encoding\": \"Plain\",\n    \"canonical_length\": 0,\n    \"role\": \"Document\",\n    \"parent_id\": null,\n    \"chunk_index\": null,\n    \"chunk_count\": 4,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billing about invoice number 1.\\nParagraph 2: the orders service talks to billing about invoice number 2.\\nParagraph 3: the orders service talks to billing about invoice number 3.\\nParagraph 4: the orders service talks to billing about invoice number 4.\\nParagraph 5: the orders service talks to billing about invoice number 5.\\nParagraph 6: the orders service talks to billing about invoice number 6.\\nParagraph 7: the orders service talks to billing about invoice number 7.\\nParagraph 8: the orders service talks to billing about invoice number 8.\\nParagraph 9: the orders service talks to billing about invoice number 9.\\nParagraph 10: the orders service talks to billing about invoice number 10.\\nParagraph 11: the orders service talks to billing about invoice number 11.\\nParagraph 12: the orders service talks to billing about invoice number 12.\\nParagraph 13: the orders service talks to billing about invoice number 13.\\nParagraph 14: the orders service talks to billing about invoice number 14.\\nParagraph 15: the orders service talks to billing about invoice number 15.\\nParagraph 16: the orders service talks to billing about invoice number 16.\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 4486,\n      \"hash\": \"5592246ef37b00164fb1c6c3727f088882600df4597197241993079c48ffc07e\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": {\n      \"chunk_chars\": 1200,\n      \"chunks\": {\n        \"current\": [\n          0,\n          1255\n        ],\n        \"next\": [\n          1255,\n          2530\n        ]\n      }\n    },\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": null,\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1200,\n  \"page_count\": 4,\n  \"has_prev\": false,\n  \"has_next\": true,\n  \"content\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billing about invoice number 1.\\nParagraph 2: the orders service talks to billing about invoice number 2.\\nParagraph 3: the orders service talks to billing about invoice number 3.\\nParagraph 4: the orders service talks to billing about invoice number 4.\\nParagraph 5: the orders service talks to billing about invoice number 5.\\nParagraph 6: the orders service talks to billing about invoice number 6.\\nParagraph 7: the orders service talks to billing about invoice number 7.\\nParagraph 8: the orders service talks to billing about invoice number 8.\\nParagraph 9: the orders service talks to billing about invoice number 9.\\nParagraph 10: the orders service talks to billing about invoice number 10.\\nParagraph 11: the orders service talks to billing about invoice number 11.\\nParagraph 12: the orders service talks to billing about invoice number 12.\\nParagraph 13: the orders service talks to billing about invoice number 13.\\nParagraph 14: the orders service talks to billing about invoice number 14.\\nParagraph 15: the orders service talks to billing about invoice number 15.\\nParagraph 16: the orders service talks to billing about invoice number 16.\\n\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/document/doc.ledger/d1#page-1",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 3,\n    \"status\": \"active\",\n    \"timestamp\": 1791473822,\n    \"kind\": \"document\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-1\",\n    \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 1/4)\",\n    \"payload_length\": 176,\n    \"canonical_encoding\": \"Zstd\",\n    \"canonical_length\": 1255,\n    \"role\": \"DocumentChunk\",\n    \"parent_id\": 2,\n    \"chunk_index\": 0,\n    \"chunk_count\": 4,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billing about invoice number 1.\\nParagraph 2: the orders service talks to billing about invoice number 2.\\nParagraph 3: the orders service talks to billing about invoice number 3.\\nParagraph 4: the orders service talks to billing about invoice number 4.\\nParagraph 5: the orders service talks to billing about invoice number 5.\\nParagraph 6: the orders service talks to billing about invoice number 6.\\nParagraph 7: the orders service talks to billing about invoice number 7.\\nParagraph 8: the orders service talks to billing about invoice number 8.\\nParagraph 9: the orders service talks to billing about invoice number 9.\\nParagraph 10: the orders service talks to billing about invoice number 10.\\nParagraph 11: the orders service talks to billing about invoice number 11.\\nParagraph 12: the orders service talks to billing about invoice number 12.\\nParagraph 13: the orders service talks to billing about invoice number 13.\\nParagraph 14: the orders service talks to billing about invoice number 14.\\nParagraph 15: the orders service talks to billing about invoice number 15.\\nParagraph 16: the orders service talks to billing about invoice number 16.\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 4486,\n      \"hash\": \"5592246ef37b00164fb1c6c3727f088882600df4597197241993079c48ffc07e\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": null,\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1254,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billing about invoice number 1.\\nParagraph 2: the orders service talks to billing about invoice number 2.\\nParagraph 3: the orders service talks to billing about invoice number 3.\\nParagraph 4: the orders service talks to billing about invoice number 4.\\nParagraph 5: the orders service talks to billing about invoice number 5.\\nParagraph 6: the orders service talks to billing about invoice number 6.\\nParagraph 7: the orders service talks to billing about invoice number 7.\\nParagraph 8: the orders service talks to billing about invoice number 8.\\nParagraph 9: the orders service talks to billing about invoice number 9.\\nParagraph 10: the orders service talks to billing about invoice number 10.\\nParagraph 11: the orders service talks to billing about invoice number 11.\\nParagraph 12: the orders service talks to billing about invoice number 12.\\nParagraph 13: the orders service talks to billing about invoice number 13.\\nParagraph 14: the orders service talks to billing about invoice number 14.\\nParagraph 15: the orders service talks to billing about invoice number 15.\\nParagraph 16: the orders service talks to billing about invoice number 16.\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/document/doc.ledger/d1#page-2",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 4,\n    \"status\": \"active\",\n    \"timestamp\": 1791473822,\n    \"kind\": \"document\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-2\",\n    \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 2/4)\",\n    \"payload_length\": 163,\n    \"canonical_encoding\": \"Zstd\",\n    \"canonical_length\": 1275,\n    \"role\": \"DocumentChunk\",\n    \"parent_id\": 2,\n    \"chunk_index\": 1,\n    \"chunk_count\": 4,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"Paragraph 17: the orders service talks to billing about invoice number 17.\\nParagraph 18: the orders service talks to billing about invoice number 18.\\nParagraph 19: the orders service talks to billing about invoice number 19.\\nParagraph 20: the orders service talks to billing about invoice number 20.\\nParagraph 21: the orders service talks to billing about invoice number 21.\\nParagraph 22: the orders service talks to billing about invoice number 22.\\nParagraph 23: the orders service talks to billing about invoice number 23.\\nParagraph 24: the orders service talks to billing about invoice number 24.\\nParagraph 25: the orders service talks to billing about invoice number 25.\\nParagraph 26: the orders service talks to billing about invoice number 26.\\nParagraph 27: the orders service talks to billing about invoice number 27.\\nParagraph 28: the orders service talks to billing about invoice number 28.\\nParagraph 29: the orders service talks to billing about invoice number 29.\\nParagraph 30: the orders service talks to billing about invoice number 30.\\nParagraph 31: the orders service talks to billing about invoice number 31.\\nParagraph 32: the orders service talks to billing about invoice number 32.\\nParagraph 33: the orders service talks to billing about invoice number 33.\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 4486,\n      \"hash\": \"5592246ef37b00164fb1c6c3727f088882600df4597197241993079c48ffc07e\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": null,\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1274,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"Paragraph 17: the orders service talks to billing about invoice number 17.\\nParagraph 18: the orders service talks to billing about invoice number 18.\\nParagraph 19: the orders service talks to billing about invoice number 19.\\nParagraph 20: the orders service talks to billing about invoice number 20.\\nParagraph 21: the orders service talks to billing about invoice number 21.\\nParagraph 22: the orders service talks to billing about invoice number 22.\\nParagraph 23: the orders service talks to billing about invoice number 23.\\nParagraph 24: the orders service talks to billing about invoice number 24.\\nParagraph 25: the orders service talks to billing about invoice number 25.\\nParagraph 26: the orders service talks to billing about invoice number 26.\\nParagraph 27: the orders service talks to billing about invoice number 27.\\nParagraph 28: the orders service talks to billing about invoice number 28.\\nParagraph 29: the orders service talks to billing about invoice number 29.\\nParagraph 30: the orders service talks to billing about invoice number 30.\\nParagraph 31: the orders service talks to billing about invoice number 31.\\nParagraph 32: the orders service talks to billing about invoice number 32.\\nParagraph 33: the orders service talks to billing about invoice number 33.\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/document/doc.ledger/d1#page-3",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 5,\n    \"status\": \"active\",\n    \"timestamp\": 1791473822,\n    \"kind\": \"document\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-3\",\n    \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 3/4)\",\n    \"payload_length\": 220,\n    \"canonical_encoding\": \"Zstd\",\n    \"canonical_length\": 1207,\n    \"role\": \"DocumentChunk\",\n    \"parent_id\": 2,\n    \"chunk_index\": 2,\n    \"chunk_count\": 4,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"Paragraph 34: the orders service talks to billing about invoice number 34.\\nParagraph 35: the orders service talks to billing about invoice number 35.\\nParagraph 36: the orders service talks to billing about invoice number 36.\\nParagraph 37: the orders service talks to billing about invoice number 37.\\nParagraph 38: the orders service talks to billing about invoice number 38.\\nParagraph 39: the orders service talks to billing about invoice number 39.\\nParagraph 40: we chose Postgres for the ledger because of serializable isolation.\\nParagraph 41: the orders service talks to billing about invoice number 41.\\nParagraph 42: the orders service talks to billing about invoice number 42.\\nParagraph 43: the orders service talks to billing about invoice number 43.\\nParagraph 44: the orders service talks to billing about invoice number 44.\\nParagraph 45: the orders service talks to billing about invoice number 45.\\nParagraph 46: the orders service talks to billing about invoice number 46.\\nParagraph 47: the orders service talks to billing about invoice number 47.\\nParagraph 48: the orders service talks to billing about invoice number 48.\\nParagraph 49: the orders service talks to billing about invoice number 49.\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 4486,\n      \"hash\": \"5592246ef37b00164fb1c6c3727f088882600df4597197241993079c48ffc07e\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": null,\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1206,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"Paragraph 34: the orders service talks to billing about invoice number 34.\\nParagraph 35: the orders service talks to billing about invoice number 35.\\nParagraph 36: the orders service talks to billing about invoice number 36.\\nParagraph 37: the orders service talks to billing about invoice number 37.\\nParagraph 38: the orders service talks to billing about invoice number 38.\\nParagraph 39: the orders service talks to billing about invoice number 39.\\nParagraph 40: we chose Postgres for the ledger because of serializable isolation.\\nParagraph 41: the orders service talks to billing about invoice number 41.\\nParagraph 42: the orders service talks to billing about invoice number 42.\\nParagraph 43: the orders service talks to billing about invoice number 43.\\nParagraph 44: the orders service talks to billing about invoice number 44.\\nParagraph 45: the orders service talks to billing about invoice number 45.\\nParagraph 46: the orders service talks to billing about invoice number 46.\\nParagraph 47: the orders service talks to billing about invoice number 47.\\nParagraph 48: the orders service talks to billing about invoice number 48.\\nParagraph 49: the orders service talks to billing about invoice number 49.\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/document/doc.ledger/d1#page-4",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 6,\n    \"status\": \"active\",\n    \"timestamp\": 1791473822,\n    \"kind\": \"document\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-4\",\n    \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 4/4)\",\n    \"payload_length\": 137,\n    \"canonical_encoding\": \"Zstd\",\n    \"canonical_length\": 749,\n    \"role\": \"DocumentChunk\",\n    \"parent_id\": 2,\n    \"chunk_index\": 3,\n    \"chunk_count\": 4,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"Paragraph 50: the orders service talks to billing about invoice number 50.\\nParagraph 51: the orders service talks to billing about invoice number 51.\\nParagraph 52: the orders service talks to billing about invoice number 52.\\nParagraph 53: the orders service talks to billing about invoice number 53.\\nParagraph 54: the orders service talks to billing about invoice number 54.\\nParagraph 55: the orders service talks to billing about invoice number 55.\\nParagraph 56: the orders service talks to billing about invoice number 56.\\nParagraph 57: the orders service talks to billing about invoice number 57.\\nParagraph 58: the orders service talks to billing about invoice number 58.\\nParagraph 59: the orders service talks to billing about invoice number 59.\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 4486,\n      \"hash\": \"5592246ef37b00164fb1c6c3727f088882600df4597197241993079c48ffc07e\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": null,\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 749,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"Paragraph 50: the orders service talks to billing about invoice number 50.\\nParagraph 51: the orders service talks to billing about invoice number 51.\\nParagraph 52: the orders service talks to billing about invoice number 52.\\nParagraph 53: the orders service talks to billing about invoice number 53.\\nParagraph 54: the orders service talks to billing about invoice number 54.\\nParagraph 55: the orders service talks to billing about invoice number 55.\\nParagraph 56: the orders service talks to billing about invoice number 56.\\nParagraph 57: the orders service talks to billing about invoice number 57.\\nParagraph 58: the orders service talks to billing about invoice number 58.\\nParagraph 59: the orders service talks to billing about invoice number 59.\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "put",
+      "<state>/memory.mv2",
+      "--json",
+      "--uri",
+      "mv2://docket/default/observation/obs.deploy-1/o1",
+      "--title",
+      "Deployed orders 1.4 to production.",
+      "--track",
+      "docket",
+      "--kind",
+      "observation",
+      "--allow-duplicate",
+      "--no-embedding",
+      "--no-auto-tag",
+      "--no-extract-dates",
+      "--no-extract-triplets",
+      "--no-enrich",
+      "--lock-timeout",
+      "5000",
+      "--timestamp",
+      "1790787600"
+    ],
+    "input": "Deployed orders 1.4 to production.",
+    "code": 0,
+    "stdout": "{\n  \"processed\": 1,\n  \"ingested\": 1,\n  \"skipped\": 0,\n  \"bytes_input\": 34,\n  \"bytes_input_human\": \"34 B\",\n  \"bytes_stored\": 43,\n  \"bytes_stored_human\": \"43 B\",\n  \"reduction_percent\": null,\n  \"embedded_documents\": 0,\n  \"embedding\": {\n    \"enabled\": false,\n    \"mode\": \"none\",\n    \"runtime_dimension\": null\n  },\n  \"tables\": {\n    \"enabled\": false,\n    \"extracted\": 0,\n    \"tables\": []\n  },\n  \"enrichment\": {\n    \"enabled\": false,\n    \"cards_extracted\": 0\n  },\n  \"capacity_reached\": false,\n  \"warnings\": [],\n  \"extraction\": {\n    \"total_duration_ms\": null,\n    \"total_pages_processed\": null\n  },\n  \"memory\": {\n    \"path\": \"<state>/memory.mv2\",\n    \"frame_count\": 8,\n    \"size_bytes\": 124095,\n    \"tier\": \"Free\"\n  },\n  \"reports\": [\n    {\n      \"seq\": 12,\n      \"uri\": \"mv2://docket/default/observation/obs.deploy-1/o1\",\n      \"title\": \"Deployed orders 1.4 to production.\",\n      \"original_bytes\": 34,\n      \"original_bytes_human\": \"34 B\",\n      \"stored_bytes\": 43,\n      \"stored_bytes_human\": \"43 B\",\n      \"compressed\": true,\n      \"mime\": \"text/plain\",\n      \"source\": null,\n      \"metadata\": {\n        \"mime\": \"text/plain\",\n        \"bytes\": 34,\n        \"hash\": \"c52ba2da5c0f745fd051847f2b876fc98ca0639527bc9b9710a178df10edc5f9\",\n        \"width\": null,\n        \"height\": null,\n        \"colors\": null,\n        \"caption\": \"Deployed orders 1.4 to production.\",\n        \"exif\": null,\n        \"audio\": null,\n        \"media\": null\n      },\n      \"extraction\": {\n        \"status\": \"ok\",\n        \"reader\": \"bytes\",\n        \"duration_ms\": null,\n        \"pages_processed\": null,\n        \"warnings\": []\n      }\n    }\n  ]\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/observation/obs.deploy-1/o1",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 7,\n    \"status\": \"active\",\n    \"timestamp\": 1790787600,\n    \"kind\": \"observation\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/observation/obs.deploy-1/o1\",\n    \"title\": \"Deployed orders 1.4 to production.\",\n    \"payload_length\": 0,\n    \"canonical_encoding\": \"Plain\",\n    \"canonical_length\": 0,\n    \"role\": \"Document\",\n    \"parent_id\": null,\n    \"chunk_index\": null,\n    \"chunk_count\": null,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"Deployed orders 1.4 to production.\\ntitle: Deployed orders 1.4 to production.\\nuri: mv2://docket/default/observation/obs.deploy-1/o1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":34,\\\"hash\\\":\\\"c52ba2da5c0f745fd051847f2b876fc98ca0639527bc9b9710a178df10edc5f9\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"Deployed orders 1.4 to production.\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 34,\n      \"hash\": \"c52ba2da5c0f745fd051847f2b876fc98ca0639527bc9b9710a178df10edc5f9\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"Deployed orders 1.4 to production.\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": \"c52ba2da5c0f745fd051847f2b876fc98ca0639527bc9b9710a178df10edc5f9\",\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1200,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "timeline",
+      "<state>/memory.mv2",
+      "--json",
+      "--limit",
+      "1000000"
+    ],
+    "code": 0,
+    "stdout": "[\n  {\n    \"frame_id\": 7,\n    \"timestamp\": 1790787600,\n    \"preview\": \"Deployed orders 1.4 to production.\\ntitle: Deployed orders 1.4 to production.\\nuri: mv2://docket/default/observation/obs.d\",\n    \"uri\": \"mv2://docket/default/observation/obs.deploy-1/o1\"\n  },\n  {\n    \"frame_id\": 0,\n    \"timestamp\": 1791473821,\n    \"preview\": \"# Orders\\nservice service.orders\\nTakes and fulfils customer orders.\\ntitle: Orders\\nuri: mv2://docket/default/entity/servic\",\n    \"uri\": \"mv2://docket/default/entity/service.orders/r1\"\n  },\n  {\n    \"frame_id\": 1,\n    \"timestamp\": 1791473821,\n    \"preview\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/servi\",\n    \"uri\": \"mv2://docket/default/entity/service.billing/b1\"\n  },\n  {\n    \"frame_id\": 2,\n    \"timestamp\": 1791473822,\n    \"preview\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billin\",\n    \"uri\": \"mv2://docket/default/document/doc.ledger/d1\",\n    \"child_frames\": [\n      3,\n      4,\n      5,\n      6\n    ]\n  }\n]\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "timeline",
+      "<state>/memory.mv2",
+      "--json",
+      "--limit",
+      "1000000"
+    ],
+    "code": 0,
+    "stdout": "[\n  {\n    \"frame_id\": 7,\n    \"timestamp\": 1790787600,\n    \"preview\": \"Deployed orders 1.4 to production.\\ntitle: Deployed orders 1.4 to production.\\nuri: mv2://docket/default/observation/obs.d\",\n    \"uri\": \"mv2://docket/default/observation/obs.deploy-1/o1\"\n  },\n  {\n    \"frame_id\": 0,\n    \"timestamp\": 1791473821,\n    \"preview\": \"# Orders\\nservice service.orders\\nTakes and fulfils customer orders.\\ntitle: Orders\\nuri: mv2://docket/default/entity/servic\",\n    \"uri\": \"mv2://docket/default/entity/service.orders/r1\"\n  },\n  {\n    \"frame_id\": 1,\n    \"timestamp\": 1791473821,\n    \"preview\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/servi\",\n    \"uri\": \"mv2://docket/default/entity/service.billing/b1\"\n  },\n  {\n    \"frame_id\": 2,\n    \"timestamp\": 1791473822,\n    \"preview\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billin\",\n    \"uri\": \"mv2://docket/default/document/doc.ledger/d1\",\n    \"child_frames\": [\n      3,\n      4,\n      5,\n      6\n    ]\n  }\n]\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "which OR service OR takes OR customer OR orders",
+      "--scope",
+      "mv2://docket/default/",
+      "--top-k",
+      "10",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--snippet-chars",
+      "4000",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"version\": \"mv2.result.v2\",\n  \"query\": \"which OR service OR takes OR customer OR orders\",\n  \"metadata\": {\n    \"elapsed_ms\": 1,\n    \"total_hits\": 7,\n    \"next_cursor\": null,\n    \"engine\": \"tantivy\",\n    \"params\": {\n      \"top_k\": 10,\n      \"snippet_chars\": 4000,\n      \"mode\": \"text\",\n      \"additional_params\": {}\n    }\n  },\n  \"hits\": [\n    {\n      \"rank\": 1,\n      \"score\": 6.4241557121276855,\n      \"id\": \"mv2-hit-f6e3369c5da7-0-0\",\n      \"frame_id\": 0,\n      \"uri\": \"mv2://docket/default/entity/service.orders/r1\",\n      \"title\": \"Orders\",\n      \"chunk_range\": [\n        0,\n        362\n      ],\n      \"range\": [\n        0,\n        362\n      ],\n      \"text\": \"# Orders\\nservice service.orders\\nTakes and fulfils customer orders.\\ntitle: Orders\\nuri: mv2://docket/default/entity/service.orders/r1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"ffd47aa8ebfe392cfdb315fe93f46f4c0909d303c4043c92853a3eb97662582b\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 11,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:01Z\"\n      }\n    },\n    {\n      \"rank\": 2,\n      \"score\": 1.480058670043945,\n      \"id\": \"mv2-hit-70ef774e6d0d-2-0\",\n      \"frame_id\": 2,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\",\n      \"chunk_range\": [\n        0,\n        1255\n      ],\n      \"range\": [\n        0,\n        1255\n      ],\n      \"text\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billing about invoice number 1.\\nParagraph 2: the orders service talks to billing about invoice number 2.\\nParagraph 3: the orders service talks to billing about invoice number 3.\\nParagraph 4: the orders service talks to billing about invoice number 4.\\nParagraph 5: the orders service talks to billing about invoice number 5.\\nParagraph 6: the orders service talks to billing about invoice number 6.\\nParagraph 7: the orders service talks to billing about invoice number 7.\\nParagraph 8: the orders service talks to billing about invoice number 8.\\nParagraph 9: the orders service talks to billing about invoice number 9.\\nParagraph 10: the orders service talks to billing about invoice number 10.\\nParagraph 11: the orders service talks to billing about invoice number 11.\\nParagraph 12: the orders service talks to billing about invoice number 12.\\nParagraph 13: the orders service talks to billing about invoice number 13.\\nParagraph 14: the orders service talks to billing about invoice number 14.\\nParagraph 15: the orders service talks to billing about invoice number 15.\\nParagraph 16: the orders service talks to billing about invoice number 16.\\n\",\n      \"metadata\": {\n        \"matches\": 34,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 3,\n      \"score\": 1.480058670043945,\n      \"id\": \"mv2-hit-62dbb1a556f5-3-0\",\n      \"frame_id\": 3,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-1\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 1/4)\",\n      \"chunk_range\": [\n        0,\n        1255\n      ],\n      \"range\": [\n        0,\n        1255\n      ],\n      \"text\": \"Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billing about invoice number 1.\\nParagraph 2: the orders service talks to billing about invoice number 2.\\nParagraph 3: the orders service talks to billing about invoice number 3.\\nParagraph 4: the orders service talks to billing about invoice number 4.\\nParagraph 5: the orders service talks to billing about invoice number 5.\\nParagraph 6: the orders service talks to billing about invoice number 6.\\nParagraph 7: the orders service talks to billing about invoice number 7.\\nParagraph 8: the orders service talks to billing about invoice number 8.\\nParagraph 9: the orders service talks to billing about invoice number 9.\\nParagraph 10: the orders service talks to billing about invoice number 10.\\nParagraph 11: the orders service talks to billing about invoice number 11.\\nParagraph 12: the orders service talks to billing about invoice number 12.\\nParagraph 13: the orders service talks to billing about invoice number 13.\\nParagraph 14: the orders service talks to billing about invoice number 14.\\nParagraph 15: the orders service talks to billing about invoice number 15.\\nParagraph 16: the orders service talks to billing about invoice number 16.\\n\",\n      \"metadata\": {\n        \"matches\": 34,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 4,\n      \"score\": 1.480058670043945,\n      \"id\": \"mv2-hit-a6477285d969-4-1255\",\n      \"frame_id\": 4,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-2\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 2/4)\",\n      \"chunk_range\": [\n        1255,\n        2530\n      ],\n      \"range\": [\n        1255,\n        2530\n      ],\n      \"text\": \"Paragraph 17: the orders service talks to billing about invoice number 17.\\nParagraph 18: the orders service talks to billing about invoice number 18.\\nParagraph 19: the orders service talks to billing about invoice number 19.\\nParagraph 20: the orders service talks to billing about invoice number 20.\\nParagraph 21: the orders service talks to billing about invoice number 21.\\nParagraph 22: the orders service talks to billing about invoice number 22.\\nParagraph 23: the orders service talks to billing about invoice number 23.\\nParagraph 24: the orders service talks to billing about invoice number 24.\\nParagraph 25: the orders service talks to billing about invoice number 25.\\nParagraph 26: the orders service talks to billing about invoice number 26.\\nParagraph 27: the orders service talks to billing about invoice number 27.\\nParagraph 28: the orders service talks to billing about invoice number 28.\\nParagraph 29: the orders service talks to billing about invoice number 29.\\nParagraph 30: the orders service talks to billing about invoice number 30.\\nParagraph 31: the orders service talks to billing about invoice number 31.\\nParagraph 32: the orders service talks to billing about invoice number 32.\\nParagraph 33: the orders service talks to billing about invoice number 33.\\n\",\n      \"metadata\": {\n        \"matches\": 34,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 5,\n      \"score\": 1.4775525331497192,\n      \"id\": \"mv2-hit-bcafee6d3d19-5-2530\",\n      \"frame_id\": 5,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-3\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 3/4)\",\n      \"chunk_range\": [\n        2530,\n        3737\n      ],\n      \"range\": [\n        2530,\n        3737\n      ],\n      \"text\": \"Paragraph 34: the orders service talks to billing about invoice number 34.\\nParagraph 35: the orders service talks to billing about invoice number 35.\\nParagraph 36: the orders service talks to billing about invoice number 36.\\nParagraph 37: the orders service talks to billing about invoice number 37.\\nParagraph 38: the orders service talks to billing about invoice number 38.\\nParagraph 39: the orders service talks to billing about invoice number 39.\\nParagraph 40: we chose Postgres for the ledger because of serializable isolation.\\nParagraph 41: the orders service talks to billing about invoice number 41.\\nParagraph 42: the orders service talks to billing about invoice number 42.\\nParagraph 43: the orders service talks to billing about invoice number 43.\\nParagraph 44: the orders service talks to billing about invoice number 44.\\nParagraph 45: the orders service talks to billing about invoice number 45.\\nParagraph 46: the orders service talks to billing about invoice number 46.\\nParagraph 47: the orders service talks to billing about invoice number 47.\\nParagraph 48: the orders service talks to billing about invoice number 48.\\nParagraph 49: the orders service talks to billing about invoice number 49.\\n\",\n      \"metadata\": {\n        \"matches\": 30,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 6,\n      \"score\": 1.4740333557128906,\n      \"id\": \"mv2-hit-b4d3ff41bd2e-6-3737\",\n      \"frame_id\": 6,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-4\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 4/4)\",\n      \"chunk_range\": [\n        3737,\n        4486\n      ],\n      \"range\": [\n        3737,\n        4486\n      ],\n      \"text\": \"Paragraph 50: the orders service talks to billing about invoice number 50.\\nParagraph 51: the orders service talks to billing about invoice number 51.\\nParagraph 52: the orders service talks to billing about invoice number 52.\\nParagraph 53: the orders service talks to billing about invoice number 53.\\nParagraph 54: the orders service talks to billing about invoice number 54.\\nParagraph 55: the orders service talks to billing about invoice number 55.\\nParagraph 56: the orders service talks to billing about invoice number 56.\\nParagraph 57: the orders service talks to billing about invoice number 57.\\nParagraph 58: the orders service talks to billing about invoice number 58.\\nParagraph 59: the orders service talks to billing about invoice number 59.\",\n      \"metadata\": {\n        \"matches\": 20,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 7,\n      \"score\": 1.4149894714355469,\n      \"id\": \"mv2-hit-c6382c8eee6b-1-0\",\n      \"frame_id\": 1,\n      \"uri\": \"mv2://docket/default/entity/service.billing/b1\",\n      \"title\": \"Billing\",\n      \"chunk_range\": [\n        0,\n        365\n      ],\n      \"range\": [\n        0,\n        365\n      ],\n      \"text\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 4,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:01Z\"\n      }\n    }\n  ],\n  \"context\": \"### [1] docket/default/entity/service.orders/r1 — Orders\\n# Orders\\nservice service.orders\\nTakes and fulfils customer orders.\\ntitle: Orders\\nuri: mv2://docket/default/entity/service.orders/r1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"ffd47aa8ebfe392cfdb315fe93f46f4c0909d303c4043c92853a3eb97662582b\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 11)\\n\\n### [2] docket/default/document/doc.ledger/d1 — Paragraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billing about invoice number 1.\\nParagraph 2: the orders service talks to billing about invoice number 2.\\nParagraph 3: the orders service talks to billing about invoice number 3.\\nParagraph 4: the orders service talks to billing about invoice number 4.\\nParagraph 5: the orders service talks to billing about invoice number 5.\\nParagraph 6: the orders service talks to billing about invoice number 6.\\nParagraph 7: the orders service talks to billing about invoice number 7.\\nParagraph 8: the orders service talks to billing about invoice number 8.\\nParagraph 9: the orders service talks to billing about invoice number 9.\\nParagraph 10: the orders service talks to billing about invoice number 10.\\nParagraph 11: the orders service talks to billing about invoice number 11.\\nParagraph 12: the orders service talks to billing about invoice number 12.\\nParagraph 13: the orders service talks to billing about invoice number 13.\\nParagraph 14: the orders service talks to billing about invoice number 14.\\nParagraph 15: the orders service talks to billing about invoice number 15.\\nParagraph 16: the orders service talks to billing about invoice number 16.\\n\\n(matches: 34)\\n\\n### [3] docket/default/document/doc.ledger/d1#page-1 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 1/4)\\nParagraph 0: the orders service talks to billing about invoice number 0.\\nParagraph 1: the orders service talks to billing about invoice number 1.\\nParagraph 2: the orders service talks to billing about invoice number 2.\\nParagraph 3: the orders service talks to billing about invoice number 3.\\nParagraph 4: the orders service talks to billing about invoice number 4.\\nParagraph 5: the orders service talks to billing about invoice number 5.\\nParagraph 6: the orders service talks to billing about invoice number 6.\\nParagraph 7: the orders service talks to billing about invoice number 7.\\nParagraph 8: the orders service talks to billing about invoice number 8.\\nParagraph 9: the orders service talks to billing about invoice number 9.\\nParagraph 10: the orders service talks to billing about invoice number 10.\\nParagraph 11: the orders service talks to billing about invoice number 11.\\nParagraph 12: the orders service talks to billing about invoice number 12.\\nParagraph 13: the orders service talks to billing about invoice number 13.\\nParagraph 14: the orders service talks to billing about invoice number 14.\\nParagraph 15: the orders service talks to billing about invoice number 15.\\nParagraph 16: the orders service talks to billing about invoice number 16.\\n\\n(matches: 34)\\n\\n### [4] docket/default/document/doc.ledger/d1#page-2 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 2/4)\\nParagraph 17: the orders service talks to billing about invoice number 17.\\nParagraph 18: the orders service talks to billing about invoice number 18.\\nParagraph 19: the orders service talks to billing about invoice number 19.\\nParagraph 20: the orders service talks to billing about invoice number 20.\\nParagraph 21: the orders service talks to billing about invoice number 21.\\nParagraph 22: the orders service talks to billing about invoice number 22.\\nParagraph 23: the orders service talks to billing about invoice number 23.\\nParagraph 24: the orders service talks to billing about invoice number 24.\\nParagraph 25: the orders service talks to billing about invoice number 25.\\nParagraph 26: the orders service talks to billing about invoice number 26.\\nParagraph 27: the orders service talks to billing about invoice number 27.\\nParagraph 28: the orders service talks to billing about invoice number 28.\\nParagraph 29: the orders service talks to billing about invoice number 29.\\nParagraph 30: the orders service talks to billing about invoice number 30.\\nParagraph 31: the orders service talks to billing about invoice number 31.\\nParagraph 32: the orders service talks to billing about invoice number 32.\\nParagraph 33: the orders service talks to billing about invoice number 33.\\n\\n(matches: 34)\\n\\n### [5] docket/default/document/doc.ledger/d1#page-3 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 3/4)\\nParagraph 34: the orders service talks to billing about invoice number 34.\\nParagraph 35: the orders service talks to billing about invoice number 35.\\nParagraph 36: the orders service talks to billing about invoice number 36.\\nParagraph 37: the orders service talks to billing about invoice number 37.\\nParagraph 38: the orders service talks to billing about invoice number 38.\\nParagraph 39: the orders service talks to billing about invoice number 39.\\nParagraph 40: we chose Postgres for the ledger because of serializable isolation.\\nParagraph 41: the orders service talks to billing about invoice number 41.\\nParagraph 42: the orders service talks to billing about invoice number 42.\\nParagraph 43: the orders service talks to billing about invoice number 43.\\nParagraph 44: the orders service talks to billing about invoice number 44.\\nParagraph 45: the orders service talks to billing about invoice number 45.\\nParagraph 46: the orders service talks to billing about invoice number 46.\\nParagraph 47: the orders service talks to billing about invoice number 47.\\nParagraph 48: the orders service talks to billing about invoice number 48.\\nParagraph 49: the orders service talks to billing about invoice number 49.\\n\\n(matches: 30)\\n\\n### [6] docket/default/document/doc.ledger/d1#page-4 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 4/4)\\nParagraph 50: the orders service talks to billing about invoice number 50.\\nParagraph 51: the orders service talks to billing about invoice number 51.\\nParagraph 52: the orders service talks to billing about invoice number 52.\\nParagraph 53: the orders service talks to billing about invoice number 53.\\nParagraph 54: the orders service talks to billing about invoice number 54.\\nParagraph 55: the orders service talks to billing about invoice number 55.\\nParagraph 56: the orders service talks to billing about invoice number 56.\\nParagraph 57: the orders service talks to billing about invoice number 57.\\nParagraph 58: the orders service talks to billing about invoice number 58.\\nParagraph 59: the orders service talks to billing about invoice number 59.\\n(matches: 20)\\n\\n### [7] docket/default/entity/service.billing/b1 — Billing\\n# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 4)\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "why OR did OR we OR choose OR postgres OR for OR the OR ledger",
+      "--scope",
+      "mv2://docket/default/",
+      "--top-k",
+      "10",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--snippet-chars",
+      "4000",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"version\": \"mv2.result.v2\",\n  \"query\": \"why OR did OR we OR choose OR postgres OR for OR the OR ledger\",\n  \"metadata\": {\n    \"elapsed_ms\": 1,\n    \"total_hits\": 4,\n    \"next_cursor\": null,\n    \"engine\": \"tantivy\",\n    \"params\": {\n      \"top_k\": 10,\n      \"snippet_chars\": 4000,\n      \"mode\": \"text\",\n      \"additional_params\": {}\n    }\n  },\n  \"hits\": [\n    {\n      \"rank\": 1,\n      \"score\": 7.733529567718506,\n      \"id\": \"mv2-hit-bcafee6d3d19-5-2530\",\n      \"frame_id\": 5,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-3\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 3/4)\",\n      \"chunk_range\": [\n        2530,\n        3737\n      ],\n      \"range\": [\n        2530,\n        3737\n      ],\n      \"text\": \"Paragraph 34: the orders service talks to billing about invoice number 34.\\nParagraph 35: the orders service talks to billing about invoice number 35.\\nParagraph 36: the orders service talks to billing about invoice number 36.\\nParagraph 37: the orders service talks to billing about invoice number 37.\\nParagraph 38: the orders service talks to billing about invoice number 38.\\nParagraph 39: the orders service talks to billing about invoice number 39.\\nParagraph 40: we chose Postgres for the ledger because of serializable isolation.\\nParagraph 41: the orders service talks to billing about invoice number 41.\\nParagraph 42: the orders service talks to billing about invoice number 42.\\nParagraph 43: the orders service talks to billing about invoice number 43.\\nParagraph 44: the orders service talks to billing about invoice number 44.\\nParagraph 45: the orders service talks to billing about invoice number 45.\\nParagraph 46: the orders service talks to billing about invoice number 46.\\nParagraph 47: the orders service talks to billing about invoice number 47.\\nParagraph 48: the orders service talks to billing about invoice number 48.\\nParagraph 49: the orders service talks to billing about invoice number 49.\\n\",\n      \"metadata\": {\n        \"matches\": 20,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 2,\n      \"score\": 2.7779364585876465,\n      \"id\": \"mv2-hit-c6382c8eee6b-1-0\",\n      \"frame_id\": 1,\n      \"uri\": \"mv2://docket/default/entity/service.billing/b1\",\n      \"title\": \"Billing\",\n      \"chunk_range\": [\n        0,\n        365\n      ],\n      \"range\": [\n        0,\n        365\n      ],\n      \"text\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 1,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:01Z\"\n      }\n    },\n    {\n      \"rank\": 3,\n      \"score\": 1.9872119426727295,\n      \"id\": \"mv2-hit-a6477285d969-4-1255\",\n      \"frame_id\": 4,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-2\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 2/4)\",\n      \"chunk_range\": [\n        1255,\n        2530\n      ],\n      \"range\": [\n        1255,\n        2530\n      ],\n      \"text\": \"Paragraph 17: the orders service talks to billing about invoice number 17.\\nParagraph 18: the orders service talks to billing about invoice number 18.\\nParagraph 19: the orders service talks to billing about invoice number 19.\\nParagraph 20: the orders service talks to billing about invoice number 20.\\nParagraph 21: the orders service talks to billing about invoice number 21.\\nParagraph 22: the orders service talks to billing about invoice number 22.\\nParagraph 23: the orders service talks to billing about invoice number 23.\\nParagraph 24: the orders service talks to billing about invoice number 24.\\nParagraph 25: the orders service talks to billing about invoice number 25.\\nParagraph 26: the orders service talks to billing about invoice number 26.\\nParagraph 27: the orders service talks to billing about invoice number 27.\\nParagraph 28: the orders service talks to billing about invoice number 28.\\nParagraph 29: the orders service talks to billing about invoice number 29.\\nParagraph 30: the orders service talks to billing about invoice number 30.\\nParagraph 31: the orders service talks to billing about invoice number 31.\\nParagraph 32: the orders service talks to billing about invoice number 32.\\nParagraph 33: the orders service talks to billing about invoice number 33.\\n\",\n      \"metadata\": {\n        \"matches\": 17,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 4,\n      \"score\": 1.9748213291168213,\n      \"id\": \"mv2-hit-b4d3ff41bd2e-6-3737\",\n      \"frame_id\": 6,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-4\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 4/4)\",\n      \"chunk_range\": [\n        3737,\n        4486\n      ],\n      \"range\": [\n        3737,\n        4486\n      ],\n      \"text\": \"Paragraph 50: the orders service talks to billing about invoice number 50.\\nParagraph 51: the orders service talks to billing about invoice number 51.\\nParagraph 52: the orders service talks to billing about invoice number 52.\\nParagraph 53: the orders service talks to billing about invoice number 53.\\nParagraph 54: the orders service talks to billing about invoice number 54.\\nParagraph 55: the orders service talks to billing about invoice number 55.\\nParagraph 56: the orders service talks to billing about invoice number 56.\\nParagraph 57: the orders service talks to billing about invoice number 57.\\nParagraph 58: the orders service talks to billing about invoice number 58.\\nParagraph 59: the orders service talks to billing about invoice number 59.\",\n      \"metadata\": {\n        \"matches\": 10,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    }\n  ],\n  \"context\": \"### [1] docket/default/document/doc.ledger/d1#page-3 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 3/4)\\nParagraph 34: the orders service talks to billing about invoice number 34.\\nParagraph 35: the orders service talks to billing about invoice number 35.\\nParagraph 36: the orders service talks to billing about invoice number 36.\\nParagraph 37: the orders service talks to billing about invoice number 37.\\nParagraph 38: the orders service talks to billing about invoice number 38.\\nParagraph 39: the orders service talks to billing about invoice number 39.\\nParagraph 40: we chose Postgres for the ledger because of serializable isolation.\\nParagraph 41: the orders service talks to billing about invoice number 41.\\nParagraph 42: the orders service talks to billing about invoice number 42.\\nParagraph 43: the orders service talks to billing about invoice number 43.\\nParagraph 44: the orders service talks to billing about invoice number 44.\\nParagraph 45: the orders service talks to billing about invoice number 45.\\nParagraph 46: the orders service talks to billing about invoice number 46.\\nParagraph 47: the orders service talks to billing about invoice number 47.\\nParagraph 48: the orders service talks to billing about invoice number 48.\\nParagraph 49: the orders service talks to billing about invoice number 49.\\n\\n(matches: 20)\\n\\n### [2] docket/default/entity/service.billing/b1 — Billing\\n# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 1)\\n\\n### [3] docket/default/document/doc.ledger/d1#page-2 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 2/4)\\nParagraph 17: the orders service talks to billing about invoice number 17.\\nParagraph 18: the orders service talks to billing about invoice number 18.\\nParagraph 19: the orders service talks to billing about invoice number 19.\\nParagraph 20: the orders service talks to billing about invoice number 20.\\nParagraph 21: the orders service talks to billing about invoice number 21.\\nParagraph 22: the orders service talks to billing about invoice number 22.\\nParagraph 23: the orders service talks to billing about invoice number 23.\\nParagraph 24: the orders service talks to billing about invoice number 24.\\nParagraph 25: the orders service talks to billing about invoice number 25.\\nParagraph 26: the orders service talks to billing about invoice number 26.\\nParagraph 27: the orders service talks to billing about invoice number 27.\\nParagraph 28: the orders service talks to billing about invoice number 28.\\nParagraph 29: the orders service talks to billing about invoice number 29.\\nParagraph 30: the orders service talks to billing about invoice number 30.\\nParagraph 31: the orders service talks to billing about invoice number 31.\\nParagraph 32: the orders service talks to billing about invoice number 32.\\nParagraph 33: the orders service talks to billing about invoice number 33.\\n\\n(matches: 17)\\n\\n### [4] docket/default/document/doc.ledger/d1#page-4 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 4/4)\\nParagraph 50: the orders service talks to billing about invoice number 50.\\nParagraph 51: the orders service talks to billing about invoice number 51.\\nParagraph 52: the orders service talks to billing about invoice number 52.\\nParagraph 53: the orders service talks to billing about invoice number 53.\\nParagraph 54: the orders service talks to billing about invoice number 54.\\nParagraph 55: the orders service talks to billing about invoice number 55.\\nParagraph 56: the orders service talks to billing about invoice number 56.\\nParagraph 57: the orders service talks to billing about invoice number 57.\\nParagraph 58: the orders service talks to billing about invoice number 58.\\nParagraph 59: the orders service talks to billing about invoice number 59.\\n(matches: 10)\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "when OR was OR orders OR deployed OR to OR production",
+      "--scope",
+      "mv2://docket/default/",
+      "--top-k",
+      "10",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--snippet-chars",
+      "4000",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"version\": \"mv2.result.v2\",\n  \"query\": \"when OR was OR orders OR deployed OR to OR production\",\n  \"metadata\": {\n    \"elapsed_ms\": 1,\n    \"total_hits\": 4,\n    \"next_cursor\": null,\n    \"engine\": \"tantivy\",\n    \"params\": {\n      \"top_k\": 10,\n      \"snippet_chars\": 4000,\n      \"mode\": \"text\",\n      \"additional_params\": {}\n    }\n  },\n  \"hits\": [\n    {\n      \"rank\": 1,\n      \"score\": 8.34191608428955,\n      \"id\": \"mv2-hit-f64cc4be50e1-7-0\",\n      \"frame_id\": 7,\n      \"uri\": \"mv2://docket/default/observation/obs.deploy-1/o1\",\n      \"title\": \"Deployed orders 1.4 to production.\",\n      \"chunk_range\": [\n        0,\n        387\n      ],\n      \"range\": [\n        0,\n        387\n      ],\n      \"text\": \"Deployed orders 1.4 to production.\\ntitle: Deployed orders 1.4 to production.\\nuri: mv2://docket/default/observation/obs.deploy-1/o1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":34,\\\"hash\\\":\\\"c52ba2da5c0f745fd051847f2b876fc98ca0639527bc9b9710a178df10edc5f9\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"Deployed orders 1.4 to production.\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 13,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-09-30T17:00:00Z\"\n      }\n    },\n    {\n      \"rank\": 2,\n      \"score\": 1.7669167518615725,\n      \"id\": \"mv2-hit-a6477285d969-4-1255\",\n      \"frame_id\": 4,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-2\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 2/4)\",\n      \"chunk_range\": [\n        1255,\n        2530\n      ],\n      \"range\": [\n        1255,\n        2530\n      ],\n      \"text\": \"Paragraph 17: the orders service talks to billing about invoice number 17.\\nParagraph 18: the orders service talks to billing about invoice number 18.\\nParagraph 19: the orders service talks to billing about invoice number 19.\\nParagraph 20: the orders service talks to billing about invoice number 20.\\nParagraph 21: the orders service talks to billing about invoice number 21.\\nParagraph 22: the orders service talks to billing about invoice number 22.\\nParagraph 23: the orders service talks to billing about invoice number 23.\\nParagraph 24: the orders service talks to billing about invoice number 24.\\nParagraph 25: the orders service talks to billing about invoice number 25.\\nParagraph 26: the orders service talks to billing about invoice number 26.\\nParagraph 27: the orders service talks to billing about invoice number 27.\\nParagraph 28: the orders service talks to billing about invoice number 28.\\nParagraph 29: the orders service talks to billing about invoice number 29.\\nParagraph 30: the orders service talks to billing about invoice number 30.\\nParagraph 31: the orders service talks to billing about invoice number 31.\\nParagraph 32: the orders service talks to billing about invoice number 32.\\nParagraph 33: the orders service talks to billing about invoice number 33.\\n\",\n      \"metadata\": {\n        \"matches\": 34,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 3,\n      \"score\": 1.7572910785675049,\n      \"id\": \"mv2-hit-b4d3ff41bd2e-6-3737\",\n      \"frame_id\": 6,\n      \"uri\": \"mv2://docket/default/document/doc.ledger/d1#page-4\",\n      \"title\": \"Paragraph 0: the orders service talks to billing about invoice number 0. (page 4/4)\",\n      \"chunk_range\": [\n        3737,\n        4486\n      ],\n      \"range\": [\n        3737,\n        4486\n      ],\n      \"text\": \"Paragraph 50: the orders service talks to billing about invoice number 50.\\nParagraph 51: the orders service talks to billing about invoice number 51.\\nParagraph 52: the orders service talks to billing about invoice number 52.\\nParagraph 53: the orders service talks to billing about invoice number 53.\\nParagraph 54: the orders service talks to billing about invoice number 54.\\nParagraph 55: the orders service talks to billing about invoice number 55.\\nParagraph 56: the orders service talks to billing about invoice number 56.\\nParagraph 57: the orders service talks to billing about invoice number 57.\\nParagraph 58: the orders service talks to billing about invoice number 58.\\nParagraph 59: the orders service talks to billing about invoice number 59.\",\n      \"metadata\": {\n        \"matches\": 20,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:02Z\"\n      }\n    },\n    {\n      \"rank\": 4,\n      \"score\": 1.114577054977417,\n      \"id\": \"mv2-hit-f6e3369c5da7-0-0\",\n      \"frame_id\": 0,\n      \"uri\": \"mv2://docket/default/entity/service.orders/r1\",\n      \"title\": \"Orders\",\n      \"chunk_range\": [\n        0,\n        362\n      ],\n      \"range\": [\n        0,\n        362\n      ],\n      \"text\": \"# Orders\\nservice service.orders\\nTakes and fulfils customer orders.\\ntitle: Orders\\nuri: mv2://docket/default/entity/service.orders/r1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"ffd47aa8ebfe392cfdb315fe93f46f4c0909d303c4043c92853a3eb97662582b\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 7,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:01Z\"\n      }\n    }\n  ],\n  \"context\": \"### [1] docket/default/observation/obs.deploy-1/o1 — Deployed orders 1.4 to production.\\nDeployed orders 1.4 to production.\\ntitle: Deployed orders 1.4 to production.\\nuri: mv2://docket/default/observation/obs.deploy-1/o1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":34,\\\"hash\\\":\\\"c52ba2da5c0f745fd051847f2b876fc98ca0639527bc9b9710a178df10edc5f9\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"Deployed orders 1.4 to production.\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 13)\\n\\n### [2] docket/default/document/doc.ledger/d1#page-2 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 2/4)\\nParagraph 17: the orders service talks to billing about invoice number 17.\\nParagraph 18: the orders service talks to billing about invoice number 18.\\nParagraph 19: the orders service talks to billing about invoice number 19.\\nParagraph 20: the orders service talks to billing about invoice number 20.\\nParagraph 21: the orders service talks to billing about invoice number 21.\\nParagraph 22: the orders service talks to billing about invoice number 22.\\nParagraph 23: the orders service talks to billing about invoice number 23.\\nParagraph 24: the orders service talks to billing about invoice number 24.\\nParagraph 25: the orders service talks to billing about invoice number 25.\\nParagraph 26: the orders service talks to billing about invoice number 26.\\nParagraph 27: the orders service talks to billing about invoice number 27.\\nParagraph 28: the orders service talks to billing about invoice number 28.\\nParagraph 29: the orders service talks to billing about invoice number 29.\\nParagraph 30: the orders service talks to billing about invoice number 30.\\nParagraph 31: the orders service talks to billing about invoice number 31.\\nParagraph 32: the orders service talks to billing about invoice number 32.\\nParagraph 33: the orders service talks to billing about invoice number 33.\\n\\n(matches: 34)\\n\\n### [3] docket/default/document/doc.ledger/d1#page-4 — Paragraph 0: the orders service talks to billing about invoice number 0. (page 4/4)\\nParagraph 50: the orders service talks to billing about invoice number 50.\\nParagraph 51: the orders service talks to billing about invoice number 51.\\nParagraph 52: the orders service talks to billing about invoice number 52.\\nParagraph 53: the orders service talks to billing about invoice number 53.\\nParagraph 54: the orders service talks to billing about invoice number 54.\\nParagraph 55: the orders service talks to billing about invoice number 55.\\nParagraph 56: the orders service talks to billing about invoice number 56.\\nParagraph 57: the orders service talks to billing about invoice number 57.\\nParagraph 58: the orders service talks to billing about invoice number 58.\\nParagraph 59: the orders service talks to billing about invoice number 59.\\n(matches: 20)\\n\\n### [4] docket/default/entity/service.orders/r1 — Orders\\n# Orders\\nservice service.orders\\nTakes and fulfils customer orders.\\ntitle: Orders\\nuri: mv2://docket/default/entity/service.orders/r1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"ffd47aa8ebfe392cfdb315fe93f46f4c0909d303c4043c92853a3eb97662582b\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 7)\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "put",
+      "<state>/memory.mv2",
+      "--json",
+      "--uri",
+      "mv2://docket/default/entity/service.orders/r2",
+      "--title",
+      "Orders",
+      "--track",
+      "docket",
+      "--kind",
+      "entity",
+      "--allow-duplicate",
+      "--no-embedding",
+      "--no-auto-tag",
+      "--no-extract-dates",
+      "--no-extract-triplets",
+      "--no-enrich",
+      "--lock-timeout",
+      "5000"
+    ],
+    "input": "# Orders\nservice service.orders\n\nTakes customer orders and publishes them to Kafka.\n",
+    "code": 0,
+    "stdout": "{\n  \"processed\": 1,\n  \"ingested\": 1,\n  \"skipped\": 0,\n  \"bytes_input\": 84,\n  \"bytes_input_human\": \"84 B\",\n  \"bytes_stored\": 79,\n  \"bytes_stored_human\": \"79 B\",\n  \"reduction_percent\": 5.952380952380952,\n  \"embedded_documents\": 0,\n  \"embedding\": {\n    \"enabled\": false,\n    \"mode\": \"none\",\n    \"runtime_dimension\": null\n  },\n  \"tables\": {\n    \"enabled\": false,\n    \"extracted\": 0,\n    \"tables\": []\n  },\n  \"enrichment\": {\n    \"enabled\": false,\n    \"cards_extracted\": 0\n  },\n  \"capacity_reached\": false,\n  \"warnings\": [],\n  \"extraction\": {\n    \"total_duration_ms\": null,\n    \"total_pages_processed\": null\n  },\n  \"memory\": {\n    \"path\": \"<state>/memory.mv2\",\n    \"frame_count\": 9,\n    \"size_bytes\": 140438,\n    \"tier\": \"Free\"\n  },\n  \"reports\": [\n    {\n      \"seq\": 14,\n      \"uri\": \"mv2://docket/default/entity/service.orders/r2\",\n      \"title\": \"Orders\",\n      \"original_bytes\": 84,\n      \"original_bytes_human\": \"84 B\",\n      \"stored_bytes\": 79,\n      \"stored_bytes_human\": \"79 B\",\n      \"compressed\": true,\n      \"mime\": \"text/plain\",\n      \"source\": null,\n      \"metadata\": {\n        \"mime\": \"text/plain\",\n        \"bytes\": 84,\n        \"hash\": \"0ac37ffee8365b0ab875f565a3a07424520c68f2b5e9b4e53663e6b8d54f6b7a\",\n        \"width\": null,\n        \"height\": null,\n        \"colors\": null,\n        \"caption\": \"# Orders\",\n        \"exif\": null,\n        \"audio\": null,\n        \"media\": null\n      },\n      \"extraction\": {\n        \"status\": \"ok\",\n        \"reader\": \"bytes\",\n        \"duration_ms\": null,\n        \"pages_processed\": null,\n        \"warnings\": []\n      }\n    }\n  ]\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/default/entity/service.orders/r2",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 8,\n    \"status\": \"active\",\n    \"timestamp\": 1791473823,\n    \"kind\": \"entity\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/default/entity/service.orders/r2\",\n    \"title\": \"Orders\",\n    \"payload_length\": 0,\n    \"canonical_encoding\": \"Plain\",\n    \"canonical_length\": 0,\n    \"role\": \"Document\",\n    \"parent_id\": null,\n    \"chunk_index\": null,\n    \"chunk_count\": null,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"# Orders\\nservice service.orders\\nTakes customer orders and publishes them to Kafka.\\ntitle: Orders\\nuri: mv2://docket/default/entity/service.orders/r2\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":84,\\\"hash\\\":\\\"0ac37ffee8365b0ab875f565a3a07424520c68f2b5e9b4e53663e6b8d54f6b7a\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 84,\n      \"hash\": \"0ac37ffee8365b0ab875f565a3a07424520c68f2b5e9b4e53663e6b8d54f6b7a\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"# Orders\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": \"0ac37ffee8365b0ab875f565a3a07424520c68f2b5e9b4e53663e6b8d54f6b7a\",\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1200,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "0",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 0,\n  \"sequence\": 16,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "3",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 3,\n  \"sequence\": 18,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "4",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 4,\n  \"sequence\": 20,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "5",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 5,\n  \"sequence\": 22,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "6",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 6,\n  \"sequence\": 24,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "2",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 2,\n  \"sequence\": 26,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "timeline",
+      "<state>/memory.mv2",
+      "--json",
+      "--limit",
+      "1000000"
+    ],
+    "code": 0,
+    "stdout": "[\n  {\n    \"frame_id\": 7,\n    \"timestamp\": 1790787600,\n    \"preview\": \"Deployed orders 1.4 to production.\\ntitle: Deployed orders 1.4 to production.\\nuri: mv2://docket/default/observation/obs.d\",\n    \"uri\": \"mv2://docket/default/observation/obs.deploy-1/o1\"\n  },\n  {\n    \"frame_id\": 1,\n    \"timestamp\": 1791473821,\n    \"preview\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/servi\",\n    \"uri\": \"mv2://docket/default/entity/service.billing/b1\"\n  },\n  {\n    \"frame_id\": 8,\n    \"timestamp\": 1791473823,\n    \"preview\": \"# Orders\\nservice service.orders\\nTakes customer orders and publishes them to Kafka.\\ntitle: Orders\\nuri: mv2://docket/defau\",\n    \"uri\": \"mv2://docket/default/entity/service.orders/r2\"\n  }\n]\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "why OR did OR we OR choose OR postgres OR for OR the OR ledger",
+      "--scope",
+      "mv2://docket/default/",
+      "--top-k",
+      "10",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--snippet-chars",
+      "4000",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"version\": \"mv2.result.v2\",\n  \"query\": \"why OR did OR we OR choose OR postgres OR for OR the OR ledger\",\n  \"metadata\": {\n    \"elapsed_ms\": 1,\n    \"total_hits\": 1,\n    \"next_cursor\": null,\n    \"engine\": \"tantivy\",\n    \"params\": {\n      \"top_k\": 10,\n      \"snippet_chars\": 4000,\n      \"mode\": \"text\",\n      \"additional_params\": {}\n    }\n  },\n  \"hits\": [\n    {\n      \"rank\": 1,\n      \"score\": 2.022665500640869,\n      \"id\": \"mv2-hit-c6382c8eee6b-1-0\",\n      \"frame_id\": 1,\n      \"uri\": \"mv2://docket/default/entity/service.billing/b1\",\n      \"title\": \"Billing\",\n      \"chunk_range\": [\n        0,\n        365\n      ],\n      \"range\": [\n        0,\n        365\n      ],\n      \"text\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 1,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:01Z\"\n      }\n    }\n  ],\n  \"context\": \"### [1] docket/default/entity/service.billing/b1 — Billing\\n# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 1)\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "which OR service OR publishes OR to OR kafka",
+      "--scope",
+      "mv2://docket/default/",
+      "--top-k",
+      "10",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--snippet-chars",
+      "4000",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"version\": \"mv2.result.v2\",\n  \"query\": \"which OR service OR publishes OR to OR kafka\",\n  \"metadata\": {\n    \"elapsed_ms\": 1,\n    \"total_hits\": 2,\n    \"next_cursor\": null,\n    \"engine\": \"tantivy\",\n    \"params\": {\n      \"top_k\": 10,\n      \"snippet_chars\": 4000,\n      \"mode\": \"text\",\n      \"additional_params\": {}\n    }\n  },\n  \"hits\": [\n    {\n      \"rank\": 1,\n      \"score\": 4.186801910400391,\n      \"id\": \"mv2-hit-da011fc4bc90-8-0\",\n      \"frame_id\": 8,\n      \"uri\": \"mv2://docket/default/entity/service.orders/r2\",\n      \"title\": \"Orders\",\n      \"chunk_range\": [\n        0,\n        378\n      ],\n      \"range\": [\n        0,\n        378\n      ],\n      \"text\": \"# Orders\\nservice service.orders\\nTakes customer orders and publishes them to Kafka.\\ntitle: Orders\\nuri: mv2://docket/default/entity/service.orders/r2\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":84,\\\"hash\\\":\\\"0ac37ffee8365b0ab875f565a3a07424520c68f2b5e9b4e53663e6b8d54f6b7a\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 7,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:03Z\"\n      }\n    },\n    {\n      \"rank\": 2,\n      \"score\": 1.754750370979309,\n      \"id\": \"mv2-hit-c6382c8eee6b-1-0\",\n      \"frame_id\": 1,\n      \"uri\": \"mv2://docket/default/entity/service.billing/b1\",\n      \"title\": \"Billing\",\n      \"chunk_range\": [\n        0,\n        365\n      ],\n      \"range\": [\n        0,\n        365\n      ],\n      \"text\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 3,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:01Z\"\n      }\n    }\n  ],\n  \"context\": \"### [1] docket/default/entity/service.orders/r2 — Orders\\n# Orders\\nservice service.orders\\nTakes customer orders and publishes them to Kafka.\\ntitle: Orders\\nuri: mv2://docket/default/entity/service.orders/r2\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":84,\\\"hash\\\":\\\"0ac37ffee8365b0ab875f565a3a07424520c68f2b5e9b4e53663e6b8d54f6b7a\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Orders\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 7)\\n\\n### [2] docket/default/entity/service.billing/b1 — Billing\\n# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/service.billing/b1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":68,\\\"hash\\\":\\\"9f6cac09cb0fc15e92e82ad1ab4235335769fe1b2ddb9e96a60e7d3d61db45dd\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Billing\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 3)\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "timeline",
+      "<state>/memory.mv2",
+      "--json",
+      "--limit",
+      "1000000"
+    ],
+    "code": 0,
+    "stdout": "[\n  {\n    \"frame_id\": 7,\n    \"timestamp\": 1790787600,\n    \"preview\": \"Deployed orders 1.4 to production.\\ntitle: Deployed orders 1.4 to production.\\nuri: mv2://docket/default/observation/obs.d\",\n    \"uri\": \"mv2://docket/default/observation/obs.deploy-1/o1\"\n  },\n  {\n    \"frame_id\": 1,\n    \"timestamp\": 1791473821,\n    \"preview\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/servi\",\n    \"uri\": \"mv2://docket/default/entity/service.billing/b1\"\n  },\n  {\n    \"frame_id\": 8,\n    \"timestamp\": 1791473823,\n    \"preview\": \"# Orders\\nservice service.orders\\nTakes customer orders and publishes them to Kafka.\\ntitle: Orders\\nuri: mv2://docket/defau\",\n    \"uri\": \"mv2://docket/default/entity/service.orders/r2\"\n  }\n]\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "put",
+      "<state>/memory.mv2",
+      "--json",
+      "--uri",
+      "mv2://docket/other/entity/service.zebra/z1",
+      "--title",
+      "Zebra",
+      "--track",
+      "docket",
+      "--kind",
+      "entity",
+      "--allow-duplicate",
+      "--no-embedding",
+      "--no-auto-tag",
+      "--no-extract-dates",
+      "--no-extract-triplets",
+      "--no-enrich",
+      "--lock-timeout",
+      "5000"
+    ],
+    "input": "# Zebra\nservice service.zebra\n\nZebra crossings for kafka.\n",
+    "code": 0,
+    "stdout": "{\n  \"processed\": 1,\n  \"ingested\": 1,\n  \"skipped\": 0,\n  \"bytes_input\": 58,\n  \"bytes_input_human\": \"58 B\",\n  \"bytes_stored\": 62,\n  \"bytes_stored_human\": \"62 B\",\n  \"reduction_percent\": null,\n  \"embedded_documents\": 0,\n  \"embedding\": {\n    \"enabled\": false,\n    \"mode\": \"none\",\n    \"runtime_dimension\": null\n  },\n  \"tables\": {\n    \"enabled\": false,\n    \"extracted\": 0,\n    \"tables\": []\n  },\n  \"enrichment\": {\n    \"enabled\": false,\n    \"cards_extracted\": 0\n  },\n  \"capacity_reached\": false,\n  \"warnings\": [],\n  \"extraction\": {\n    \"total_duration_ms\": null,\n    \"total_pages_processed\": null\n  },\n  \"memory\": {\n    \"path\": \"<state>/memory.mv2\",\n    \"frame_count\": 10,\n    \"size_bytes\": 150608,\n    \"tier\": \"Free\"\n  },\n  \"reports\": [\n    {\n      \"seq\": 28,\n      \"uri\": \"mv2://docket/other/entity/service.zebra/z1\",\n      \"title\": \"Zebra\",\n      \"original_bytes\": 58,\n      \"original_bytes_human\": \"58 B\",\n      \"stored_bytes\": 62,\n      \"stored_bytes_human\": \"62 B\",\n      \"compressed\": true,\n      \"mime\": \"text/plain\",\n      \"source\": null,\n      \"metadata\": {\n        \"mime\": \"text/plain\",\n        \"bytes\": 58,\n        \"hash\": \"c6b5c900e8e951e05d4615459c075d0ac9da3bda45b842c364374967bdd8ea43\",\n        \"width\": null,\n        \"height\": null,\n        \"colors\": null,\n        \"caption\": \"# Zebra\",\n        \"exif\": null,\n        \"audio\": null,\n        \"media\": null\n      },\n      \"extraction\": {\n        \"status\": \"ok\",\n        \"reader\": \"bytes\",\n        \"duration_ms\": null,\n        \"pages_processed\": null,\n        \"warnings\": []\n      }\n    }\n  ]\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "view",
+      "<state>/memory.mv2",
+      "--uri",
+      "mv2://docket/other/entity/service.zebra/z1",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame\": {\n    \"id\": 9,\n    \"status\": \"active\",\n    \"timestamp\": 1791473826,\n    \"kind\": \"entity\",\n    \"track\": \"docket\",\n    \"uri\": \"mv2://docket/other/entity/service.zebra/z1\",\n    \"title\": \"Zebra\",\n    \"payload_length\": 0,\n    \"canonical_encoding\": \"Plain\",\n    \"canonical_length\": 0,\n    \"role\": \"Document\",\n    \"parent_id\": null,\n    \"chunk_index\": null,\n    \"chunk_count\": null,\n    \"tags\": [],\n    \"labels\": [],\n    \"search_text\": \"# Zebra\\nservice service.zebra\\nZebra crossings for kafka.\\ntitle: Zebra\\nuri: mv2://docket/other/entity/service.zebra/z1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":58,\\\"hash\\\":\\\"c6b5c900e8e951e05d4615459c075d0ac9da3bda45b842c364374967bdd8ea43\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Zebra\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n    \"metadata\": {\n      \"mime\": \"text/plain\",\n      \"bytes\": 58,\n      \"hash\": \"c6b5c900e8e951e05d4615459c075d0ac9da3bda45b842c364374967bdd8ea43\",\n      \"width\": null,\n      \"height\": null,\n      \"colors\": null,\n      \"caption\": \"# Zebra\",\n      \"exif\": null,\n      \"audio\": null,\n      \"media\": null\n    },\n    \"extra_metadata\": {},\n    \"content_dates\": [],\n    \"chunk_manifest\": null,\n    \"supersedes\": null,\n    \"superseded_by\": null,\n    \"source_sha256\": \"c6b5c900e8e951e05d4615459c075d0ac9da3bda45b842c364374967bdd8ea43\",\n    \"source_path\": null\n  },\n  \"page\": 1,\n  \"page_size\": 1200,\n  \"page_count\": 1,\n  \"has_prev\": false,\n  \"has_next\": false,\n  \"content\": \"\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "zebra",
+      "--scope",
+      "mv2://docket/default/",
+      "--top-k",
+      "10",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--snippet-chars",
+      "4000",
+      "--json"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "Lexical index is not enabled\n"
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "zebra",
+      "--top-k",
+      "1",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"version\": \"mv2.result.v2\",\n  \"query\": \"zebra\",\n  \"metadata\": {\n    \"elapsed_ms\": 1,\n    \"total_hits\": 1,\n    \"next_cursor\": null,\n    \"engine\": \"tantivy\",\n    \"params\": {\n      \"top_k\": 1,\n      \"snippet_chars\": 480,\n      \"mode\": \"text\",\n      \"additional_params\": {}\n    }\n  },\n  \"hits\": [\n    {\n      \"rank\": 1,\n      \"score\": 3.2287135124206543,\n      \"id\": \"mv2-hit-645053b682ab-9-0\",\n      \"frame_id\": 9,\n      \"uri\": \"mv2://docket/other/entity/service.zebra/z1\",\n      \"title\": \"Zebra\",\n      \"chunk_range\": [\n        0,\n        347\n      ],\n      \"range\": [\n        0,\n        247\n      ],\n      \"text\": \"# Zebra\\nservice service.zebra\\nZebra crossings for kafka.\\ntitle: Zebra\\nuri: mv2://docket/other/entity/service.zebra/z1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":58,\\\"hash\\\":\\\"c6b5c900e8e951e05d4615459c075d0ac9da3bda45b842c364374967bdd8ea43\\\"\",\n      \"metadata\": {\n        \"matches\": 5,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:06Z\"\n      }\n    }\n  ],\n  \"context\": \"### [1] docket/other/entity/service.zebra/z1 — Zebra\\n# Zebra\\nservice service.zebra\\nZebra crossings for kafka.\\ntitle: Zebra\\nuri: mv2://docket/other/entity/service.zebra/z1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":58,\\\"hash\\\":\\\"c6b5c900e8e951e05d4615459c075d0ac9da3bda45b842c364374967bdd8ea43\\\"\\n(matches: 5)\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "timeline",
+      "<state>/memory.mv2",
+      "--json",
+      "--limit",
+      "1000000"
+    ],
+    "code": 0,
+    "stdout": "[\n  {\n    \"frame_id\": 7,\n    \"timestamp\": 1790787600,\n    \"preview\": \"Deployed orders 1.4 to production.\\ntitle: Deployed orders 1.4 to production.\\nuri: mv2://docket/default/observation/obs.d\",\n    \"uri\": \"mv2://docket/default/observation/obs.deploy-1/o1\"\n  },\n  {\n    \"frame_id\": 1,\n    \"timestamp\": 1791473821,\n    \"preview\": \"# Billing\\nservice service.billing\\nIssues invoices for every order.\\ntitle: Billing\\nuri: mv2://docket/default/entity/servi\",\n    \"uri\": \"mv2://docket/default/entity/service.billing/b1\"\n  },\n  {\n    \"frame_id\": 8,\n    \"timestamp\": 1791473823,\n    \"preview\": \"# Orders\\nservice service.orders\\nTakes customer orders and publishes them to Kafka.\\ntitle: Orders\\nuri: mv2://docket/defau\",\n    \"uri\": \"mv2://docket/default/entity/service.orders/r2\"\n  },\n  {\n    \"frame_id\": 9,\n    \"timestamp\": 1791473826,\n    \"preview\": \"# Zebra\\nservice service.zebra\\nZebra crossings for kafka.\\ntitle: Zebra\\nuri: mv2://docket/other/entity/service.zebra/z1\\ntr\",\n    \"uri\": \"mv2://docket/other/entity/service.zebra/z1\"\n  }\n]\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "7",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 7,\n  \"sequence\": 30,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "1",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 1,\n  \"sequence\": 32,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "delete",
+      "<state>/memory.mv2",
+      "--frame-id",
+      "8",
+      "--yes",
+      "--json",
+      "--lock-timeout",
+      "5000"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"frame_id\": 8,\n  \"sequence\": 34,\n  \"status\": \"deleted\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "timeline",
+      "<state>/memory.mv2",
+      "--json",
+      "--limit",
+      "1000000"
+    ],
+    "code": 0,
+    "stdout": "[\n  {\n    \"frame_id\": 9,\n    \"timestamp\": 1791473826,\n    \"preview\": \"# Zebra\\nservice service.zebra\\nZebra crossings for kafka.\\ntitle: Zebra\\nuri: mv2://docket/other/entity/service.zebra/z1\\ntr\",\n    \"uri\": \"mv2://docket/other/entity/service.zebra/z1\"\n  }\n]\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "find",
+      "<state>/memory.mv2",
+      "--query",
+      "zebra OR crossings",
+      "--scope",
+      "mv2://docket/other/",
+      "--top-k",
+      "10",
+      "--mode",
+      "lex",
+      "--no-adaptive",
+      "--snippet-chars",
+      "4000",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"version\": \"mv2.result.v2\",\n  \"query\": \"zebra OR crossings\",\n  \"metadata\": {\n    \"elapsed_ms\": 1,\n    \"total_hits\": 1,\n    \"next_cursor\": null,\n    \"engine\": \"tantivy\",\n    \"params\": {\n      \"top_k\": 10,\n      \"snippet_chars\": 4000,\n      \"mode\": \"text\",\n      \"additional_params\": {}\n    }\n  },\n  \"hits\": [\n    {\n      \"rank\": 1,\n      \"score\": 1.8150993585586548,\n      \"id\": \"mv2-hit-645053b682ab-9-0\",\n      \"frame_id\": 9,\n      \"uri\": \"mv2://docket/other/entity/service.zebra/z1\",\n      \"title\": \"Zebra\",\n      \"chunk_range\": [\n        0,\n        347\n      ],\n      \"range\": [\n        0,\n        347\n      ],\n      \"text\": \"# Zebra\\nservice service.zebra\\nZebra crossings for kafka.\\ntitle: Zebra\\nuri: mv2://docket/other/entity/service.zebra/z1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":58,\\\"hash\\\":\\\"c6b5c900e8e951e05d4615459c075d0ac9da3bda45b842c364374967bdd8ea43\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Zebra\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\",\n      \"metadata\": {\n        \"matches\": 7,\n        \"track\": \"docket\",\n        \"created_at\": \"2026-10-08T15:37:06Z\"\n      }\n    }\n  ],\n  \"context\": \"### [1] docket/other/entity/service.zebra/z1 — Zebra\\n# Zebra\\nservice service.zebra\\nZebra crossings for kafka.\\ntitle: Zebra\\nuri: mv2://docket/other/entity/service.zebra/z1\\ntrack: docket\\nmetadata: {\\\"mime\\\":\\\"text/plain\\\",\\\"bytes\\\":58,\\\"hash\\\":\\\"c6b5c900e8e951e05d4615459c075d0ac9da3bda45b842c364374967bdd8ea43\\\",\\\"width\\\":null,\\\"height\\\":null,\\\"colors\\\":null,\\\"caption\\\":\\\"# Zebra\\\",\\\"exif\\\":null,\\\"audio\\\":null,\\\"media\\\":null}\\n(matches: 7)\"\n}\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "version"
+    ],
+    "code": 0,
+    "stdout": "memvid-cli 2.0.140\n",
+    "stderr": ""
+  },
+  {
+    "args": [
+      "stats",
+      "<state>/memory.mv2",
+      "--json"
+    ],
+    "code": 0,
+    "stdout": "{\n  \"summary\": {\n    \"sequence\": 1,\n    \"frames\": \"10 total (1 active)\",\n    \"usage\": \"148.1 KB used / 50.0 MB total (0.3%)\",\n    \"remaining\": \"49.9 MB free\"\n  },\n  \"storage\": {\n    \"payload\": \"0 B (0%)\",\n    \"overhead\": \"148.1 KB (100%) - WAL + indexes\",\n    \"logical_payload\": \"0 B before compression\",\n    \"compression_savings\": \"0 B saved (0%)\",\n    \"compression_ratio\": \"100%\"\n  },\n  \"frames\": {\n    \"average_stored\": \"0 B\",\n    \"average_logical\": \"0 B\",\n    \"clip_images\": 0\n  },\n  \"indexes\": {\n    \"lexical\": \"yes\",\n    \"vector\": \"yes\",\n    \"time\": \"yes\"\n  },\n  \"enrichment\": {\n    \"total_frames\": 1,\n    \"enriched_frames\": 1,\n    \"pending_frames\": 0,\n    \"searchable_only\": 0\n  },\n  \"ticket\": {\n    \"issuer\": \"free-tier\",\n    \"seq_no\": 1,\n    \"expires_in_secs\": 0,\n    \"capacity_bytes\": 52428800,\n    \"verified\": false\n  },\n  \"embedding_identity\": null,\n  \"embedding_quality\": null,\n  \"tables\": {\n    \"count\": 0,\n    \"tables\": []\n  },\n  \"maintenance\": \"memvid doctor <state>/memory.mv2 --vacuum --rebuild-time-index --rebuild-lex-index\",\n  \"raw\": {\n    \"frame_count\": 10,\n    \"size_bytes\": 151664,\n    \"vec_enabled\": true,\n    \"has_lex_index\": true,\n    \"has_vec_index\": true,\n    \"has_clip_index\": false,\n    \"has_time_index\": true,\n    \"seq_no\": 1,\n    \"capacity_bytes\": 52428800,\n    \"active_frame_count\": 1,\n    \"payload_bytes\": 0,\n    \"logical_bytes\": 0,\n    \"saved_bytes\": 0,\n    \"compression_ratio_percent\": 100.0,\n    \"savings_percent\": 0.0,\n    \"storage_utilisation_percent\": 0.29,\n    \"remaining_capacity_bytes\": 52277136,\n    \"average_frame_payload_bytes\": 0,\n    \"average_frame_logical_bytes\": 0,\n    \"wal_bytes\": 65536,\n    \"lex_index_bytes\": 4632,\n    \"vec_index_bytes\": 8,\n    \"time_index_bytes\": 28,\n    \"vector_count\": 0,\n    \"clip_image_count\": 0,\n    \"lex_enabled\": true\n  }\n}\n",
+    "stderr": ""
+  }
+]
