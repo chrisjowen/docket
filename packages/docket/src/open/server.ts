@@ -96,15 +96,17 @@ const MAX_BODY_BYTES = 256 * 1024
 /** A request id the client chose: short and printable, so it is safe to log and echo. */
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/
 
-const readJson = (request: IncomingMessage): Promise<unknown> =>
+const readJson = (request: IncomingMessage, response: ServerResponse): Promise<unknown> =>
   new Promise((done, fail) => {
     const chunks: Buffer[] = []
     let size = 0
     request.on('data', (chunk: Buffer) => {
       size += chunk.length
       if (size > MAX_BODY_BYTES) {
+        request.removeAllListeners('data')
+        request.resume()
+        response.setHeader('connection', 'close')
         fail(new HttpError(413, `The request body is larger than ${MAX_BODY_BYTES} bytes.`))
-        request.destroy()
         return
       }
       chunks.push(chunk)
@@ -170,7 +172,7 @@ const coordinatedAsk = async (
   cwd: string,
   inFlight: InFlight
 ): Promise<unknown> => {
-  const body = askBody(await readJson(request))
+  const body = askBody(await readJson(request, response))
   const requestId = body.requestId ?? randomUUID()
   if (inFlight.has(requestId)) throw new HttpError(409, `A question with request id "${requestId}" is already being answered.`)
   response.setHeader('x-request-id', requestId)
@@ -237,7 +239,7 @@ const api = async (
       allow('POST')
       let references
       try {
-        references = readEvidenceBody(await readJson(request))
+        references = readEvidenceBody(await readJson(request, response))
       } catch (cause) {
         if (cause instanceof EvidenceRequestError) throw new HttpError(400, cause.message)
         throw cause

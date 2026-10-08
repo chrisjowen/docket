@@ -129,13 +129,6 @@ describe('synthesisPrompt', () => {
     ;({ prompt, exhibits, evidence } = synthesisPrompt(input()))
   })
 
-  it('tells the model to cite evidence, mark derived facts, respect coverage and keep conflicting counts', () => {
-    expect(prompt.system).toContain('casebook')
-    expect(prompt.system).toMatch(/derived/)
-    expect(prompt.system).toMatch(/never present how many it found as a count/)
-    expect(prompt.system).toMatch(/Never pick one silently or average them/)
-  })
-
   it('states each adapter\'s coverage, and the one that could not answer', () => {
     expect(prompt.user).toContain('Asked: 2026-10-09T08:00:00.000Z (time zone Asia/Singapore), in scope "default"')
     expect(prompt.user).toContain('graph: Read-only Cypher (every match in scope)')

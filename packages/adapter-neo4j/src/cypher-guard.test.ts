@@ -62,7 +62,9 @@ describe('scopeProblem', () => {
     'MATCH (a:Memory {scope: $scope}), (b:Memory {scope: $scope}) RETURN a, b',
     'MATCH (s:Memory {scope: $scope}) WITH s AS service MATCH (service)-->(x) RETURN x',
     'MATCH p = (a:Memory {scope: $scope})-[*1..3]-(b) RETURN p',
-    "MATCH (d:Memory:Deployment {scope: $scope}) WHERE d.title CONTAINS ',' RETURN count(d)"
+    "MATCH (d:Memory:Deployment {scope: $scope}) WHERE d.title CONTAINS ',' RETURN count(d)",
+    "MATCH (n:Memory) WHERE $scope = n.scope AND (n.type = 'team' OR n.type = 'service') RETURN count(n)",
+    'MATCH (s:Service {scope: $scope}) RETURN s.id AS id UNION MATCH (t:Team) WHERE t.scope = $scope RETURN t.id AS id'
   ])('accepts a query anchored in scope: %s', (query) => {
     expect(scopeProblem(query)).toBeUndefined()
   })
@@ -71,7 +73,11 @@ describe('scopeProblem', () => {
     ['MATCH (s:Memory:Service) RETURN count(s)', /never binds \$scope/],
     ['MATCH (s:Memory {scope: $scope}), (d:Memory:Deployment) RETURN count(d)', /\(d:Memory:Deployment\) is not bound/],
     ['MATCH (s:Memory {scope: $scope}) MATCH (x)-[r]->(y) RETURN count(r)', /\(x\)-\[r\]->\(y\) is not bound/],
-    ["MATCH (s:Memory) WHERE s.title = '$scope' RETURN s", /never binds \$scope/]
+    ["MATCH (s:Memory) WHERE s.title = '$scope' RETURN s", /never binds \$scope/],
+    ['MATCH (s:Service {scope: $scope}) RETURN s.id AS id UNION MATCH (s:Team) RETURN s.id AS id', /\(s:Team\) is not bound/],
+    ["MATCH (n) WHERE n.scope = $scope OR n.type = 'team' RETURN count(n)", /\(n\) is not bound/],
+    ['MATCH (n) WHERE NOT n.scope = $scope RETURN count(n)', /\(n\) is not bound/],
+    ['MATCH (n) WITH count(n) AS total MATCH (m) WHERE m.scope = $scope RETURN total', /\(n\) is not bound/]
   ])('rejects a pattern that could read another scope: %s', (query, reason) => {
     expect(scopeProblem(query)).toMatch(reason)
   })

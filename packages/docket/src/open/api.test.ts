@@ -198,6 +198,12 @@ describe('POST /api/ask', () => {
     const notJson = await fetch(new URL('/api/ask', server?.url), { method: 'POST', body: '{ nope' })
     expect(notJson.status).toBe(400)
   })
+
+  it('refuses a body over the size limit with a JSON error, not a dropped connection', async () => {
+    const response = await post('/api/ask', { question: 'x'.repeat(300 * 1024) })
+    expect(response.status).toBe(413)
+    expect(((await response.json()) as { error: string }).error).toMatch(/larger than/)
+  })
 })
 
 describe('GET /api/adapters', () => {
