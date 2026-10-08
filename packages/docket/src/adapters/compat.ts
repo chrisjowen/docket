@@ -147,7 +147,12 @@ const compatDefinition = <C extends ProjectionConfig>(
   },
   async create(config, services) {
     const projection = createProjection(config)
-    await projection.init?.({ ...context, projectRoot: services.projectRoot })
+    try {
+      await projection.init?.({ ...context, projectRoot: services.projectRoot })
+    } catch (error) {
+      await projection.close?.().catch(() => undefined)
+      throw error
+    }
     return projectionAdapter(projection, { rebuild })
   }
 })
