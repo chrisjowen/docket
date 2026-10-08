@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises'
 
-import { Command } from 'commander'
+import { Command, Option } from 'commander'
+import { adapterAdd, adaptersList, displayCommand, type AdapterAddPlan } from './commands/adapter.js'
 import { configMigrate } from './commands/config.js'
 import { init } from './commands/init.js'
 import { open } from './commands/open.js'
@@ -18,6 +19,8 @@ import { sync } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
 import { confidenceModel, observationConfidence } from './evidence/confidence.js'
+import { terminalPrompter } from './install/answers.js'
+import { PROVIDERS } from './install/providers.js'
 import { openBrowser } from './open/browser.js'
 import {
   hasErrors,
@@ -340,6 +343,172 @@ runtimeCommand
         ? `✓ runtime ${result.runtime} is down and its volumes are deleted`
         : `✓ runtime ${result.runtime} is down; its volumes are kept`
     )
+  })
+
+/** Everything `docket adapter add` will do, shown before it does any of it. */
+const printAddPlan = (plan: AdapterAddPlan): void => {
+  const { entry, runtime } = plan.addition
+  console.log(`\nPlan: add the ${plan.provider} adapter "${entry.id}" (${entry.module})`)
+  console.log(`\n  ${plan.configFile} gains:`)
+  console.log(`    ${plan.configYaml.trimEnd().replace(/\n/g, '\n    ')}`)
+  if (plan.files.length > 0) {
+    console.log('\n  Files')
+    for (const file of plan.files) {
+      if (file.exists) {
+        console.log(`    keep    ${file.path}  (exists; never overwritten)`)
+      } else {
+        console.log(`    create  ${file.path}  (${file.purpose})`)
+        console.log(`      ${file.contents.trimEnd().replace(/\n/g, '\n      ')}`)
+      }
+    }
+  }
+  if (plan.env.length > 0) {
+    console.log('\n  Environment variables - set them yourself; only their names are written')
+    const width = widest(plan.env.map((variable) => variable.name))
+    for (const variable of plan.env) {
+      const marks = [variable.secret ? 'secret' : '', variable.required ? '' : 'optional'].filter(Boolean)
+      console.log(`    ${pad(variable.name, width)}  ${variable.purpose}${marks.length > 0 ? ` (${marks.join(', ')})` : ''}`)
+    }
+  }
+  if (plan.driver !== undefined) {
+    const { driver } = plan
+    console.log('\n  Package')
+    console.log(
+      `    ${driver.spec}  ` +
+        (driver.installed
+          ? 'already installed'
+          : driver.command
+            ? `not installed; installed only if you agree: ${displayCommand(driver.command)}`
+            : `not installed, and there is no package.json in ${plan.projectRoot} to install it into`)
+    )
+  }
+  if (runtime !== undefined) {
+    console.log(`\n  Nothing is pulled or started now: \`docket runtime up ${runtime.id}\` does that when you run it.`)
+  }
+  for (const note of plan.notes) console.log(`\n  Note: ${note}`)
+}
+
+const OUTCOME = (ok: boolean): string => (ok ? '✓' : '✗')
+
+const adapterCommand = program
+  .command('adapter')
+  .description('Set up an adapter instance in .docket.yaml')
+
+adapterCommand
+  .command('add')
+  .argument('<provider>', `what to set up: ${PROVIDERS.map((provider) => provider.name).join(', ')}`)
+  .description('Ask what an adapter needs, show the resolved plan, and apply it once confirmed')
+  .option('--id <id>', 'adapter instance id')
+  .option('--roles <roles>', 'projection,query (default), query or projection')
+  .option('--mode <mode>', 'neo4j: external (default) or local; mem0: platform (default) or server')
+  .option('--url <url>', 'the endpoint to connect to (neo4j external, mem0 server)')
+  .option('--username <name>', 'neo4j: username (default neo4j)')
+  .option('--database <name>', 'neo4j: database (default: the server\'s)')
+  .option('--password-env <name>', 'neo4j: environment variable holding the password ("none": no auth)')
+  .option('--api-key-env <name>', 'mem0: environment variable holding the API key (default MEM0_API_KEY)')
+  .option('--scope <scope>', 'neo4j scope, or mem0 agent id (default: one unique to the checkout)')
+  .option('--output <dir>', 'jsonl: directory to write to')
+  .option('--image <ref>', 'neo4j local: the image to run (default: read from --image-env when up runs)')
+  .option('--image-env <name>', 'neo4j local: environment variable holding the image (default DOCKET_NEO4J_IMAGE)')
+  .option('--port <port>', 'neo4j local: Bolt port on 127.0.0.1 (default 17687)')
+  .option('--runtime-id <id>', 'neo4j local: runtime group id (default <id>-dev)')
+  .option('--compose-file <path>', 'neo4j local: Compose file to create, relative to .docket.yaml')
+  .option('--project-name <name>', 'neo4j local: Compose project name')
+  .addOption(new Option('--pull-policy <policy>', 'neo4j local: when runtime up may pull').choices(['never', 'missing', 'always']))
+  .option('-y, --yes', 'ask nothing: take the options and defaults, and apply the plan')
+  .option('--dry-run', 'show the plan and change nothing')
+  .option('--install', 'install the driver package with the project\'s package manager without asking')
+  .option('--no-install', 'never offer to install the driver package')
+  .option('--plan-runtime', 'run `docket runtime plan` afterwards (local containers)')
+  .option('--check', 'open the adapter afterwards and report its status')
+  .action(async (provider: string, options: Record<string, string | boolean | undefined>) => {
+    const value = (name: string): string | undefined => {
+      const given = options[name]
+      return typeof given === 'string' ? given : undefined
+    }
+    const flags = [
+      'id', 'roles', 'mode', 'url', 'username', 'database', 'passwordEnv', 'apiKeyEnv', 'scope', 'output',
+      'image', 'imageEnv', 'port', 'runtimeId', 'composeFile', 'projectName', 'pullPolicy'
+    ]
+    const values = Object.fromEntries(
+      flags.map((name) => [`--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, value(name)])
+    )
+    // --install defined before --no-install leaves it unset unless one is given.
+    const install = typeof options.install === 'boolean' ? options.install : undefined
+    const result = await adapterAdd(provider, {
+      values,
+      yes: options.yes === true,
+      dryRun: options.dryRun === true,
+      prompter: terminalPrompter(),
+      show: printAddPlan,
+      install,
+      planRuntime: options.planRuntime === true ? true : undefined,
+      check: options.check === true ? true : undefined
+    })
+    const { plan } = result
+    if (result.status === 'preview') {
+      console.log(`\nOnce applied, next:\n  ${plan.next.join('\n  ')}`)
+      console.log('\nDry run: nothing was changed.')
+      return
+    }
+    if (result.status === 'declined') {
+      console.log('\nNothing was changed.')
+      return
+    }
+    console.log(`\n✓ added adapter "${plan.addition.entry.id}" to ${plan.configFile}`)
+    for (const path of result.created) console.log(`✓ created ${path}`)
+    for (const path of result.kept) console.log(`- kept ${path} (exists)`)
+    if (result.install) {
+      console.log(`${OUTCOME(result.install.ok)} ${result.install.ok ? `installed: ${result.install.value}` : result.install.error}`)
+    }
+    if (result.runtimePlan) {
+      if (result.runtimePlan.ok) {
+        const runtimePlan = result.runtimePlan.value
+        console.log(`${OUTCOME(runtimePlan.problems.length === 0)} docket runtime plan ${runtimePlan.runtime}`)
+        for (const problem of runtimePlan.problems) console.log(`    ${problem}`)
+      } else {
+        console.log(`✗ docket runtime plan: ${result.runtimePlan.error}`)
+      }
+    }
+    if (result.check) {
+      console.log(
+        result.check.ok
+          ? `${OUTCOME(result.check.value.state !== 'unavailable')} status: ${result.check.value.state} - ${result.check.value.message}`
+          : `✗ status check: ${result.check.error}`
+      )
+    }
+    if (plan.next.length > 0) console.log(`\nNext:\n  ${plan.next.join('\n  ')}`)
+    const failed = [result.install, result.runtimePlan, result.check].some((outcome) => outcome?.ok === false)
+    if (failed) process.exitCode = 1
+  })
+
+const adaptersCommand = program
+  .command('adapters')
+  .description('Inspect the adapter instances .docket.yaml configures')
+
+adaptersCommand
+  .command('list')
+  .description('List the configured adapter instances and whether each can load, connecting to nothing')
+  .option('--json', 'print the result as JSON')
+  .action(async (options: { json?: boolean }) => {
+    const result = await adaptersList()
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2))
+      return
+    }
+    console.log(result.configFile)
+    if (result.adapters.length === 0) console.log('  no adapters')
+    const width = widest(result.adapters.map((adapter) => adapter.id))
+    for (const adapter of result.adapters) {
+      const runtime = adapter.runtime ? `  runtime ${adapter.runtime}` : ''
+      const source = adapter.source ? ` (${adapter.source})` : ''
+      console.log(`  ${pad(adapter.id, width)}  ${adapter.module}${source}  [${adapter.roles.join(', ')}]${runtime}`)
+      if (adapter.problem) console.log(`  ${pad('', width)}  ! ${adapter.problem}`)
+    }
+    console.log('\n`docket adapter add <provider>` sets up:')
+    const providerWidth = widest(result.providers.map((provider) => provider.name))
+    for (const provider of result.providers) console.log(`  ${pad(provider.name, providerWidth)}  ${provider.summary}`)
+    if (result.adapters.some((adapter) => adapter.problem)) process.exitCode = 1
   })
 
 const configCommand = program

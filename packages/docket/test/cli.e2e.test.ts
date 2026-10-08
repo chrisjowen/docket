@@ -378,6 +378,34 @@ evidence:
     expect((await memory(root, 'config', 'migrate', '--write')).stderr).toContain('already version 2')
   })
 
+  it('adds an adapter from options with --yes, shows the plan first, and lists it', async () => {
+    root = await makeRepo('memory-e2e')
+    await write(root, '.docket/resources/teams/payments.md', PAYMENTS)
+
+    const dryRun = await memory(root, 'adapter', 'add', 'jsonl', '--id', 'mirror', '--dry-run')
+    expect(dryRun.code).toBe(0)
+    expect(dryRun.stdout).toContain('Plan: add the jsonl adapter "mirror"')
+    expect(dryRun.stdout).toContain('Dry run: nothing was changed.')
+    expect(await readFile(join(root, '.docket.yaml'), 'utf8')).not.toContain('mirror')
+
+    // Without a terminal and without --yes, nothing changes.
+    expect((await memory(root, 'adapter', 'add', 'jsonl', '--id', 'mirror')).code).toBe(1)
+
+    const added = await memory(root, 'adapter', 'add', 'jsonl', '--id', 'mirror', '--yes')
+    expect(added.code).toBe(0)
+    expect(added.stdout).toContain('✓ added adapter "mirror"')
+    expect(added.stdout).toContain('docket sync')
+
+    const listed = await memory(root, 'adapters', 'list')
+    expect(listed.code).toBe(0)
+    expect(listed.stdout).toMatch(/local\s+@docket\/adapter-jsonl \(bundled\)\s+\[projection, query\]/)
+    expect(listed.stdout).toMatch(/mirror\s+@docket\/adapter-jsonl/)
+
+    const sync = await memory(root, 'sync')
+    expect(sync.code).toBe(0)
+    expect(JSON.parse((await readFile(join(root, '.docket/.index/mirror/documents.jsonl'), 'utf8')).trim()).id).toBe('team.payments')
+  })
+
   it('rebuilds into an index directory that does not exist yet', async () => {
     root = await makeRepo('memory-e2e')
     await write(root, '.docket/resources/teams/payments.md', PAYMENTS)
