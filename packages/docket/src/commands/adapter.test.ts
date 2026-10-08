@@ -2,11 +2,13 @@ import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
 import { openDocket } from '../adapters/docket.js'
+import type { AdapterDistribution } from '../adapters/resolve-module.js'
 import { loadConfig } from '../config/loader.js'
 import type { Choice, Prompter } from '../install/answers.js'
 import type { CommandInvocation, CommandRunner } from '../runtime/runner.js'
@@ -430,15 +432,70 @@ describe('a version 1 .docket.yaml', () => {
   })
 })
 
+/** docket's workspace copies of the adapter packages it does not bundle, as a project would install them. */
+const workspacePackages: AdapterDistribution = {
+  packages: ['@docket/adapter-memvid', '@docket/adapter-mempalace'],
+  find: (name) => fileURLToPath(new URL(`../../../${name.replace('@docket/', '')}`, import.meta.url))
+}
+
+describe('docket adapter add memvid', () => {
+  it('adds an embedded instance the adapter accepts, and says what the project must install itself', async () => {
+    const result = await add('memvid', { '--namespace': 'payments' })
+    const { resolved, entry } = await instance('memvid')
+    expect(entry).toEqual({
+      id: 'memvid',
+      module: '@docket/adapter-memvid',
+      roles: ['projection', 'query'],
+      config: { namespace: 'payments' }
+    })
+    expect(resolved.config.runtimes).toEqual({})
+    expect(result.plan.module).toEqual({ name: '@docket/adapter-memvid', installed: false })
+    expect(result.plan.driver).toBeUndefined()
+    expect(result.plan.next[0]).toMatch(/^Add @docket\/adapter-memvid to the project: it is not published/)
+    expect(result.plan.next).toContain(result.plan.prerequisites[0])
+    expect(result.plan.prerequisites[0]).toMatch(/^npm install -g memvid-cli@2\.0\.160/)
+    expect(calls).toEqual([])
+    await expect(openDocket(resolved, { distribution: workspacePackages })).resolves.toBeDefined()
+  })
+
+  it('refuses a file that is not a .mv2, and a namespace that is not one segment', async () => {
+    await expect(add('memvid', { '--file': 'memory.db' })).rejects.toThrow(/a \.mv2 file/)
+    await expect(add('memvid', { '--namespace': 'a/b' })).rejects.toThrow(/one URI segment/)
+  })
+})
+
+describe('docket adapter add mempalace', () => {
+  it('adds an instance the adapter accepts, keeping only what differs from its defaults', async () => {
+    const result = await add('mempalace', { '--wing': 'payments wing', '--embedding-model': 'embeddinggemma', '--palace': 'palace' })
+    const { resolved, entry } = await instance('palace')
+    expect(entry?.config).toEqual({ palace: 'palace', wing: 'payments wing', embeddingModel: 'embeddinggemma' })
+    expect(result.plan.prerequisites[0]).toMatch(/^pip install mempalace==3\.10\.0/)
+    expect(result.plan.module?.installed).toBe(false)
+    await expect(openDocket(resolved, { distribution: workspacePackages })).resolves.toBeDefined()
+  })
+
+  it('offers to fetch nothing, and says how to download the default model', async () => {
+    const result = await add('mempalace')
+    expect((await instance('palace')).entry?.config).toEqual({})
+    expect(result.plan.prerequisites[1]).toContain('ONNXMiniLM_L6_V2')
+    expect(calls).toEqual([])
+  })
+
+  it('refuses a wing MemPalace would', async () => {
+    await expect(add('mempalace', { '--wing': '../escape' })).rejects.toThrow(/starting and ending with a letter or digit/)
+  })
+})
+
 describe('docket adapter add, other providers', () => {
   it('lists what it can set up when given one it cannot', async () => {
-    await expect(add('mempalace')).rejects.toThrow(/No provider "mempalace"\. .* jsonl, neo4j, mem0/)
+    await expect(add('nonesuch')).rejects.toThrow(/No provider "nonesuch"\. .* jsonl, neo4j, mem0, memvid, mempalace/)
   })
 })
 
 describe('docket adapters list', () => {
   it('lists each instance with where its module loads from, and the providers', async () => {
     await add('neo4j', { '--mode': 'local', '--image': 'neo4j:5' })
+    await add('memvid')
     await writeFile(join(root, 'custom.mjs'), 'export default {}\n')
     const text = await configText()
     await writeFile(
@@ -453,9 +510,11 @@ describe('docket adapters list', () => {
       { id: 'custom', source: 'project file', runtime: undefined },
       { id: 'missing', source: undefined, runtime: undefined },
       { id: 'local', source: expect.any(String), runtime: undefined },
-      { id: 'graph', source: expect.any(String), runtime: 'graph-dev' }
+      { id: 'graph', source: expect.any(String), runtime: 'graph-dev' },
+      { id: 'memvid', source: undefined, runtime: undefined }
     ])
     expect(result.adapters.find((adapter) => adapter.id === 'missing')?.problem).toMatch(/is not installed/)
-    expect(result.providers.map((provider) => provider.name)).toEqual(['jsonl', 'neo4j', 'mem0'])
+    expect(result.adapters.find((adapter) => adapter.id === 'memvid')?.problem).toMatch(/not published to npm/)
+    expect(result.providers.map((provider) => provider.name)).toEqual(['jsonl', 'neo4j', 'mem0', 'memvid', 'mempalace'])
   })
 })

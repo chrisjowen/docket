@@ -69,6 +69,12 @@ export interface DriverPlan {
   command?: string[] | undefined
 }
 
+/** The adapter package itself, when docket does not ship it: the project must provide it. */
+export interface ModulePlan {
+  name: string
+  installed: boolean
+}
+
 /** Everything `docket adapter add` would do, resolved before anything is done. */
 export interface AdapterAddPlan {
   provider: string
@@ -79,7 +85,11 @@ export interface AdapterAddPlan {
   configYaml: string
   files: PlannedFile[]
   env: EnvRequirement[]
+  /** Set when the adapter package is not bundled with docket. */
+  module?: ModulePlan | undefined
   driver?: DriverPlan | undefined
+  /** What the adapter drives and docket never installs, as the commands that install it. */
+  prerequisites: string[]
   notes: string[]
   /** What to run afterwards, in order. */
   next: string[]
@@ -264,6 +274,9 @@ export const adapterAdd = async (provider: string, options: AdapterAddOptions = 
   })
 
   const driver = definition.driver === undefined ? undefined : planDriver(definition.driver, projectRoot)
+  const module: ModulePlan | undefined = standardDistribution.packages.includes(definition.module)
+    ? undefined
+    : { name: definition.module, installed: findPackageDir(definition.module, projectRoot) !== undefined }
   const notes = [...setup.notes]
   for (const file of files.filter((file) => file.exists)) {
     notes.push(
@@ -276,6 +289,10 @@ export const adapterAdd = async (provider: string, options: AdapterAddOptions = 
   }
 
   const next: string[] = []
+  if (module !== undefined && !module.installed) {
+    next.push(`Add ${module.name} to the project: it is not published to npm, so depend on a docket checkout's package (a workspace or file: dependency)`)
+  }
+  next.push(...setup.prerequisites)
   if (driver !== undefined && !driver.installed) {
     next.push(
       driver.command
@@ -303,7 +320,9 @@ export const adapterAdd = async (provider: string, options: AdapterAddOptions = 
     configYaml: additionYaml(addition),
     files,
     env: setup.env,
+    module,
     driver,
+    prerequisites: setup.prerequisites,
     notes,
     next
   }
@@ -447,7 +466,13 @@ export const adaptersList = async (options: { cwd?: string | undefined } = {}): 
         }
       }
     } catch (cause) {
-      listing.problem = cause instanceof Error ? cause.message : String(cause)
+      const unpublished =
+        !standardDistribution.packages.includes(adapter.module) && PROVIDERS.some((provider) => provider.module === adapter.module)
+      listing.problem = unpublished
+        ? `${adapter.module} is not installed in the project; it is not published to npm, so add it as a workspace or file: dependency on a docket checkout's package`
+        : cause instanceof Error
+          ? cause.message
+          : String(cause)
     }
     return listing
   })

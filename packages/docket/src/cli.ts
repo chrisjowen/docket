@@ -370,6 +370,19 @@ const printAddPlan = (plan: AdapterAddPlan): void => {
       console.log(`    ${pad(variable.name, width)}  ${variable.purpose}${marks.length > 0 ? ` (${marks.join(', ')})` : ''}`)
     }
   }
+  if (plan.module !== undefined) {
+    console.log('\n  Adapter package')
+    console.log(
+      `    ${plan.module.name}  ` +
+        (plan.module.installed
+          ? 'installed in the project'
+          : 'not installed; docket does not bundle it and it is not on npm, so add it to the project yourself')
+    )
+  }
+  if (plan.prerequisites.length > 0) {
+    console.log('\n  Install yourself - docket never installs these')
+    for (const line of plan.prerequisites) console.log(`    ${line}`)
+  }
   if (plan.driver !== undefined) {
     const { driver } = plan
     console.log('\n  Package')
@@ -408,6 +421,12 @@ adapterCommand
   .option('--api-key-env <name>', 'mem0: environment variable holding the API key (default MEM0_API_KEY)')
   .option('--scope <scope>', 'neo4j scope, or mem0 agent id (default: one unique to the checkout)')
   .option('--output <dir>', 'jsonl: directory to write to')
+  .option('--file <path>', 'memvid: the .mv2 file (default: in the adapter\'s state directory)')
+  .option('--namespace <name>', 'memvid: namespace for this project\'s frames')
+  .option('--palace <dir>', 'mempalace: palace directory (default: in the adapter\'s state directory)')
+  .option('--wing <name>', 'mempalace: wing to file drawers under')
+  .addOption(new Option('--embedding-model <model>', 'mempalace: embedding model').choices(['minilm', 'embeddinggemma']))
+  .option('--command <command>', 'memvid: the CLI (default memvid); mempalace: the MCP server (default mempalace-mcp)')
   .option('--image <ref>', 'neo4j local: the image to run (default: read from --image-env when up runs)')
   .option('--image-env <name>', 'neo4j local: environment variable holding the image (default DOCKET_NEO4J_IMAGE)')
   .option('--port <port>', 'neo4j local: Bolt port on 127.0.0.1 (default 17687)')
@@ -428,6 +447,7 @@ adapterCommand
     }
     const flags = [
       'id', 'roles', 'mode', 'url', 'username', 'database', 'passwordEnv', 'apiKeyEnv', 'scope', 'output',
+      'file', 'namespace', 'palace', 'wing', 'embeddingModel', 'command',
       'image', 'imageEnv', 'port', 'runtimeId', 'composeFile', 'projectName', 'pullPolicy'
     ]
     const values = Object.fromEntries(

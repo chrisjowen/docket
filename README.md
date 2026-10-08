@@ -238,7 +238,7 @@ docket search <query...>    # ask every projection that can search
 docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
-docket adapter add <provider>    # set up jsonl, neo4j or mem0: asks, shows the plan, applies it once confirmed
+docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid or mempalace: asks, shows the plan, applies it once confirmed
 docket adapters list        # configured adapter instances and whether each can load
 docket config migrate --dry-run  # show a version 1 .docket.yaml rewritten as version 2
 docket config migrate       # rewrite it, once confirmed (--write: without asking); the original is kept
@@ -506,6 +506,8 @@ applies it only once you confirm:
 docket adapter add neo4j    # an existing or hosted server, or a local container
 docket adapter add mem0     # hosted mem0 (app.mem0.ai) or a self-hosted mem0 server
 docket adapter add jsonl    # another JSONL index
+docket adapter add memvid   # a memvid .mv2 file, searched through the memvid CLI
+docket adapter add mempalace  # drawers in a MemPalace wing, through its MCP server
 docket adapters list        # what is configured, and whether each module and driver loads
 ```
 
@@ -519,6 +521,14 @@ the runtime starts: docket never picks an image. For **mem0**, choose hosted
 (an API key variable, `MEM0_API_KEY` by default) or a self-hosted server URL.
 mem0's in-process `oss` mode needs an embedder, vector store and LLM, so write
 that entry by hand.
+
+**memvid** and **MemPalace** are embedded: no secrets and no runtime group,
+only an optional file or palace directory, namespace or wing, and the command
+docket runs. Their adapter packages are not bundled with the CLI and not
+published to npm, so the plan reminds you to add the package to the project
+(a workspace or `file:` dependency), along with the engine each drives and
+docket never installs: `npm install -g memvid-cli@2.0.160`, or `pip install
+mempalace==3.10.0` and its embedding model, downloaded beforehand.
 
 What it will and will not do:
 

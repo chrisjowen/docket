@@ -32,6 +32,8 @@ export interface ProviderSetup {
   runtime?: { id: string; config: DockerComposeRuntimeConfig } | undefined
   files: TemplateFile[]
   env: EnvRequirement[]
+  /** Commands that install what the adapter drives - an engine or CLI docket never installs - each with why. */
+  prerequisites: string[]
   /** Anything the developer should know about what was chosen. */
   notes: string[]
 }
@@ -182,7 +184,7 @@ const jsonl: AdapterProvider = {
       fallback: `.docket/.index/${id}`,
       check: checkNonBlank
     })
-    return { config: { output }, files: [], env: [], notes: [] }
+    return { config: { output }, files: [], env: [], prerequisites: [], notes: [] }
   }
 }
 
@@ -245,6 +247,7 @@ const neo4j: AdapterProvider = {
         env: authenticated
           ? [{ name: passwordEnv, purpose: `the password for ${username} on ${url}`, secret: true, required: true }]
           : [],
+        prerequisites: [],
         notes: []
       }
     }
@@ -296,6 +299,7 @@ const neo4j: AdapterProvider = {
           required: true
         }
       ],
+      prerequisites: [],
       notes: [
         runtime.config.pullPolicy === 'never'
           ? 'pullPolicy is never: `docket runtime up` uses only an image already present, so pull or load it yourself first.'
@@ -358,6 +362,7 @@ const mem0: AdapterProvider = {
           required: mode === 'platform'
         }
       ],
+      prerequisites: [],
       notes: [
         'mem0\'s in-process mode (mode: oss) needs an embedder, vector store and LLM configured; write that entry by hand (see the README).'
       ]
@@ -365,11 +370,109 @@ const mem0: AdapterProvider = {
   }
 }
 
+/** A config value the adapter defaults itself is left out, so the entry stays as short as what was chosen. */
+const unlessDefault = (key: string, value: string, fallback: string): Record<string, string> =>
+  value === fallback ? {} : { [key]: value }
+
+const MEMVID_NAMESPACE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+const memvid: AdapterProvider = {
+  name: 'memvid',
+  module: '@docket/adapter-memvid',
+  summary: 'a memvid .mv2 file, searched lexically through the memvid CLI; embedded, no service',
+  defaultId: 'memvid',
+  async configure({ answers }) {
+    const file = await answers.text({
+      flag: '--file',
+      question: 'Memory file, relative to .docket.yaml (empty: memory.mv2 in the adapter\'s own state directory)',
+      optional: true,
+      check: (value) => checkNonBlank(value) ?? (value.endsWith('.mv2') ? undefined : 'a .mv2 file')
+    })
+    const namespace = await answers.text({
+      flag: '--namespace',
+      question: 'Namespace for this project\'s frames (empty: the docket scope; set one when projects share a file)',
+      optional: true,
+      check: (value) => (MEMVID_NAMESPACE.test(value) ? undefined : 'one URI segment: letters, digits, ".", "_" and "-"')
+    })
+    const command = await answers.text({
+      flag: '--command',
+      question: 'The memvid CLI: a command on PATH, or a path relative to .docket.yaml',
+      fallback: 'memvid',
+      check: checkNonBlank
+    })
+    return {
+      config: { ...(file ? { file } : {}), ...(namespace ? { namespace } : {}), ...unlessDefault('command', command, 'memvid') },
+      files: [],
+      env: [],
+      prerequisites: ['npm install -g memvid-cli@2.0.160   # the memvid CLI it was tested with; docket never installs it'],
+      notes: []
+    }
+  }
+}
+
+/** MemPalace's own rule for wing names (3.10.0): up to 128 characters, starting and ending with a letter or digit. */
+const PALACE_NAME = /^(?:[\p{L}\p{N}]|[\p{L}\p{N}][\p{L}\p{N}_ .'-]{0,126}[\p{L}\p{N}])$/u
+
+const mempalace: AdapterProvider = {
+  name: 'mempalace',
+  module: '@docket/adapter-mempalace',
+  summary: 'drawers in a MemPalace wing, recalled through its MCP server; runs offline',
+  defaultId: 'palace',
+  async configure({ answers }) {
+    const palace = await answers.text({
+      flag: '--palace',
+      question: 'Palace directory, relative to .docket.yaml (empty: one in the adapter\'s own state directory)',
+      optional: true,
+      check: checkNonBlank
+    })
+    const wing = await answers.text({
+      flag: '--wing',
+      question: 'Wing to file drawers under (empty: one unique to the checkout)',
+      optional: true,
+      check: (value) =>
+        PALACE_NAME.test(value) && !value.includes('..')
+          ? undefined
+          : 'letters, digits, " ", ".", "_", "\'" and "-", starting and ending with a letter or digit'
+    })
+    const embeddingModel = await answers.choose({
+      flag: '--embedding-model',
+      question: 'Embedding model (it must already be downloaded; docket never lets MemPalace fetch one)',
+      choices: [
+        { value: 'minilm', label: 'minilm - all-MiniLM-L6-v2, about 80 MB, in chromadb\'s cache' },
+        { value: 'embeddinggemma', label: 'embeddinggemma - in the Hugging Face cache' }
+      ],
+      fallback: 'minilm'
+    })
+    const command = await answers.text({
+      flag: '--command',
+      question: 'The MemPalace MCP server command',
+      fallback: 'mempalace-mcp',
+      check: checkNonBlank
+    })
+    return {
+      config: {
+        ...(palace ? { palace } : {}),
+        ...(wing ? { wing } : {}),
+        ...unlessDefault('embeddingModel', embeddingModel, 'minilm'),
+        ...unlessDefault('command', command, 'mempalace-mcp')
+      },
+      files: [],
+      env: [],
+      prerequisites: [
+        'pip install mempalace==3.10.0   # the MemPalace it was tested with; docket never installs it',
+        embeddingModel === 'minilm'
+          ? 'python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2 as M; M()([\'warm up\'])"   # download the minilm model, in MemPalace\'s Python'
+          : 'Download embeddinggemma into the Hugging Face cache; the server runs offline and never fetches it'
+      ],
+      notes: ['To run the server through Python instead, set command: python3 and args: ["-m", "mempalace.mcp_server"] in the entry.']
+    }
+  }
+}
+
 /**
- * Every provider `docket adapter add` knows, by name. An adapter package that
- * ships with docket gets one here - mempalace and memvid join when their
- * packages exist; a project-local module is configured by hand instead.
+ * Every provider `docket adapter add` knows, by name. A new adapter package
+ * gets one here; a project-local module is configured by hand instead.
  */
-export const PROVIDERS: readonly AdapterProvider[] = [jsonl, neo4j, mem0]
+export const PROVIDERS: readonly AdapterProvider[] = [jsonl, neo4j, mem0, memvid, mempalace]
 
 export const findProvider = (name: string): AdapterProvider | undefined => PROVIDERS.find((provider) => provider.name === name)
