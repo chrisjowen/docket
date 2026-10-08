@@ -219,23 +219,37 @@ export interface SourceLocation {
   endLine?: number
 }
 
+/** The relationship an observation was made of, when it was made of one rather than of a resource. */
+export interface ObservedRelationship {
+  source: string
+  rel: string
+  target: string
+}
+
 export interface ObservationInput extends InputBase {
   kind: 'observation'
   text: string
   /** The individual sources it was seen in. */
   sources: SourceLocation[]
   entityRefs: string[]
-  observedAt: string
+  /** When it was observed, only when the canonical record says - never a file's modification time. */
+  observedAt?: string
   /** When the event happened, only when actually known - never a file's modification time. */
   eventAt?: string
   validFrom?: string
   validTo?: string
+  /** Its provenance: the canonical files that record it, repo-relative. */
+  recordedIn?: string[]
+  /** The canonical evidence record it was read from, every field it states. */
+  evidence?: EvidenceRecord
+  /** Set when it observes a relationship; `entityRefs` then holds both ends. */
+  relationship?: ObservedRelationship
 }
 
 export interface DocumentInput extends InputBase {
   kind: 'document'
   text: string
-  /** Where the text came from, span-addressable. */
+  /** Where the text came from, span-addressable: its lines are `startLine` to `endLine` of the source at `revision`. */
   source: SourceLocation
   entityRefs: string[]
 }

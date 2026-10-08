@@ -479,4 +479,33 @@ describe('version 2 adapter instances', () => {
     await writeFile(join(root, '.docket.yaml'), `${v2}  - id: renamed\n    module: ./tools/docket/fake-local.mjs\n    config: { label: a }\n`, 'utf8')
     expect((await createDocket({ projectRoot: root })).projectionsFingerprint).not.toBe(more)
   })
+
+  it('fingerprint each instance on its own, by what it projects into', async () => {
+    const { root } = await project()
+    const fingerprints = async (config: string): Promise<Record<string, string>> => {
+      await writeFile(join(root, '.docket.yaml'), config, 'utf8')
+      const docket = await createDocket({ projectRoot: root })
+      return Object.fromEntries(docket.adapters.map((slot) => [slot.id, slot.fingerprint]))
+    }
+    const neo4j = (uri: string) => `  - id: graph\n    module: "@docket/adapter-neo4j"\n    config: { uri: "${uri}", passwordEnv: NEO4J_PASSWORD }\n`
+    const local = (id: string) => `  - id: ${id}\n    module: ./tools/docket/fake-local.mjs\n    config: { label: a }\n`
+
+    const before = await fingerprints(v2Config(`  - id: local\n    module: "@docket/adapter-jsonl"\n${neo4j('bolt://a')}${local('mine')}`))
+    // A v1 file and its v2 migration fingerprint each instance alike.
+    expect((await fingerprints('version: 1\nprojections:\n  - type: jsonl\n')).jsonl).toBe(before.local)
+
+    // Another endpoint changes that instance's fingerprint, and no other's.
+    const moved = await fingerprints(v2Config(`  - id: local\n    module: "@docket/adapter-jsonl"\n${neo4j('neo4j+s://b')}${local('mine')}`))
+    expect(moved.graph).not.toBe(before.graph)
+    expect(moved.local).toBe(before.local)
+    expect(moved.mine).toBe(before.mine)
+
+    // A bundled instance renamed still writes where it did; a local module's state moves with its id.
+    const renamed = await fingerprints(v2Config(`  - id: jsonl\n    module: "@docket/adapter-jsonl"\n${neo4j('bolt://a')}${local('yours')}`))
+    expect(renamed.jsonl).toBe(before.local)
+    expect(renamed.yours).not.toBe(before.mine)
+
+    // Secrets are named, never valued, so no fingerprint can carry one.
+    expect(Object.values(before).every((fingerprint) => /^sha256:[0-9a-f]{64}$/.test(fingerprint))).toBe(true)
+  })
 })

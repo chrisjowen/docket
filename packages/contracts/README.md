@@ -12,7 +12,8 @@ that boundary.
 - `@docket/contracts/testing` - contract test helpers: `assertAdapterContract`
   drives a definition through config, create, describe, status, apply, replay,
   reset, ask and close; `fakeServices`, `sampleBatch` and `sampleAskRequest`
-  supply what it needs.
+  supply what it needs, and `sampleObservation` and `sampleDocument` give the
+  other two input kinds for adapters that declare them.
 
 A private workspace package: it is not published on its own. `@chrisjowen/docket` bundles
 its runtime code and types (not `testing`) into its own `dist/bundled/contracts`.

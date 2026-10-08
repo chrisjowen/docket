@@ -3,9 +3,11 @@ import type {
   AdapterServices,
   AskRequest,
   CanonicalInput,
+  DocumentInput,
   EntityInput,
   InputKind,
   MemoryAdapter,
+  ObservationInput,
   ProjectionBatch
 } from './types.js'
 import {
@@ -100,6 +102,40 @@ export const sampleEntity = (overrides: Partial<EntityInput> = {}): EntityInput 
   basis: 'evidence',
   evidenceCount: 1,
   sources: ['code'],
+  ...overrides
+})
+
+/** One observation of the sample entity, as docket derives it from an evidence record; override any field. */
+export const sampleObservation = (overrides: Partial<ObservationInput> = {}): ObservationInput => ({
+  kind: 'observation',
+  id: 'service.orders#5f0c2a91d4e7b3c8',
+  revision: 'sha256:0101',
+  scope: SAMPLE_SCOPE,
+  text: 'service.orders (Orders) seen in code at services/orders/main.ts:12-40 OrdersRepository: opens the pool',
+  sources: [{ path: 'services/orders/main.ts', startLine: 12, endLine: 40 }],
+  entityRefs: ['service.orders'],
+  observedAt: '2026-10-05',
+  recordedIn: ['.docket/resources/services/orders.md'],
+  evidence: {
+    source: 'code',
+    path: 'services/orders/main.ts',
+    lines: '12-40',
+    symbol: 'OrdersRepository',
+    observedAt: '2026-10-05',
+    note: 'opens the pool'
+  },
+  ...overrides
+})
+
+/** The sample entity's Markdown body as a document, its lines addressable in its file; override any field. */
+export const sampleDocument = (overrides: Partial<DocumentInput> = {}): DocumentInput => ({
+  kind: 'document',
+  id: '.docket/resources/services/orders.md',
+  revision: 'sha256:0201',
+  scope: SAMPLE_SCOPE,
+  text: 'Takes and fulfils customer orders.\nStores them in the orders database.',
+  source: { path: '.docket/resources/services/orders.md', startLine: 6, endLine: 7 },
+  entityRefs: ['service.orders'],
   ...overrides
 })
 

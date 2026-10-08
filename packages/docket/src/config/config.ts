@@ -74,7 +74,7 @@ const sharedSections = {
       file: z.string().default('.docket/entities.yaml')
     })
     .prefault({}),
-  /** Derived bookkeeping - the manifest - owned by sync, not by any adapter. */
+  /** Derived bookkeeping - each adapter instance's sync manifest - owned by sync, not by any adapter. */
   state: z
     .object({
       dir: z.string().default('.docket/.index')
@@ -298,6 +298,6 @@ export interface ResolvedConfig {
 
 export const CONFIG_FILENAME = '.docket.yaml'
 
-/** Absolute directory holding the manifest (spec §31). */
+/** Absolute directory holding the sync manifests (spec §31) and each adapter instance's state root. */
 export const stateRootOf = (resolved: ResolvedConfig): string =>
   resolve(resolved.projectRoot, resolved.config.state.dir)

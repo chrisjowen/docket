@@ -117,10 +117,13 @@ const observationInputSchema = z.looseObject({
   text: z.string(),
   sources: z.array(sourceLocationSchema),
   entityRefs: z.array(nonEmpty),
-  observedAt: nonEmpty,
+  observedAt: nonEmpty.optional(),
   eventAt: z.string().optional(),
   validFrom: z.string().optional(),
-  validTo: z.string().optional()
+  validTo: z.string().optional(),
+  recordedIn: z.array(nonEmpty).optional(),
+  evidence: evidenceRecordSchema.optional(),
+  relationship: z.looseObject({ source: nonEmpty, rel: nonEmpty, target: nonEmpty }).optional()
 })
 
 const documentInputSchema = z.looseObject({

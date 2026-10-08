@@ -1,12 +1,13 @@
 import { readFile } from 'node:fs/promises'
 import { relative, sep } from 'node:path'
 
+import { DEFAULT_SCOPE } from '../adapters/docket.js'
+import { failureOf } from '../commands/sync.js'
 import type { ResolvedConfig } from '../config/config.js'
 import { aggregate } from '../evidence/aggregate.js'
 import { confidenceModel } from '../evidence/confidence.js'
 import { entryPaths, type IndexManifest } from '../manifest/manifest.js'
 import { manifestEntry, planProjection } from '../manifest/plan.js'
-import { loadManifestState, saveManifest } from '../manifest/state.js'
 import { type Diagnostic, error, hasErrors } from '../model/diagnostic.js'
 import type { MemoryDocument, Ontology } from '../model/index.js'
 import { loadOntology } from '../ontology/loader.js'
@@ -15,6 +16,7 @@ import type { ProjectionManager } from '../projection/manager.js'
 import { hashContent } from '../source/hashing.js'
 import { parseMemoryFile } from '../source/parser.js'
 import { scanSource } from '../source/scanner.js'
+import { canonicalState } from '../sync/inputs.js'
 
 /**
  * What a reconciliation pass observed. Track E owns how any of this is
@@ -64,25 +66,24 @@ const NO_ONTOLOGY: Ontology = { version: 1, resourceTypes: {}, relationships: {}
  * move register an id at its new path without its old path's unlink event
  * deleting the resource that just moved.
  *
- * Holds the last read of every path, and the manifest of what each id last
- * projected. Nothing here throws on bad input: a file that cannot be parsed or
- * validated is reported and its id keeps whatever it last projected (spec §67).
+ * Holds the last read of every path, and what each id was last read from.
+ * Each adapter instance is planned against its own manifest by the manager,
+ * which hands it the entities, observations and documents of the ids a pass
+ * touched. Nothing here throws on bad input: a file that cannot be parsed or
+ * validated is reported and its id keeps whatever it last projected (spec
+ * §67). An instance that fails is reported, and the others carry on.
  *
- * Mutations are buffered: each pass ends with one `commit`, which flushes the
- * projections and then records the manifest, so a full sync over thousands of
- * files writes each derived file once rather than once per entity.
+ * Mutations are buffered: each pass ends with one `commit`, which flushes
+ * each instance and then records its manifest, so a full sync over thousands
+ * of files writes each derived file once rather than once per entity.
  */
 export const createReconciler = (
   resolved: ResolvedConfig,
   manager: ProjectionManager,
-  report: WatchReporter,
-  /** The docket's `projectionsFingerprint`, which the manifest is kept under. */
-  projections: string
+  report: WatchReporter
 ): Reconciler => {
   const files = new Map<string, SourceFile>()
   let projected: IndexManifest['documents'] = {}
-  /** Something was handed to the projections since the last commit. */
-  let dirty = false
   /**
    * Mutation events wait for the commit, so whoever hears one can rely on the
    * derived files already reflecting it.
@@ -97,18 +98,23 @@ export const createReconciler = (
   }
 
   /**
-   * The hash gate needs what was last projected, which sync records in the
-   * manifest (spec §31). Reading it lets a restarted watcher skip entities
-   * nothing has touched. A missing manifest, or one written for other
-   * projections, vouches for nothing: the projections are reset and
-   * everything reprojected.
+   * Which files each id was last read from, as the instances' manifests
+   * record it (spec §31), so a restarted watcher knows what a path
+   * contributed before reading anything. The manager already reset any
+   * instance whose manifest vouched for nothing.
    */
   const seed = async (): Promise<void> => {
     if (seeded) return
     seeded = true
-    const { manifest, stale } = await loadManifestState(resolved, projections)
-    if (stale) await manager.reset()
-    projected = { ...manifest.documents }
+    projected = {}
+    for (const [id, { paths, revision }] of manager.knownOwners()) {
+      const [path] = paths
+      if (path !== undefined) projected[id] = { path, ...(paths.length > 1 ? { paths } : {}), hash: revision ?? '' }
+    }
+  }
+
+  const reportFailures = (failures: readonly { id: string; message: string }[]): void => {
+    reportAll(failures.map(({ id, message }) => error('projection-failure', `adapter ${id}: ${message}`)))
   }
 
   const reloadOntology = async (): Promise<boolean> => {
@@ -130,15 +136,13 @@ export const createReconciler = (
   }
 
   /**
-   * Ends every pass, so a restarted watcher can trust the manifest. The
-   * projections are flushed first: the manifest vouches for what they hold, so
-   * it must never get ahead of them.
+   * Ends every pass, so a restarted watcher can trust the manifests. Each
+   * instance that was handed anything is flushed before its manifest is
+   * written: the manifest vouches for what it holds, so it must never get
+   * ahead of it.
    */
   const commit = async (): Promise<void> => {
-    if (!dirty) return
-    await manager.flush()
-    await saveManifest(resolved, projections, projected)
-    dirty = false
+    reportFailures((await manager.commit()).map(({ id, error }) => ({ id, message: error })))
     const committed = pending
     pending = []
     for (const event of committed) report(event)
@@ -169,19 +173,26 @@ export const createReconciler = (
 
     for (const id of plan.removals) {
       const entry = projected[id]
-      await manager.remove(id, entry?.hash)
       delete projected[id]
-      dirty = true
       pending.push({ kind: 'removed', id, path: entry?.path ?? '' })
     }
-
     for (const entity of plan.upserts) {
       const known = entity.id in projected
-      await manager.upsert(entity)
       projected[entity.id] = manifestEntry(entity)
-      dirty = true
       pending.push({ kind: known ? 'updated' : 'added', id: entity.id, path: entity.path })
     }
+
+    // Each instance plans for itself: one lagging behind gets what it lacks
+    // even when the files did not change.
+    const state = canonicalState(merged.entities, documents, DEFAULT_SCOPE)
+    const passes = await manager.apply(state, broken, ids === 'all' ? undefined : ids)
+    reportFailures(
+      passes.flatMap((pass) =>
+        pass.error !== undefined || pass.failed.length > 0
+          ? [{ id: pass.id, message: failureOf(pass) }]
+          : []
+      )
+    )
   }
 
   /** Ids a path contributes to: as last read, and as the manifest last recorded. */

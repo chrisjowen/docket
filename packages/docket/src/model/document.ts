@@ -104,6 +104,9 @@ export interface MemoryDocument {
   /** Markdown body, frontmatter stripped. */
   content: string
 
+  /** The 1-based line of the source file `content` starts on, so a span of the body is a span of the file. */
+  bodyLine: number
+
   /** Weak `[[id]]` references found in the body. Never semantic relationships. */
   mentions: string[]
 
@@ -143,7 +146,7 @@ export interface EntityLink extends MemoryLink, Assessment {
  * What projections receive: every file that declares an id, merged into one
  * resource with its links deduplicated and its confidence computed.
  */
-export interface MemoryEntity extends Omit<MemoryDocument, 'links'>, Assessment {
+export interface MemoryEntity extends Omit<MemoryDocument, 'links' | 'bodyLine'>, Assessment {
   /** Every file that declares this id, in path order. `path` is the first. */
   paths: string[]
   /** `sha256:<hex>` over the merged entity, so it changes whenever what is projected does. */

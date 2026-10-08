@@ -2,12 +2,13 @@ import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import matter from 'gray-matter'
 
-import { openDocket } from '../adapters/docket.js'
+import { DEFAULT_SCOPE, openDocket } from '../adapters/docket.js'
 import type { ResolvedConfig } from '../config/config.js'
 import { validate } from '../commands/validate.js'
-import { planProjection } from '../manifest/plan.js'
-import { loadManifestState } from '../manifest/state.js'
-import type { Assessment, MemoryEntity } from '../model/index.js'
+import { planAdapter } from '../manifest/plan.js'
+import { loadAdapterManifests } from '../manifest/state.js'
+import type { Assessment, MemoryDocument, MemoryEntity } from '../model/index.js'
+import { canonicalState } from '../sync/inputs.js'
 import { iconFor } from '../ontology/icons.js'
 import { MATTER_OPTIONS } from '../source/parser.js'
 import type { UiAssessment, UiEdge, UiEntity, UiGraph, UiIndexStatus } from './types.js'
@@ -57,26 +58,39 @@ const toEntity = (entity: MemoryEntity, frontmatter: Record<string, unknown>): U
 })
 
 /**
- * How many entities the index has not caught up with - the same plan `sync`
- * would carry out. Search answers from the index, so a lagging one explains a
- * search that misses what the graph shows. Projections whose adapters cannot
- * be loaded have synced nothing; searching says why.
+ * How many entities the index has not caught up with - the plan `sync` would
+ * carry out for each instance enabled for projection, read from its manifest
+ * without connecting to it. An entity counts once however many of its
+ * records, and however many instances, lag. Search answers from the index, so
+ * a lagging one explains a search that misses what the graph shows.
+ * Projections whose adapters cannot be loaded have synced nothing; searching
+ * says why.
  */
 export const indexStatus = async (
   resolved: ResolvedConfig,
   entities: readonly MemoryEntity[],
+  documents: readonly MemoryDocument[],
   broken: ReadonlySet<string>
 ): Promise<UiIndexStatus> => {
-  let projections: string
+  let docket
   try {
-    projections = (await openDocket(resolved)).projectionsFingerprint
+    docket = await openDocket(resolved)
   } catch {
     return { synced: false, behind: entities.length }
   }
-  const state = await loadManifestState(resolved, projections)
-  if (state.stale) return { synced: false, behind: entities.length }
-  const plan = planProjection(entities, broken, state.manifest.documents)
-  return { synced: true, behind: plan.upserts.length + plan.removals.length }
+  const slots = docket.adapters.filter((slot) => slot.roles.includes('projection'))
+  const manifests = await loadAdapterManifests(resolved, slots, {
+    legacyFingerprint: docket.projectionsFingerprint,
+    configured: slots.map((slot) => slot.id)
+  })
+  if ([...manifests.values()].some((loaded) => loaded.reset)) return { synced: false, behind: entities.length }
+
+  const state = canonicalState(entities, documents, DEFAULT_SCOPE)
+  const behind = new Set<string>()
+  for (const { manifest } of manifests.values()) {
+    for (const { owner } of planAdapter(state, manifest, { inputs: new Set(manifest.inputs), broken }).changes) behind.add(owner)
+  }
+  return { synced: true, behind: behind.size }
 }
 
 /**
@@ -86,7 +100,7 @@ export const indexStatus = async (
  * an id merged into one, with its confidence computed from the evidence.
  */
 export const readGraph = async (cwd: string): Promise<UiGraph> => {
-  const { resolved, ontology, entities, broken, diagnostics } = await validate({ cwd })
+  const { resolved, ontology, entities, documents, broken, diagnostics } = await validate({ cwd })
   const frontmatters = await Promise.all(
     entities.map((entity) => readFrontmatter(join(resolved.projectRoot, entity.path)))
   )
@@ -122,6 +136,6 @@ export const readGraph = async (cwd: string): Promise<UiGraph> => {
     })),
     relationships: definitions(ontology?.relationships),
     diagnostics,
-    index: await indexStatus(resolved, entities, broken)
+    index: await indexStatus(resolved, entities, documents, broken)
   }
 }

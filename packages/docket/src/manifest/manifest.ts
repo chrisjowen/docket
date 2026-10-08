@@ -19,7 +19,13 @@ export interface ManifestEntry {
 /** Every file an entry was projected from. */
 export const entryPaths = (entry: ManifestEntry): string[] => entry.paths ?? [entry.path]
 
-/** Maps stable identity to path and last projected hash (spec §31). */
+/**
+ * Maps stable identity to path and last projected hash (spec §31). Before
+ * each adapter instance kept its own manifest (`adapter-manifest.ts`), sync
+ * kept this one for every projection together; it is now read only to
+ * migrate from, and the watcher keeps its own record of what it read in
+ * this shape.
+ */
 export interface IndexManifest {
   version: number
   /**

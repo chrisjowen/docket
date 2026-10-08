@@ -11,7 +11,7 @@ import {
   writeFile
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
@@ -85,13 +85,20 @@ export const write = async (
 
 export const INDEX = '.docket/.index'
 
-/** Every file in the index directory, keyed by name, as raw text. */
+/** Every file under the index directory, as index-relative posix paths, sorted. */
+const indexEntries = async (dir: string): Promise<string[]> =>
+  (await readdir(dir, { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(dir, join(entry.parentPath, entry.name)).split(sep).join('/'))
+    .sort()
+
+/** Every file in the index directory, keyed by index-relative path, as raw text. */
 export const indexFiles = async (
   root: string
 ): Promise<Record<string, string>> => {
   const dir = join(root, INDEX)
   const contents: Record<string, string> = {}
-  for (const entry of (await readdir(dir)).sort()) {
+  for (const entry of await indexEntries(dir)) {
     contents[entry] = await readFile(join(dir, entry), 'utf8')
   }
   return contents
@@ -103,7 +110,7 @@ export const indexDigests = async (
 ): Promise<Record<string, string>> => {
   const dir = join(root, INDEX)
   const digests: Record<string, string> = {}
-  for (const entry of (await readdir(dir)).sort()) {
+  for (const entry of await indexEntries(dir)) {
     const bytes = await readFile(join(dir, entry))
     digests[entry] = createHash('sha256').update(bytes).digest('hex')
   }

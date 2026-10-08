@@ -19,7 +19,7 @@ export interface AskResult {
  * join what was found, read from the canonical files.
  */
 export const askCasebook = async (cwd: string, query: string, limit: number): Promise<AskResult> => {
-  const [answer, { resolved, entities, broken }] = await Promise.all([
+  const [answer, { resolved, entities, documents, broken }] = await Promise.all([
     search(query, { cwd, limit }),
     validate({ cwd })
   ])
@@ -43,7 +43,7 @@ export const askCasebook = async (cwd: string, query: string, limit: number): Pr
       documents: answer.documents,
       paths: connectingPaths(edges, ranked),
       diagnostics: answer.diagnostics,
-      index: await indexStatus(resolved, entities, broken)
+      index: await indexStatus(resolved, entities, documents, broken)
     },
     resolved,
     entities

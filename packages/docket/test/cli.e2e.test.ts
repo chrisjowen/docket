@@ -93,7 +93,7 @@ describe('memory CLI end to end', () => {
     expect(Object.keys(await indexFiles(root))).toEqual([
       'documents.jsonl',
       'edges.jsonl',
-      'manifest.json',
+      'manifests/local.json',
       'nodes.jsonl'
     ])
 
@@ -331,19 +331,45 @@ evidence:
     expect(result.stderr).toContain('docket init')
   })
 
-  it('says why each configured adapter failed to start', async () => {
+  it('says why each configured adapter failed to start, and syncs the others', async () => {
     root = await makeRepo('memory-e2e')
     await writeFile(
       join(root, '.docket.yaml'),
       'version: 1\nprojections:\n  - type: jsonl\n  - type: mem0\n    mode: platform\n    apiKeyEnv: DOCKET_E2E_UNSET_MEM0_KEY\n',
       'utf8'
     )
+    await write(root, '.docket/resources/teams/payments.md', PAYMENTS)
 
     const result = await memory(root, 'sync')
     expect(result.code).toBe(1)
     expect(result.stderr).toContain(
-      'projection init failed: mem0\n  The mem0 projection is in platform mode but DOCKET_E2E_UNSET_MEM0_KEY is not set.'
+      '✗ mem0: The mem0 projection is in platform mode but DOCKET_E2E_UNSET_MEM0_KEY is not set.'
     )
+    expect(result.stdout).toContain('✓ jsonl: 1 projected, 0 removed, 0 unchanged')
+    expect(Object.keys(await indexFiles(root))).toContain('manifests/jsonl.json')
+    expect(Object.keys(await indexFiles(root))).not.toContain('manifests/mem0.json')
+  })
+
+  it('syncs and rebuilds only the instances --adapter names', async () => {
+    root = await makeRepo('memory-e2e')
+    await writeFile(
+      join(root, '.docket.yaml'),
+      'version: 2\nadapters:\n  - id: local\n    module: "@docket/adapter-jsonl"\n  - id: second\n    module: "@docket/adapter-jsonl"\n    config: { output: .docket/.second }\n',
+      'utf8'
+    )
+    await write(root, '.docket/resources/teams/payments.md', PAYMENTS)
+
+    const synced = await memory(root, 'sync', '--adapter', 'second')
+    expect(synced.code).toBe(0)
+    expect(synced.stdout.trim()).toBe('✓ second: 1 projected, 0 removed, 0 unchanged')
+    expect(Object.keys(await indexFiles(root))).toEqual(['manifests/second.json'])
+
+    const rebuilt = await memory(root, 'rebuild', '--adapter', 'local')
+    expect(rebuilt.stdout.trim()).toBe('✓ local: 1 projected from scratch')
+
+    const unknown = await memory(root, 'sync', '--adapter', 'nope')
+    expect(unknown.code).toBe(1)
+    expect(unknown.stderr).toContain('No adapter instance "nope" is configured. Configured instances: local, second.')
   })
 
   it('migrates a version 1 config only when told to, and the next sync reprojects nothing', async () => {

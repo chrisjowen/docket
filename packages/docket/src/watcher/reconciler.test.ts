@@ -18,7 +18,6 @@ const memoryFile = (id: string, type: string, title: string): string =>
 interface Harness {
   resolved: ResolvedConfig
   manager: ProjectionManager
-  projections: string
   projection: {
     upsert: ReturnType<typeof vi.fn>
     remove: ReturnType<typeof vi.fn>
@@ -40,10 +39,22 @@ const harness = async (): Promise<Harness> => {
     remove: vi.fn(async () => {}),
     flush: vi.fn(async () => {})
   }
-  const manager = new ProjectionManager([
-    { id: 'fake', adapter: entityProjectionAdapter({ name: 'fake', ...projection } satisfies EntityProjection, { version: '0.0.0' }) }
-  ])
+  const adapter = entityProjectionAdapter({ name: 'fake', ...projection } satisfies EntityProjection, { version: '0.0.0' })
   const { projectionsFingerprint } = await openDocket(resolved)
+  const manager = await ProjectionManager.open(
+    [
+      {
+        id: 'fake',
+        name: 'fake',
+        source: 'registration',
+        roles: ['projection'],
+        fingerprint: 'fake',
+        scope: 'default',
+        create: async () => adapter
+      }
+    ],
+    { resolved, legacyFingerprint: projectionsFingerprint, configured: ['fake'] }
+  )
   const events: WatchEvent[] = []
 
   const path = (relativePath: string): string =>
@@ -54,8 +65,7 @@ const harness = async (): Promise<Harness> => {
     manager,
     projection,
     events,
-    projections: projectionsFingerprint,
-    reconciler: createReconciler(resolved, manager, (event) => events.push(event), projectionsFingerprint),
+    reconciler: createReconciler(resolved, manager, (event) => events.push(event)),
     async write(relativePath, contents) {
       const file = path(relativePath)
       await mkdir(dirname(file), { recursive: true })
@@ -410,7 +420,7 @@ describe('createReconciler', () => {
     await h.reconciler.sync()
 
     // A restarted watcher knows the manifest but has read no files yet.
-    const restarted = createReconciler(h.resolved, h.manager, () => {}, h.projections)
+    const restarted = createReconciler(h.resolved, h.manager, () => {})
     const a = await h.write('a.md', memoryFile('service.orders', 'service', 'Order Service'))
     await restarted.reconcile(a)
 
