@@ -14,7 +14,7 @@ import { z } from 'zod'
 import { lexicalSearch } from './lexical-search.js'
 
 /** Writes the normalized model as JSONL - a readable debug view of what projections receive. */
-export const jsonlConfigSchema = z.object({
+export const jsonlConfigSchema = z.strictObject({
   type: z.literal('jsonl').default('jsonl'),
   output: z.string().default('.docket/.index')
 })

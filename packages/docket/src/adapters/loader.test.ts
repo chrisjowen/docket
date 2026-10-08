@@ -94,7 +94,7 @@ describe('project-local adapter modules', () => {
     const typescript = vi.fn(async () => fake)
     const docket = await createDocket({ projectRoot: root, adapters: [typed], typescript })
     expect(typescript).toHaveBeenCalledWith(join(root, 'tools', 'docket', 'typed.ts'))
-    expect(docket.adapters.map((slot) => slot.id)).toEqual(['jsonl', 'company-memory'])
+    expect(docket.adapters.map((slot) => slot.id)).toEqual(['local', 'company-memory'])
   })
 
   it('must be compiled JavaScript', async () => {
@@ -129,7 +129,7 @@ describe('adapter packages', () => {
       ]
     })
     expect(docket.adapters.map((slot) => [slot.id, slot.name])).toEqual([
-      ['jsonl', 'jsonl'],
+      ['local', 'jsonl'],
       ['packaged', 'fake-local'],
       ['subpath', 'fake-local']
     ])
@@ -212,8 +212,8 @@ describe('createDocket', () => {
     const { root } = await project()
     const definition = await fake()
     await expect(
-      createDocket({ projectRoot: root, registrations: [{ id: 'jsonl', definition, config: { label: 'a' } }] })
-    ).rejects.toThrow('Adapter id "jsonl" is used more than once; instance ids must be unique.')
+      createDocket({ projectRoot: root, registrations: [{ id: 'local', definition, config: { label: 'a' } }] })
+    ).rejects.toThrow('Adapter id "local" is used more than once; instance ids must be unique.')
     await expect(
       createDocket({ projectRoot: root, registrations: [{ id: '../escape', definition, config: { label: 'a' } }] })
     ).rejects.toThrow(/Adapter id "..\/escape" must start with a letter or digit/)
@@ -304,7 +304,7 @@ describe('v1 projections', () => {
       "export default { apiVersion: 1, name: 'project-jsonl', validateConfig: (config) => config, async create() { throw new Error('unused') } }\n"
     )
     const docket = await createDocket({ projectRoot: root })
-    expect(docket.adapters.map((slot) => [slot.id, slot.name])).toEqual([['jsonl', 'project-jsonl']])
+    expect(docket.adapters.map((slot) => [slot.id, slot.name])).toEqual([['local', 'project-jsonl']])
   })
 
   it('say how to get an adapter package a minimal docket was built without', async () => {
@@ -366,7 +366,113 @@ describe('v1 projections', () => {
       'utf8'
     )
     const docket = await createDocket({ projectRoot: root })
-    expect(docket.resolved.config.projections[0]?.runtime).toBe('local')
+    expect(docket.resolved.config.adapters[0]?.runtime).toBe('local')
     expect(docket.projectionsFingerprint).toBe(before)
+  })
+})
+
+describe('version 2 adapter instances', () => {
+  const v2Config = (adapters: string, rest = ''): string => `version: 2\nadapters:\n${adapters}${rest}`
+
+  it('load each instance by module, several of one package side by side, from any working directory', async () => {
+    const { root, nested } = await project()
+    await writeFile(
+      join(root, '.docket.yaml'),
+      v2Config(
+        [
+          '  - id: local',
+          '    module: "@docket/adapter-jsonl"',
+          '    config: { output: .docket/.index/local }',
+          '  - id: archive',
+          '    module: "@docket/adapter-jsonl"',
+          '    roles: [projection]',
+          '    config: { output: .docket/.index/archive }',
+          '  - id: company-memory',
+          '    module: ./tools/docket/fake-local.mjs',
+          '    roles: [query]',
+          '    config: { label: company, endpoint: "https://memory.internal.example", tokenEnv: COMPANY_MEMORY_TOKEN }',
+          ''
+        ].join('\n')
+      ),
+      'utf8'
+    )
+    const docket = await inDirectory(nested, () => createDocket())
+    expect(docket.adapters.map((slot) => [slot.id, slot.name, slot.source, slot.roles])).toEqual([
+      ['local', 'jsonl', '@docket/adapter-jsonl', ['projection', 'query']],
+      ['archive', 'jsonl', '@docket/adapter-jsonl', ['projection']],
+      ['company-memory', 'fake-local', './tools/docket/fake-local.mjs', ['query']]
+    ])
+  })
+
+  it('never run a role an instance is not enabled for', async () => {
+    const { root } = await project()
+    await writeFile(
+      join(root, '.docket.yaml'),
+      v2Config(
+        '  - id: ask-only\n    module: ./tools/docket/fake-local.mjs\n    roles: [query]\n    config: { label: a }\n' +
+          '  - id: off\n    module: ./tools/docket/fake-local.mjs\n    roles: []\n    config: { label: b }\n'
+      ),
+      'utf8'
+    )
+    const docket = await createDocket({ projectRoot: root })
+    const askOnly = await docket.adapters[0]!.create()
+    expect(askOnly.query).toBeDefined()
+    expect(askOnly.projection).toBeUndefined()
+    const off = await docket.adapters[1]!.create()
+    expect(off.query).toBeUndefined()
+    expect(off.projection).toBeUndefined()
+  })
+
+  it('pass an adapter its config with unfamiliar fields intact, and report a rejection by instance', async () => {
+    const { root } = await project()
+    const seen = vi.fn()
+    const definition: AdapterDefinition = {
+      apiVersion: 1,
+      name: 'echo',
+      validateConfig: (config) => {
+        seen(config)
+        return config
+      },
+      create: async () => {
+        throw new Error('unused')
+      }
+    }
+    await writeFile(join(root, '.docket.yaml'), v2Config('  - id: a\n    module: "@docket/adapter-jsonl"\n'), 'utf8')
+    await createDocket({ projectRoot: root, registrations: [{ id: 'echo', definition, config: { endpoint: 'x', extra: { deep: 1 } } }] })
+    expect(seen).toHaveBeenCalledWith({ endpoint: 'x', extra: { deep: 1 } })
+
+    await writeFile(
+      join(root, '.docket.yaml'),
+      v2Config('  - id: enterprise-graph\n    module: "@docket/adapter-neo4j"\n    config:\n      uri: bolt://graph\n      password: hunter2\n'),
+      'utf8'
+    )
+    const failure = createDocket({ projectRoot: root })
+    await expect(failure).rejects.toThrow(/^Adapter "enterprise-graph" \(neo4j\) rejected its configuration: .*Unrecognized key: "password"/s)
+    await expect(failure).rejects.not.toThrow(/hunter2/)
+  })
+
+  it('fingerprint the instances that project, so a migrated file reprojects nothing', async () => {
+    const { root } = await project()
+    const neo4j = '    url: bolt://localhost:7687\n    passwordEnv: NEO4J_PASSWORD\n'
+    await writeFile(join(root, '.docket.yaml'), `version: 1\nprojections:\n  - type: file\n  - type: neo4j\n${neo4j}`, 'utf8')
+    const v1 = (await createDocket({ projectRoot: root })).projectionsFingerprint
+
+    const v2 = v2Config(
+      `  - id: jsonl\n    module: "@docket/adapter-jsonl"\n  - id: neo4j\n    module: "@docket/adapter-neo4j"\n    config:\n  ${neo4j.replaceAll('\n    ', '\n      ')}`
+    )
+    await writeFile(join(root, '.docket.yaml'), v2, 'utf8')
+    expect((await createDocket({ projectRoot: root })).projectionsFingerprint).toBe(v1)
+
+    // An instance that only answers questions holds nothing a sync wrote.
+    await writeFile(join(root, '.docket.yaml'), `${v2}  - id: ask\n    module: ./tools/docket/fake-local.mjs\n    roles: [query]\n    config: { label: a }\n`, 'utf8')
+    expect((await createDocket({ projectRoot: root })).projectionsFingerprint).toBe(v1)
+
+    // One that projects does, and so does a change to which module serves it.
+    await writeFile(join(root, '.docket.yaml'), `${v2}  - id: more\n    module: ./tools/docket/fake-local.mjs\n    config: { label: a }\n`, 'utf8')
+    const more = (await createDocket({ projectRoot: root })).projectionsFingerprint
+    expect(more).not.toBe(v1)
+    await copyFile(FAKE_LOCAL, join(root, 'tools', 'docket', 'other.mjs'))
+    await writeFile(join(root, '.docket.yaml'), `${v2}  - id: more\n    module: ./tools/docket/other.mjs\n    config: { label: a }\n`, 'utf8')
+    expect((await createDocket({ projectRoot: root })).projectionsFingerprint).not.toBe(more)
   })
 })

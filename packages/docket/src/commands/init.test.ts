@@ -40,7 +40,7 @@ describe('init', () => {
 
     const raw = parse(await readFile(join(root, '.docket.yaml'), 'utf8'))
     expect(memoryConfigSchema.parse(raw)).toEqual(
-      memoryConfigSchema.parse({ version: 1 })
+      memoryConfigSchema.parse({ version: 2 })
     )
 
     const resolved = await loadConfig(root)

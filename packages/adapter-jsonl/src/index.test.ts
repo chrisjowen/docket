@@ -23,5 +23,6 @@ describe('jsonl adapter', () => {
     expect(jsonl.validateConfig({ type: 'jsonl' })).toEqual({ type: 'jsonl', output: '.docket/.index' })
     expect(jsonl.validateConfig({ output: '.docket/.out' })).toEqual({ type: 'jsonl', output: '.docket/.out' })
     expect(() => jsonl.validateConfig({ type: 'neo4j' })).toThrow()
+    expect(() => jsonl.validateConfig({ ouput: '.docket/.out' })).toThrow(/Unrecognized key: "ouput"/)
   })
 })

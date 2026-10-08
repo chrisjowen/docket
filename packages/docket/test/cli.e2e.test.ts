@@ -1,4 +1,4 @@
-import { rm, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -344,6 +344,38 @@ evidence:
     expect(result.stderr).toContain(
       'projection init failed: mem0\n  The mem0 projection is in platform mode but DOCKET_E2E_UNSET_MEM0_KEY is not set.'
     )
+  })
+
+  it('migrates a version 1 config only when told to, and the next sync reprojects nothing', async () => {
+    root = await makeRepo('memory-e2e')
+    const v1 = 'version: 1\nprojections:\n  - type: jsonl\n    output: .docket/.index # the default\n'
+    await writeFile(join(root, '.docket.yaml'), v1, 'utf8')
+    await write(root, '.docket/resources/teams/payments.md', PAYMENTS)
+    expect((await memory(root, 'sync')).stdout).toContain('1 projected')
+
+    // No terminal to confirm on and no --write: nothing is touched.
+    const refused = await memory(root, 'config', 'migrate')
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('Pass --write')
+    expect(await readFile(join(root, '.docket.yaml'), 'utf8')).toBe(v1)
+
+    const preview = await memory(root, 'config', 'migrate', '--dry-run')
+    expect(preview.code).toBe(0)
+    expect(preview.stdout).toBe(
+      'version: 2\nadapters:\n  - id: jsonl\n    module: "@docket/adapter-jsonl"\n    roles: [ projection, query ]\n' +
+        '    config:\n      output: .docket/.index # the default\n'
+    )
+    expect(await readFile(join(root, '.docket.yaml'), 'utf8')).toBe(v1)
+
+    const written = await memory(root, 'config', 'migrate', '--write')
+    expect(written.code).toBe(0)
+    expect(await readFile(join(root, '.docket.yaml'), 'utf8')).toBe(preview.stdout)
+    expect(await readFile(join(root, '.docket.yaml.v1.bak'), 'utf8')).toBe(v1)
+
+    const sync = await memory(root, 'sync')
+    expect(sync.code).toBe(0)
+    expect(sync.stdout).toContain('0 projected, 0 removed, 1 unchanged')
+    expect((await memory(root, 'config', 'migrate', '--write')).stderr).toContain('already version 2')
   })
 
   it('rebuilds into an index directory that does not exist yet', async () => {

@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+import { createInterface } from 'node:readline/promises'
+
 import { Command } from 'commander'
+import { configMigrate } from './commands/config.js'
 import { init } from './commands/init.js'
 import { open } from './commands/open.js'
 import {
@@ -337,6 +340,49 @@ runtimeCommand
         ? `✓ runtime ${result.runtime} is down and its volumes are deleted`
         : `✓ runtime ${result.runtime} is down; its volumes are kept`
     )
+  })
+
+const configCommand = program
+  .command('config')
+  .description('Upgrade .docket.yaml')
+
+configCommand
+  .command('migrate')
+  .description('Rewrite a version 1 .docket.yaml as version 2; version 1 keeps working without it')
+  .option('--dry-run', 'print the version 2 file and write nothing')
+  .option('--write', 'rewrite the file without asking; the original is kept as a backup')
+  .action(async (options: { dryRun?: boolean; write?: boolean }) => {
+    const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY)
+    const result = await configMigrate({
+      dryRun: options.dryRun,
+      write: options.write,
+      confirm: interactive
+        ? async (question, text) => {
+            console.log(text)
+            const prompt = createInterface({ input: process.stdin, output: process.stdout })
+            try {
+              return (await prompt.question(`${question} [y/N] `)).trim().toLowerCase().startsWith('y')
+            } finally {
+              prompt.close()
+            }
+          }
+        : undefined
+    })
+    switch (result.status) {
+      case 'current':
+        console.error(`${result.file} is already version 2; nothing to migrate.`)
+        break
+      case 'preview':
+        // The file alone on stdout, so it can be redirected.
+        process.stdout.write(result.text)
+        break
+      case 'declined':
+        console.error(`Left ${result.file} unchanged.`)
+        break
+      case 'written':
+        console.log(`✓ ${result.file} is now version 2; the original is kept at ${result.backup}`)
+        break
+    }
   })
 
 const ontologyCommand = program

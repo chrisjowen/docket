@@ -47,7 +47,7 @@ history.
 
 ```text
 your-repo/
-├── .docket.yaml               config: where the case file lives, which projections to feed
+├── .docket.yaml               config: where the case file lives, which adapters to feed
 └── .docket/
     ├── entities.yaml          the ontology: resource types, relationships, evidence sources
     ├── resources/             exhibits, one Markdown file per thing
@@ -238,6 +238,8 @@ docket search <query...>    # ask every projection that can search
 docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
+docket config migrate --dry-run  # show a version 1 .docket.yaml rewritten as version 2
+docket config migrate       # rewrite it, once confirmed (--write: without asking); the original is kept
 docket runtime plan <id>    # validate a runtimes entry and show what it would run, secrets redacted
 docket runtime up <id>      # start its containers, pulling only as its pullPolicy allows
 docket runtime status <id>  # state and health of its containers, changing nothing
@@ -419,7 +421,8 @@ be built incrementally, so a dangling reference is a warning until you ask for
 ## Projections
 
 The Markdown files are the source. A projection is a destination: sync and
-watch push every change into each projection listed in `.docket.yaml`.
+watch push every change into each adapter `.docket.yaml` enables for
+projection, and `docket search` asks each one enabled for query.
 
 ```
 .docket/**/*.md ──► docket sync / watch ──┬──► jsonl  → .docket/.index/*.jsonl
@@ -431,38 +434,131 @@ Every projection receives merged entities — one per id, however many files
 declare it — each resource and link carrying its evidence, evidence count,
 corroborating source kinds and confidence.
 
-**`jsonl`** writes `documents.jsonl`, `nodes.jsonl` and `edges.jsonl` — a
-readable view of exactly what projections receive. Output is deterministic, so
-rebuilds are byte-identical and diffable. (`type: file` is still accepted.)
-It is the default, and the only projection `docket search` has out of the box:
-a lexical keyword search over titles, ids, tags and bodies.
+### Configuring adapters
 
-**`mem0`** stores each resource as one verbatim memory (`infer: false`): the
-title, type, id, confidence, body, links, evidence and tags as text; the id,
-type, paths, hash, tags, confidence and evidence count as metadata. Rebuilds
-reproduce it exactly and cost no LLM calls. Documents with
+`.docket.yaml` version 2 lists adapter instances
+([`docs/adapter-spec.md`](docs/adapter-spec.md) §5):
+
+```yaml
+version: 2
+
+adapters:
+  - id: local                        # unique; names the instance in answers and errors
+    module: "@docket/adapter-jsonl"   # a package, or ./a/file.mjs relative to .docket.yaml
+    roles: [projection, query]       # default: both; a role left out never runs
+    config:                          # the adapter's own settings
+      output: .docket/.index
+
+  - id: enterprise-graph
+    module: "@docket/adapter-neo4j"
+    roles: [query]                   # asked questions, never synced into
+    config:
+      uri: "neo4j+s://graph.internal.example"
+      database: project-memory
+      username: docket
+      passwordEnv: DOCKET_GRAPH_PASSWORD
+      scope: payments-project
+
+  - id: company-memory
+    module: "./tools/docket/company-memory.mjs"
+    config:
+      endpoint: "https://memory.internal.example"
+      tokenEnv: COMPANY_MEMORY_TOKEN
+
+query:
+  defaultAdapters: [local, enterprise-graph, company-memory]   # default: every query adapter
+  timeoutMs: 30000
+  maxConcurrentAdapters: 3
+  synthesis: true
+```
+
+An instance's `id` is its identity, separate from its module, so one package
+can serve several instances — two Neo4j databases, say. docket itself checks
+only this envelope, strictly: an unknown field, a repeated id, a role other than
+`projection` or `query`, a `runtime` that is not defined or a default adapter
+that is not configured for `query` is an error naming the instance. Everything
+under `config` belongs to the adapter, which receives it as written and
+validates it when the docket opens; the bundled adapters reject a field they do
+not know rather than ignore it, and their errors name the instance too.
+
+Secrets never go in the file. An adapter takes the *name* of the environment
+variable holding one — `passwordEnv`, `apiKeyEnv`, `tokenEnv` — and reads the
+value itself; docket never writes a value into a manifest, error, log or API
+response.
+
+`docket search` asks the instances `query.defaultAdapters` names, or every
+instance with the `query` role. `timeoutMs`, `maxConcurrentAdapters` and
+`synthesis` are for the shared query coordinator
+([`docs/adapter-spec.md`](docs/adapter-spec.md) §10); they are checked now but
+nothing reads them yet. `docket init` writes a version 2 file.
+
+### Version 1 files
+
+A version 1 `.docket.yaml` keeps working unchanged. Its `projections` are read
+as adapter instances: each entry's `type` picks the module and names the
+instance (`jsonl`, `mem0`, then `mem0#2` for a second of a type; `type: file`
+still means `jsonl`), its `runtime`
+moves to the instance, and every other field becomes the instance's `config`
+— every mem0 mode, Neo4j setting and scope included. Both roles are enabled,
+as before.
+
+`docket config migrate --dry-run` prints the file rewritten as version 2.
+`docket config migrate` shows it and asks before writing; `--write` writes
+without asking, which is also the only way it writes without a terminal. Either
+way it first copies the original to `.docket.yaml.v1.bak` (or `.v1.bak.2`, never
+over an existing backup). Only `version` and `projections` change, and comments
+stay, though comments inside the old entries keep their version 1 wording. The
+rewritten file loads as exactly the same configuration, so the next sync
+reprojects nothing.
+
+### The bundled adapters
+
+**`jsonl`** (`@docket/adapter-jsonl`) writes `documents.jsonl`, `nodes.jsonl`
+and `edges.jsonl` under `output` (default `.docket/.index`) — a readable view
+of exactly what projections receive. Output is deterministic, so rebuilds are
+byte-identical and diffable. It is the default, and the only adapter `docket
+search` has out of the box: a lexical keyword search over titles, ids, tags and
+bodies.
+
+**`mem0`** (`@docket/adapter-mem0`) stores each resource as one verbatim memory
+(`infer: false`): the title, type, id, confidence, body, links, evidence and
+tags as text; the id, type, paths, hash, tags, confidence and evidence count as
+metadata. Rebuilds reproduce it exactly and cost no LLM calls. Documents with
 `index.vector: false` are left out. It needs the optional `mem0ai` package
 (`pnpm add mem0ai`).
 
 ```yaml
-projections:
+adapters:
   # Hosted mem0. The key comes from the environment, never the file.
-  - type: mem0
-    mode: platform
-    apiKeyEnv: MEM0_API_KEY   # default
-    # host: https://api.mem0.ai
-
-  # Or self-hosted. `config` goes to mem0's `Memory` constructor untouched,
-  # so any embedder, vector store or LLM mem0 supports works.
-  - type: mem0
-    mode: oss
+  - id: memories
+    module: "@docket/adapter-mem0"
     config:
-      embedder: { provider: ollama, config: { model: nomic-embed-text } }
-      vectorStore: { provider: qdrant, config: { host: localhost, port: 6333 } }
-      llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
+      mode: platform
+      apiKeyEnv: MEM0_API_KEY   # default
+      # host: https://api.mem0.ai
+
+  # mem0's self-hosted REST server.
+  - id: team-memories
+    module: "@docket/adapter-mem0"
+    config:
+      mode: server
+      url: http://localhost:8888
+      apiKeyEnv: MEM0_API_KEY   # optional: the server can run without auth
+
+  # Or mem0ai/oss in-process. Its `config` goes to mem0's `Memory` constructor
+  # untouched, so any embedder, vector store or LLM mem0 supports works.
+  - id: local-memories
+    module: "@docket/adapter-mem0"
+    config:
+      mode: oss
+      config:
+        embedder: { provider: ollama, config: { model: nomic-embed-text } }
+        vectorStore: { provider: qdrant, config: { host: localhost, port: 6333 } }
+        llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
 ```
 
-Both modes file memories under one scope, by default
+Every mode also takes `minScore` (drop hits below that similarity) and `scope`.
+All modes file memories under one scope, by default
 `agentId: docket-<checkout directory>-<hash>`, where the hash is taken over the
 checkout's absolute path (symlinks and letter case resolved). Two clones or
 worktrees with the same directory name therefore never share a scope. Moving a
@@ -472,7 +568,7 @@ The path is the only input, so checkouts on different machines at the same path
 point at one shared mem0 or Neo4j server, each must set `scope:` (`userId`,
 `agentId` and/or `runId`) explicitly. Set `scope:` too to choose your own.
 `docket rebuild` deletes and repopulates the whole scope, so do not share it
-with memories written by anything else. The `neo4j` projection's
+with memories written by anything else. The `neo4j` adapter's
 `scope` defaults the same way.
 
 Scopes created by earlier versions (`team-memory-<directory>` in mem0, the bare
@@ -482,60 +578,67 @@ hand if you no longer want it, or set `scope:` to the old value to keep using
 it. Set
 `MEM0_TELEMETRY=false` to turn off the mem0 SDK's telemetry.
 
-**`neo4j`** writes one `(:Memory:<Type>)` node per resource and one
-relationship per (source, rel, target), with `confidence`, `evidenceCount`,
-`sources` and `evidence` on both, so a query can ask for what rests on code
-alone — and a full-text index over the documents. It needs the optional
-`neo4j-driver` package and a running Neo4j server. `docket search` asks it with
-a full-text query, or, with `cypher` set, has a local Ollama model write a
-read-only Cypher query against the graph's schema (falling back to full-text
-when that fails or finds nothing).
+**`neo4j`** (`@docket/adapter-neo4j`) writes one `(:Memory:<Type>)` node per
+resource and one relationship per (source, rel, target), with `confidence`,
+`evidenceCount`, `sources` and `evidence` on both, so a query can ask for what
+rests on code alone — and a full-text index over the documents. It needs the
+optional `neo4j-driver` package and a running Neo4j server, local or hosted.
+`docket search` asks it with a full-text query, or, with `cypher` set, has a
+local Ollama model write a read-only Cypher query against the graph's schema
+(falling back to full-text when that fails or finds nothing).
 
 ```yaml
-projections:
-  - type: neo4j
-    url: bolt://localhost:7687        # default
-    username: neo4j                   # default
-    passwordEnv: NEO4J_PASSWORD       # unset: connect without auth
-    # database: neo4j
-    # cypher:
-    #   model: "qwen2.5:7b"           # Ollama at http://localhost:11434
+adapters:
+  - id: graph
+    module: "@docket/adapter-neo4j"
+    config:
+      uri: bolt://localhost:7687        # default; any driver scheme, e.g. neo4j+s://
+      username: neo4j                   # default
+      passwordEnv: NEO4J_PASSWORD       # unset: connect without auth
+      # database: neo4j
+      # scope: payments-project
+      # cypher:
+      #   model: "qwen2.5:7b"           # Ollama at http://localhost:11434
 ```
 
+`uri` is also accepted as `url`, its name in version 1 entries.
+
 The manifest that makes sync skip unchanged resources lives in `state.dir`
-(default `.docket/.index`), independent of any projection. A resource is
+(default `.docket/.index`), independent of any adapter. A resource is
 reprojected whenever what it projects changes — one of its files, or a
-confidence rule in the ontology. Adding, removing or reconfiguring a projection
-makes the next sync reproject everything, so a newly added mem0 receives the
-whole repository.
+confidence rule in the ontology. Adding, removing or reconfiguring an adapter
+enabled for projection makes the next sync reproject everything, so a newly
+added mem0 receives the whole repository. Renaming an instance, or adding one
+that only answers queries, does not.
+
+### Writing an adapter
 
 New engines plug in as memory adapters, through the contracts in
 [`packages/contracts`](packages/contracts) (`@docket/contracts`, not published
 on its own; its code ships bundled inside `@chrisjowen/docket`, which also
-exports its types). The three projections above are adapters too, each its own
-package with its own configuration and driver dependency:
-[`@docket/adapter-jsonl`](packages/adapter-jsonl),
-[`@docket/adapter-neo4j`](packages/adapter-neo4j) and
-[`@docket/adapter-mem0`](packages/adapter-mem0), sharing
+exports its types). The three adapters above are packages too, each with its
+own configuration and driver dependency, sharing
 [`@docket/adapter-kit`](packages/adapter-kit). docket's core imports none of
-them: a `projections` entry's `type` names the adapter package that reads the
-rest of the entry, loaded only when it is configured.
+them: an instance's `module` is loaded only when it is configured.
 
 The standard `@chrisjowen/docket` package ships all three, bundled in
-`dist/bundled`, so existing `.docket.yaml` files keep working unchanged. The
-drivers stay optional: install `neo4j-driver` or `mem0ai` next to docket only
-for the projection you configure. A jsonl-only project needs neither, nor
-Docker, Python or network access. A project's own install of an adapter
-package (from a private registry or a workspace) is used in preference to the
-bundled copy. For a minimal core, build docket with only the adapters you want
-bundled — `DOCKET_BUNDLED_ADAPTERS=jsonl pnpm build`, or empty for none. The
-`@docket/adapter-*` packages are not published to npm, so a project using a
-minimal core cannot `npm install` the adapters it left out: a configured
-adapter that is neither installed nor bundled fails with an error saying it is
-not included in this build, and that a build with `DOCKET_BUNDLED_ADAPTERS`
-unset or listing it includes it.
+`dist/bundled`. The drivers stay optional: install `neo4j-driver` or `mem0ai`
+next to docket only for the adapter you configure. A jsonl-only project needs
+neither, nor Docker, Python or network access. A project's own install of an
+adapter package (from a private registry or a workspace) is used in preference
+to the bundled copy. For a minimal core, build docket with only the adapters
+you want bundled — `DOCKET_BUNDLED_ADAPTERS=jsonl pnpm build`, or empty for
+none. The `@docket/adapter-*` packages are not published to npm, so a project
+using a minimal core cannot `npm install` the adapters it left out: a
+configured adapter that is neither installed nor bundled fails with an error
+saying it is not included in this build, and that a build with
+`DOCKET_BUNDLED_ADAPTERS` unset or listing it includes it.
 
-A program can open a docket with more adapters:
+A project-local adapter is a compiled `.js` or `.mjs` module whose default
+export is an `AdapterDefinition`
+([`docs/adapter-spec.md`](docs/adapter-spec.md) §7, §12), named by its path in
+`module`. A program can also open a docket with more adapters than the file
+lists:
 
 ```ts
 import { createDocket } from '@chrisjowen/docket'
@@ -550,26 +653,28 @@ const docket = await createDocket({
 ```
 
 docket never installs an adapter package, and runs a `.ts` adapter only with a
-TypeScript runner passed as `typescript`. Configuring adapters in
-`.docket.yaml` is the next step of [`docs/adapter-spec.md`](docs/adapter-spec.md).
+TypeScript runner passed as `typescript`.
 
 ## Local runtimes
 
-A projection connects to a service; docket does not start one unless asked.
+An adapter connects to a service; docket does not start one unless asked.
 Hosted and already-running services need nothing more, and no command but
 `docket runtime` ever calls Docker - not sync, watch, search, `open` or
 loading an adapter, even with a `runtimes` section configured.
 
 To have docket manage local containers explicitly, write your own Compose file
-with the images you approve, and name it in a `runtimes` group. A projection's
-`runtime:` says which group it connects to:
+with the images you approve, and name it in a `runtimes` group. An adapter
+instance's `runtime:` says which group it connects to (in a version 1 file, a
+projection's `runtime:` does):
 
 ```yaml
-projections:
-  - type: neo4j
-    url: bolt://127.0.0.1:17687
-    passwordEnv: DOCKET_GRAPH_PASSWORD
+adapters:
+  - id: dev-graph
+    module: "@docket/adapter-neo4j"
     runtime: graph-dev
+    config:
+      uri: bolt://127.0.0.1:17687
+      passwordEnv: DOCKET_GRAPH_PASSWORD
 
 runtimes:
   graph-dev:

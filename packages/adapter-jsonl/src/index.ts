@@ -1,4 +1,4 @@
-import { entityProjectionDefinition, packageVersion } from '@docket/adapter-kit'
+import { entityProjectionDefinition, packageVersion, parseAdapterConfig } from '@docket/adapter-kit'
 
 import { createJsonlProjection, jsonlConfigSchema, type JsonlConfig } from './jsonl-projection.js'
 
@@ -24,7 +24,7 @@ const definition = entityProjectionDefinition<JsonlConfig>({
   name: 'jsonl',
   version: packageVersion(new URL('../package.json', import.meta.url)),
   rebuild: 'deterministic',
-  validateConfig: (input) => jsonlConfigSchema.parse(input),
+  validateConfig: (input) => parseAdapterConfig(jsonlConfigSchema, input),
   createProjection: (config) => createJsonlProjection(config)
 })
 

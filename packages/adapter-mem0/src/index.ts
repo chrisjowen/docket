@@ -1,4 +1,4 @@
-import { entityProjectionDefinition, packageVersion } from '@docket/adapter-kit'
+import { entityProjectionDefinition, packageVersion, parseAdapterConfig } from '@docket/adapter-kit'
 
 import { mem0ConfigSchema, type Mem0Config } from './config.js'
 import { createMem0Projection } from './mem0-projection.js'
@@ -16,7 +16,7 @@ const definition = entityProjectionDefinition<Mem0Config>({
   version: packageVersion(new URL('../package.json', import.meta.url)),
   // mem0 extracts memories with a model: rebuilt, but not byte for byte.
   rebuild: 'reconstructible',
-  validateConfig: (input) => mem0ConfigSchema.parse(input),
+  validateConfig: (input) => parseAdapterConfig(mem0ConfigSchema, input),
   createProjection: (config) => createMem0Projection(config)
 })
 
