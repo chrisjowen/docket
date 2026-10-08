@@ -135,6 +135,12 @@ describe('runtimes in .docket.yaml', () => {
     )
   })
 
+  it('does not take an inherited object property for a runtime', async () => {
+    await expect(loadYaml('projections:\n  - type: jsonl\n    runtime: toString\n')).rejects.toThrow(
+      /runtime "toString" is not defined under runtimes/
+    )
+  })
+
   it.each([
     ['an unknown pull policy', GRAPH_DEV.replace('pullPolicy: missing', 'pullPolicy: sometimes')],
     ['a misspelt field', GRAPH_DEV.replace('pullPolicy:', 'pullpolicy:')],

@@ -27,7 +27,7 @@ const adaptersUsing = (resolved: ResolvedConfig, id: string): string[] => {
 /** The configured runtime group `id`, ready to act on. Only the runtime commands open one. */
 const openRuntime = async (id: string, options: RuntimeCommandOptions): Promise<ComposeRuntime> => {
   const resolved = await loadConfig(options.cwd)
-  const config = resolved.config.runtimes[id]
+  const config = Object.hasOwn(resolved.config.runtimes, id) ? resolved.config.runtimes[id] : undefined
   if (config === undefined) {
     const configured = Object.keys(resolved.config.runtimes).sort()
     throw new Error(

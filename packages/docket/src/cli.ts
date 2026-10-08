@@ -271,35 +271,30 @@ runtimeCommand
   .command('plan')
   .argument('<id>', 'runtime id from .docket.yaml')
   .description('Validate the runtime and show what up, status and down would run, secrets redacted')
-  .option('--json', 'print the plan as JSON')
-  .action(async (id: string, options: { json?: boolean }) => {
+  .action(async (id: string) => {
     const plan = await runtimePlan(id)
-    if (options.json) {
-      console.log(JSON.stringify(plan, null, 2))
-    } else {
-      const rows: [string, string][] = [
-        ['compose file', plan.composeFile],
-        ['project', plan.projectName],
-        ['pull policy', plan.pullPolicy],
-        ['services', plan.services.length > 0 ? plan.services.join(', ') : '(every service in the file)'],
-        ['adapters', plan.adapters.length > 0 ? plan.adapters.join(', ') : '(none reference it)']
-      ]
-      console.log(`runtime ${plan.runtime} (${plan.provider})`)
-      const width = widest(rows.map(([label]) => label))
-      for (const [label, value] of rows) console.log(`  ${pad(label, width)}  ${value}`)
-      for (const service of plan.resolved) {
-        console.log(`\n  ${service.name}`)
-        console.log(`    image        ${service.image ?? '(none)'}`)
-        if (service.ports.length > 0) console.log(`    ports        ${service.ports.join(', ')}`)
-        if (service.volumes.length > 0) console.log(`    volumes      ${service.volumes.join(', ')}`)
-        if (service.environment.length > 0) {
-          console.log(`    environment  ${service.environment.map((name) => `${name}=<redacted>`).join(', ')}`)
-        }
+    const rows: [string, string][] = [
+      ['compose file', plan.composeFile],
+      ['project', plan.projectName],
+      ['pull policy', plan.pullPolicy],
+      ['services', plan.services.length > 0 ? plan.services.join(', ') : '(every service in the file)'],
+      ['adapters', plan.adapters.length > 0 ? plan.adapters.join(', ') : '(none reference it)']
+    ]
+    console.log(`runtime ${plan.runtime} (${plan.provider})`)
+    const width = widest(rows.map(([label]) => label))
+    for (const [label, value] of rows) console.log(`  ${pad(label, width)}  ${value}`)
+    for (const service of plan.resolved) {
+      console.log(`\n  ${service.name}`)
+      console.log(`    image        ${service.image ?? '(none)'}`)
+      if (service.ports.length > 0) console.log(`    ports        ${service.ports.join(', ')}`)
+      if (service.volumes.length > 0) console.log(`    volumes      ${service.volumes.join(', ')}`)
+      if (service.environment.length > 0) {
+        console.log(`    environment  ${service.environment.map((name) => `${name}=<redacted>`).join(', ')}`)
       }
-      console.log('\n  operations')
-      for (const [name, operation] of Object.entries(plan.operations)) {
-        console.log(`    ${name}: ${operation.description}\n      ${operation.command}`)
-      }
+    }
+    console.log('\n  operations')
+    for (const [name, operation] of Object.entries(plan.operations)) {
+      console.log(`    ${name}: ${operation.description}\n      ${operation.command}`)
     }
     for (const problem of plan.problems) console.error(`ERROR ${problem}`)
     if (plan.problems.length > 0) process.exitCode = 1
@@ -318,13 +313,8 @@ runtimeCommand
   .command('status')
   .argument('<id>', 'runtime id from .docket.yaml')
   .description('Report the state and health of the runtime\'s services, changing nothing')
-  .option('--json', 'print the status as JSON')
-  .action(async (id: string, options: { json?: boolean }) => {
+  .action(async (id: string) => {
     const status = await runtimeStatus(id)
-    if (options.json) {
-      console.log(JSON.stringify(status, null, 2))
-      return
-    }
     console.log(`runtime ${status.runtime} (project ${status.projectName})`)
     if (status.services.length === 0) console.log('  no containers')
     const width = widest(status.services.map((service) => service.service))

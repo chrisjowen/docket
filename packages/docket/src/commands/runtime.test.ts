@@ -96,6 +96,9 @@ describe('docket runtime', () => {
     await expect(runtimeStatus('graph', { cwd: root, runner })).rejects.toThrow(
       /No runtime "graph" in .*\.docket\.yaml\. Configured runtimes: graph-dev, vectors-dev\./
     )
+    await expect(runtimePlan('constructor', { cwd: root, runner })).rejects.toThrow(
+      /No runtime "constructor" in .*\.docket\.yaml\. Configured runtimes: graph-dev, vectors-dev\./
+    )
     await writeFile(join(root, '.docket.yaml'), 'version: 1\n')
     await expect(runtimeStatus('graph', { cwd: root, runner })).rejects.toThrow(/It has no runtimes section/)
     expect(calls).toEqual([])

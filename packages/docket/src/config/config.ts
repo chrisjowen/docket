@@ -178,7 +178,7 @@ export const memoryConfigSchema = z.object({
   summarize: summarizeConfigSchema
 }).superRefine((config, context) => {
   config.projections.forEach((projection, index) => {
-    if (projection.runtime !== undefined && !(projection.runtime in config.runtimes)) {
+    if (projection.runtime !== undefined && !Object.hasOwn(config.runtimes, projection.runtime)) {
       context.addIssue({
         code: 'custom',
         path: ['projections', index, 'runtime'],
