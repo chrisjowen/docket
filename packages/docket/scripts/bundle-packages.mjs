@@ -7,7 +7,8 @@
 // - the adapter packages v1 projections are served by, which core loads as
 //   adapter modules and never imports. DOCKET_BUNDLED_ADAPTERS picks which
 //   (comma-separated: jsonl,neo4j,mem0 - all by default); set it empty for a
-//   minimal core whose projects install the adapters they configure.
+//   minimal core. The adapter packages are not published, so a build that
+//   leaves one out cannot serve projects that configure it.
 //
 // Fails rather than ship a package that still imports a workspace package.
 import { cp, readdir, readFile, writeFile } from 'node:fs/promises'
