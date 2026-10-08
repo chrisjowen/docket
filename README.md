@@ -247,7 +247,7 @@ docket runtime down <id>    # stop and remove its containers; volumes are kept (
 ## Browse it: `docket open`
 
 <p align="center">
-  <img src="docs/assets/docket-open.png" alt="docket open showing the acme-platform example: the Research Assistant agent selected in the relationship graph, with its confidence, sources and three pieces of evidence in the details panel" width="100%">
+  <img src="docs/assets/docket-open.png" alt="docket open on the acme-platform example: the Browse graph with the Research Assistant agent selected, and its confidence, sources and three pieces of evidence in the Inspector" width="100%">
 </p>
 
 `docket open` serves a web UI for the repository on port 4380 and prints
