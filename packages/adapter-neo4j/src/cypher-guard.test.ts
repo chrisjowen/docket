@@ -64,7 +64,11 @@ describe('scopeProblem', () => {
     'MATCH p = (a:Memory {scope: $scope})-[*1..3]-(b) RETURN p',
     "MATCH (d:Memory:Deployment {scope: $scope}) WHERE d.title CONTAINS ',' RETURN count(d)",
     "MATCH (n:Memory) WHERE $scope = n.scope AND (n.type = 'team' OR n.type = 'service') RETURN count(n)",
-    'MATCH (s:Service {scope: $scope}) RETURN s.id AS id UNION MATCH (t:Team) WHERE t.scope = $scope RETURN t.id AS id'
+    'MATCH (s:Service {scope: $scope}) RETURN s.id AS id UNION MATCH (t:Team) WHERE t.scope = $scope RETURN t.id AS id',
+    'MATCH (s:Memory {scope: $scope}) WITH DISTINCT s, count(*) AS n MATCH (s)-->(t) RETURN t, n',
+    'MATCH (s:Memory {scope: $scope}) WITH * MATCH (s)-->(t) RETURN t',
+    'MATCH (s:Memory {scope: $scope, type: $type}) WHERE (s)-[:USES]->(:Team) RETURN size([(s)-->(t) | t]) AS reach',
+    'MATCH (s:Memory {scope: $scope}) WHERE EXISTS { MATCH (s)-->(t:Team) } RETURN COUNT { (s)-->() } AS links'
   ])('accepts a query anchored in scope: %s', (query) => {
     expect(scopeProblem(query)).toBeUndefined()
   })
@@ -77,7 +81,14 @@ describe('scopeProblem', () => {
     ['MATCH (s:Service {scope: $scope}) RETURN s.id AS id UNION MATCH (s:Team) RETURN s.id AS id', /\(s:Team\) is not bound/],
     ["MATCH (n) WHERE n.scope = $scope OR n.type = 'team' RETURN count(n)", /\(n\) is not bound/],
     ['MATCH (n) WHERE NOT n.scope = $scope RETURN count(n)', /\(n\) is not bound/],
-    ['MATCH (n) WITH count(n) AS total MATCH (m) WHERE m.scope = $scope RETURN total', /\(n\) is not bound/]
+    ['MATCH (n) WITH count(n) AS total MATCH (m) WHERE m.scope = $scope RETURN total', /\(n\) is not bound/],
+    ['MATCH (s:Memory {scope: $scope}) WITH count(s) AS mine MATCH (s:Team) RETURN count(s)', /\(s:Team\) is not bound/],
+    ['MATCH (s:Memory {scope: $scope}) WITH 1 AS one MATCH (s) RETURN count(s)', /\(s\) is not bound/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN size([(t:Team) | t]) AS teams', /\(t:Team\) is not bound/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Team) } AS teams', /\(t:Team\) is not bound/],
+    ['MATCH (s:Memory {scope: $scope}) WHERE EXISTS { MATCH (t:Team) } RETURN s', /\(t:Team\).* is not bound/],
+    ['MATCH (s:Memory {scope: $scope}) WHERE EXISTS { MATCH (s)-->(t) } MATCH (t) RETURN count(t)', /\(t\) is not bound/],
+    ["MATCH (t:Team {scope: $scope + '-other'}) RETURN count(t)", /\(t:Team .*\) is not bound/]
   ])('rejects a pattern that could read another scope: %s', (query, reason) => {
     expect(scopeProblem(query)).toMatch(reason)
   })

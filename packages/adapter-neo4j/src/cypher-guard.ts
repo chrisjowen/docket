@@ -66,6 +66,19 @@ const SCOPE_EQUALITY = /^(?:([A-Za-z_]\w*)\.scope\s*=\s*\$scope|\$scope\s*=\s*([
 /** A node pattern: `(n)`, `(:Label)`, `(n:A:B {scope: $scope})`. */
 const NODE = /\(\s*([A-Za-z_]\w*)?\s*((?::\s*`?\w+`?\s*)*)(\{[^}]*\})?\s*\)/g
 
+/**
+ * A pattern written as an expression - in a WHERE predicate, a pattern
+ * comprehension or an EXISTS, COUNT or COLLECT subquery: nodes joined by
+ * relationships, not following a name the way a function's arguments do.
+ */
+const PATTERN = new RegExp(`(?<![\\w$\`])${NODE.source}(?:\\s*<?-(?:\\[[^\\]]*\\])?->?\\s*${NODE.source})*`, 'g')
+
+/** A property map that pins its node to exactly `$scope`. */
+const SCOPE_PROPERTY = /[{,]\s*scope\s*:\s*\$scope\s*[,}]/
+
+/** One projected item that carries a node through: `s` or `s AS alias`. */
+const PROJECTED = /^([A-Za-z_]\w*)(?:\s+AS\s+([A-Za-z_]\w*))?$/i
+
 /** Splits on `separator` outside brackets, braces and parentheses. */
 const topLevel = (text: string, separator: RegExp = /,/y): string[] => {
   const parts: string[] = []
@@ -106,9 +119,11 @@ const scopedByWhere = (where: string): string[] => {
  * Why a query could read beyond `$scope`, or undefined when it cannot. Each
  * pattern a MATCH reads must be anchored in scope: one of its nodes carries
  * `{scope: $scope}`, is constrained by `n.scope = $scope` in that MATCH's
- * WHERE, or was bound by an earlier anchored pattern in the same side of any
- * UNION. The projection never links nodes across scopes, so everything an
- * anchored pattern reaches is in scope too.
+ * WHERE, or was bound by an earlier anchored pattern and carried through
+ * every WITH since, in the same side of any UNION. Patterns written as
+ * expressions, outside MATCH, must be anchored the same way. The projection
+ * never links nodes across scopes, so everything an anchored pattern reaches
+ * is in scope too.
  *
  * Run before the query, because dropping foreign rows afterwards cannot
  * correct a count or another aggregate taken over them.
@@ -123,32 +138,52 @@ export const scopeProblem = (cypher: string): string | undefined => {
   return undefined
 }
 
+/** Whether one of the pattern's nodes is pinned to `$scope` or already known to be in scope. */
+const anchored = (pattern: string, scoped: Set<string>): boolean =>
+  [...pattern.matchAll(NODE)].some(
+    ([, variable, , properties]) =>
+      (properties !== undefined && SCOPE_PROPERTY.test(properties)) || (variable !== undefined && scoped.has(variable))
+  )
+
+/** How many subquery braces enclose `index`; property maps open and close before it. */
+const braceDepth = (code: string, index: number): number =>
+  [...code.slice(0, index)].reduce((depth, char) => depth + (char === '{' ? 1 : char === '}' ? -1 : 0), 0)
+
+/** The scoped variables a WITH or RETURN passes on; Cypher forgets the rest. */
+const projected = (body: string, scoped: Set<string>): Set<string> => {
+  const kept = new Set<string>()
+  for (const item of topLevel(body.replace(/^\s*DISTINCT\b/i, ''))) {
+    if (item.trim() === '*') return new Set(scoped)
+    const match = PROJECTED.exec(item.trim())
+    if (match && scoped.has(match[1] as string)) kept.add((match[2] ?? match[1]) as string)
+  }
+  return kept
+}
+
 const branchScopeProblem = (code: string): string | undefined => {
-  const scoped = new Set<string>()
+  let scoped = new Set<string>()
   const clauses = [...code.matchAll(CLAUSE)].map((clause, position, all) => ({
     keyword: (clause[1] ?? '').toUpperCase().replace(/\s+/g, ' '),
-    body: code.slice((clause.index ?? 0) + clause[0].length, all[position + 1]?.index ?? code.length)
+    body: code.slice((clause.index ?? 0) + clause[0].length, all[position + 1]?.index ?? code.length),
+    nested: braceDepth(code, clause.index ?? 0) > 0
   }))
-  for (const [position, { keyword, body }] of clauses.entries()) {
-    if (keyword === 'WITH' || keyword === 'RETURN') {
-      // `WITH s AS service` carries s's scope over to the alias.
-      for (const alias of body.matchAll(/\b([A-Za-z_]\w*)\s+AS\s+([A-Za-z_]\w*)/gi)) {
-        if (scoped.has(alias[1] as string)) scoped.add(alias[2] as string)
+  for (const [position, { keyword, body, nested }] of clauses.entries()) {
+    if (keyword !== 'MATCH' && keyword !== 'OPTIONAL MATCH') {
+      for (const [pattern] of body.matchAll(PATTERN)) {
+        if (!anchored(pattern, scoped)) return `the pattern ${pattern.trim()} is not bound to $scope`
       }
+      if (!nested && (keyword === 'WITH' || keyword === 'RETURN')) scoped = projected(body, scoped)
       continue
     }
-    if (keyword !== 'MATCH' && keyword !== 'OPTIONAL MATCH') continue
     const next = clauses[position + 1]
-    const pinned = new Set(next?.keyword === 'WHERE' ? scopedByWhere(next.body) : [])
+    const pinned = new Set([...scoped, ...(next?.keyword === 'WHERE' ? scopedByWhere(next.body) : [])])
     for (const pattern of topLevel(body)) {
-      const nodes = [...pattern.matchAll(NODE)]
-      const anchored = nodes.some(
-        ([, variable, , properties]) =>
-          (properties !== undefined && /\bscope\s*:\s*\$scope\b/.test(properties)) ||
-          (variable !== undefined && (scoped.has(variable) || pinned.has(variable)))
-      )
-      if (!anchored) return `the pattern ${pattern.trim()} is not bound to $scope`
-      for (const [, variable] of nodes) if (variable !== undefined) scoped.add(variable)
+      if (!anchored(pattern, pinned)) return `the pattern ${pattern.trim()} is not bound to $scope`
+      for (const [, variable] of pattern.matchAll(NODE)) {
+        if (variable === undefined) continue
+        pinned.add(variable)
+        if (!nested) scoped.add(variable)
+      }
     }
   }
   return undefined
