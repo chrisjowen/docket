@@ -51,6 +51,21 @@ const everything = async (dir = root): Promise<string> => {
   return text
 }
 
+/** Installs a package under `dir`'s node_modules: the project's own copy of it. */
+const installPackage = async (dir: string, name: string): Promise<string> => {
+  const packageDir = join(dir, 'node_modules', name)
+  await mkdir(packageDir, { recursive: true })
+  await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name, type: 'module', exports: { '.': './index.js' } }))
+  await writeFile(join(packageDir, 'index.js'), 'export default {}\n')
+  return packageDir
+}
+
+/** The project's own copy of the provider adapters with drivers, so the driver is looked up from the project. */
+const ownAdapters = async (): Promise<void> => {
+  await installPackage(root, '@docket/adapter-neo4j')
+  await installPackage(root, '@docket/adapter-mem0')
+}
+
 /** Answers questions from a script, by a fragment of each question's text, and records what was asked. */
 const scripted = (script: [fragment: string, answer: string | boolean][]): Prompter & { asked: string[] } => {
   const asked: string[] = []
@@ -250,6 +265,21 @@ describe('never overwriting', () => {
     )
   })
 
+  it('without a terminal, defaults to a runtime id that is not taken', async () => {
+    await add('neo4j', { '--id': 'old-graph', '--mode': 'local', '--image': 'neo4j:5', '--runtime-id': 'graph-dev' })
+    const result = await add('neo4j', { '--mode': 'local', '--image': 'neo4j:5' })
+    expect(result.plan.addition.runtime?.id).toBe('graph-dev-2')
+    expect((await instance('graph')).entry?.runtime).toBe('graph-dev-2')
+  })
+
+  it('without a terminal, checks a default the way it checks a given answer', async () => {
+    const before = await configText()
+    await expect(add('neo4j', { '--id': 'graph#1', '--mode': 'local', '--image': 'neo4j:5' })).rejects.toThrow(
+      /--runtime-id is required: its default "graph#1-dev" will not do/
+    )
+    expect(await configText()).toBe(before)
+  })
+
   it('changes nothing on a dry run', async () => {
     const before = await configText()
     const result = await add('neo4j', { '--mode': 'local', '--image': 'neo4j:5' }, { dryRun: true, yes: false })
@@ -309,6 +339,7 @@ describe('the driver package', () => {
   beforeEach(async () => {
     await writeFile(join(root, 'package.json'), '{"name":"project","private":true}\n')
     await writeFile(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+    await ownAdapters()
   })
 
   it('is installed with the project\'s package manager only with consent', async () => {
@@ -331,6 +362,14 @@ describe('the driver package', () => {
     const result = await add('mem0', {}, { install: true })
     expect(result.plan.driver?.installed).toBe(true)
     expect(calls).toEqual([])
+  })
+
+  it('is looked for where the adapter loads from, as adapters list does', async () => {
+    await installPackage(join(root, 'node_modules', '@docket', 'adapter-mem0'), 'mem0ai')
+    const result = await add('mem0', {}, { install: true })
+    expect(result.plan.driver?.installed).toBe(true)
+    expect(calls).toEqual([])
+    expect((await adaptersList({ cwd: root })).adapters.find((adapter) => adapter.id === 'memories')?.problem).toBeUndefined()
   })
 
   it('uses npm when the project has no other lockfile', async () => {
@@ -389,6 +428,7 @@ describe('interactively', () => {
 
   it('asks before installing the driver, and installs nothing when told no', async () => {
     await writeFile(join(root, 'package.json'), '{"name":"project","private":true}\n')
+    await ownAdapters()
     const prompter = scripted([
       ['instance id', ''],
       ['What should it do', ''],

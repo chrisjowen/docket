@@ -123,7 +123,11 @@ export class Answers {
     if (passed !== undefined) return passed === '' && question.optional ? undefined : passed
 
     if (this.prompter === undefined) {
-      if (question.fallback !== undefined) return question.fallback
+      if (question.fallback !== undefined) {
+        const problem = question.check?.(question.fallback)
+        if (problem !== undefined) throw new Error(`${question.flag} is required: its default ${JSON.stringify(question.fallback)} will not do (${problem}).`)
+        return question.fallback
+      }
       if (question.optional) return undefined
       throw new Error(`${question.flag} is required${question.hint ? `: ${question.hint}` : '.'}`)
     }
@@ -155,6 +159,12 @@ export class Answers {
       this.prompter.note(`  ${problem}`)
     }
   }
+}
+
+/** `base`, or the first of `base-2`, `base-3`, ... that is not taken. */
+export const uniqueId = (base: string, taken: ReadonlySet<string>): string => {
+  if (!taken.has(base)) return base
+  for (let n = 2; ; n++) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`
 }
 
 /** Environment variable names only: a value pasted where a name belongs is refused, never written. */

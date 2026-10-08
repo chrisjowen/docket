@@ -4,7 +4,7 @@ import { Document } from 'yaml'
 
 import { V1_PROJECTION_MODULES } from '../config/config.js'
 import type { DockerComposeRuntimeConfig, PullPolicy } from '../runtime/config.js'
-import { Answers, checkEnvName, checkNonBlank, checkPort, checkUrl } from './answers.js'
+import { Answers, checkEnvName, checkNonBlank, checkPort, checkUrl, uniqueId } from './answers.js'
 
 /** An environment variable the developer sets. Only its name is ever written anywhere. */
 export interface EnvRequirement {
@@ -83,7 +83,7 @@ const askRuntime = async (
   const id = await answers.text({
     flag: '--runtime-id',
     question: 'Runtime group id (what `docket runtime up <id>` takes)',
-    fallback: `${context.id}-dev`,
+    fallback: uniqueId(`${context.id}-dev`, context.runtimes),
     check: (value) =>
       !RUNTIME_ID.test(value)
         ? 'starts with a letter or digit and uses only letters, digits, ".", "_" and "-"'

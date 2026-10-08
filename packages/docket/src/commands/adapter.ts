@@ -13,7 +13,7 @@ import { ADAPTER_ID_PATTERN, ADAPTER_ROLES, CONFIG_FILENAME, type ResolvedConfig
 import { findConfigFile, loadConfig } from '../config/loader.js'
 import type { RuntimePlan } from '../runtime/docker-compose.js'
 import { spawnRunner, type CommandRunner } from '../runtime/runner.js'
-import { Answers, type Prompter } from '../install/answers.js'
+import { Answers, uniqueId, type Prompter } from '../install/answers.js'
 import { addToConfigText, additionYaml, type ConfigAddition } from '../install/config-edit.js'
 import { detectPackageManager, driverSpec, installCommand, type PackageManager } from '../install/packages.js'
 import { findProvider, PROVIDERS, type EnvRequirement } from '../install/providers.js'
@@ -125,11 +125,6 @@ const normalizeRoles = (value: string | undefined): string | undefined => {
   const roles = value.split(',').map((role) => role.trim()).filter(Boolean)
   const known = ADAPTER_ROLES.filter((role) => roles.includes(role))
   return known.length === roles.length && new Set(roles).size === roles.length ? known.join(',') : value
-}
-
-const uniqueId = (base: string, taken: ReadonlySet<string>): string => {
-  if (!taken.has(base)) return base
-  for (let n = 2; ; n++) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`
 }
 
 const CHECK_TIMEOUT_MS = 15_000
@@ -273,7 +268,7 @@ export const adapterAdd = async (provider: string, options: AdapterAddOptions = 
     return { ...file, absolute, exists: existsSync(absolute) }
   })
 
-  const driver = definition.driver === undefined ? undefined : planDriver(definition.driver, projectRoot)
+  const driver = definition.driver === undefined ? undefined : planDriver(definition.driver, definition.module, projectRoot)
   const module: ModulePlan | undefined = standardDistribution.packages.includes(definition.module)
     ? undefined
     : { name: definition.module, installed: findPackageDir(definition.module, projectRoot) !== undefined }
@@ -398,9 +393,18 @@ export const adapterAdd = async (provider: string, options: AdapterAddOptions = 
   return result
 }
 
-const planDriver = (name: string, projectRoot: string): DriverPlan => {
+/** Where an adapter package's own imports resolve from: the directory its module loads from, else the project. */
+const moduleDir = (module: string, projectRoot: string): string => {
+  try {
+    return dirname(resolveAdapterModule(module, { id: module, projectRoot, distribution: standardDistribution }).path)
+  } catch {
+    return projectRoot
+  }
+}
+
+const planDriver = (name: string, module: string, projectRoot: string): DriverPlan => {
   const spec = driverSpec(name)
-  const installed = findPackageDir(name, projectRoot) !== undefined
+  const installed = findPackageDir(name, moduleDir(module, projectRoot)) !== undefined
   const manager = detectPackageManager(projectRoot)
   return {
     name,
