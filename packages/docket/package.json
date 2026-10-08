@@ -20,6 +20,15 @@
     "directory": "packages/docket"
   },
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "docket": "./dist/cli.js"
   },
@@ -40,6 +49,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@docket/contracts": "workspace:*",
     "chokidar": "^4.0.3",
     "commander": "^14.0.1",
     "gray-matter": "^4.0.3",

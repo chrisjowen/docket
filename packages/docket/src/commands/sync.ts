@@ -1,10 +1,9 @@
-import { stateRootOf } from '../config/config.js'
 import { emptyManifest } from '../manifest/manifest.js'
 import { planProjection } from '../manifest/plan.js'
 import { loadManifestState, saveManifest } from '../manifest/state.js'
 import type { Diagnostic } from '../model/index.js'
+import { openDocket } from '../adapters/docket.js'
 import { ProjectionManager } from '../projection/manager.js'
-import { createProjections } from '../projection/registry.js'
 import { validate, type ValidateOptions } from './validate.js'
 
 export type SyncOptions = ValidateOptions
@@ -43,15 +42,10 @@ export const reconcile = async (
   // nothing rather than indexing documents of unknown standing.
   if (ontology === null) return result
 
-  const stateRoot = stateRootOf(resolved)
-  const manager = new ProjectionManager(
-    createProjections(resolved.config.projections)
-  )
-  await manager.init({
-    projectRoot: resolved.projectRoot,
-    memoryRoot: resolved.memoryRoot,
-    stateRoot
-  })
+  // The configured projections, created and driven through the adapter
+  // contract (docs/adapter-spec.md §15 step 1).
+  const docket = await openDocket(resolved)
+  const manager = await ProjectionManager.open(docket.adapters)
 
   // A manifest written for other projections cannot say what these ones hold,
   // so that case is a rebuild too - e.g. mem0 just added to the config.
@@ -65,7 +59,7 @@ export const reconcile = async (
   const plan = planProjection(entities, broken, state.manifest.documents)
 
   try {
-    for (const id of plan.removals) await manager.remove(id)
+    for (const id of plan.removals) await manager.remove(id, state.manifest.documents[id]?.hash)
     for (const entity of plan.upserts) await manager.upsert(entity)
 
     // Once per pass, and before the manifest: the manifest vouches for what
