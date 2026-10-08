@@ -84,6 +84,31 @@ describe('canonicalState', () => {
     })
   })
 
+  it('gives evidence written as YAML numbers, dates or a single URL as the strings the contract defines', () => {
+    const raw =
+      '---\nid: service.orders\ntype: service\ntitle: Orders\nevidence:\n  - source: code\n    path: src/k8s.ts\n    lines: 22\n    observedAt: 2026-10-05\n    urls: https://example.com/orders\n---\n'
+    const [observation] = observations(derive(parseMemoryFile(raw, '.docket/a.md').document!))
+
+    expect(observation?.evidence).toEqual({
+      source: 'code',
+      path: 'src/k8s.ts',
+      lines: '22',
+      observedAt: '2026-10-05',
+      urls: ['https://example.com/orders']
+    })
+    expect(observation?.sources).toEqual([{ path: 'src/k8s.ts', startLine: 22, endLine: 22 }])
+    expect(validateCanonicalInput(observation)).toEqual(observation)
+  })
+
+  it('rejects a file whose evidence gives a commit or key as a number, so none reaches an adapter', () => {
+    for (const field of ['commit: 1234567', 'key: 42']) {
+      const raw = `---\nid: service.orders\ntype: service\ntitle: Orders\nevidence:\n  - source: code\n    ${field}\n---\n`
+      const parsed = parseMemoryFile(raw, '.docket/a.md')
+      expect(parsed.document).toBeUndefined()
+      expect(parsed.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(['invalid-frontmatter'])
+    }
+  })
+
   it('gives each file\'s body as a document whose span is exactly its lines', () => {
     const raw = '---\nid: service.orders\ntype: service\ntitle: Orders\n---\n\n\nTakes orders. See [[team.payments]].\nShips them.\n\n'
     const parsed = parseMemoryFile(raw, '.docket/a.md').document!

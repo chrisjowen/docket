@@ -174,7 +174,10 @@ class ProjectionTarget {
       }
       this.checkpoint = Checkpoint.of(records)
 
-      if (this.reset) await this.port?.reset(this.slot.scope)
+      if (this.reset) {
+        await writeAdapterManifest(stateRootOf(this.context.resolved), { ...this.manifest, owners: {} })
+        await this.port?.reset(this.slot.scope)
+      }
       this.opened = true
     } catch (cause) {
       this.failure = messageOf(cause)

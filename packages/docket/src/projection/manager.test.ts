@@ -17,7 +17,7 @@ import type { AdapterSlot } from '../adapters/docket.js'
 import { init } from '../commands/init.js'
 import { stateRootOf, type ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
-import { adapterManifestPath, readAdapterManifest } from '../manifest/adapter-manifest.js'
+import { adapterManifestPath, emptyRecords, readAdapterManifest } from '../manifest/adapter-manifest.js'
 import { manifestPath, writeManifest } from '../manifest/manifest.js'
 import type { MemoryDocument } from '../model/index.js'
 import { canonicalState, type CanonicalState } from '../sync/inputs.js'
@@ -217,7 +217,7 @@ describe('ProjectionManager', () => {
 
     const [failed] = await pass(slots, stateOf(ORDERS))
     expect(failed?.error).toBe('could not record what it holds: disk full')
-    expect(await readAdapterManifest(stateRootOf(resolved), 'graph')).toBeUndefined()
+    expect((await readAdapterManifest(stateRootOf(resolved), 'graph'))?.records).toEqual(emptyRecords())
 
     flushFails = false
     const [replayed] = await pass(slots, stateOf(ORDERS))
@@ -334,6 +334,34 @@ describe('ProjectionManager', () => {
     ])
     expect(graph.resets).toEqual(['payments', 'payments'])
     expect(local.resets).toEqual(['default'])
+  })
+
+  it('never leaves a manifest vouching for what a rebuild reset but could not record', async () => {
+    const store = newStore()
+    let flushFails = false
+    const adapter = fakeAdapter(['entity', 'observation', 'document'], store, {
+      flush: async () => {
+        if (flushFails) throw new Error('disk full')
+      }
+    })
+    const slots = [slotOf('graph', async () => adapter)]
+    await pass(slots, stateOf(ORDERS))
+    expect(store.records.size).toBe(3)
+
+    flushFails = true
+    const manager = await open(slots, new Set(['graph']))
+    expect(store.records.size).toBe(0)
+    expect((await readAdapterManifest(stateRootOf(resolved), 'graph'))?.records).toEqual(emptyRecords())
+    await manager.apply(stateOf(ORDERS), new Set())
+    expect(await manager.commit()).toEqual([{ id: 'graph', error: 'could not record what it holds: disk full' }])
+    await manager.close()
+    store.records.clear()
+
+    flushFails = false
+    const [synced] = await pass(slots, stateOf(ORDERS))
+    expect(synced?.origin).toBe('current')
+    expect(synced?.upserted).toHaveLength(3)
+    expect(store.records.size).toBe(3)
   })
 
   it('rebuilds only the instances asked for', async () => {

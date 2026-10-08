@@ -222,7 +222,7 @@ program
   .command('sync')
   .description('Reconcile the adapter instances with the canonical files')
   .option('--strict', 'treat unresolved references as errors')
-  .option('-a, --adapter <id>', 'sync only this adapter instance (repeatable)', collect, [])
+  .option('--adapter <id>', 'sync only this adapter instance (repeatable)', collect, [])
   .action(async (options: { strict?: boolean; adapter: string[] }) => {
     await runSync(
       () => sync({ strict: options.strict, adapters: options.adapter.length > 0 ? options.adapter : undefined }),
@@ -234,7 +234,7 @@ program
   .command('rebuild')
   .description('Reset adapter instances and reproject them from the canonical files')
   .option('--strict', 'treat unresolved references as errors')
-  .option('-a, --adapter <id>', 'rebuild only this adapter instance (repeatable); the others are left as they are', collect, [])
+  .option('--adapter <id>', 'rebuild only this adapter instance (repeatable); the others are left as they are', collect, [])
   .action(async (options: { strict?: boolean; adapter: string[] }) => {
     await runSync(
       () => rebuild({ strict: options.strict, adapters: options.adapter.length > 0 ? options.adapter : undefined }),
