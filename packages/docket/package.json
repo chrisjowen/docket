@@ -42,14 +42,13 @@
     "access": "public"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json && mkdir -p dist/ontology && cp src/ontology/*.yaml dist/ontology/ && node scripts/copy-ui.mjs",
+    "build": "rm -rf dist && tsc -p tsconfig.json && node scripts/bundle-contracts.mjs && mkdir -p dist/ontology && cp src/ontology/*.yaml dist/ontology/ && node scripts/copy-ui.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@docket/contracts": "workspace:*",
     "chokidar": "^4.0.3",
     "commander": "^14.0.1",
     "gray-matter": "^4.0.3",
@@ -69,6 +68,7 @@
     }
   },
   "devDependencies": {
+    "@docket/contracts": "workspace:*",
     "@qdrant/js-client-rest": "^1.18.0",
     "@types/node": "^22.10.2",
     "mem0ai": "^3.3.1",

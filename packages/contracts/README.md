@@ -14,4 +14,5 @@ that boundary.
   reset, ask and close; `fakeServices`, `sampleBatch` and `sampleAskRequest`
   supply what it needs.
 
-A workspace package for now: it is not published.
+A private workspace package: it is not published on its own. `@chrisjowen/docket` bundles
+its runtime code and types (not `testing`) into its own `dist/contracts`.

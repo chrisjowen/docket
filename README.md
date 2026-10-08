@@ -492,8 +492,9 @@ makes the next sync reproject everything, so a newly added mem0 receives the
 whole repository.
 
 New engines plug in as memory adapters, through the contracts in
-[`packages/contracts`](packages/contracts) (`@docket/contracts`, not yet
-published). The three projections above already run through it, wrapped as
+[`packages/contracts`](packages/contracts) (`@docket/contracts`, not published
+on its own; its code ships bundled inside `@chrisjowen/docket`, which also
+exports its types). The three projections above already run through it, wrapped as
 compatibility adapters, and a program can open a docket with more:
 
 ```ts
