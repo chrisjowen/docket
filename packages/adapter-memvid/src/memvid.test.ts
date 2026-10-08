@@ -1,4 +1,4 @@
-import { mkdtemp, realpath } from 'node:fs/promises'
+import { mkdtemp, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 
 import memvid from './index.js'
 import { createMemvidAdapter } from './memvid-adapter.js'
-import { lexicalQuery, stripFrameMetadata } from './memvid-store.js'
+import { lexicalQuery, MemvidStore, stripFrameMetadata } from './memvid-store.js'
 import { memvidEnvironment, MemvidUnavailableError, spawnRunner, type CommandRunner } from './runner.js'
 import { frameUri, namespacePrefix, parseFrameUri } from './uri.js'
 
@@ -63,6 +63,39 @@ describe('stripFrameMetadata', () => {
   it('leaves a chunk, which carries none, alone, and empties an empty frame', () => {
     expect(stripFrameMetadata('Paragraph 40: Postgres.', 'Ledger (page 3/4)', `${uri}#page-3`)).toBe('Paragraph 40: Postgres.')
     expect(stripFrameMetadata(`title: Empty\nuri: ${uri}\nmetadata: {}`, 'Empty', uri)).toBe('')
+  })
+})
+
+describe('MemvidStore.write', () => {
+  it('passes a title that starts with a hyphen as one argument, which clap reads as a value', async () => {
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'docket-memvid-')))
+    const calls: string[][] = []
+    const run: CommandRunner = async (args) => {
+      calls.push([...args])
+      if (args[0] === 'create') {
+        await writeFile(args[1]!, '')
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      if (args[0] === 'put') {
+        if (args.includes('--title')) return { code: 2, stdout: '', stderr: "error: unexpected argument '---' found" }
+        return { code: 0, stdout: JSON.stringify({ ingested: 1 }), stderr: '' }
+      }
+      return { code: 0, stdout: JSON.stringify({ frame: { id: 7, status: 'active', chunk_count: 0 } }), stderr: '' }
+    }
+    const store = new MemvidStore({ file: join(directory, 'docket.mv2'), namespace: 'default', run, timeoutMs: 1_000, lockTimeoutMs: 1_000 })
+    const document = {
+      kind: 'document' as const,
+      id: 'doc.notes',
+      revision: 'r1',
+      scope: 'default',
+      text: '---\ntitle: Notes\n---\n- first item',
+      source: { path: 'notes.md' },
+      entityRefs: []
+    }
+
+    expect(await store.write(document)).toEqual({ nativeId: '7', identity: { kind: 'document', id: 'doc.notes', revision: 'r1' } })
+    const put = calls.find((args) => args[0] === 'put')!
+    expect(put.filter((arg) => arg.startsWith('--title'))).toEqual(['--title=---'])
   })
 })
 
