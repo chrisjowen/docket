@@ -72,6 +72,13 @@ describe('showAnswer', () => {
     expect(outcome.results.map((item) => item.state)).toEqual(['failed', 'answered'])
   })
 
+  it('fails an answer whose unknown-kind block reuses another block’s id', () => {
+    const [known] = RECALL_ANSWER.blocks
+    const result = showAnswer('company-memory', { ...RECALL_ANSWER, blocks: [known, { kind: 'heatmap', id: known?.id }] })
+    expect(result).toMatchObject({ state: 'failed', error: { code: 'invalid-answer' } })
+    expect(result.state === 'failed' && result.issues).toEqual([`blocks: block id "${known?.id}" is used more than once`])
+  })
+
   it('rejects values that are not plain JSON', () => {
     const result = showAnswer('local', { ...LOCAL_ANSWER, evidence: [{ ...LOCAL_ANSWER.evidence[0], observedAt: new Date() }] })
     expect(result.state).toBe('failed')

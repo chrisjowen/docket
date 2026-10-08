@@ -8,7 +8,7 @@
 </script>
 
 <ul class="grid gap-2 {block.kind === 'facts' ? 'sm:grid-cols-2' : ''}">
-  {#each block.evidenceIds as id (id)}
+  {#each [...new Set(block.evidenceIds)] as id (id)}
     {@const evidence = result.evidence.get(id)}
     {#if evidence}<li class="min-w-0"><EvidenceCard {evidence} {result} /></li>{/if}
   {/each}

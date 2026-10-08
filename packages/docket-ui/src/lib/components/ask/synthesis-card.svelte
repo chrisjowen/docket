@@ -15,7 +15,7 @@
   const byId = $derived(new Map(workspace.graph?.entities.map((entity) => [entity.id, entity]) ?? []))
   const synthesis = $derived(outcome.synthesis)
   const cited = $derived(
-    (synthesis?.citedEvidence ?? []).flatMap((id) => {
+    [...new Set(synthesis?.citedEvidence ?? [])].flatMap((id) => {
       const item = workspace.ask.evidence.get(id)
       const result = outcome.results.find((candidate) => candidate.adapter === item?.adapter)
       return item && result?.state === 'answered' ? [{ id, item, label: `${item.adapter} ${evidenceLabel(result, id)}` }] : []

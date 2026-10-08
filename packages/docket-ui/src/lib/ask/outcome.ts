@@ -97,6 +97,14 @@ export const showAnswer = (adapter: string, value: unknown, durationMs?: number)
     else unknown.set(index, unknownBlock(block, index))
   })
 
+  const invalid = (issues: readonly string[]): FailedResult => ({
+    adapter,
+    state: 'failed',
+    error: { code: 'invalid-answer', message: `${adapter} returned an answer that breaks the adapter contract.` },
+    issues,
+    ...timing
+  })
+
   let answer: AdapterAnswer
   try {
     const known = blocks ? positions.map((index) => blocks[index]) : undefined
@@ -107,13 +115,7 @@ export const showAnswer = (adapter: string, value: unknown, durationMs?: number)
     const issues = cause.issues.map((issue) =>
       issue.replace(/^blocks\.(\d+)/, (whole, at: string) => `blocks.${positions[Number(at)] ?? at}`)
     )
-    return {
-      adapter,
-      state: 'failed',
-      error: { code: 'invalid-answer', message: `${adapter} returned an answer that breaks the adapter contract.` },
-      issues,
-      ...timing
-    }
+    return invalid(issues)
   }
 
   const shown: ShownBlock[] = []
@@ -127,6 +129,9 @@ export const showAnswer = (adapter: string, value: unknown, durationMs?: number)
       if (block) shown.push({ known: true, block })
     }
   }
+  const ids = shown.map(({ block }) => block.id)
+  const repeated = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))]
+  if (repeated.length > 0) return invalid(repeated.map((id) => `blocks: block id "${id}" is used more than once`))
   return {
     adapter,
     state: 'answered',

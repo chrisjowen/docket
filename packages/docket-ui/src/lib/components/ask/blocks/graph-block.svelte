@@ -36,20 +36,26 @@
   const boardId = (id: string): string => canonicalOf.get(id) ?? `${block.id}\u0000${id}`
   const labelOf = $derived(new Map(block.nodes.map((node) => [node.id, node.label])))
 
-  const nodes: GraphNode[] = $derived(
-    block.nodes.map((node) => {
-      const entity = byId.get(canonicalOf.get(node.id) ?? '')
-      return entity
-        ? { id: entity.id, title: node.label || entity.title, type: entity.type, ghost: false }
-        : { id: boardId(node.id), title: node.label, type: node.type ?? '', ghost: true }
-    })
-  )
-  const links: GraphLink[] = $derived(
-    block.edges.map((edge) => {
-      const [source, target] = [boardId(edge.source), boardId(edge.target)]
-      return { key: edgeKey({ source, rel: edge.rel, target }), source, target, rel: edge.rel }
-    })
-  )
+  const nodes: GraphNode[] = $derived.by(() => {
+    const seen = new Set<string>()
+    return block.nodes
+      .map((node): GraphNode => {
+        const entity = byId.get(canonicalOf.get(node.id) ?? '')
+        return entity
+          ? { id: entity.id, title: node.label || entity.title, type: entity.type, ghost: false }
+          : { id: boardId(node.id), title: node.label, type: node.type ?? '', ghost: true }
+      })
+      .filter((node) => !seen.has(node.id) && seen.add(node.id))
+  })
+  const links: GraphLink[] = $derived.by(() => {
+    const seen = new Set<string>()
+    return block.edges
+      .map((edge): GraphLink => {
+        const [source, target] = [boardId(edge.source), boardId(edge.target)]
+        return { key: edgeKey({ source, rel: edge.rel, target }), source, target, rel: edge.rel }
+      })
+      .filter((link) => !seen.has(link.key) && seen.add(link.key))
+  })
 
   /** Paths the answer used stay at full strength; the rest of the subgraph fades. */
   const emphasis = $derived.by(() => {

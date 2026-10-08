@@ -219,7 +219,7 @@
               {comparison.agree ? 'Adapters agree' : 'Adapters disagree'}: {comparison.label}
             </h3>
             <ul class="flex flex-wrap gap-3">
-              {#each comparison.readings as reading (reading.blockId)}
+              {#each comparison.readings as reading (`${reading.adapter}\u0000${reading.blockId}`)}
                 <li class="bg-background flex flex-col rounded-md border px-3 py-2">
                   <span class="font-serif text-2xl font-semibold tabular-nums">
                     {reading.value.toLocaleString()} <span class="text-muted-foreground text-sm font-normal">{reading.unit ?? ''}</span>

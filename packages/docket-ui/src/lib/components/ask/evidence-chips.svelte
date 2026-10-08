@@ -13,7 +13,7 @@
 
 {#if ids.length > 0}
   <span class="inline-flex flex-wrap items-center gap-1">
-    {#each ids as id (id)}
+    {#each [...new Set(ids)] as id (id)}
       {@const evidence = result.evidence.get(id)}
       {#if evidence}
         {@const standing = standingOf(evidence, view.casebook)}
