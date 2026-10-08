@@ -119,6 +119,16 @@ describe('docket adapter add jsonl', () => {
     expect(after).toContain('roles: [query]')
   })
 
+  it('leaves the top-level comment blocks after the list at the top level, so uncommenting them still loads', async () => {
+    await add('jsonl', { '--id': 'second' })
+    const uncommented = (await configText())
+      .replace('# query:\n', 'query:\n')
+      .replace('#   defaultAdapters: [local]\n', '  defaultAdapters: [local]\n')
+    await writeFile(join(root, '.docket.yaml'), uncommented)
+    const { resolved } = await instance('second')
+    expect(resolved.config.query.defaultAdapters).toEqual(['local'])
+  })
+
   it('writes out the default local adapter before adding to a file that had none listed', async () => {
     await writeFile(join(root, '.docket.yaml'), 'version: 2\n')
     await add('jsonl', { '--id': 'second' })

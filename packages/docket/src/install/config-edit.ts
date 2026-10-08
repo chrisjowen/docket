@@ -54,6 +54,41 @@ export const additionYaml = (addition: ConfigAddition): string => {
 }
 
 /**
+ * The `yaml` parser hangs every comment after a top-level section's last item
+ * on that section, and writes them all back at the section's indent. Comment
+ * lines that were at the top level in `text` go back to the top level: before
+ * the next key, or at the end of the document.
+ */
+const keepTopLevelComments = (document: Document, root: YAMLMap<unknown, unknown>, text: string): void => {
+  root.items.forEach((pair, at) => {
+    const value = pair.value as { comment?: string | null; range?: [number, number, number] } | null
+    const key = pair.key as { range?: [number, number, number] } | null
+    if (!isMap(value) && !isSeq(value)) return
+    if (!value.comment || !value.range || !key?.range) return
+    const keyColumn = key.range[0] - (text.lastIndexOf('\n', key.range[0] - 1) + 1)
+    const trailing = text.slice(value.range[1], value.range[2]).split('\n')
+    const first = trailing.findIndex((line) => line.trimStart().startsWith('#'))
+    const lines = trailing.slice(first)
+    while (lines.length > 0 && lines.at(-1)!.trim() === '') lines.pop()
+    const commentLines = value.comment.split('\n')
+    if (first < 0 || lines.length !== commentLines.length) return
+    const outer = lines.findIndex((line) => line.trimStart().startsWith('#') && line.length - line.trimStart().length <= keyColumn)
+    if (outer < 0) return
+    const inner = commentLines.slice(0, outer)
+    while (inner.length > 0 && inner.at(-1)!.trim() === '') inner.pop()
+    value.comment = inner.length > 0 ? inner.join('\n') : null
+    const moved = commentLines.slice(outer).join('\n')
+    const next = root.items[at + 1]?.key as { commentBefore?: string | null; spaceBefore?: boolean } | undefined
+    if (next !== undefined && typeof next === 'object' && next !== null) {
+      next.commentBefore = next.commentBefore ? `${moved}\n${next.commentBefore}` : moved
+      next.spaceBefore = true
+    } else {
+      document.comment = document.comment ? `${moved}\n${document.comment}` : moved
+    }
+  })
+}
+
+/**
  * Adds an adapter instance - and its runtime group - to a version 2
  * `.docket.yaml`, keeping every existing entry, section and comment. A file
  * without `adapters` has the default local adapter written out first, so
@@ -75,6 +110,7 @@ export const addToConfigText = (text: string, addition: ConfigAddition, file = '
 
   if (!isMap(document.contents)) throw new Error(`Invalid ${file}: expected a mapping at the top level.`)
   const root = document.contents as YAMLMap<unknown, unknown>
+  keepTopLevelComments(document, root, text)
 
   const adapters: unknown = root.get('adapters', true)
   const sequence = isSeq(adapters) ? adapters : (document.createNode(DEFAULT_ADAPTERS) as YAMLSeq)
