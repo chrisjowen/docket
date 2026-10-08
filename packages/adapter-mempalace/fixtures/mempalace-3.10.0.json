@@ -1,0 +1,1050 @@
+[
+  {
+    "tool": "mempalace_list_wings",
+    "args": {},
+    "result": {
+      "error": "Chroma database missing",
+      "details": "Could not open missing database at <state>/palace/chroma.sqlite3.",
+      "hint": "Run: mempalace status or mempalace repair-status for diagnostics.",
+      "backend": "chroma"
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-test",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "error": "Chroma database missing",
+      "details": "Could not open missing database at <state>/palace/chroma.sqlite3.",
+      "hint": "Run: mempalace status or mempalace repair-status for diagnostics.",
+      "backend": "chroma"
+    }
+  },
+  {
+    "tool": "mempalace_add_drawer",
+    "args": {
+      "wing": "docket-test",
+      "room": "service",
+      "content": "docket entity service.orders (revision r1)\n\n# Orders\nservice service.orders\n\nTakes and fulfils customer orders.\n",
+      "source_file": "docket:docket-test:entity:service.orders:r1",
+      "added_by": "docket"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_service_b5ed689188e089071eddc1b5",
+      "wing": "docket-test",
+      "room": "service",
+      "chunks": 1
+    }
+  },
+  {
+    "tool": "mempalace_add_drawer",
+    "args": {
+      "wing": "docket-test",
+      "room": "service",
+      "content": "docket entity service.billing (revision b1)\n\n# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+      "source_file": "docket:docket-test:entity:service.billing:b1",
+      "added_by": "docket"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+      "wing": "docket-test",
+      "room": "service",
+      "chunks": 1
+    }
+  },
+  {
+    "tool": "mempalace_add_drawer",
+    "args": {
+      "wing": "docket-test",
+      "room": "documents",
+      "content": "docket document doc.ledger (revision d1)\n\nParagraph 0: the orders service talks to billing about invoice number 0.\nParagraph 1: the orders service talks to billing about invoice number 1.\nParagraph 2: the orders service talks to billing about invoice number 2.\nParagraph 3: the orders service talks to billing about invoice number 3.\nParagraph 4: the orders service talks to billing about invoice number 4.\nParagraph 5: the orders service talks to billing about invoice number 5.\nParagraph 6: the orders service talks to billing about invoice number 6.\nParagraph 7: the orders service talks to billing about invoice number 7.\nParagraph 8: the orders service talks to billing about invoice number 8.\nParagraph 9: the orders service talks to billing about invoice number 9.\nParagraph 10: the orders service talks to billing about invoice number 10.\nParagraph 11: the orders service talks to billing about invoice number 11.\nParagraph 12: the orders service talks to billing about invoice number 12.\nParagraph 13: the orders service talks to billing about invoice number 13.\nParagraph 14: the orders service talks to billing about invoice number 14.\nParagraph 15: the orders service talks to billing about invoice number 15.\nParagraph 16: the orders service talks to billing about invoice number 16.\nParagraph 17: the orders service talks to billing about invoice number 17.\nParagraph 18: the orders service talks to billing about invoice number 18.\nParagraph 19: the orders service talks to billing about invoice number 19.\nParagraph 20: we chose Postgres for the ledger because of serializable isolation.\nParagraph 21: the orders service talks to billing about invoice number 21.\nParagraph 22: the orders service talks to billing about invoice number 22.\nParagraph 23: the orders service talks to billing about invoice number 23.\nParagraph 24: the orders service talks to billing about invoice number 24.\nParagraph 25: the orders service talks to billing about invoice number 25.\nParagraph 26: the orders service talks to billing about invoice number 26.\nParagraph 27: the orders service talks to billing about invoice number 27.\nParagraph 28: the orders service talks to billing about invoice number 28.\nParagraph 29: the orders service talks to billing about invoice number 29.",
+      "source_file": "docket:docket-test:document:doc.ledger:d1",
+      "added_by": "docket"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+      "wing": "docket-test",
+      "room": "documents",
+      "chunks": 3,
+      "chunk_ids": [
+        "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000000",
+        "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000001",
+        "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000002"
+      ]
+    }
+  },
+  {
+    "tool": "mempalace_add_drawer",
+    "args": {
+      "wing": "docket-test",
+      "room": "observations",
+      "content": "docket observation obs.deploy-1 (revision o1)\n\nDeployed orders 1.4 to production.",
+      "source_file": "docket:docket-test:observation:obs.deploy-1:o1",
+      "added_by": "docket"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+      "wing": "docket-test",
+      "room": "observations",
+      "chunks": 1
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-test",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "drawers": [
+        {
+          "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+          "wing": "docket-test",
+          "room": "documents",
+          "content_preview": "docket document doc.ledger (revision d1)\n\nParagraph 0: the orders service talks to billing about invoice number 0.\nParagraph 1: the orders service talks to billing about invoice number 1.\nParagraph 2:...",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.333479",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.333479",
+            "parent_drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+            "room": "documents",
+            "source_file": "docket:docket-test:document:doc.ledger:d1",
+            "wing": "docket-test",
+            "chunks": 3,
+            "chunk_ids": [
+              "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000000",
+              "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000001",
+              "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000002"
+            ]
+          },
+          "chunks": 3,
+          "chunk_ids": [
+            "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000000",
+            "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000001",
+            "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000002"
+          ]
+        },
+        {
+          "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+          "wing": "docket-test",
+          "room": "observations",
+          "content_preview": "docket observation obs.deploy-1 (revision o1)\n\nDeployed orders 1.4 to production.",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.412815",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.412815",
+            "room": "observations",
+            "source_file": "docket:docket-test:observation:obs.deploy-1:o1",
+            "wing": "docket-test"
+          }
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+          "wing": "docket-test",
+          "room": "service",
+          "content_preview": "docket entity service.billing (revision b1)\n\n# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.291975",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.291975",
+            "room": "service",
+            "source_file": "docket:docket-test:entity:service.billing:b1",
+            "wing": "docket-test"
+          }
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_b5ed689188e089071eddc1b5",
+          "wing": "docket-test",
+          "room": "service",
+          "content_preview": "docket entity service.orders (revision r1)\n\n# Orders\nservice service.orders\n\nTakes and fulfils customer orders.\n",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.162273",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.162273",
+            "room": "service",
+            "source_file": "docket:docket-test:entity:service.orders:r1",
+            "wing": "docket-test"
+          }
+        }
+      ],
+      "total": 4,
+      "count": 4,
+      "offset": 0,
+      "limit": 100
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-test",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "drawers": [
+        {
+          "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+          "wing": "docket-test",
+          "room": "documents",
+          "content_preview": "docket document doc.ledger (revision d1)\n\nParagraph 0: the orders service talks to billing about invoice number 0.\nParagraph 1: the orders service talks to billing about invoice number 1.\nParagraph 2:...",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.333479",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.333479",
+            "parent_drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+            "room": "documents",
+            "source_file": "docket:docket-test:document:doc.ledger:d1",
+            "wing": "docket-test",
+            "chunks": 3,
+            "chunk_ids": [
+              "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000000",
+              "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000001",
+              "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000002"
+            ]
+          },
+          "chunks": 3,
+          "chunk_ids": [
+            "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000000",
+            "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000001",
+            "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000002"
+          ]
+        },
+        {
+          "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+          "wing": "docket-test",
+          "room": "observations",
+          "content_preview": "docket observation obs.deploy-1 (revision o1)\n\nDeployed orders 1.4 to production.",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.412815",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.412815",
+            "room": "observations",
+            "source_file": "docket:docket-test:observation:obs.deploy-1:o1",
+            "wing": "docket-test"
+          }
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+          "wing": "docket-test",
+          "room": "service",
+          "content_preview": "docket entity service.billing (revision b1)\n\n# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.291975",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.291975",
+            "room": "service",
+            "source_file": "docket:docket-test:entity:service.billing:b1",
+            "wing": "docket-test"
+          }
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_b5ed689188e089071eddc1b5",
+          "wing": "docket-test",
+          "room": "service",
+          "content_preview": "docket entity service.orders (revision r1)\n\n# Orders\nservice service.orders\n\nTakes and fulfils customer orders.\n",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.162273",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.162273",
+            "room": "service",
+            "source_file": "docket:docket-test:entity:service.orders:r1",
+            "wing": "docket-test"
+          }
+        }
+      ],
+      "total": 4,
+      "count": 4,
+      "offset": 0,
+      "limit": 100
+    }
+  },
+  {
+    "tool": "mempalace_search",
+    "args": {
+      "query": "Which service takes customer orders?",
+      "wing": "docket-test",
+      "limit": 1
+    },
+    "result": {
+      "query": "Which service takes customer orders?",
+      "filters": {
+        "wing": "docket-test",
+        "room": null,
+        "source_file": null,
+        "since": null,
+        "before": null
+      },
+      "total_before_filter": 4,
+      "results": [
+        {
+          "drawer_id": "drawer_docket-test_service_b5ed689188e089071eddc1b5",
+          "text": "docket entity service.orders (revision r1)\n\n# Orders\nservice service.orders\n\nTakes and fulfils customer orders.\n",
+          "wing": "docket-test",
+          "room": "service",
+          "source_file": "docket:docket-test:entity:service.orders:r1",
+          "source_path": "docket:docket-test:entity:service.orders:r1",
+          "created_at": "2026-10-08T23:42:26.162273",
+          "filed_at": "2026-10-08T23:42:26.162273",
+          "authored_at": "2026-10-08T23:42:26.162273",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.542,
+          "distance": 0.4578,
+          "effective_distance": 0.4578,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 4.309
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mempalace_search",
+    "args": {
+      "query": "Why did we choose Postgres for the ledger?",
+      "wing": "docket-test",
+      "limit": 3
+    },
+    "result": {
+      "query": "Why did we choose Postgres for the ledger?",
+      "filters": {
+        "wing": "docket-test",
+        "room": null,
+        "source_file": null,
+        "since": null,
+        "before": null
+      },
+      "total_before_filter": 6,
+      "results": [
+        {
+          "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+          "text": "vice talks to billing about invoice number 10.\nParagraph 11: the orders service talks to billing about invoice number 11.\nParagraph 12: the orders service talks to billing about invoice number 12.\nParagraph 13: the orders service talks to billing about invoice number 13.\nParagraph 14: the orders service talks to billing about invoice number 14.\nParagraph 15: the orders service talks to billing about invoice number 15.\nParagraph 16: the orders service talks to billing about invoice number 16.\nParagraph 17: the orders service talks to billing about invoice number 17.\nParagraph 18: the orders service talks to billing about invoice number 18.\nParagraph 19: the orders service talks to billing about invoice number 19.\nParagraph 20: we chose Postgres for the ledger because of serializable isolati",
+          "wing": "docket-test",
+          "room": "documents",
+          "source_file": "docket:docket-test:document:doc.ledger:d1",
+          "source_path": "docket:docket-test:document:doc.ledger:d1",
+          "created_at": "2026-10-08T23:42:26.333479",
+          "filed_at": "2026-10-08T23:42:26.333479",
+          "authored_at": "2026-10-08T23:42:26.333479",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.449,
+          "distance": 0.5511,
+          "effective_distance": 0.5511,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 4.943
+        },
+        {
+          "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+          "text": "docket document doc.ledger (revision d1)\n\nParagraph 0: the orders service talks to billing about invoice number 0.\nParagraph 1: the orders service talks to billing about invoice number 1.\nParagraph 2: the orders service talks to billing about invoice number 2.\nParagraph 3: the orders service talks to billing about invoice number 3.\nParagraph 4: the orders service talks to billing about invoice number 4.\nParagraph 5: the orders service talks to billing about invoice number 5.\nParagraph 6: the orders service talks to billing about invoice number 6.\nParagraph 7: the orders service talks to billing about invoice number 7.\nParagraph 8: the orders service talks to billing about invoice number 8.\nParagraph 9: the orders service talks to billing about invoice number 9.\nParagraph 10: the orders ser",
+          "wing": "docket-test",
+          "room": "documents",
+          "source_file": "docket:docket-test:document:doc.ledger:d1",
+          "source_path": "docket:docket-test:document:doc.ledger:d1",
+          "created_at": "2026-10-08T23:42:26.333479",
+          "filed_at": "2026-10-08T23:42:26.333479",
+          "authored_at": "2026-10-08T23:42:26.333479",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.246,
+          "distance": 0.7541,
+          "effective_distance": 0.7541,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 2.211
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+          "text": "docket entity service.billing (revision b1)\n\n# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+          "wing": "docket-test",
+          "room": "service",
+          "source_file": "docket:docket-test:entity:service.billing:b1",
+          "source_path": "docket:docket-test:entity:service.billing:b1",
+          "created_at": "2026-10-08T23:42:26.291975",
+          "filed_at": "2026-10-08T23:42:26.291975",
+          "authored_at": "2026-10-08T23:42:26.291975",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.131,
+          "distance": 0.8691,
+          "effective_distance": 0.8691,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 1.573
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mempalace_search",
+    "args": {
+      "query": "When was orders deployed to production?",
+      "wing": "docket-test",
+      "limit": 5
+    },
+    "result": {
+      "query": "When was orders deployed to production?",
+      "filters": {
+        "wing": "docket-test",
+        "room": null,
+        "source_file": null,
+        "since": null,
+        "before": null
+      },
+      "total_before_filter": 6,
+      "results": [
+        {
+          "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+          "text": "docket observation obs.deploy-1 (revision o1)\n\nDeployed orders 1.4 to production.",
+          "wing": "docket-test",
+          "room": "observations",
+          "source_file": "docket:docket-test:observation:obs.deploy-1:o1",
+          "source_path": "docket:docket-test:observation:obs.deploy-1:o1",
+          "created_at": "2026-10-08T23:42:26.412815",
+          "filed_at": "2026-10-08T23:42:26.412815",
+          "authored_at": "2026-10-08T23:42:26.412815",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.572,
+          "distance": 0.4282,
+          "effective_distance": 0.4282,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 6.075
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_b5ed689188e089071eddc1b5",
+          "text": "docket entity service.orders (revision r1)\n\n# Orders\nservice service.orders\n\nTakes and fulfils customer orders.\n",
+          "wing": "docket-test",
+          "room": "service",
+          "source_file": "docket:docket-test:entity:service.orders:r1",
+          "source_path": "docket:docket-test:entity:service.orders:r1",
+          "created_at": "2026-10-08T23:42:26.162273",
+          "filed_at": "2026-10-08T23:42:26.162273",
+          "authored_at": "2026-10-08T23:42:26.162273",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.436,
+          "distance": 0.5639,
+          "effective_distance": 0.5639,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 0.52
+        },
+        {
+          "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+          "text": "docket document doc.ledger (revision d1)\n\nParagraph 0: the orders service talks to billing about invoice number 0.\nParagraph 1: the orders service talks to billing about invoice number 1.\nParagraph 2: the orders service talks to billing about invoice number 2.\nParagraph 3: the orders service talks to billing about invoice number 3.\nParagraph 4: the orders service talks to billing about invoice number 4.\nParagraph 5: the orders service talks to billing about invoice number 5.\nParagraph 6: the orders service talks to billing about invoice number 6.\nParagraph 7: the orders service talks to billing about invoice number 7.\nParagraph 8: the orders service talks to billing about invoice number 8.\nParagraph 9: the orders service talks to billing about invoice number 9.\nParagraph 10: the orders ser",
+          "wing": "docket-test",
+          "room": "documents",
+          "source_file": "docket:docket-test:document:doc.ledger:d1",
+          "source_path": "docket:docket-test:document:doc.ledger:d1",
+          "created_at": "2026-10-08T23:42:26.333479",
+          "filed_at": "2026-10-08T23:42:26.333479",
+          "authored_at": "2026-10-08T23:42:26.333479",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.285,
+          "distance": 0.7152,
+          "effective_distance": 0.7152,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 1.396
+        },
+        {
+          "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+          "text": "on.\nParagraph 21: the orders service talks to billing about invoice number 21.\nParagraph 22: the orders service talks to billing about invoice number 22.\nParagraph 23: the orders service talks to billing about invoice number 23.\nParagraph 24: the orders service talks to billing about invoice number 24.\nParagraph 25: the orders service talks to billing about invoice number 25.\nParagraph 26: the orders service talks to billing about invoice number 26.\nParagraph 27: the orders service talks to billing about invoice number 27.\nParagraph 28: the orders service talks to billing about invoice number 28.\nParagraph 29: the orders service talks to billing about invoice number 29.",
+          "wing": "docket-test",
+          "room": "documents",
+          "source_file": "docket:docket-test:document:doc.ledger:d1",
+          "source_path": "docket:docket-test:document:doc.ledger:d1",
+          "created_at": "2026-10-08T23:42:26.333479",
+          "filed_at": "2026-10-08T23:42:26.333479",
+          "authored_at": "2026-10-08T23:42:26.333479",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.261,
+          "distance": 0.7392,
+          "effective_distance": 0.7392,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 1.363
+        },
+        {
+          "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+          "text": "vice talks to billing about invoice number 10.\nParagraph 11: the orders service talks to billing about invoice number 11.\nParagraph 12: the orders service talks to billing about invoice number 12.\nParagraph 13: the orders service talks to billing about invoice number 13.\nParagraph 14: the orders service talks to billing about invoice number 14.\nParagraph 15: the orders service talks to billing about invoice number 15.\nParagraph 16: the orders service talks to billing about invoice number 16.\nParagraph 17: the orders service talks to billing about invoice number 17.\nParagraph 18: the orders service talks to billing about invoice number 18.\nParagraph 19: the orders service talks to billing about invoice number 19.\nParagraph 20: we chose Postgres for the ledger because of serializable isolati",
+          "wing": "docket-test",
+          "room": "documents",
+          "source_file": "docket:docket-test:document:doc.ledger:d1",
+          "source_path": "docket:docket-test:document:doc.ledger:d1",
+          "created_at": "2026-10-08T23:42:26.333479",
+          "filed_at": "2026-10-08T23:42:26.333479",
+          "authored_at": "2026-10-08T23:42:26.333479",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.242,
+          "distance": 0.7582,
+          "effective_distance": 0.7582,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 1.344
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mempalace_add_drawer",
+    "args": {
+      "wing": "docket-test",
+      "room": "service",
+      "content": "docket entity service.orders (revision r2)\n\n# Orders\nservice service.orders\n\nTakes customer orders and publishes them to Kafka.\n",
+      "source_file": "docket:docket-test:entity:service.orders:r2",
+      "added_by": "docket"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_service_4d38f817079f821665fa13ae",
+      "wing": "docket-test",
+      "room": "service",
+      "chunks": 1
+    }
+  },
+  {
+    "tool": "mempalace_delete_drawer",
+    "args": {
+      "drawer_id": "drawer_docket-test_service_b5ed689188e089071eddc1b5"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_service_b5ed689188e089071eddc1b5",
+      "deleted_ids": [
+        "drawer_docket-test_service_b5ed689188e089071eddc1b5"
+      ],
+      "chunks_deleted": 1,
+      "closets_deleted": 0
+    }
+  },
+  {
+    "tool": "mempalace_delete_drawer",
+    "args": {
+      "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_documents_681fec30db942fcc712e74f3",
+      "deleted_ids": [
+        "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000000",
+        "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000001",
+        "drawer_docket-test_documents_681fec30db942fcc712e74f3_chunk_000002"
+      ],
+      "chunks_deleted": 3,
+      "closets_deleted": 0
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-test",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "drawers": [
+        {
+          "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+          "wing": "docket-test",
+          "room": "observations",
+          "content_preview": "docket observation obs.deploy-1 (revision o1)\n\nDeployed orders 1.4 to production.",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.412815",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.412815",
+            "room": "observations",
+            "source_file": "docket:docket-test:observation:obs.deploy-1:o1",
+            "wing": "docket-test"
+          }
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_4d38f817079f821665fa13ae",
+          "wing": "docket-test",
+          "room": "service",
+          "content_preview": "docket entity service.orders (revision r2)\n\n# Orders\nservice service.orders\n\nTakes customer orders and publishes them to Kafka.\n",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.544464",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.544464",
+            "room": "service",
+            "source_file": "docket:docket-test:entity:service.orders:r2",
+            "wing": "docket-test"
+          }
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+          "wing": "docket-test",
+          "room": "service",
+          "content_preview": "docket entity service.billing (revision b1)\n\n# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.291975",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.291975",
+            "room": "service",
+            "source_file": "docket:docket-test:entity:service.billing:b1",
+            "wing": "docket-test"
+          }
+        }
+      ],
+      "total": 3,
+      "count": 3,
+      "offset": 0,
+      "limit": 100
+    }
+  },
+  {
+    "tool": "mempalace_search",
+    "args": {
+      "query": "Why did we choose Postgres for the ledger?",
+      "wing": "docket-test",
+      "limit": 5
+    },
+    "result": {
+      "query": "Why did we choose Postgres for the ledger?",
+      "filters": {
+        "wing": "docket-test",
+        "room": null,
+        "source_file": null,
+        "since": null,
+        "before": null
+      },
+      "total_before_filter": 3,
+      "results": [
+        {
+          "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+          "text": "docket entity service.billing (revision b1)\n\n# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+          "wing": "docket-test",
+          "room": "service",
+          "source_file": "docket:docket-test:entity:service.billing:b1",
+          "source_path": "docket:docket-test:entity:service.billing:b1",
+          "created_at": "2026-10-08T23:42:26.291975",
+          "filed_at": "2026-10-08T23:42:26.291975",
+          "authored_at": "2026-10-08T23:42:26.291975",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.131,
+          "distance": 0.8691,
+          "effective_distance": 0.8691,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 0.961
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_4d38f817079f821665fa13ae",
+          "text": "docket entity service.orders (revision r2)\n\n# Orders\nservice service.orders\n\nTakes customer orders and publishes them to Kafka.\n",
+          "wing": "docket-test",
+          "room": "service",
+          "source_file": "docket:docket-test:entity:service.orders:r2",
+          "source_path": "docket:docket-test:entity:service.orders:r2",
+          "created_at": "2026-10-08T23:42:26.544464",
+          "filed_at": "2026-10-08T23:42:26.544464",
+          "authored_at": "2026-10-08T23:42:26.544464",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.143,
+          "distance": 0.8569,
+          "effective_distance": 0.8569,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 0
+        },
+        {
+          "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+          "text": "docket observation obs.deploy-1 (revision o1)\n\nDeployed orders 1.4 to production.",
+          "wing": "docket-test",
+          "room": "observations",
+          "source_file": "docket:docket-test:observation:obs.deploy-1:o1",
+          "source_path": "docket:docket-test:observation:obs.deploy-1:o1",
+          "created_at": "2026-10-08T23:42:26.412815",
+          "filed_at": "2026-10-08T23:42:26.412815",
+          "authored_at": "2026-10-08T23:42:26.412815",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.033,
+          "distance": 0.9667,
+          "effective_distance": 0.9667,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 0
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mempalace_search",
+    "args": {
+      "query": "Which service publishes orders to Kafka?",
+      "wing": "docket-test",
+      "limit": 1
+    },
+    "result": {
+      "query": "Which service publishes orders to Kafka?",
+      "filters": {
+        "wing": "docket-test",
+        "room": null,
+        "source_file": null,
+        "since": null,
+        "before": null
+      },
+      "total_before_filter": 3,
+      "results": [
+        {
+          "drawer_id": "drawer_docket-test_service_4d38f817079f821665fa13ae",
+          "text": "docket entity service.orders (revision r2)\n\n# Orders\nservice service.orders\n\nTakes customer orders and publishes them to Kafka.\n",
+          "wing": "docket-test",
+          "room": "service",
+          "source_file": "docket:docket-test:entity:service.orders:r2",
+          "source_path": "docket:docket-test:entity:service.orders:r2",
+          "created_at": "2026-10-08T23:42:26.544464",
+          "filed_at": "2026-10-08T23:42:26.544464",
+          "authored_at": "2026-10-08T23:42:26.544464",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.739,
+          "distance": 0.261,
+          "effective_distance": 0.261,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 3.729
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-other",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "drawers": [],
+      "total": 0,
+      "count": 0,
+      "offset": 0,
+      "limit": 100
+    }
+  },
+  {
+    "tool": "mempalace_add_drawer",
+    "args": {
+      "wing": "docket-other",
+      "room": "service",
+      "content": "docket entity service.zebra (revision z1)\n\n# Zebra\nservice service.zebra\n\nZebra crossings for kafka.\n",
+      "source_file": "docket:docket-other:entity:service.zebra:z1",
+      "added_by": "docket"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-other_service_36176e60cce0391df3585f12",
+      "wing": "docket-other",
+      "room": "service",
+      "chunks": 1
+    }
+  },
+  {
+    "tool": "mempalace_search",
+    "args": {
+      "query": "zebra crossings",
+      "wing": "docket-test",
+      "limit": 5
+    },
+    "result": {
+      "query": "zebra crossings",
+      "filters": {
+        "wing": "docket-test",
+        "room": null,
+        "source_file": null,
+        "since": null,
+        "before": null
+      },
+      "total_before_filter": 3,
+      "results": [
+        {
+          "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+          "text": "docket observation obs.deploy-1 (revision o1)\n\nDeployed orders 1.4 to production.",
+          "wing": "docket-test",
+          "room": "observations",
+          "source_file": "docket:docket-test:observation:obs.deploy-1:o1",
+          "source_path": "docket:docket-test:observation:obs.deploy-1:o1",
+          "created_at": "2026-10-08T23:42:26.412815",
+          "filed_at": "2026-10-08T23:42:26.412815",
+          "authored_at": "2026-10-08T23:42:26.412815",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.023,
+          "distance": 0.9768,
+          "effective_distance": 0.9768,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 0
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_4d38f817079f821665fa13ae",
+          "text": "docket entity service.orders (revision r2)\n\n# Orders\nservice service.orders\n\nTakes customer orders and publishes them to Kafka.\n",
+          "wing": "docket-test",
+          "room": "service",
+          "source_file": "docket:docket-test:entity:service.orders:r2",
+          "source_path": "docket:docket-test:entity:service.orders:r2",
+          "created_at": "2026-10-08T23:42:26.544464",
+          "filed_at": "2026-10-08T23:42:26.544464",
+          "authored_at": "2026-10-08T23:42:26.544464",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0,
+          "distance": 1.115,
+          "effective_distance": 1.115,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 0
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+          "text": "docket entity service.billing (revision b1)\n\n# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+          "wing": "docket-test",
+          "room": "service",
+          "source_file": "docket:docket-test:entity:service.billing:b1",
+          "source_path": "docket:docket-test:entity:service.billing:b1",
+          "created_at": "2026-10-08T23:42:26.291975",
+          "filed_at": "2026-10-08T23:42:26.291975",
+          "authored_at": "2026-10-08T23:42:26.291975",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0,
+          "distance": 1.0113,
+          "effective_distance": 1.0113,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 0
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-test",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "drawers": [
+        {
+          "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+          "wing": "docket-test",
+          "room": "observations",
+          "content_preview": "docket observation obs.deploy-1 (revision o1)\n\nDeployed orders 1.4 to production.",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.412815",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.412815",
+            "room": "observations",
+            "source_file": "docket:docket-test:observation:obs.deploy-1:o1",
+            "wing": "docket-test"
+          }
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_4d38f817079f821665fa13ae",
+          "wing": "docket-test",
+          "room": "service",
+          "content_preview": "docket entity service.orders (revision r2)\n\n# Orders\nservice service.orders\n\nTakes customer orders and publishes them to Kafka.\n",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.544464",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.544464",
+            "room": "service",
+            "source_file": "docket:docket-test:entity:service.orders:r2",
+            "wing": "docket-test"
+          }
+        },
+        {
+          "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+          "wing": "docket-test",
+          "room": "service",
+          "content_preview": "docket entity service.billing (revision b1)\n\n# Billing\nservice service.billing\n\nIssues invoices for every order.\n",
+          "metadata": {
+            "added_by": "docket",
+            "chunk_index": 0,
+            "filed_at": "2026-10-08T23:42:26.291975",
+            "id_recipe": "v3",
+            "last_modified": "2026-10-08T23:42:26.291975",
+            "room": "service",
+            "source_file": "docket:docket-test:entity:service.billing:b1",
+            "wing": "docket-test"
+          }
+        }
+      ],
+      "total": 3,
+      "count": 3,
+      "offset": 0,
+      "limit": 100
+    }
+  },
+  {
+    "tool": "mempalace_delete_drawer",
+    "args": {
+      "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_observations_e2ac1691ecda2698d94eae18",
+      "deleted_ids": [
+        "drawer_docket-test_observations_e2ac1691ecda2698d94eae18"
+      ],
+      "chunks_deleted": 1,
+      "closets_deleted": 0
+    }
+  },
+  {
+    "tool": "mempalace_delete_drawer",
+    "args": {
+      "drawer_id": "drawer_docket-test_service_4d38f817079f821665fa13ae"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_service_4d38f817079f821665fa13ae",
+      "deleted_ids": [
+        "drawer_docket-test_service_4d38f817079f821665fa13ae"
+      ],
+      "chunks_deleted": 1,
+      "closets_deleted": 0
+    }
+  },
+  {
+    "tool": "mempalace_delete_drawer",
+    "args": {
+      "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a"
+    },
+    "result": {
+      "success": true,
+      "drawer_id": "drawer_docket-test_service_8ede50b95af1cd39ee6e506a",
+      "deleted_ids": [
+        "drawer_docket-test_service_8ede50b95af1cd39ee6e506a"
+      ],
+      "chunks_deleted": 1,
+      "closets_deleted": 0
+    }
+  },
+  {
+    "tool": "mempalace_list_drawers",
+    "args": {
+      "wing": "docket-test",
+      "limit": 100,
+      "offset": 0
+    },
+    "result": {
+      "drawers": [],
+      "total": 0,
+      "count": 0,
+      "offset": 0,
+      "limit": 100
+    }
+  },
+  {
+    "tool": "mempalace_search",
+    "args": {
+      "query": "zebra crossings",
+      "wing": "docket-other",
+      "limit": 5
+    },
+    "result": {
+      "query": "zebra crossings",
+      "filters": {
+        "wing": "docket-other",
+        "room": null,
+        "source_file": null,
+        "since": null,
+        "before": null
+      },
+      "total_before_filter": 1,
+      "results": [
+        {
+          "drawer_id": "drawer_docket-other_service_36176e60cce0391df3585f12",
+          "text": "docket entity service.zebra (revision z1)\n\n# Zebra\nservice service.zebra\n\nZebra crossings for kafka.\n",
+          "wing": "docket-other",
+          "room": "service",
+          "source_file": "docket:docket-other:entity:service.zebra:z1",
+          "source_path": "docket:docket-other:entity:service.zebra:z1",
+          "created_at": "2026-10-08T23:42:26.681259",
+          "filed_at": "2026-10-08T23:42:26.681259",
+          "authored_at": "2026-10-08T23:42:26.681259",
+          "authored_at_source": "filed_at",
+          "content_date": null,
+          "content_date_source": "unknown",
+          "similarity": 0.455,
+          "distance": 0.5451,
+          "effective_distance": 0.5451,
+          "closet_boost": 0,
+          "matched_via": "drawer",
+          "bm25_score": 0.811
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mempalace_list_wings",
+    "args": {},
+    "result": {
+      "wings": {
+        "docket-other": 1
+      }
+    }
+  }
+]

@@ -657,6 +657,15 @@ const docket = await createDocket({
 docket never installs an adapter package, and runs a `.ts` adapter only with a
 TypeScript runner passed as `typescript`.
 
+Two recall engines are adapter packages loaded this way, not bundled with the
+CLI: [`@docket/adapter-memvid`](packages/adapter-memvid) (a memvid `.mv2`
+file, searched lexically through the memvid CLI) and
+[`@docket/adapter-mempalace`](packages/adapter-mempalace) (drawers in a
+MemPalace wing, recalled through its MCP server). Each answers with source
+passages and the canonical records they came from; their READMEs list the
+engine versions they were tested against, what each needs installed, and what
+each does not do.
+
 ## Local runtimes
 
 An adapter connects to a service; docket does not start one unless asked.
