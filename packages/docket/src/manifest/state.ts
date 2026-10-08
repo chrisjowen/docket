@@ -3,9 +3,12 @@ import { stableStringify } from '../model/stable-json.js'
 import { hashContent } from '../source/hashing.js'
 import { emptyManifest, readManifest, writeManifest, type IndexManifest } from './manifest.js'
 
-/** Changes whenever a projection is added, removed or reconfigured. */
+/**
+ * Changes whenever a projection is added, removed or reconfigured. Which
+ * runtime group it connects to is not what it holds, so that is left out.
+ */
 export const projectionsFingerprint = (resolved: ResolvedConfig): string =>
-  hashContent(stableStringify(resolved.config.projections))
+  hashContent(stableStringify(resolved.config.projections.map(({ runtime: _runtime, ...projection }) => projection)))
 
 export interface ManifestState {
   manifest: IndexManifest

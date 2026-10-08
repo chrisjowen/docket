@@ -83,3 +83,65 @@ describe('loadConfig', () => {
     expect(defaultConfig('/tmp/nowhere').config.state).toEqual({ dir: '.docket/.index' })
   })
 })
+
+describe('runtimes in .docket.yaml', () => {
+  const loadYaml = async (yaml: string) => {
+    const root = await mkdtemp(join(tmpdir(), 'memory-loader-'))
+    await writeFile(join(root, '.docket.yaml'), `version: 1\n${yaml}`)
+    return loadConfig(root)
+  }
+
+  const GRAPH_DEV = `runtimes:
+  graph-dev:
+    provider: docker-compose
+    composeFile: ./infra/docket-memory.compose.yaml
+    projectName: docket-payments
+    pullPolicy: missing
+    services: [graph]
+`
+
+  it('has none unless configured: connecting to a service is the default', () => {
+    expect(defaultConfig('/tmp/nowhere').config.runtimes).toEqual({})
+  })
+
+  it('reads a docker-compose runtime group and an adapter\'s reference to it', async () => {
+    const resolved = await loadYaml(
+      `projections:\n  - type: neo4j\n    url: bolt://127.0.0.1:17687\n    runtime: graph-dev\n${GRAPH_DEV}`
+    )
+    expect(resolved.config.runtimes).toEqual({
+      'graph-dev': {
+        provider: 'docker-compose',
+        composeFile: './infra/docket-memory.compose.yaml',
+        projectName: 'docket-payments',
+        pullPolicy: 'missing',
+        services: ['graph']
+      }
+    })
+    expect(resolved.config.projections).toEqual([
+      { type: 'neo4j', url: 'bolt://127.0.0.1:17687', username: 'neo4j', runtime: 'graph-dev' }
+    ])
+  })
+
+  it('never pulls unless the pull policy says so', async () => {
+    const resolved = await loadYaml(
+      'runtimes:\n  graph-dev:\n    provider: docker-compose\n    composeFile: compose.yaml\n    projectName: docket\n'
+    )
+    expect(resolved.config.runtimes['graph-dev']?.pullPolicy).toBe('never')
+  })
+
+  it('rejects a reference to a runtime that is not defined', async () => {
+    await expect(loadYaml('projections:\n  - type: jsonl\n    runtime: graph-dev\n')).rejects.toThrow(
+      /runtime "graph-dev" is not defined under runtimes/
+    )
+  })
+
+  it.each([
+    ['an unknown pull policy', GRAPH_DEV.replace('pullPolicy: missing', 'pullPolicy: sometimes')],
+    ['a misspelt field', GRAPH_DEV.replace('pullPolicy:', 'pullpolicy:')],
+    ['an unknown provider', GRAPH_DEV.replace('provider: docker-compose', 'provider: podman')],
+    ['a project name Compose refuses', GRAPH_DEV.replace('projectName: docket-payments', 'projectName: Docket Payments')],
+    ['no services', GRAPH_DEV.replace('services: [graph]', 'services: []')]
+  ])('rejects %s', async (_what, yaml) => {
+    await expect(loadYaml(yaml)).rejects.toThrow(/Invalid/)
+  })
+})

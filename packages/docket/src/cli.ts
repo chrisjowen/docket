@@ -8,6 +8,7 @@ import {
   relationshipsTo
 } from './commands/ontology.js'
 import { rebuild } from './commands/rebuild.js'
+import { runtimeDown, runtimePlan, runtimeStatus, runtimeUp } from './commands/runtime.js'
 import { DEFAULT_SEARCH_LIMIT, search } from './commands/search.js'
 import { setup, type StepOutcome } from './commands/setup.js'
 import { sync } from './commands/sync.js'
@@ -260,6 +261,92 @@ program
     }
     process.once('SIGINT', stop)
     process.once('SIGTERM', stop)
+  })
+
+const runtimeCommand = program
+  .command('runtime')
+  .description('Explicitly manage the local containers a runtimes entry in .docket.yaml configures')
+
+runtimeCommand
+  .command('plan')
+  .argument('<id>', 'runtime id from .docket.yaml')
+  .description('Validate the runtime and show what up, status and down would run, secrets redacted')
+  .option('--json', 'print the plan as JSON')
+  .action(async (id: string, options: { json?: boolean }) => {
+    const plan = await runtimePlan(id)
+    if (options.json) {
+      console.log(JSON.stringify(plan, null, 2))
+    } else {
+      const rows: [string, string][] = [
+        ['compose file', plan.composeFile],
+        ['project', plan.projectName],
+        ['pull policy', plan.pullPolicy],
+        ['services', plan.services.length > 0 ? plan.services.join(', ') : '(every service in the file)'],
+        ['adapters', plan.adapters.length > 0 ? plan.adapters.join(', ') : '(none reference it)']
+      ]
+      console.log(`runtime ${plan.runtime} (${plan.provider})`)
+      const width = widest(rows.map(([label]) => label))
+      for (const [label, value] of rows) console.log(`  ${pad(label, width)}  ${value}`)
+      for (const service of plan.resolved) {
+        console.log(`\n  ${service.name}`)
+        console.log(`    image        ${service.image ?? '(none)'}`)
+        if (service.ports.length > 0) console.log(`    ports        ${service.ports.join(', ')}`)
+        if (service.volumes.length > 0) console.log(`    volumes      ${service.volumes.join(', ')}`)
+        if (service.environment.length > 0) {
+          console.log(`    environment  ${service.environment.map((name) => `${name}=<redacted>`).join(', ')}`)
+        }
+      }
+      console.log('\n  operations')
+      for (const [name, operation] of Object.entries(plan.operations)) {
+        console.log(`    ${name}: ${operation.description}\n      ${operation.command}`)
+      }
+    }
+    for (const problem of plan.problems) console.error(`ERROR ${problem}`)
+    if (plan.problems.length > 0) process.exitCode = 1
+  })
+
+runtimeCommand
+  .command('up')
+  .argument('<id>', 'runtime id from .docket.yaml')
+  .description('Start the runtime\'s services, pulling images only as its pullPolicy allows')
+  .action(async (id: string) => {
+    const result = await runtimeUp(id)
+    console.log(`✓ runtime ${result.runtime} is up`)
+  })
+
+runtimeCommand
+  .command('status')
+  .argument('<id>', 'runtime id from .docket.yaml')
+  .description('Report the state and health of the runtime\'s services, changing nothing')
+  .option('--json', 'print the status as JSON')
+  .action(async (id: string, options: { json?: boolean }) => {
+    const status = await runtimeStatus(id)
+    if (options.json) {
+      console.log(JSON.stringify(status, null, 2))
+      return
+    }
+    console.log(`runtime ${status.runtime} (project ${status.projectName})`)
+    if (status.services.length === 0) console.log('  no containers')
+    const width = widest(status.services.map((service) => service.service))
+    for (const service of status.services) {
+      const health = service.health ? ` (${service.health})` : ''
+      const detail = service.status ? `  ${service.status}` : ''
+      console.log(`  ${pad(service.service, width)}  ${service.state}${health}${detail}`)
+    }
+  })
+
+runtimeCommand
+  .command('down')
+  .argument('<id>', 'runtime id from .docket.yaml')
+  .description('Stop and remove the runtime\'s containers; volumes and their data are kept')
+  .option('--destroy-volumes', 'also delete the runtime\'s volumes and all the data in them')
+  .action(async (id: string, options: { destroyVolumes?: boolean }) => {
+    const result = await runtimeDown(id, { destroyVolumes: options.destroyVolumes === true })
+    console.log(
+      options.destroyVolumes
+        ? `✓ runtime ${result.runtime} is down and its volumes are deleted`
+        : `✓ runtime ${result.runtime} is down; its volumes are kept`
+    )
   })
 
 const ontologyCommand = program
