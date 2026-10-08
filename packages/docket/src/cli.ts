@@ -430,7 +430,7 @@ adapterCommand
   .option('--image <ref>', 'neo4j local: the image to run (default: read from --image-env when up runs)')
   .option('--image-env <name>', 'neo4j local: environment variable holding the image (default DOCKET_NEO4J_IMAGE)')
   .option('--port <port>', 'neo4j local: Bolt port on 127.0.0.1 (default 17687)')
-  .option('--runtime-id <id>', 'neo4j local: runtime group id (default <id>-dev)')
+  .option('--runtime-id <id>', 'neo4j local: runtime group id (default <id>-dev, numbered if taken)')
   .option('--compose-file <path>', 'neo4j local: Compose file to create, relative to .docket.yaml')
   .option('--project-name <name>', 'neo4j local: Compose project name')
   .addOption(new Option('--pull-policy <policy>', 'neo4j local: when runtime up may pull').choices(['never', 'missing', 'always']))
