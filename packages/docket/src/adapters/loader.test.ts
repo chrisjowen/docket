@@ -474,5 +474,9 @@ describe('version 2 adapter instances', () => {
     await copyFile(FAKE_LOCAL, join(root, 'tools', 'docket', 'other.mjs'))
     await writeFile(join(root, '.docket.yaml'), `${v2}  - id: more\n    module: ./tools/docket/other.mjs\n    config: { label: a }\n`, 'utf8')
     expect((await createDocket({ projectRoot: root })).projectionsFingerprint).not.toBe(more)
+
+    // Renaming it moves its state to a fresh directory, so it reprojects too.
+    await writeFile(join(root, '.docket.yaml'), `${v2}  - id: renamed\n    module: ./tools/docket/fake-local.mjs\n    config: { label: a }\n`, 'utf8')
+    expect((await createDocket({ projectRoot: root })).projectionsFingerprint).not.toBe(more)
   })
 })

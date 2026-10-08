@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /** A local Ollama chat model. */
-export const ollamaModelSchema = z.strictObject({
+export const ollamaModelSchema = z.object({
   provider: z.literal('ollama').default('ollama'),
   url: z.string().url().default('http://localhost:11434'),
   model: z.string().min(1),

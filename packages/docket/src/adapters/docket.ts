@@ -181,7 +181,7 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
       if (!ALL_ROLES.includes(role)) throw new Error(`Adapter "${entry.id}" has unknown role "${String(role)}".`)
     }
     if (entry.configured !== undefined && roles.includes('projection')) {
-      fingerprinted.push(STANDARD_MODULES.has(entry.configured) ? config : { module: entry.configured, config })
+      fingerprinted.push(STANDARD_MODULES.has(entry.configured) ? config : { id: entry.id, module: entry.configured, config })
     }
 
     const services: AdapterServices = {

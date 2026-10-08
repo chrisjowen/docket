@@ -32,7 +32,7 @@ export const neo4jConfigSchema = z.preprocess(
      * Answer searches by having a local Ollama model write a read-only Cypher
      * query against the graph's schema. Without it, search is full-text only.
      */
-    cypher: ollamaModelSchema.optional()
+    cypher: z.strictObject(ollamaModelSchema.shape).optional()
   })
 )
 

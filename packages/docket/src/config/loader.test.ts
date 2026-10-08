@@ -331,6 +331,11 @@ ${runtimes}`)
     expect(v1).toEqual(v2)
   })
 
+  it('still loads a summarize section with a field it does not use', async () => {
+    const config = await load('version: 1\nsummarize:\n  model: "qwen2.5:7b"\n  temperature: 0.2\n')
+    expect(config.summarize).toMatchObject({ provider: 'ollama', model: 'qwen2.5:7b' })
+  })
+
   it('keeps v1\'s defaults: no projections means the jsonl one', async () => {
     expect((await load('version: 1\n')).adapters).toEqual([
       { id: 'jsonl', module: '@docket/adapter-jsonl', roles: ['projection', 'query'], config: { output: '.docket/.index' } }
