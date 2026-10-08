@@ -608,8 +608,10 @@ The manifest that makes sync skip unchanged resources lives in `state.dir`
 reprojected whenever what it projects changes — one of its files, or a
 confidence rule in the ontology. Adding, removing or reconfiguring an adapter
 enabled for projection makes the next sync reproject everything, so a newly
-added mem0 receives the whole repository. Renaming an instance, or adding one
-that only answers queries, does not.
+added mem0 receives the whole repository. Renaming an instance of a bundled
+adapter (jsonl, mem0, neo4j), or adding one that only answers queries, does
+not. Renaming an instance of any other module does, because its state
+directory moves with its id.
 
 ### Writing an adapter
 
