@@ -514,10 +514,12 @@ for the projection you configure. A jsonl-only project needs neither, nor
 Docker, Python or network access. A project's own install of an adapter
 package (from a private registry or a workspace) is used in preference to the
 bundled copy. For a minimal core, build docket with only the adapters you want
-bundled — `DOCKET_BUNDLED_ADAPTERS=jsonl pnpm build`, or empty for none — and
-install the rest in the projects that configure them; a configured adapter
-that is neither installed nor bundled fails with an error naming the package
-to install.
+bundled — `DOCKET_BUNDLED_ADAPTERS=jsonl pnpm build`, or empty for none. The
+`@docket/adapter-*` packages are not published to npm, so a project using a
+minimal core cannot `npm install` the adapters it left out: a configured
+adapter that is neither installed nor bundled fails with an error saying it is
+not included in this build, and that a build with `DOCKET_BUNDLED_ADAPTERS`
+unset or listing it includes it.
 
 A program can open a docket with more adapters:
 

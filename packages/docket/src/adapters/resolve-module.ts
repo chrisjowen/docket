@@ -74,11 +74,16 @@ export const resolveAdapterModule = (specifier: string, context: ModuleResolutio
   const { name, subpath } = splitPackageSpecifier(specifier)
   const packageDir = findPackageDir(name, context.projectRoot) ?? context.distribution?.find(name)
   if (packageDir === undefined) {
-    const shipped = context.distribution?.packages.includes(name)
-      ? ' The standard @chrisjowen/docket distribution includes it; this installation of docket was built without it.'
-      : ''
+    if (context.distribution?.packages.includes(name)) {
+      // docket's own adapter packages are not published: only a docket build ships them.
+      const adapter = name.replace(/^@docket\/adapter-/, '')
+      throw new Error(
+        `${label} is not included in this build of docket. The standard @chrisjowen/docket CLI bundles the ` +
+          `jsonl, neo4j and mem0 adapters; a docket build includes ${adapter} when DOCKET_BUNDLED_ADAPTERS is unset or lists it.`
+      )
+    }
     throw new Error(
-      `${label} is not installed in ${context.projectRoot}.${shipped} Install it in the project ` +
+      `${label} is not installed in ${context.projectRoot}. Install it in the project ` +
         `(e.g. \`npm install ${name}\`); docket never installs packages itself.`
     )
   }

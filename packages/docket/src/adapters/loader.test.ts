@@ -312,9 +312,9 @@ describe('v1 projections', () => {
     await writeFile(join(root, '.docket.yaml'), v1Config('  - type: neo4j\n'), 'utf8')
     const minimal = { packages: standardDistribution.packages, find: () => undefined }
     await expect(createDocket({ projectRoot: root, distribution: minimal })).rejects.toThrow(
-      `Adapter "neo4j" module "@docket/adapter-neo4j" is not installed in ${root}. ` +
-        'The standard @chrisjowen/docket distribution includes it; this installation of docket was built without it. ' +
-        'Install it in the project (e.g. `npm install @docket/adapter-neo4j`); docket never installs packages itself.'
+      'Adapter "neo4j" module "@docket/adapter-neo4j" is not included in this build of docket. ' +
+        'The standard @chrisjowen/docket CLI bundles the jsonl, neo4j and mem0 adapters; ' +
+        'a docket build includes neo4j when DOCKET_BUNDLED_ADAPTERS is unset or lists it.'
     )
   })
 
