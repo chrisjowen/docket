@@ -30,8 +30,8 @@
     /** The conversation, kept by the page so switching tabs does not lose it. */
     turns: ChatTurn[]
     onselect: (id: string) => void
-    /** Put an answer's exhibits, and only those, on the board. */
-    onshow: (answer: UiAnswer) => void
+    /** Put an answer's exhibits, and only those, on the board; `reveal` also goes to the board. */
+    onshow: (answer: UiAnswer, options?: { reveal: boolean }) => void
   }
 
   let { graph, turns = $bindable(), onselect, onshow }: Props = $props()
@@ -179,7 +179,7 @@
                         </li>
                       {/each}
                     </ul>
-                    <Button variant="ghost" size="xs" class="self-start" onclick={() => onshow(boardAnswer(reply))}>
+                    <Button variant="ghost" size="xs" class="self-start" onclick={() => onshow(boardAnswer(reply), { reveal: true })}>
                       <Eye /> Show these on the board
                     </Button>
                   </section>

@@ -262,7 +262,7 @@ API never changes the canonical files; its one write is chat's answer cache.
   type drawn with its own icon and colour, filtered by type and relationship
   (each with All / None switches). Links to entities no file defines yet
   show as dashed ghosts.
-- **Details** - an entity's frontmatter, notes and links in and out, with the
+- **Inspector** - an entity's frontmatter, notes and links in and out, with the
   confidence docket computes for it and for each link, the sources that
   corroborate it, and every piece of evidence - file and lines, endpoint,
   URLs, when and by whom - merged from all the files that declare its id.
@@ -271,11 +271,25 @@ API never changes the canonical files; its one write is chat's answer cache.
   tags, attributes, notes and relationship names. `type:service`,
   `rel:depends_on` and `tag:core` narrow it down; picking a result focuses
   the graph on it.
-- **Ask** - a question answered by `docket search`, the same search agents
-  use, with the relationship paths that join what it found. The graph then
-  shows only the entities the answer cites until you show everything again.
-  It answers from the projections, so run `docket sync` first; the UI says
-  when the index is behind the files.
+- **Table** and **History** - beside the graph under Browse: every exhibit or
+  observation as a sortable table, filtered by type, source, date observed and
+  assessment; and the dated observations over time - when something happened
+  (`eventAt`) and when it was observed (`observedAt`), labelled apart - with
+  each chain of `supersedes` decisions.
+- **Ask** - its own page: a question put to every adapter configured for
+  query, each answer shown as it came - exhibits, passages, facts, counts,
+  tables, timelines, graphs - with how the adapter read the question, how much
+  it covered, and the evidence behind each result, which opens in the
+  inspector beside it. One adapter failing leaves the others' answers in
+  place, and counts that disagree are shown side by side. Until docket serves
+  its adapter coordinator, Ask answers through `docket search` - the same
+  search agents use - with the relationship paths that join what it found;
+  "Show on the board" puts the results, and only them, on the graph. It
+  answers from the projections, so run `docket sync` first; the UI says when
+  the index is behind the files.
+- **Adapters** - each configured adapter's roles, connection health and how
+  far its index lags the files, once docket reports them. It never shows
+  configuration, which can hold secrets.
 - **Chat** - a conversation with the casebook. Each question runs the same
   search as Ask, then a model summarizes what it found in a few sentences,
   citing each exhibit it relies on; citations link to the exhibit, and the

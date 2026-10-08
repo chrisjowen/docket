@@ -90,8 +90,8 @@
     aria-expanded={open && results.length > 0}
     aria-controls="quick-results"
     aria-activedescendant={open && results.length > 0 ? `quick-${active}` : undefined}
-    aria-label="Search exhibits and relationships"
-    placeholder="Search exhibits and relationships…  type: rel: tag:"
+    aria-label="Find exhibits and relationships in the loaded casebook"
+    placeholder="Find in the casebook…  type: rel: tag:"
     autocomplete="off"
     spellcheck="false"
     class="border-input bg-background placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-lg border pr-14 pl-8 text-sm outline-none focus-visible:ring-3"
