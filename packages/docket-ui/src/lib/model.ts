@@ -70,7 +70,7 @@ export const linksOf = (graph: UiGraph, id: string): { outgoing: UiEdge[]; incom
 })
 
 /** The entity and everything one link away, either direction. */
-export const neighbourhood = (edges: readonly UiEdge[], id: string): Set<string> => {
+export const neighbourhood = (edges: readonly Pick<UiEdge, 'source' | 'target'>[], id: string): Set<string> => {
   const ids = new Set([id])
   for (const edge of edges) {
     if (edge.source === id) ids.add(edge.target)

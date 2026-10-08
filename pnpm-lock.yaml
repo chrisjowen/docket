@@ -71,6 +71,9 @@ importers:
 
   packages/docket-ui:
     devDependencies:
+      '@docket/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@lucide/svelte':
         specifier: ^1.52.0
         version: 1.52.0(svelte@5.57.1)
