@@ -38,11 +38,13 @@ npx docket watch                # reconcile continuously as files change
 npx docket search <query...>    # ask every searchable projection
 npx docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 npx docket ontology list        # what resource types and relationships exist
+npx docket adapter add neo4j    # set up an adapter: asks, shows the plan, applies it once confirmed
 ```
 
 Requires Node 22 or later. The jsonl, mem0 and Neo4j adapters ship with the
 package; mem0 and Neo4j projections also need the optional `mem0ai` and
-`neo4j-driver` packages installed next to it.
+`neo4j-driver` packages installed next to it, which `docket adapter add` offers
+to install.
 
 ![docket open: the relationship graph with an exhibit's evidence and confidence](https://raw.githubusercontent.com/chrisjowen/docket/main/docs/assets/docket-open.png)
 

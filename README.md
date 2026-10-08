@@ -241,6 +241,8 @@ docket search <query...>    # ask every projection that can search
 docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
+docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid or mempalace: asks, shows the plan, applies it once confirmed
+docket adapters list        # configured adapter instances and whether each can load
 docket config migrate --dry-run  # show a version 1 .docket.yaml rewritten as version 2
 docket config migrate       # rewrite it, once confirmed (--write: without asking); the original is kept
 docket runtime plan <id>    # validate a runtimes entry and show what it would run, secrets redacted
@@ -508,6 +510,75 @@ instance with the `query` role. `timeoutMs`, `maxConcurrentAdapters` and
 ([`docs/adapter-spec.md`](docs/adapter-spec.md) §10); they are checked now but
 nothing reads them yet. `docket init` writes a version 2 file.
 
+### Set up a provider: `docket adapter add`
+
+`docket adapter add <provider>` replaces the manual steps for the bundled
+adapters. It asks what the adapter needs, shows the resolved plan - the
+`.docket.yaml` entry, any runtime group and Compose file, the environment
+variables to set, the driver package and the commands to run next - and
+applies it only once you confirm:
+
+```bash
+docket adapter add neo4j    # an existing or hosted server, or a local container
+docket adapter add mem0     # hosted mem0 (app.mem0.ai) or a self-hosted mem0 server
+docket adapter add jsonl    # another JSONL index
+docket adapter add memvid   # a memvid .mv2 file, searched through the memvid CLI
+docket adapter add mempalace  # drawers in a MemPalace wing, through its MCP server
+docket adapters list        # what is configured, and whether each module and driver loads
+```
+
+For **Neo4j**, choose an existing endpoint (its URI, username and the name of
+the variable holding its password) or a local container. A local container
+gets a runtime group in `.docket.yaml` and a Compose template you then own,
+`./infra/docket-<runtime>.compose.yaml`, binding Bolt to `127.0.0.1`. Its
+image is the reference you give with `--image` (an internal registry tag or
+digest), or, without one, a required `${DOCKET_NEO4J_IMAGE}` Compose reads when
+the runtime starts: docket never picks an image. For **mem0**, choose hosted
+(an API key variable, `MEM0_API_KEY` by default) or a self-hosted server URL.
+mem0's in-process `oss` mode needs an embedder, vector store and LLM, so write
+that entry by hand.
+
+**memvid** and **MemPalace** are embedded: no secrets and no runtime group,
+only an optional file or palace directory, namespace or wing, and the command
+docket runs. Their adapter packages are not bundled with the CLI and not
+published to npm, so the plan reminds you to add the package to the project
+(a workspace or `file:` dependency), along with the engine each drives and
+docket never installs: `npm install -g memvid-cli@2.0.160`, or `pip install
+mempalace==3.10.0` and its embedding model, downloaded beforehand.
+
+What it will and will not do:
+
+- It never overwrites a file. An existing Compose file at the chosen path is
+  kept as it is, and the plan says so.
+- It never asks for, shows or writes a secret: only the *name* of the
+  environment variable holding one. A value given where a name belongs, or
+  credentials in a URL, is refused.
+- It writes version 2 entries. In a version 1 `.docket.yaml` it offers to run
+  `docket config migrate` first (keeping the original as a backup) and
+  otherwise explains how; it never migrates silently.
+- It installs the driver (`neo4j-driver` or `mem0ai`) only with your consent,
+  with the project's package manager (from `packageManager` or its lockfile):
+  asked at a terminal, or `--install`.
+- It never pulls an image or starts a container. It prints `docket runtime up
+  <id>` for you to run, and can run `docket runtime plan <id>` (which starts
+  nothing) when asked (`--plan-runtime`). For an endpoint it can check the
+  connection (`--check`), opening the adapter as `docket sync` would.
+
+Scripts and CI pass the answers as options and `--yes` to apply without asking;
+a required answer that is missing is an error naming its option, and an option
+that does not apply to what was chosen is refused. `--dry-run` prints the plan
+and changes nothing.
+
+```bash
+docket adapter add neo4j --mode local --image registry.internal/neo4j:5.26 --yes
+docket adapter add neo4j --url neo4j+s://graph.internal.example --password-env DOCKET_GRAPH_PASSWORD --yes
+docket adapter add mem0 --mode platform --api-key-env MEM0_API_KEY --install --yes
+docket adapter add mem0 --mode server --url http://localhost:8888 --dry-run
+```
+
+`docket adapter add --help` lists every option. A project-local adapter module
+is added to `.docket.yaml` by hand ([Writing an adapter](#writing-an-adapter)).
+
 ### Version 1 files
 
 A version 1 `.docket.yaml` keeps working unchanged. Its `projections` are read
@@ -719,7 +790,9 @@ Hosted and already-running services need nothing more, and no command but
 loading an adapter, even with a `runtimes` section configured.
 
 To have docket manage local containers explicitly, write your own Compose file
-with the images you approve, and name it in a `runtimes` group. An adapter
+with the images you approve, and name it in a `runtimes` group - or have
+`docket adapter add neo4j --mode local` write both from the image you give
+([Set up a provider](#set-up-a-provider-docket-adapter-add)). An adapter
 instance's `runtime:` says which group it connects to (in a version 1 file, a
 projection's `runtime:` does):
 
@@ -742,7 +815,7 @@ runtimes:
 ```
 
 ```yaml
-# infra/docket-memory.compose.yaml - yours; docket never writes or rewrites it
+# infra/docket-memory.compose.yaml - yours; docket never rewrites it
 services:
   graph:
     image: ${DOCKET_NEO4J_IMAGE:?Set the approved image reference}
