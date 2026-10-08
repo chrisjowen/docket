@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /** Which mem0 entity the projected memories are filed under. At least one id is required. */
 const mem0ScopeSchema = z
-  .object({
+  .strictObject({
     userId: z.string().min(1).optional(),
     agentId: z.string().min(1).optional(),
     runId: z.string().min(1).optional()
@@ -22,7 +22,7 @@ const mem0MinScoreSchema = z.number().min(0).max(1).optional()
 const mem0Type = z.literal('mem0').default('mem0')
 
 /** Hosted mem0 (app.mem0.ai). The key is read from the environment, never from the file. */
-const mem0PlatformSchema = z.object({
+const mem0PlatformSchema = z.strictObject({
   type: mem0Type,
   mode: z.literal('platform'),
   apiKeyEnv: z.string().default('MEM0_API_KEY'),
@@ -36,7 +36,7 @@ const mem0PlatformSchema = z.object({
  * constructor untouched - embedder, vector store, LLM - so every provider mem0
  * supports works without this package knowing about it.
  */
-const mem0OssSchema = z.object({
+const mem0OssSchema = z.strictObject({
   type: mem0Type,
   mode: z.literal('oss'),
   config: z.record(z.string(), z.unknown()).default({}),
@@ -49,7 +49,7 @@ const mem0OssSchema = z.object({
  * serves its dashboard. It speaks its own API, not the hosted one, so it has its
  * own mode. The key is optional because the server can run with auth disabled.
  */
-const mem0ServerSchema = z.object({
+const mem0ServerSchema = z.strictObject({
   type: mem0Type,
   mode: z.literal('server'),
   url: z.string().url(),

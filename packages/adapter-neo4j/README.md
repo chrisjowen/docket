@@ -5,8 +5,10 @@ relationship per (source, rel, target), with a full-text index, searched
 full-text or through a read-only Cypher query a local Ollama model writes.
 
 Its default export is the `AdapterDefinition`
-([`docs/adapter-spec.md`](../../docs/adapter-spec.md) §7); its configuration is
-a v1 `projections` entry of `type: neo4j`. `neo4j-driver` is its dependency,
+([`docs/adapter-spec.md`](../../docs/adapter-spec.md) §7). Its configuration is
+an instance's `config` in a version 2 `.docket.yaml`, or a v1 `projections`
+entry of `type: neo4j`: `uri` (or v1's `url`), `database`, `username`,
+`passwordEnv`, `scope` and `cypher`. Any other field is rejected. `neo4j-driver` is its dependency,
 imported only when an instance is created.
 
 A private workspace package: it is not published on its own.

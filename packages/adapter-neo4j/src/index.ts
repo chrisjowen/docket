@@ -1,4 +1,4 @@
-import { entityProjectionDefinition, packageVersion } from '@docket/adapter-kit'
+import { entityProjectionDefinition, packageVersion, parseAdapterConfig } from '@docket/adapter-kit'
 
 import { neo4jConfigSchema, type Neo4jConfig } from './config.js'
 import { createNeo4jProjection } from './neo4j-projection.js'
@@ -15,7 +15,7 @@ const definition = entityProjectionDefinition<Neo4jConfig>({
   name: 'neo4j',
   version: packageVersion(new URL('../package.json', import.meta.url)),
   rebuild: 'deterministic',
-  validateConfig: (input) => neo4jConfigSchema.parse(input),
+  validateConfig: (input) => parseAdapterConfig(neo4jConfigSchema, input),
   createProjection: (config) => createNeo4jProjection(config)
 })
 

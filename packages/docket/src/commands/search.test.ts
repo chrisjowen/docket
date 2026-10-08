@@ -74,6 +74,23 @@ describe('search', () => {
     ])
   })
 
+  it('asks only the instances query.defaultAdapters names, and none whose query role is off', async () => {
+    const adapter = (id: string, roles: string) =>
+      `  - id: ${id}\n    module: "@docket/adapter-jsonl"\n    roles: ${roles}\n    config: { output: .docket/.index }\n`
+    const v2 = (query: string) =>
+      writeFile(
+        join(root, '.docket.yaml'),
+        `version: 2\nadapters:\n${adapter('a', '[projection, query]')}${adapter('b', '[query]')}${adapter('c', '[projection]')}${query}`,
+        'utf8'
+      )
+
+    await v2('')
+    expect((await search('minio', { cwd: root })).sources.map((source) => source.name)).toEqual(['a', 'b'])
+
+    await v2('query:\n  defaultAdapters: [b]\n')
+    expect((await search('minio', { cwd: root })).sources.map((source) => source.name)).toEqual(['b'])
+  })
+
   it('passes the limit to every projection', async () => {
     const result = await search('development', { cwd: root, limit: 1 })
 

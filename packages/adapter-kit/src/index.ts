@@ -1,4 +1,5 @@
 export * from './atomic-write.js'
+export * from './config.js'
 export * from './entity-projection.js'
 export * from './ollama-chat.js'
 export * from './package-version.js'

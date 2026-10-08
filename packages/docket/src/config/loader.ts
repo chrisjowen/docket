@@ -44,7 +44,7 @@ export const resolveConfig = (
  * `docket init` uses this to place the files it creates.
  */
 export const defaultConfig = (projectRoot: string): ResolvedConfig =>
-  resolveConfig(memoryConfigSchema.parse({ version: 1 }), resolve(projectRoot))
+  resolveConfig(memoryConfigSchema.parse({ version: 2 }), resolve(projectRoot))
 
 /** Find, parse and validate the nearest `.docket.yaml`. */
 export const loadConfig = async (

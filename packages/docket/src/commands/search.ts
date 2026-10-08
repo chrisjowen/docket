@@ -67,10 +67,14 @@ export const search = async (
   const known = new Map(scanned.documents.map((document) => [document.id, document]))
   const entities = new Map(scanned.entities.map((entity) => [entity.id, entity]))
 
-  // Every configured adapter enabled for query, asked through the adapter
-  // contract (docs/adapter-spec.md §15 step 1).
+  // The configured adapters enabled for query - those `query.defaultAdapters`
+  // names, or every one - asked through the adapter contract
+  // (docs/adapter-spec.md §5, §15 step 1).
   const docket = await openDocket(resolved)
-  const slots = docket.adapters.filter((slot) => slot.roles.includes('query'))
+  const selected = resolved.config.query.defaultAdapters
+  const slots = docket.adapters.filter(
+    (slot) => slot.roles.includes('query') && (selected === undefined || selected.includes(slot.id))
+  )
 
   const answers = await Promise.all(
     slots.map(async (slot): Promise<SourceResult | null> => {

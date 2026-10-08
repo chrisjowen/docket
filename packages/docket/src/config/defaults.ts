@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
-/** Contents of a fresh `.docket.yaml`. Mirrors spec section 5 verbatim. */
-export const DEFAULT_CONFIG_YAML = `version: 1
+/** Contents of a fresh `.docket.yaml`: version 2 (docs/adapter-spec.md §5). */
+export const DEFAULT_CONFIG_YAML = `version: 2
 
 source:
   root: .docket
@@ -18,29 +18,52 @@ ontology:
 watch:
   debounceMs: 300
 
-projections:
-  - type: jsonl
-    output: .docket/.index
+# Adapter instances: each has a unique id, the module that serves it (a
+# package, or a .js/.mjs file relative to this one), the roles it runs in and
+# its own config. Secrets are never written here - name the environment
+# variable that holds one (passwordEnv, apiKeyEnv, tokenEnv, ...).
+adapters:
+  - id: local
+    module: "@docket/adapter-jsonl"
+    roles: [projection, query]
+    config:
+      output: .docket/.index
 
-  # Optional: project into mem0 as well. Needs \`pnpm add mem0ai\`.
+  # Optional: mem0. Needs \`pnpm add mem0ai\`.
   #
   # Hosted (app.mem0.ai) - the key is read from the environment:
-  # - type: mem0
-  #   mode: platform
-  #   apiKeyEnv: MEM0_API_KEY
-  #
-  # Self-hosted - \`config\` is passed to mem0's Memory constructor as-is:
-  # - type: mem0
-  #   mode: oss
+  # - id: memories
+  #   module: "@docket/adapter-mem0"
+  #   roles: [projection, query]
   #   config:
-  #     embedder: { provider: ollama, config: { model: nomic-embed-text } }
-  #     vectorStore: { provider: qdrant, config: { host: localhost, port: 6333 } }
-  #     llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
+  #     mode: platform
+  #     apiKeyEnv: MEM0_API_KEY
+  #
+  # Self-hosted - \`config.config\` is passed to mem0's Memory constructor as-is:
+  # - id: memories
+  #   module: "@docket/adapter-mem0"
+  #   config:
+  #     mode: oss
+  #     config:
+  #       embedder: { provider: ollama, config: { model: nomic-embed-text } }
+  #       vectorStore: { provider: qdrant, config: { host: localhost, port: 6333 } }
+  #       llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
 
   # Optional: a Neo4j graph with full-text search. Needs \`pnpm add neo4j-driver\`.
-  # - type: neo4j
-  #   url: bolt://localhost:7687
-  #   passwordEnv: NEO4J_PASSWORD
+  # - id: graph
+  #   module: "@docket/adapter-neo4j"
+  #   roles: [projection, query]
+  #   config:
+  #     uri: bolt://localhost:7687
+  #     passwordEnv: NEO4J_PASSWORD
+
+# How questions are put to the adapters. Every adapter with the query role
+# answers unless defaultAdapters lists the ones to ask.
+# query:
+#   defaultAdapters: [local]
+#   timeoutMs: 30000
+#   maxConcurrentAdapters: 4
+#   synthesis: true
 
 # \`docket open\`'s chat summarizes answers with the \`claude\` CLI (Claude Code),
 # using your own login - nothing to set. To choose its model, or to use a local

@@ -19,7 +19,13 @@ import {
 
 import { stableStringify } from '@docket/adapter-kit'
 
-import { stateRootOf, V1_PROJECTION_MODULES, type ResolvedConfig } from '../config/config.js'
+import {
+  ADAPTER_ID_PATTERN,
+  ADAPTER_ROLES,
+  stateRootOf,
+  V1_PROJECTION_MODULES,
+  type ResolvedConfig
+} from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import { validate } from '../commands/validate.js'
 import { hashContent } from '../source/hashing.js'
@@ -34,10 +40,10 @@ import type { AdapterDistribution, TypeScriptRunner } from './resolve-module.js'
  */
 export const DEFAULT_SCOPE = 'default'
 
-const ALL_ROLES: readonly AdapterRole[] = ['projection', 'query']
+const ALL_ROLES: readonly AdapterRole[] = ADAPTER_ROLES
 
-/** Instance ids name state directories, so they stay path-safe. */
-const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._#-]*$/
+/** The standard adapters' configs name their own type, so they identify their module. */
+const STANDARD_MODULES = new Set<string>(Object.values(V1_PROJECTION_MODULES))
 
 /** An adapter loaded from a module: an npm package installed in the project, or a .js/.mjs path relative to `.docket.yaml`. */
 export interface AdapterModuleReference {
@@ -79,9 +85,10 @@ export interface Docket {
   readonly resolved: ResolvedConfig
   readonly adapters: readonly AdapterSlot[]
   /**
-   * The v1 projections as their adapters read them, hashed: changes whenever
-   * one is added, removed or reconfigured, so sync's manifest knows when it
-   * no longer vouches for what they hold.
+   * The `.docket.yaml` adapters enabled for projection, as they read their
+   * configs, hashed: changes whenever one is added, removed or reconfigured,
+   * so sync's manifest knows when it no longer vouches for what they hold. A
+   * v1 file and its v2 migration hash alike, so migrating reprojects nothing.
    */
   readonly projectionsFingerprint: string
 }
@@ -103,10 +110,10 @@ export interface CreateDocketOptions extends OpenDocketOptions {
 }
 
 /**
- * Opens the project's docket: the v1 projections its `.docket.yaml`
- * configures, each served by its adapter package, then any adapters loaded by
- * module reference or registered directly - all driven through the adapter
- * contract (docs/adapter-spec.md §4, §12, §15 step 2).
+ * Opens the project's docket: the adapter instances its `.docket.yaml`
+ * configures (a v1 file's projections converted to them), then any adapters
+ * loaded by module reference or registered directly - all driven through the
+ * adapter contract (docs/adapter-spec.md §4, §5, §12, §15).
  */
 export const createDocket = async (options: CreateDocketOptions = {}): Promise<Docket> =>
   openDocket(await loadConfig(options.projectRoot), options)
@@ -126,16 +133,14 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
     source: string
     definition: unknown
     config: unknown
-    roles?: AdapterRole[] | undefined
-    v1?: true
+    roles?: readonly AdapterRole[] | undefined
+    /** Configured in `.docket.yaml`, by this module. */
+    configured?: string
   }[] = []
 
-  const projectionIds = projectionInstanceIds(resolved.config.projections)
-  for (const [index, { runtime: _runtime, ...config }] of resolved.config.projections.entries()) {
-    // The runtime reference is the docket's, not the projection's (adapter spec §6).
-    const id = projectionIds[index]!
-    const module = V1_PROJECTION_MODULES[config.type]
-    pending.push({ id, source: module, definition: await load(id, module), config, v1: true })
+  // The runtime reference is the docket's, not the adapter's (adapter spec §6).
+  for (const { id, module, roles, config } of resolved.config.adapters) {
+    pending.push({ id, source: module, definition: await load(id, module), config, roles, configured: module })
   }
 
   for (const reference of options.adapters ?? []) {
@@ -155,7 +160,7 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
 
   const ids = new Set<string>()
   const canonical = options.canonical ?? projectCanonicalReader(resolved)
-  const v1Configs: unknown[] = []
+  const fingerprinted: unknown[] = []
   const adapters = pending.map((entry): AdapterSlot => {
     checkId(entry.id)
     if (ids.has(entry.id)) throw new Error(`Adapter id "${entry.id}" is used more than once; instance ids must be unique.`)
@@ -171,11 +176,12 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
         { cause }
       )
     }
-    if (entry.v1) v1Configs.push(config)
-
     const roles = entry.roles ?? ALL_ROLES
     for (const role of roles) {
       if (!ALL_ROLES.includes(role)) throw new Error(`Adapter "${entry.id}" has unknown role "${String(role)}".`)
+    }
+    if (entry.configured !== undefined && roles.includes('projection')) {
+      fingerprinted.push(STANDARD_MODULES.has(entry.configured) ? config : { id: entry.id, module: entry.configured, config })
     }
 
     const services: AdapterServices = {
@@ -196,25 +202,11 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
     }
   })
 
-  return { resolved, adapters, projectionsFingerprint: hashContent(stableStringify(v1Configs)) }
-}
-
-/**
- * The instance id of each v1 projection: its type. Two projections of one
- * type would share a name; number the repeats so their answers stay apart,
- * as `docket search` always has.
- */
-export const projectionInstanceIds = (projections: readonly { type: string }[]): string[] => {
-  const seen = new Map<string, number>()
-  return projections.map(({ type }) => {
-    const count = (seen.get(type) ?? 0) + 1
-    seen.set(type, count)
-    return count === 1 ? type : `${type}#${count}`
-  })
+  return { resolved, adapters, projectionsFingerprint: hashContent(stableStringify(fingerprinted)) }
 }
 
 const checkId = (id: string): void => {
-  if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+  if (typeof id !== 'string' || !ADAPTER_ID_PATTERN.test(id)) {
     throw new Error(`Adapter id "${String(id)}" must start with a letter or digit and use only letters, digits, ".", "_", "#" and "-".`)
   }
 }

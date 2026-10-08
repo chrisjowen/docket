@@ -28,6 +28,12 @@ describe('mem0 adapter', () => {
     )
   })
 
+  it('rejects an unfamiliar field in any mode rather than dropping it', () => {
+    expect(() => mem0.validateConfig({ mode: 'platform', apiKey: 'secret' })).toThrow(/Unrecognized key: "apiKey"/)
+    expect(() => mem0.validateConfig({ mode: 'server', url: 'http://localhost:8888', minscore: 0.2 })).toThrow(/Unrecognized key: "minscore"/)
+    expect(() => mem0.validateConfig({ mode: 'oss', scope: { userId: 'u', user: 'v' } })).toThrow(/Unrecognized key: "user"/)
+  })
+
   it('names itself and its contract major', () => {
     expect(mem0).toMatchObject({ apiVersion: 1, name: 'mem0' })
   })

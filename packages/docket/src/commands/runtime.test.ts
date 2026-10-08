@@ -82,6 +82,23 @@ describe('docket runtime', () => {
     expect((await runtimePlan('vectors-dev', { cwd: root, runner })).adapters).toEqual([])
   })
 
+  it('names a version 2 adapter instance by its id', async () => {
+    await mkdir(join(root, 'infra'), { recursive: true })
+    await writeFile(join(root, 'infra', 'docket-memory.compose.yaml'), 'services: {}\n')
+    await writeFile(
+      join(root, '.docket.yaml'),
+      CONFIG.replace('version: 1', 'version: 2').replace(
+        /projections:[\s\S]*?(?=runtimes:)/,
+        'adapters:\n  - id: dev-graph\n    module: "@docket/adapter-neo4j"\n    runtime: graph-dev\n    config: { uri: "bolt://127.0.0.1:17687" }\n'
+      )
+    )
+    const plan = await runtimePlan('graph-dev', {
+      cwd: root,
+      runner: async () => ({ exitCode: 0, stdout: '{"services":{}}', stderr: '' })
+    })
+    expect(plan.adapters).toEqual(['dev-graph'])
+  })
+
   it('acts only on the runtime asked for', async () => {
     await runtimeStatus('vectors-dev', { cwd: root, runner })
     await runtimeDown('vectors-dev', { cwd: root, runner })

@@ -1,4 +1,3 @@
-import { projectionInstanceIds } from '../adapters/docket.js'
 import type { ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import {
@@ -19,10 +18,8 @@ export interface RuntimeCommandOptions {
 }
 
 /** The adapter instances whose `runtime:` names this group. */
-const adaptersUsing = (resolved: ResolvedConfig, id: string): string[] => {
-  const ids = projectionInstanceIds(resolved.config.projections)
-  return resolved.config.projections.flatMap((projection, index) => (projection.runtime === id ? [ids[index]!] : []))
-}
+const adaptersUsing = (resolved: ResolvedConfig, id: string): string[] =>
+  resolved.config.adapters.flatMap((adapter) => (adapter.runtime === id ? [adapter.id] : []))
 
 /** The configured runtime group `id`, ready to act on. Only the runtime commands open one. */
 const openRuntime = async (id: string, options: RuntimeCommandOptions): Promise<ComposeRuntime> => {

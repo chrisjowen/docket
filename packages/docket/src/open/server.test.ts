@@ -194,7 +194,7 @@ describe('the ask API', () => {
     const answer = await getJson<UiAnswer>('/api/ask?q=checkout')
 
     expect(answer.query).toBe('checkout')
-    expect(answer.sources.map((source) => source.name)).toEqual(['jsonl'])
+    expect(answer.sources.map((source) => source.name)).toEqual(['local'])
     expect(answer.documents.map((document) => document.id).sort()).toEqual([
       'service.orders',
       'team.payments'

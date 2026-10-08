@@ -11,7 +11,7 @@ evidence into a confidence score. The files are the record; indexes, vectors and
 graphs are disposable projections rebuilt from them.
 
 ```text
-.docket.yaml                config: where the case file lives, which projections to feed
+.docket.yaml                config: where the case file lives, which adapters to feed
 .docket/entities.yaml       the ontology: resource types, relationships, evidence sources
 .docket/resources/...       exhibits, one Markdown file per service, team, datasource...
 .docket/decisions/          decisions and why
