@@ -112,8 +112,8 @@ describe('scopeProblem', () => {
     ["MATCH (t:Memory {type: coalesce('team', {scope: $scope})}) RETURN count(t)", /not a plain node/],
     ["MATCH (t:Memory {type: [(u {scope: $scope}) | 'team'][0]}) RETURN count(t)", /not a plain node/],
     ["MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Memory {type: coalesce('team', {scope: $scope})}) } AS n", /not a plain node/],
-    ['MATCH (t:Team)-[r {k: [(u {scope: $scope}) | 1][0]}]-(x) RETURN count(t)', /not a plain relationship/],
-    ['MATCH (t:Team)-[r:REL {k: size([(u {scope: $scope}) | 1])}]->() RETURN count(t)', /not a plain relationship/]
+    ['MATCH (t:Team)-[r {k: [(u {scope: $scope}) | 1][0]}]-(x) RETURN count(t)', /^\[r \{k: \[\(u \{scope: \$scope\}\) \| 1\] is not a plain relationship pattern$/],
+    ['MATCH (t:Team)-[r:REL {k: size([(u {scope: $scope}) | 1])}]->() RETURN count(t)', /^\[r:REL \{k: size\(\[\(u \{scope: \$scope\}\) \| 1\] is not a plain relationship pattern$/]
   ])('rejects a pattern that could read another scope: %s', (query, reason) => {
     expect(scopeProblem(query)).toMatch(reason)
   })

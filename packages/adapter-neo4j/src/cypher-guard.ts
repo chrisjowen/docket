@@ -147,9 +147,10 @@ const uncheckedNode = (code: string): string | undefined => {
   }
   const relationship = new RegExp(RELATIONSHIP, 'y')
   for (const arrow of code.matchAll(/-\s*\[/g)) {
-    relationship.lastIndex = (arrow.index ?? 0) + arrow[0].length - 1
+    const start = (arrow.index ?? 0) + arrow[0].length - 1
+    relationship.lastIndex = start
     if (!relationship.test(code)) {
-      return `${code.slice(relationship.lastIndex, relationship.lastIndex + 40).split(']')[0]}] is not a plain relationship pattern`
+      return `${code.slice(start, start + 40).split(']')[0]}] is not a plain relationship pattern`
     }
   }
   return undefined
