@@ -63,13 +63,13 @@ describe('scopeProblem', () => {
     'MATCH (s:Memory {scope: $scope}) WITH s AS service MATCH (service)-->(x) RETURN x',
     'MATCH p = (a:Memory {scope: $scope})-[*1..3]-(b) RETURN p',
     "MATCH (d:Memory:Deployment {scope: $scope}) WHERE d.title CONTAINS ',' RETURN count(d)",
-    "MATCH (n:Memory) WHERE $scope = n.scope AND (n.type = 'team' OR n.type = 'service') RETURN count(n)",
+    "MATCH (n:Memory) WHERE $scope = n.scope AND n.type = 'team' RETURN count(n)",
     'MATCH (s:Service {scope: $scope}) RETURN s.id AS id UNION MATCH (t:Team) WHERE t.scope = $scope RETURN t.id AS id',
     'MATCH (s:Memory {scope: $scope}) WITH DISTINCT s, count(*) AS n MATCH (s)-->(t) RETURN t, n',
     'MATCH (s:Memory {scope: $scope}) WITH * MATCH (s)-->(t) RETURN t',
     'MATCH (s:Memory {scope: $scope, type: $type}) WHERE (s)-[:USES]->(:Team) RETURN size([(s)-->(t) | t]) AS reach',
     'MATCH (s:Memory {scope: $scope}) WHERE EXISTS { MATCH (s)-->(t:Team) } RETURN COUNT { (s)-->() } AS links',
-    'MATCH (n:Memory {scope: $scope}) WHERE n.rank > 0 AND (n:Service OR n:Library) RETURN (count(n) + 1) * 2 AS score'
+    'MATCH (n:Memory {scope: $scope}) WHERE n:Service OR n:Library RETURN count(n) + 1 AS score'
   ])('accepts a query anchored in scope: %s', (query) => {
     expect(scopeProblem(query)).toBeUndefined()
   })
@@ -90,15 +90,24 @@ describe('scopeProblem', () => {
     ['MATCH (s:Memory {scope: $scope}) WHERE EXISTS { MATCH (t:Team) } RETURN s', /\(t:Team\).* is not bound/],
     ['MATCH (s:Memory {scope: $scope}) WHERE EXISTS { MATCH (s)-->(t) } MATCH (t) RETURN count(t)', /\(t\) is not bound/],
     ["MATCH (t:Team {scope: $scope + '-other'}) RETURN count(t)", /\(t:Team .*\) is not bound/],
-    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Team|Service) } AS teams', /\(t:Team\|Service\) cannot be checked/],
-    ['MATCH (s:Memory {scope: $scope}) RETURN size([(t:Memory|Team) | t.id]) AS ids', /\(t:Memory\|Team\) cannot be checked/],
-    ["MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t WHERE t.type = 'team') } AS n", /\(t WHERE .*cannot be checked/],
-    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:A&B) } AS n', /cannot be checked/],
-    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:!Memory) } AS n', /cannot be checked/],
-    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:%) } AS n', /cannot be checked/],
-    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:`My Team`) } AS n', /cannot be checked/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Team|Service) } AS teams', /\(t:Team\|Service\) is not a plain node/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN size([(t:Memory|Team) | t.id]) AS ids', /\(t:Memory\|Team\) is not a plain node/],
+    ["MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t WHERE t.type = 'team') } AS n", /\(t WHERE .*is not a plain node/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:A&B) } AS n', /not a plain node/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:!Memory) } AS n', /not a plain node/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:%) } AS n', /not a plain node/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:`My Team`) } AS n', /backticked/],
     ['MATCH (s:Memory {scope: $scope}) MATCH (s)((a)-->(b)){1,3}(t) RETURN count(t)', /quantified pattern/],
-    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { ((t:Team)-->(u)) } AS n', /cannot be checked/]
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { ((t:Team)-->(u)) } AS n', /not a plain node/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t IS Team) } AS n', /\(t IS Team\) is not a plain node/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN size([(t IS Team) | t.id]) AS ids', /\(t IS Team\) is not a plain node/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (`t`:Team) } AS n', /backticked/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (/**/t:Team) } AS n', /comment/],
+    ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t /* x */ :Team) } AS n', /comment/],
+    ['MATCH (t:Team) /* WHERE t.scope = $scope AND 1 = 1 */ RETURN count(t)', /comment/],
+    ['MATCH (n:Memory {scope: $scope}) WHERE n.rank > 0 AND (n:Service OR n:Library) RETURN n', /\(n:Service OR n:Library\) is not a plain node/],
+    ['MATCH (n:Memory {scope: $scope}) RETURN (count(n) + 1) * 2 AS score', /not a plain node/],
+    ["MATCH (n:Memory) WHERE $scope = n.scope AND (n.type = 'team' OR n.type = 'service') RETURN count(n)", /not a plain node/]
   ])('rejects a pattern that could read another scope: %s', (query, reason) => {
     expect(scopeProblem(query)).toMatch(reason)
   })
