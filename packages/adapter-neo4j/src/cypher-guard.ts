@@ -72,6 +72,9 @@ const MAP = String.raw`\{\s*(?:\w+\s*:\s*${MAP_VALUE}\s*(?:,\s*\w+\s*:\s*${MAP_V
 /** A node pattern: `(n)`, `(:Label)`, `(n:A:B {scope: $scope})`. */
 const NODE = new RegExp(String.raw`\(\s*([A-Za-z_]\w*)?\s*((?::\s*\w+\s*)*)(${MAP})?\s*\)`, 'g')
 
+/** A relationship's details: `[r:A|B*1..3 {map}]`, with no node or nested value inside. */
+const RELATIONSHIP = String.raw`\[\s*(?:[A-Za-z_]\w*)?\s*(?::\s*\w+(?:\s*\|\s*:?\s*\w+)*)?\s*(?:\*\s*(?:\d+)?\s*(?:\.\.\s*(?:\d+)?)?)?\s*(?:${MAP})?\s*\]`
+
 /** A quantified path or relationship: `{1,3}` or `+`/`*` after a pattern. */
 const QUANTIFIER = /[->)]\s*\{\s*\d|[->]\s*[+*]/
 
@@ -80,7 +83,7 @@ const QUANTIFIER = /[->)]\s*\{\s*\d|[->]\s*[+*]/
  * comprehension or an EXISTS, COUNT or COLLECT subquery: nodes joined by
  * relationships, not following a name the way a function's arguments do.
  */
-const PATTERN = new RegExp(`(?<![\\w$\`])${NODE.source}(?:\\s*<?-(?:\\[[^\\]]*\\])?->?\\s*${NODE.source})*`, 'g')
+const PATTERN = new RegExp(`(?<![\\w$\`])${NODE.source}(?:\\s*<?-(?:${RELATIONSHIP})?->?\\s*${NODE.source})*`, 'g')
 
 /** A property map that pins its node to exactly `$scope`. */
 const SCOPE_PROPERTY = /[{,]\s*scope\s*:\s*\$scope\s*[,}]/
@@ -129,7 +132,8 @@ const scopedByWhere = (where: string): string[] => {
  * it. Every `(` that does not call a function must be a plain
  * `(n:Label {map})` node: a label expression, `IS`, a backticked name, an
  * inline `(n WHERE ...)`, a parenthesised path or a parenthesised condition
- * is refused, as are comments and quantified paths.
+ * is refused, as are comments and quantified paths. Every relationship's
+ * `-[...]` must be plain too: a variable, types, a length and a flat map.
  */
 const uncheckedNode = (code: string): string | undefined => {
   if (/\/\*|\/\/|`/.test(code)) return 'it has a comment or a backticked name'
@@ -140,6 +144,13 @@ const uncheckedNode = (code: string): string | undefined => {
     if (/\w/.test(code[index - 1] ?? '')) continue
     node.lastIndex = index
     if (!node.test(code)) return `${code.slice(index, index + 40).split(')')[0]}) is not a plain node pattern`
+  }
+  const relationship = new RegExp(RELATIONSHIP, 'y')
+  for (const arrow of code.matchAll(/-\s*\[/g)) {
+    relationship.lastIndex = (arrow.index ?? 0) + arrow[0].length - 1
+    if (!relationship.test(code)) {
+      return `${code.slice(relationship.lastIndex, relationship.lastIndex + 40).split(']')[0]}] is not a plain relationship pattern`
+    }
   }
   return undefined
 }

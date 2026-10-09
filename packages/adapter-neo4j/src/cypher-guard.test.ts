@@ -62,6 +62,7 @@ describe('scopeProblem', () => {
     'MATCH (a:Memory {scope: $scope}), (b:Memory {scope: $scope}) RETURN a, b',
     'MATCH (s:Memory {scope: $scope}) WITH s AS service MATCH (service)-->(x) RETURN x',
     'MATCH p = (a:Memory {scope: $scope})-[*1..3]-(b) RETURN p',
+    "MATCH (a:Memory {scope: $scope})<-[r:USES|:DEPENDS_ON {rel: 'uses'}]-(b) WHERE b.sources = ['code'] RETURN a, r, b",
     "MATCH (d:Memory:Deployment {scope: $scope}) WHERE d.title CONTAINS ',' RETURN count(d)",
     "MATCH (n:Memory) WHERE $scope = n.scope AND n.type = 'team' RETURN count(n)",
     'MATCH (s:Service {scope: $scope}) RETURN s.id AS id UNION MATCH (t:Team) WHERE t.scope = $scope RETURN t.id AS id',
@@ -110,7 +111,9 @@ describe('scopeProblem', () => {
     ["MATCH (n:Memory) WHERE $scope = n.scope AND (n.type = 'team' OR n.type = 'service') RETURN count(n)", /not a plain node/],
     ["MATCH (t:Memory {type: coalesce('team', {scope: $scope})}) RETURN count(t)", /not a plain node/],
     ["MATCH (t:Memory {type: [(u {scope: $scope}) | 'team'][0]}) RETURN count(t)", /not a plain node/],
-    ["MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Memory {type: coalesce('team', {scope: $scope})}) } AS n", /not a plain node/]
+    ["MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Memory {type: coalesce('team', {scope: $scope})}) } AS n", /not a plain node/],
+    ['MATCH (t:Team)-[r {k: [(u {scope: $scope}) | 1][0]}]-(x) RETURN count(t)', /not a plain relationship/],
+    ['MATCH (t:Team)-[r:REL {k: size([(u {scope: $scope}) | 1])}]->() RETURN count(t)', /not a plain relationship/]
   ])('rejects a pattern that could read another scope: %s', (query, reason) => {
     expect(scopeProblem(query)).toMatch(reason)
   })
