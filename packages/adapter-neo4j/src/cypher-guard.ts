@@ -64,7 +64,16 @@ const UNION = /\bUNION(?:\s+ALL)?\b/i
 const SCOPE_EQUALITY = /^(?:([A-Za-z_]\w*)\.scope\s*=\s*\$scope|\$scope\s*=\s*([A-Za-z_]\w*)\.scope)$/
 
 /** A node pattern: `(n)`, `(:Label)`, `(n:A:B {scope: $scope})`. */
-const NODE = /\(\s*([A-Za-z_]\w*)?\s*((?::\s*`?\w+`?\s*)*)(\{[^}]*\})?\s*\)/g
+const NODE = /\(\s*([A-Za-z_]\w*)?\s*((?::\s*\w+\s*)*)(\{[^}]*\})?\s*\)/g
+
+/** An opening parenthesis that starts a node or a parenthesised path, not an expression. */
+const NODE_START = /\(\s*(?:\(\s*)?(?:[A-Za-z_]\w*\s*)?(?:[):{]|WHERE\b)/iy
+
+/** A parenthesised label test, `(n:Service OR n:Library)`, which is an expression. */
+const LABEL_TEST = /\(\s*[A-Za-z_]\w*\s*:\s*\w+\s+(?:OR|AND|XOR)\b/iy
+
+/** A quantified path or relationship: `{1,3}` or `+`/`*` after a pattern. */
+const QUANTIFIER = /[->)]\s*\{\s*\d|[->]\s*[+*]/
 
 /**
  * A pattern written as an expression - in a WHERE predicate, a pattern
@@ -128,9 +137,34 @@ const scopedByWhere = (where: string): string[] => {
  * Run before the query, because dropping foreign rows afterwards cannot
  * correct a count or another aggregate taken over them.
  */
+/**
+ * A node the scope check cannot read, so it refuses rather than skip it: a
+ * label expression (`:A|B`, `:!A`, `:%`), a backticked label, an inline
+ * `(n WHERE ...)` or a parenthesised or quantified path. Only plain
+ * `(n:Label {map})` nodes are understood.
+ */
+const uncheckedNode = (code: string): string | undefined => {
+  const quantified = QUANTIFIER.exec(code)
+  if (quantified) return `the quantified pattern near ${code.slice(quantified.index, quantified.index + 20).trim()} cannot be checked`
+  for (let index = code.indexOf('('); index !== -1; index = code.indexOf('(', index + 1)) {
+    if (/[\w$`]/.test(code[index - 1] ?? '')) continue
+    NODE_START.lastIndex = index
+    LABEL_TEST.lastIndex = index
+    if (!NODE_START.test(code) || LABEL_TEST.test(code)) continue
+    const node = new RegExp(NODE.source, 'y')
+    node.lastIndex = index
+    if (!node.test(code)) {
+      return `the node pattern ${code.slice(index, index + 40).split(')')[0]}) cannot be checked`
+    }
+  }
+  return undefined
+}
+
 export const scopeProblem = (cypher: string): string | undefined => {
   const code = withoutStrings(cypher)
   if (!/\$scope\b/.test(code)) return 'it never binds $scope'
+  const unchecked = uncheckedNode(code)
+  if (unchecked) return unchecked
   for (const branch of code.split(UNION)) {
     const problem = branchScopeProblem(branch)
     if (problem) return problem
