@@ -364,7 +364,9 @@ describe.skipIf(!URL)('neo4j projection', () => {
 
     it('answers grouped values as a typed table, keeping each row', async () => {
       const { projection: graph } = await withModel(
-        'MATCH (s:Memory {scope: $scope}) RETURN s.id AS id, s.title AS title, s.evidenceCount AS evidence ORDER BY id'
+        // evidenceCount is written from a JS number, so Neo4j holds a float;
+        // toInteger makes the column a Neo4j Integer, which stays an integer.
+        'MATCH (s:Memory {scope: $scope}) RETURN s.id AS id, s.title AS title, toInteger(s.evidenceCount) AS evidence ORDER BY id'
       )
       const now = new Date()
       const answer = await graph.answer?.({
