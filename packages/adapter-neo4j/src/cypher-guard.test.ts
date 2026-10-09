@@ -89,7 +89,7 @@ describe('scopeProblem', () => {
     ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Team) } AS teams', /\(t:Team\) is not bound/],
     ['MATCH (s:Memory {scope: $scope}) WHERE EXISTS { MATCH (t:Team) } RETURN s', /\(t:Team\).* is not bound/],
     ['MATCH (s:Memory {scope: $scope}) WHERE EXISTS { MATCH (s)-->(t) } MATCH (t) RETURN count(t)', /\(t\) is not bound/],
-    ["MATCH (t:Team {scope: $scope + '-other'}) RETURN count(t)", /\(t:Team .*\) is not bound/],
+    ["MATCH (t:Team {scope: $scope + '-other'}) RETURN count(t)", /\(t:Team .*\) is not a plain node/],
     ['MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Team|Service) } AS teams', /\(t:Team\|Service\) is not a plain node/],
     ['MATCH (s:Memory {scope: $scope}) RETURN size([(t:Memory|Team) | t.id]) AS ids', /\(t:Memory\|Team\) is not a plain node/],
     ["MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t WHERE t.type = 'team') } AS n", /\(t WHERE .*is not a plain node/],
@@ -107,7 +107,10 @@ describe('scopeProblem', () => {
     ['MATCH (t:Team) /* WHERE t.scope = $scope AND 1 = 1 */ RETURN count(t)', /comment/],
     ['MATCH (n:Memory {scope: $scope}) WHERE n.rank > 0 AND (n:Service OR n:Library) RETURN n', /\(n:Service OR n:Library\) is not a plain node/],
     ['MATCH (n:Memory {scope: $scope}) RETURN (count(n) + 1) * 2 AS score', /not a plain node/],
-    ["MATCH (n:Memory) WHERE $scope = n.scope AND (n.type = 'team' OR n.type = 'service') RETURN count(n)", /not a plain node/]
+    ["MATCH (n:Memory) WHERE $scope = n.scope AND (n.type = 'team' OR n.type = 'service') RETURN count(n)", /not a plain node/],
+    ["MATCH (t:Memory {type: coalesce('team', {scope: $scope})}) RETURN count(t)", /not a plain node/],
+    ["MATCH (t:Memory {type: [(u {scope: $scope}) | 'team'][0]}) RETURN count(t)", /not a plain node/],
+    ["MATCH (s:Memory {scope: $scope}) RETURN COUNT { (t:Memory {type: coalesce('team', {scope: $scope})}) } AS n", /not a plain node/]
   ])('rejects a pattern that could read another scope: %s', (query, reason) => {
     expect(scopeProblem(query)).toMatch(reason)
   })

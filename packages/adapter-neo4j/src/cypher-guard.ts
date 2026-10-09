@@ -63,8 +63,14 @@ const UNION = /\bUNION(?:\s+ALL)?\b/i
 /** A whole conjunct `n.scope = $scope` or `$scope = n.scope`. */
 const SCOPE_EQUALITY = /^(?:([A-Za-z_]\w*)\.scope\s*=\s*\$scope|\$scope\s*=\s*([A-Za-z_]\w*)\.scope)$/
 
+/** A value a node's property map may hold: a parameter, a (blanked) string, a number, true, false or null. */
+const MAP_VALUE = String.raw`(?:\$\w+|''|-?\d+(?:\.\d+)?|true|false|null)`
+
+/** A flat property map of `key: value` pairs; nothing nested, so its `}` is its own. */
+const MAP = String.raw`\{\s*(?:\w+\s*:\s*${MAP_VALUE}\s*(?:,\s*\w+\s*:\s*${MAP_VALUE}\s*)*)?\}`
+
 /** A node pattern: `(n)`, `(:Label)`, `(n:A:B {scope: $scope})`. */
-const NODE = /\(\s*([A-Za-z_]\w*)?\s*((?::\s*\w+\s*)*)(\{[^}]*\})?\s*\)/g
+const NODE = new RegExp(String.raw`\(\s*([A-Za-z_]\w*)?\s*((?::\s*\w+\s*)*)(${MAP})?\s*\)`, 'g')
 
 /** A quantified path or relationship: `{1,3}` or `+`/`*` after a pattern. */
 const QUANTIFIER = /[->)]\s*\{\s*\d|[->]\s*[+*]/
