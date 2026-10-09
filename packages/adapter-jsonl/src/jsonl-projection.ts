@@ -3,6 +3,8 @@ import { join, resolve } from 'node:path'
 
 import type { Assessment, EntityInput, EvidenceRecord } from '@docket/contracts'
 import {
+  questionTerms,
+  relevantExcerpt,
   stableStringify,
   writeFileAtomic,
   type EntityProjection,
@@ -36,7 +38,12 @@ export interface DocumentRecord {
   paths: string[]
   content: string
   tags: string[]
+  /** The entity's revision when it was projected, so an answer read from an index behind the files shows. Absent from files written before it was kept. */
+  revision?: string
 }
+
+/** The most of a matched document an answer quotes as its passage. */
+export const PASSAGE_CHARS = 600
 
 /** One line of `nodes.jsonl` (spec §29), with the evidence behind it and the confidence it earns. */
 export interface NodeRecord extends Assessment {
@@ -117,7 +124,8 @@ class JsonlProjection implements EntityProjection {
       path: entity.path,
       paths: [...entity.paths],
       content: entity.content,
-      tags: [...entity.tags]
+      tags: [...entity.tags],
+      revision: entity.revision
     })
 
     // `index.graph: false` suppresses the graph records only (spec §21). The
@@ -173,8 +181,25 @@ class JsonlProjection implements EntityProjection {
     )
   }
 
+  /**
+   * Keyword hits, each quoting the part of its document that matched as a
+   * passage, with the revision it was projected at.
+   */
   async search(query: string, limit: number): Promise<SearchAnswer> {
-    return { hits: lexicalSearch(this.documents.values(), query, limit) }
+    const terms = questionTerms(query)
+    return {
+      hits: lexicalSearch(this.documents.values(), query, limit).map((hit) => {
+        const document = this.documents.get(hit.id)
+        if (!document) return hit
+        const text = relevantExcerpt(document.content.trim() === '' ? document.title : document.content, terms, PASSAGE_CHARS).text
+        return {
+          ...hit,
+          ...(document.revision !== undefined ? { revision: document.revision } : {}),
+          ...(text === '' ? {} : { passage: { text } })
+        }
+      }),
+      note: 'Keyword (BM25) search over titles, ids, tags and bodies'
+    }
   }
 
   async close(): Promise<void> {

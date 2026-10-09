@@ -5,8 +5,10 @@
   import X from '@lucide/svelte/icons/x'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { casebookOf, isDerived, referenceLocation, resolves, STANDING_DETAIL, standingOf } from '$lib/ask/evidence.js'
+  import type { EvidenceState } from '$lib/ask/client.js'
+  import { casebookOf, isDerived, referenceLocation, referenceResolves, STANDING_DETAIL, standingOf } from '$lib/ask/evidence.js'
   import type { AnsweredResult } from '$lib/ask/outcome.js'
+  import type { ReferenceStatus } from '$lib/ask/wire.js'
   import type { UiGraph } from '$lib/types.js'
   import { getWorkspace } from '$lib/workspace.svelte.js'
   import TypeMark from '../type-mark.svelte'
@@ -24,7 +26,31 @@
   const casebook = $derived(casebookOf(graph))
   const byId = $derived(new Map(graph.entities.map((entity) => [entity.id, entity])))
   const byPath = $derived(new Map(graph.entities.flatMap((entity) => entity.paths.map((path) => [path, entity] as const))))
-  const standing = $derived(standingOf(evidence, casebook))
+  const statuses = $derived(result.references?.[evidence.id])
+  const standing = $derived(standingOf(evidence, casebook, statuses))
+
+  const STATUS_NOTE: Record<ReferenceStatus, string> = {
+    resolved: 'On record at this revision.',
+    stale: 'The files hold a newer revision: this came from an index behind them.',
+    unresolved: 'The files do not hold this record in scope.'
+  }
+
+  /** What the files hold at each reference, read when the evidence is opened. */
+  let onRecord = $state.raw<EvidenceState | null>(null)
+  $effect(() => {
+    const references = evidence.canonicalRefs
+    const controller = new AbortController()
+    onRecord = null
+    workspace.client
+      .resolveEvidence(references, controller.signal)
+      .then((state) => {
+        if (!controller.signal.aborted) onRecord = state
+      })
+      .catch(() => {
+        // Aborted because another piece of evidence was opened.
+      })
+    return () => controller.abort()
+  })
   const interpretation = $derived(result.answer.interpretation)
   const coverage = $derived(result.answer.coverage)
   /** The blocks that cite it, so the inspector says where it was used. */
@@ -62,7 +88,8 @@
     {:else}
       <ul class="flex flex-col gap-1.5">
         {#each evidence.canonicalRefs as reference, index (index)}
-          {@const found = resolves(reference, casebook)}
+          {@const found = referenceResolves(evidence, index, casebook, statuses)}
+          {@const resolved = onRecord?.state === 'ready' ? onRecord.references[index] : undefined}
           {@const entity = reference.kind === 'entity' ? byId.get(reference.id) : reference.span ? byPath.get(reference.span.path) : undefined}
           <li class="bg-muted/50 flex flex-col gap-1 rounded-md border px-2.5 py-2 text-xs">
             <span class="flex items-center gap-1.5">
@@ -79,6 +106,20 @@
             {#if reference.span?.startLine !== undefined}
               <span class="text-muted-foreground pl-5">Lines refer to revision {reference.revision}.</span>
             {/if}
+            {#if statuses?.[index]}
+              <span class="text-muted-foreground pl-5">{STATUS_NOTE[statuses[index]]}</span>
+            {/if}
+            {#if resolved?.excerpt}
+              <div class="ml-5 flex flex-col gap-1">
+                <span class="text-muted-foreground">
+                  The files {resolved.status === 'stale' ? 'now say' : 'say'}{resolved.excerpt.path
+                    ? `, ${resolved.excerpt.path}${resolved.excerpt.startLine !== undefined ? `:${resolved.excerpt.startLine}${resolved.excerpt.endLine !== undefined && resolved.excerpt.endLine !== resolved.excerpt.startLine ? `-${resolved.excerpt.endLine}` : ''}` : ''}`
+                    : ''}{resolved.record ? ` @ ${resolved.record.revision}` : ''}:
+                </span>
+                <pre class="bg-background max-h-48 overflow-y-auto rounded border p-2 font-mono text-[11px] whitespace-pre-wrap">{resolved.excerpt.text}</pre>
+                {#if resolved.excerpt.truncated}<span class="text-muted-foreground">Cut short; open the exhibit for the rest.</span>{/if}
+              </div>
+            {/if}
             {#if entity}
               <button type="button" class="hover:bg-muted ml-4 flex items-center gap-1.5 self-start rounded px-1 py-0.5" onclick={() => workspace.select(entity.id)}>
                 <TypeMark type={entity.type} size="sm" />
@@ -90,6 +131,9 @@
           </li>
         {/each}
       </ul>
+      {#if onRecord?.state === 'failed'}
+        <p class="text-muted-foreground text-xs">Could not read the files at these references: {onRecord.message}</p>
+      {/if}
     {/if}
   </section>
 

@@ -1,9 +1,15 @@
-import { ContractError, validateAdapterDescription, validateAdapterStatus, type ConversationTurn } from '@docket/contracts'
+import {
+  ContractError,
+  validateAdapterDescription,
+  validateAdapterStatus,
+  type CanonicalReference,
+  type ConversationTurn
+} from '@docket/contracts'
 
 import type { UiAnswer, UiChatAnswer } from '$lib/types.js'
 import { fromLegacyAnswer, fromLegacyChat, LEGACY_LIMIT } from './legacy.js'
 import { showOutcome, type AskOutcome } from './outcome.js'
-import type { AdapterInstance, AdaptersResponse, AskBody } from './wire.js'
+import type { AdapterInstance, AdaptersResponse, AskBody, EvidenceResponse, ResolvedReference } from './wire.js'
 
 /*
  * The typed client for the coordinator's API. `POST /api/ask` is tried first;
@@ -27,9 +33,19 @@ export type AdaptersState =
   | { state: 'unavailable'; message: string }
   | { state: 'failed'; message: string }
 
+/** What `POST /api/evidence` gave: references checked against the files, a server without it, or a failure. */
+export type EvidenceState =
+  | { state: 'ready'; references: ResolvedReference[] }
+  | { state: 'unavailable' }
+  | { state: 'failed'; message: string }
+
 export interface AskClient {
   ask(options: AskOptions): Promise<AskOutcome>
   adapters(signal?: AbortSignal): Promise<AdaptersState>
+  /** Asks the server to stop answering a question; aborting its request does too. Best effort. */
+  cancel(requestId: string): Promise<void>
+  /** Resolves one piece of evidence's references against the files as they stand, for the inspector. */
+  resolveEvidence(references: readonly CanonicalReference[], signal?: AbortSignal): Promise<EvidenceState>
 }
 
 /** The server has no such route: a status that means "not built yet", not "broken". */
@@ -127,6 +143,37 @@ export const createAskClient = (fetcher: typeof fetch = (...args) => fetch(...ar
       coordinator = true
       if (!response.ok) throw await errorOf(response)
       return showOutcome(await response.json(), 'coordinator')
+    },
+
+    async cancel(requestId) {
+      if (coordinator !== true) return
+      try {
+        await fetcher(`/api/ask/${encodeURIComponent(requestId)}`, { method: 'DELETE' })
+      } catch {
+        // The question is abandoned either way: its answer is never shown.
+      }
+    },
+
+    async resolveEvidence(references, signal) {
+      if (references.length === 0) return { state: 'ready', references: [] }
+      let response: Response
+      try {
+        response = await fetcher('/api/evidence', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ references }),
+          signal: signal ?? null
+        })
+      } catch (cause) {
+        if (signal?.aborted) throw cause
+        return { state: 'failed', message: cause instanceof Error ? cause.message : String(cause) }
+      }
+      if (missing(response.status)) return { state: 'unavailable' }
+      if (!response.ok) return { state: 'failed', message: (await errorOf(response)).message }
+      const body = (await response.json()) as Partial<EvidenceResponse>
+      return Array.isArray(body.references)
+        ? { state: 'ready', references: body.references }
+        : { state: 'failed', message: 'The server answered, but not with resolved references.' }
     },
 
     async adapters(signal) {

@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline/promises'
 
 import { Command, Option } from 'commander'
 import { adapterAdd, adaptersList, displayCommand, type AdapterAddPlan } from './commands/adapter.js'
+import { askCommand, formatAdapters, formatAnswer } from './commands/ask.js'
 import { configMigrate } from './commands/config.js'
 import { init } from './commands/init.js'
 import { open } from './commands/open.js'
@@ -18,6 +19,8 @@ import { setup, type StepOutcome } from './commands/setup.js'
 import { failureOf, sync, SyncError, type SyncResult } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
+import { DEFAULT_ASK_RESULTS } from './query/ask.js'
+import { adaptersStatus } from './query/status.js'
 import { confidenceModel, observationConfidence } from './evidence/confidence.js'
 import { terminalPrompter } from './install/answers.js'
 import { PROVIDERS } from './install/providers.js'
@@ -272,7 +275,7 @@ program
 program
   .command('search')
   .argument('<query...>', 'what to look for')
-  .description('Ask every searchable projection, and show what each found')
+  .description('Ask every adapter enabled for query, and show the documents each found (docket ask shows their full answers)')
   .option('-n, --limit <count>', 'hits asked of each projection', String(DEFAULT_SEARCH_LIMIT))
   .option('--json', 'print the full result as JSON')
   .action(async (words: string[], options: { limit: string; json?: boolean }) => {
@@ -303,6 +306,50 @@ program
     }
     report(result.diagnostics)
   })
+
+program
+  .command('ask')
+  .argument('<question...>', 'what to ask')
+  .description('Ask the adapters enabled for query, through the shared coordinator, and show each answer with its evidence')
+  .option('--adapter <id>', 'ask only this adapter instance (repeatable)', collect, [])
+  .option('-n, --limit <count>', 'results asked of each adapter', String(DEFAULT_ASK_RESULTS))
+  .option('--json', 'print the coordinated answer as JSON: blocks, evidence and diagnostics')
+  .option('--synthesis', 'summarize the results with a model (the default, except with --json)')
+  .option('--no-synthesis', 'show the results without a summary')
+  .option('--timezone <zone>', 'IANA time zone relative times are read in (default: this machine\'s)')
+  .action(
+    async (
+      words: string[],
+      options: { adapter: string[]; limit: string; json?: boolean; synthesis?: boolean; timezone?: string }
+    ) => {
+      const limit = Number.parseInt(options.limit, 10)
+      if (!Number.isInteger(limit) || limit < 1) {
+        throw new Error(`--limit must be a positive whole number, got "${options.limit}"`)
+      }
+      // JSON is for programs reading the results; a summary there is asked for, not assumed.
+      const synthesis = options.synthesis ?? (options.json ? false : undefined)
+      const controller = new AbortController()
+      const stop = (): void => controller.abort()
+      process.once('SIGINT', stop)
+      try {
+        const answer = await askCommand(words.join(' '), {
+          adapters: options.adapter.length > 0 ? options.adapter : undefined,
+          maxResults: limit,
+          synthesis,
+          timezone: options.timezone,
+          signal: controller.signal
+        })
+        if (options.json) console.log(JSON.stringify(answer, null, 2))
+        else console.log(formatAnswer(answer).join('\n'))
+        for (const diagnostic of answer.diagnostics) {
+          console.error(`${diagnostic.severity === 'error' ? 'ERROR' : diagnostic.severity === 'warning' ? 'WARN ' : 'NOTE '} ${diagnostic.code}: ${diagnostic.message}`)
+        }
+        if (answer.results.length > 0 && answer.results.every((result) => result.state === 'failed')) process.exitCode = 1
+      } finally {
+        process.off('SIGINT', stop)
+      }
+    }
+  )
 
 program
   .command('open')
@@ -590,6 +637,20 @@ adaptersCommand
     const providerWidth = widest(result.providers.map((provider) => provider.name))
     for (const provider of result.providers) console.log(`  ${pad(provider.name, providerWidth)}  ${provider.summary}`)
     if (result.adapters.some((adapter) => adapter.problem)) process.exitCode = 1
+  })
+
+adaptersCommand
+  .command('status')
+  .description('Connect to each adapter instance and report its health and how far its index lags the files; starts nothing')
+  .option('--json', 'print the status as JSON')
+  .action(async (options: { json?: boolean }) => {
+    const response = await adaptersStatus(process.cwd())
+    if (options.json) console.log(JSON.stringify(response, null, 2))
+    else console.log(formatAdapters(response).join('\n'))
+    for (const diagnostic of response.diagnostics) {
+      console.error(`${diagnostic.severity === 'error' ? 'ERROR' : 'WARN '} ${diagnostic.code}: ${diagnostic.message}`)
+    }
+    if (response.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) process.exitCode = 1
   })
 
 const configCommand = program

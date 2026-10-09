@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -69,7 +69,8 @@ describe('jsonl projection', () => {
         path: '.docket/resources/agent.research-assistant.md',
         paths: ['.docket/resources/agent.research-assistant.md'],
         content: 'The Research Assistant performs research...',
-        tags: ['research', 'agents']
+        tags: ['research', 'agents'],
+        revision: 'sha256:agent.research-assistant'
       }
     ])
     expect(await lines(outputDir, NODES_FILENAME)).toEqual([
@@ -271,6 +272,46 @@ describe('jsonl projection', () => {
         evidenceCount: 2,
         sources: ['code', 'manifest']
       }
+    ])
+  })
+
+  it('answers a search with the part of each document that matched, at the revision it was projected', async () => {
+    await projection.upsert(
+      makeDocument({
+        id: 'decision.postgres',
+        type: 'decision',
+        title: 'Keep order state in Postgres',
+        revision: 'sha256:pg',
+        content: 'We compared stores.\n\nOrder state lives in Postgres for its transactions.\n\nReviewed yearly.'
+      })
+    )
+    await projection.upsert(team)
+
+    const answer = await projection.search?.('postgres transactions', 5)
+
+    expect(answer?.hits).toEqual([
+      {
+        id: 'decision.postgres',
+        score: expect.any(Number),
+        revision: 'sha256:pg',
+        passage: { text: expect.stringContaining('Order state lives in Postgres for its transactions.') }
+      }
+    ])
+    expect(answer?.note).toContain('BM25')
+  })
+
+  it('answers from records written before revisions were kept, without one', async () => {
+    await mkdir(outputDir, { recursive: true })
+    await writeFile(
+      join(outputDir, DOCUMENTS_FILENAME),
+      `${JSON.stringify({ id: 'team.research-platform', type: 'team', title: 'Research Platform', path: 'x.md', paths: ['x.md'], content: '', tags: [] })}\n`,
+      'utf8'
+    )
+    const reloaded = createJsonlProjection({ type: 'jsonl', output: OUTPUT })
+    await reloaded.init?.({ projectRoot: join(outputDir, '..', '..') })
+
+    expect((await reloaded.search?.('research platform', 5))?.hits).toEqual([
+      { id: 'team.research-platform', score: expect.any(Number), passage: { text: 'Research Platform' } }
     ])
   })
 })

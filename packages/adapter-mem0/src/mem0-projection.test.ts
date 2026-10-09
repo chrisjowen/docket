@@ -179,7 +179,8 @@ describe('mem0 projection', () => {
       hits: [
         { id: 'decision.minio', score: 0.8 },
         { id: 'service.orders', score: 0.6 }
-      ]
+      ],
+      note: expect.stringContaining('mem0')
     })
     expect(backend.lastSearch).toEqual({ query: 'uploads', limit: 5 })
   })
@@ -193,8 +194,30 @@ describe('mem0 projection', () => {
     ]
 
     expect(await projection.search?.('orders', 5)).toEqual({
-      hits: [{ id: 'service.orders', score: 0.7 }]
+      hits: [{ id: 'service.orders', score: 0.7 }],
+      note: expect.any(String)
     })
+  })
+
+  it('quotes each memory it matched, with the revision it was stored at', async () => {
+    const { projection, backend } = await setup()
+    backend.searchResults = [
+      {
+        id: 'mem-7',
+        score: 0.9,
+        memory: '# Orders\nservice service.orders\n',
+        metadata: { [DOCUMENT_ID_KEY]: 'service.orders', memory_hash: 'sha256:orders' }
+      }
+    ]
+
+    expect((await projection.search?.('orders', 5))?.hits).toEqual([
+      {
+        id: 'service.orders',
+        score: 0.9,
+        revision: 'sha256:orders',
+        passage: { text: '# Orders\nservice service.orders\n', nativeId: 'mem-7' }
+      }
+    ])
   })
 
   it('renders a document without body, links or tags', () => {

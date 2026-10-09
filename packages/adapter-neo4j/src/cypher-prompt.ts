@@ -15,6 +15,9 @@ Rules:
 - Answer with only the query: no explanation, no code fences.
 - Every node pattern must carry {scope: $scope}, e.g. (s:Memory:Service {scope: $scope}).
 - Use only MATCH, OPTIONAL MATCH, WHERE, WITH, UNWIND, RETURN, ORDER BY and LIMIT.
+- Write each node as plain (n:Label {scope: $scope}): no label expressions (:A|B, IS), no WHERE inside a node,
+  no backticks, no comments, no parenthesised or quantified paths.
+- Never wrap WHERE conditions in parentheses: chain them with AND, or with OR alone.
 - Return whole nodes and relationships (RETURN s, r, e), not just their properties.
 - Nodes with stub = true are links to documents that do not exist yet; leave them out unless asked.
 - Labels and relationship types are case-sensitive: use them exactly as the schema lists them.

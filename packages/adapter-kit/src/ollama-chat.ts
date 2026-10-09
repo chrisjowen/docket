@@ -22,17 +22,18 @@ export interface OllamaChatConfig {
   timeoutMs: number
 }
 
-/** Sends a prompt, returns the model's reply text. */
-export type Chat = (prompt: ChatPrompt) => Promise<string>
+/** Sends a prompt, returns the model's reply text. Aborting `signal` gives up on the reply. */
+export type Chat = (prompt: ChatPrompt, options?: { signal?: AbortSignal | undefined }) => Promise<string>
 
 /** A local Ollama model, at temperature 0 so the same question reads the same way twice. */
 export const ollamaChat =
   (config: OllamaChatConfig, fetchImpl: typeof fetch = fetch): Chat =>
-  async (prompt) => {
+  async (prompt, options = {}) => {
+    const timeout = AbortSignal.timeout(config.timeoutMs)
     const response = await fetchImpl(`${config.url.replace(/\/+$/, '')}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(config.timeoutMs),
+      signal: options.signal ? AbortSignal.any([timeout, options.signal]) : timeout,
       body: JSON.stringify({
         model: config.model,
         stream: false,

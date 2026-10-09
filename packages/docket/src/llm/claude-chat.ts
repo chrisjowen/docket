@@ -24,8 +24,12 @@ export class ClaudeNotFoundError extends Error {
  */
 export const claudeChat =
   (config: ClaudeChatConfig): Chat =>
-  (prompt) =>
+  (prompt, options = {}) =>
     new Promise((done, fail) => {
+      if (options.signal?.aborted) {
+        fail(options.signal.reason instanceof Error ? options.signal.reason : new Error('claude was not asked: the question was cancelled'))
+        return
+      }
       const args = [
         '-p',
         '--output-format',
@@ -47,8 +51,15 @@ export const claudeChat =
         if (settled) return
         settled = true
         clearTimeout(timer)
+        options.signal?.removeEventListener('abort', onAbort)
         outcome()
       }
+      // A cancelled question stops the model too, rather than leaving it to finish for nobody.
+      const onAbort = (): void => {
+        child.kill('SIGTERM')
+        settle(() => fail(new Error('claude was stopped: the question was cancelled')))
+      }
+      options.signal?.addEventListener('abort', onAbort, { once: true })
       child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
       child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
       // Given up on at once: anything it started may hold its output open long after.

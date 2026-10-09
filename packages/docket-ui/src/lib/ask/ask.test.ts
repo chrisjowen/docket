@@ -179,6 +179,47 @@ describe('createAskClient', () => {
     expect(await client.adapters()).toMatchObject({ state: 'unavailable' })
   })
 
+  it('cancels a question by its request id, once the coordinator has answered before', async () => {
+    const calls: string[] = []
+    const client = createAskClient(async (url, init) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(url)}`)
+      return reply(200, FIXTURE_ANSWER)
+    })
+    await client.cancel('before-any-question')
+    await client.ask({ question: 'orders', synthesis: false })
+    await client.cancel('r 1')
+    expect(calls).toEqual(['POST /api/ask', 'DELETE /api/ask/r%201'])
+  })
+
+  it('resolves evidence references through the server, and says when it cannot', async () => {
+    const references = [{ kind: 'entity' as const, id: 'service.orders' }]
+    const resolved = [{ reference: references[0], status: 'resolved', excerpt: { text: 'Takes orders.', truncated: false } }]
+    let body: unknown
+    const client = createAskClient(async (_url, init) => {
+      body = JSON.parse(String(init?.body))
+      return reply(200, { references: resolved })
+    })
+    expect(await client.resolveEvidence(references)).toEqual({ state: 'ready', references: resolved })
+    expect(body).toEqual({ references })
+    expect(await createAskClient(async () => new Response(null, { status: 404 })).resolveEvidence(references)).toEqual({ state: 'unavailable' })
+    expect(await client.resolveEvidence([])).toEqual({ state: 'ready', references: [] })
+  })
+
+  it('keeps the coordinator\'s reference statuses and a broken answer\'s issues', () => {
+    const outcome = showOutcome(
+      {
+        ...FIXTURE_ANSWER,
+        results: [
+          { ...FIXTURE_ANSWER.results[0], references: { 'local:ev-decision': ['stale'] } },
+          { adapter: 'bad', state: 'failed', error: { code: 'invalid-answer', message: 'broke it' }, issues: ['blocks.0.id: required'] }
+        ]
+      },
+      'coordinator'
+    )
+    expect(answered(outcome.results[0]).references).toEqual({ 'local:ev-decision': ['stale'] })
+    expect(outcome.results[1]).toMatchObject({ state: 'failed', issues: ['blocks.0.id: required'] })
+  })
+
   it('keeps adapter status only when it passes the contract', async () => {
     const response = readAdapters({
       ...FIXTURE_ADAPTERS,
@@ -201,6 +242,13 @@ describe('evidence standing', () => {
     if (!item) throw new Error(`no ${id}`)
     return standingOf(item.evidence, casebook)
   }
+
+  it('trusts the coordinator\'s check of a reference over the loaded casebook', () => {
+    const item = index.get('local:ev-decision')
+    if (!item) throw new Error('no local:ev-decision')
+    expect(standingOf(item.evidence, casebook, ['stale'])).toBe('unresolved')
+    expect(standingOf(item.evidence, casebookOf(null), ['resolved'])).toBe('canonical')
+  })
 
   it('tells canonical evidence from derived, and resolved from unresolved', () => {
     expect(standing('local:ev-decision')).toBe('canonical')

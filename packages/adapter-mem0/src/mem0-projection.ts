@@ -148,7 +148,9 @@ class Mem0Projection implements EntityProjection {
 
   /**
    * mem0's own ranking, mapped back to document ids. Memories without our id
-   * metadata were not projected from `.docket/` and are left out.
+   * metadata were not projected from `.docket/` and are left out. Each hit
+   * quotes the memory mem0 matched - stored verbatim, so it is the canonical
+   * text as of the revision it carries.
    */
   async search(query: string, limit: number): Promise<SearchAnswer> {
     const hits: SearchHit[] = []
@@ -157,9 +159,17 @@ class Mem0Projection implements EntityProjection {
       const id = memory.metadata?.[DOCUMENT_ID_KEY]
       if (typeof id !== 'string' || seen.has(id)) continue
       seen.add(id)
-      hits.push({ id, ...(memory.score !== undefined ? { score: memory.score } : {}) })
+      const revision = memory.metadata?.memory_hash
+      hits.push({
+        id,
+        ...(memory.score !== undefined ? { score: memory.score } : {}),
+        ...(typeof revision === 'string' ? { revision } : {}),
+        ...(typeof memory.memory === 'string' && memory.memory.trim() !== ''
+          ? { passage: { text: memory.memory, nativeId: memory.id } }
+          : {})
+      })
     }
-    return { hits }
+    return { hits, note: 'mem0 semantic search over one verbatim memory per entity' }
   }
 
   private async ownership(): Promise<Map<string, string[]>> {

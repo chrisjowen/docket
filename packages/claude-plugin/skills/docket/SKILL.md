@@ -33,6 +33,20 @@ Use search first when you need to know how the system works, who owns
 something, or whether a resource already exists. Grep `.docket/` only when
 search finds nothing, or to confirm an exact `id` is unused.
 
+For counts, lists and anything a graph or recall engine answers better than
+a list of hits, ask the adapters directly:
+
+```bash
+docket ask --json "how many services depend on the ledger?"
+```
+
+Each adapter's part keeps its own blocks - a `metric` or `table` is a count or
+rows the engine computed, not documents - with `coverage.mode` saying whether
+it covered `exhaustive`ly or is a `top-k` sample (never a count), and
+`evidence` citing canonical references whose status (`resolved`, `stale`,
+`unresolved`) is under `references`. Treat `derived-fact` evidence as an
+engine's computation, and read the canonical file before relying on it.
+
 When what you then read in the code, config or infrastructure confirms or
 contradicts a hit, or shows something search did not find, record it with the
 `remember` skill - you do not need to be asked.

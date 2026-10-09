@@ -1,5 +1,6 @@
 import type {
   Driver,
+  Integer,
   ManagedTransaction,
   Node,
   Path,
@@ -7,10 +8,13 @@ import type {
   Relationship
 } from 'neo4j-driver'
 
-import type { EntityInput } from '@docket/contracts'
+import type { AdapterAnswer, AskRequest, Diagnostic, EntityInput, ResultKind } from '@docket/contracts'
 import {
   checkoutScope,
   ollamaChat,
+  questionTerms,
+  relevantExcerpt,
+  searchAnswer,
   type Chat,
   type EntityProjection,
   type ProjectionContext,
@@ -20,7 +24,7 @@ import {
 
 import type { Neo4jConfig } from './config.js'
 import type { GraphSchema } from './cypher-prompt.js'
-import { cypherSearch, type CypherPort } from './cypher-search.js'
+import { cypherAnswer, cypherSearch, type CypherPort } from './cypher-search.js'
 import {
   describeNeighbours,
   fulltextQuery,
@@ -36,6 +40,8 @@ const FULLTEXT_INDEX = 'memory_text'
 const CYPHER_TIMEOUT_MS = 10_000
 /** Lucene's English analyzer: drops stop words and stems, so `ordering` finds `orders`. */
 const FULLTEXT_ANALYZER = 'english'
+/** The most of a matched node's body a full-text answer quotes as its passage. */
+const PASSAGE_CHARS = 600
 
 /**
  * neo4j-driver is an optional dependency: only repositories that configure a
@@ -70,6 +76,7 @@ const isOwnLabel = (label: string): boolean => label !== 'Memory' && /^[A-Za-z][
  */
 class Neo4jProjection implements EntityProjection {
   readonly name = 'neo4j'
+  readonly resultKinds: readonly ResultKind[] = ['entities', 'passages', 'table', 'metric', 'graph']
 
   private driver: Driver | null = null
   private neo4j: Neo4jApi | null = null
@@ -183,8 +190,43 @@ class Neo4jProjection implements EntityProjection {
   }
 
   /**
+   * With `cypher` configured, the model writes a query from the question and
+   * the rows are the answer, kept as the values they are: a count is a
+   * metric, a list a typed table, relationships a graph (docs/adapter-spec.md
+   * §9, §15 step 5). When it fails or finds nothing - or without `cypher` -
+   * the answer is full-text search, saying why.
+   */
+  async answer(request: AskRequest): Promise<AdapterAnswer> {
+    const remaining = Date.parse(request.budget.deadline) - Date.now()
+    if (!(remaining > 0)) throw new Error('neo4j adapter: the question\'s deadline has already passed')
+    const timeoutMs = Math.min(remaining, CYPHER_TIMEOUT_MS)
+    const diagnostics: Diagnostic[] = []
+    if (this.chat) {
+      let reason: string
+      try {
+        const { run, answer } = await cypherAnswer(this.cypherPort(), this.chat, request, {
+          writtenBy: this.config.cypher ? `Ollama ${this.config.cypher.model}` : 'a model',
+          timeoutMs
+        })
+        if (run.records.length > 0) return answer
+        reason = `The Cypher query found nothing: ${run.cypher}`
+      } catch (cause) {
+        reason = `The Cypher query failed: ${cause instanceof Error ? cause.message : String(cause)}`
+      }
+      diagnostics.push({ severity: 'info', code: 'cypher-fallback', message: `${reason}\nAnswered with full-text search instead.` })
+    }
+    const answer = searchAnswer({ hits: await this.fulltextSearch(request.question, request.budget.maxResults) }, request, {
+      description: `Neo4j full-text search (English analyzer) over titles, bodies, ids and tags in scope "${this.scope}"`,
+      assumptions: ['Ranked by Lucene relevance: the best matches, not every match, and never a count.'],
+      nativeQuery: fulltextQuery(request.question)
+    })
+    return { ...answer, diagnostics: [...diagnostics, ...answer.diagnostics] }
+  }
+
+  /**
    * Full-text matches, each with its links in `detail` - the neighbourhood is
-   * what a graph adds to a search. Linked documents are not answers of their
+   * what a graph adds to a search - the part of its body that matched, and the
+   * revision it was projected at. Linked documents are not answers of their
    * own: the best-connected ones would otherwise come back for every query.
    */
   private async fulltextSearch(query: string, limit: number): Promise<SearchHit[]> {
@@ -194,15 +236,25 @@ class Neo4jProjection implements EntityProjection {
     const matches = await this.run(
       `CALL db.index.fulltext.queryNodes('${FULLTEXT_INDEX}', $lucene) YIELD node, score
        WHERE node.scope = $scope AND node.stub = false
-       RETURN node.id AS id, score ORDER BY score DESC, id LIMIT $limit`,
+       RETURN node.id AS id, node.hash AS hash, node.title AS title, node.content AS content, score
+       ORDER BY score DESC, id LIMIT $limit`,
       { lucene, scope: this.scope, limit: this.requireNeo4j().int(limit) }
     )
 
+    const terms = questionTerms(query)
     const hits: SearchHit[] = []
     for (const match of matches) {
       const id = match.id as string
       const detail = describeNeighbours(await this.neighbours(id))
-      hits.push({ id, score: match.score as number, ...(detail ? { detail } : {}) })
+      const body = typeof match.content === 'string' && match.content.trim() !== '' ? match.content : String(match.title ?? '')
+      const passage = relevantExcerpt(body, terms, PASSAGE_CHARS).text
+      hits.push({
+        id,
+        score: match.score as number,
+        ...(detail ? { detail } : {}),
+        ...(typeof match.hash === 'string' ? { revision: match.hash } : {}),
+        ...(passage ? { passage: { text: passage } } : {})
+      })
     }
     return hits
   }
@@ -212,28 +264,26 @@ class Neo4jProjection implements EntityProjection {
     return {
       scope: this.scope,
       schema: () => this.schema(),
-      read: async (cypher) => {
+      read: async (cypher, timeoutMs = CYPHER_TIMEOUT_MS) => {
         const session = this.requireDriver().session(this.sessionConfig())
         try {
           const result = await session.executeRead((tx) => tx.run(cypher, { scope: this.scope }), {
-            timeout: CYPHER_TIMEOUT_MS
+            timeout: timeoutMs
           })
           return result.records as Neo4jRecord[]
         } finally {
           await session.close()
         }
       },
-      documentIds: async (ids) => {
-        if (ids.length === 0) return new Set()
+      documents: async (ids) => {
+        if (ids.length === 0) return new Map()
         const rows = await this.run(
-          `MATCH (n:Memory {scope: $scope}) WHERE n.id IN $ids AND n.stub = false RETURN n.id AS id`,
+          `MATCH (n:Memory {scope: $scope}) WHERE n.id IN $ids AND n.stub = false RETURN n.id AS id, n.hash AS hash`,
           { scope: this.scope, ids }
         )
-        return new Set(rows.map((row) => row.id as string))
+        return new Map(rows.map((row) => [row.id as string, typeof row.hash === 'string' ? row.hash : undefined]))
       },
-      isNode: (value): value is Node => neo4j.isNode(value as object),
-      isRelationship: (value): value is Relationship => neo4j.isRelationship(value as object),
-      isPath: (value): value is Path => neo4j.isPath(value as object)
+      ...neo4jValues(neo4j)
     }
   }
 
@@ -374,6 +424,22 @@ class Neo4jProjection implements EntityProjection {
     return this.neo4j
   }
 }
+
+/** How the driver's own values are told apart: the type guards Cypher answers read rows with. */
+export const neo4jValues = (
+  neo4j: Pick<Neo4jApi, 'isNode' | 'isRelationship' | 'isPath' | 'isInt' | 'isDate' | 'isDateTime' | 'isLocalDateTime'>
+): Pick<CypherPort, 'isNode' | 'isRelationship' | 'isPath' | 'isInteger' | 'temporal'> => ({
+  isNode: (value): value is Node => typeof value === 'object' && value !== null && neo4j.isNode(value),
+  isRelationship: (value): value is Relationship => typeof value === 'object' && value !== null && neo4j.isRelationship(value),
+  isPath: (value): value is Path => typeof value === 'object' && value !== null && neo4j.isPath(value),
+  isInteger: (value): value is Integer => neo4j.isInt(value),
+  temporal: (value) => {
+    if (typeof value !== 'object' || value === null) return undefined
+    if (neo4j.isDate(value)) return { type: 'date', text: value.toString() }
+    if (neo4j.isDateTime(value) || neo4j.isLocalDateTime(value)) return { type: 'datetime', text: value.toString() }
+    return undefined
+  }
+})
 
 export interface Neo4jProjectionDependencies {
   /** Replaces the configured model - for tests. */

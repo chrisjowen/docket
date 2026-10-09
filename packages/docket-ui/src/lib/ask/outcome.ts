@@ -7,7 +7,7 @@ import {
   type RetrievedEvidence
 } from '@docket/contracts'
 
-import type { AdapterResult, CoordinatedAnswer, Synthesis, SynthesisNotice } from './wire.js'
+import type { AdapterFreshness, AdapterResult, CoordinatedAnswer, ReferenceStatus, Synthesis, SynthesisNotice } from './wire.js'
 
 /*
  * What the Ask workspace draws: a coordinated answer with every adapter's part
@@ -37,6 +37,9 @@ export interface AnsweredResult {
   blocks: ShownBlock[]
   evidence: Map<string, RetrievedEvidence>
   durationMs?: number
+  /** For each evidence id, how each of its references stood against the files, as the coordinator checked them. */
+  references?: Record<string, ReferenceStatus[]>
+  freshness?: AdapterFreshness
 }
 
 export interface FailedResult {
@@ -86,7 +89,12 @@ const unknownBlock = (value: unknown, index: number): UnknownBlock => {
  * structured fallback - the contract's union cannot know them - and the rest
  * must pass the contract validators in full.
  */
-export const showAnswer = (adapter: string, value: unknown, durationMs?: number): ShownResult => {
+export const showAnswer = (
+  adapter: string,
+  value: unknown,
+  durationMs?: number,
+  checked: Pick<AnsweredResult, 'references' | 'freshness'> = {}
+): ShownResult => {
   const timing = durationMs === undefined ? {} : { durationMs }
   const blocks = isObject(value) && Array.isArray(value.blocks) ? (value.blocks as unknown[]) : null
   /** Where each block the validator sees sat in the adapter's own list. */
@@ -138,17 +146,23 @@ export const showAnswer = (adapter: string, value: unknown, durationMs?: number)
     answer,
     blocks: shown,
     evidence: new Map(answer.evidence.map((item) => [item.id, item])),
-    ...timing
+    ...timing,
+    ...(isObject(checked.references) ? { references: checked.references } : {}),
+    ...(isObject(checked.freshness) ? { freshness: checked.freshness } : {})
   }
 }
 
 const showResult = (result: AdapterResult): ShownResult =>
   result.state === 'answered'
-    ? showAnswer(result.adapter, result.answer, result.durationMs)
+    ? showAnswer(result.adapter, result.answer, result.durationMs, {
+        ...(result.references ? { references: result.references } : {}),
+        ...(result.freshness ? { freshness: result.freshness } : {})
+      })
     : {
         adapter: result.adapter,
         state: 'failed',
         error: result.error,
+        ...(Array.isArray(result.issues) ? { issues: result.issues.filter((issue): issue is string => typeof issue === 'string') } : {}),
         ...(result.durationMs === undefined ? {} : { durationMs: result.durationMs })
       }
 

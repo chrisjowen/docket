@@ -11,6 +11,8 @@ export interface Mem0Scope {
 
 export interface StoredMemory {
   id: string
+  /** The memory's text, as mem0 returns it. */
+  memory?: string
   metadata?: Record<string, unknown> | null
   /** Similarity to the query, on search results only. */
   score?: number

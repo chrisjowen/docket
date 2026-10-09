@@ -160,6 +160,7 @@ at its canonical file:
 
 ```bash
 docket search who owns checkout
+docket ask "how many services depend on the ledger?"
 docket ontology show service    # a service's attributes, links and what each source is worth
 ```
 
@@ -237,7 +238,12 @@ docket sync --adapter <id>  # sync only that adapter instance (repeatable)
 docket rebuild              # reset and reproject everything
 docket rebuild --adapter <id>  # reset and reproject only that instance, in its own namespace
 docket watch                # reconcile continuously as files change
-docket search <query...>    # ask every projection that can search
+docket ask <question...>    # ask the adapters through the coordinator: each answer with its evidence, and a summary
+docket ask --json <question...>  # the coordinated answer as JSON: blocks, evidence, diagnostics (no summary unless --synthesis)
+docket ask --adapter <id> --no-synthesis <question...>  # one adapter (repeatable), without a summary
+docket search <query...>    # the documents each adapter found: ask's compatibility view
+docket adapters list        # the configured adapter instances, without connecting to any
+docket adapters status      # each instance's health and how far its index lags the files (--json)
 docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
@@ -288,15 +294,16 @@ API never changes the canonical files; its one write is chat's answer cache.
   tables, timelines, graphs - with how the adapter read the question, how much
   it covered, and the evidence behind each result, which opens in the
   inspector beside it. One adapter failing leaves the others' answers in
-  place, and counts that disagree are shown side by side. Until docket serves
-  its adapter coordinator, Ask answers through `docket search` - the same
-  search agents use - with the relationship paths that join what it found;
-  "Show on the board" puts the results, and only them, on the graph. It
-  answers from the projections, so run `docket sync` first; the UI says when
-  the index is behind the files.
+  place, and counts that disagree are shown side by side. Ask goes through
+  the same coordinator as `docket ask` (see [Asking questions](#asking-questions-docket-ask)),
+  with the relationship paths that join what the adapters found; "Show on
+  the board" puts the results, and only them, on the graph. Clicking evidence
+  opens it with what the files hold at its reference, read when you click.
+  Adapters answer from their projections, so run `docket sync` first; the UI
+  says when an adapter is behind the files.
 - **Adapters** - each configured adapter's roles, connection health and how
-  far its index lags the files, once docket reports them. It never shows
-  configuration, which can hold secrets.
+  far its index lags the files. It never shows configuration, which can hold
+  secrets, and viewing it never starts or pulls anything.
 - **Chat** - a conversation with the casebook. Each question runs the same
   search as Ask, then a model summarizes what it found in a few sentences,
   citing each exhibit it relies on; citations link to the exhibit, and the
@@ -339,6 +346,60 @@ API never changes the canonical files; its one write is chat's answer cache.
 
 The UI is a SvelteKit app in [`packages/docket-ui`](packages/docket-ui),
 built into the npm package, so `npm i -g @chrisjowen/docket` is all it needs.
+
+The API it reads is plain JSON, for scripts too: `POST /api/ask` (a question,
+optional `adapters`, `conversation`, `synthesis`, `timezone` and `requestId`)
+returns what `docket ask --json` prints; `DELETE /api/ask/<requestId>`
+cancels a question still being answered, as closing its connection does;
+`GET /api/adapters` returns what `docket adapters status --json` prints; and
+`POST /api/evidence` resolves up to 16 canonical references against the files,
+with a bounded excerpt of each. The older `GET /api/ask?q=` and
+`GET /api/chat?q=` still answer, translated from the coordinator's answers.
+
+## Asking questions: `docket ask`
+
+`docket ask` puts a question to every adapter enabled for query - or those
+`--adapter` names - through one shared coordinator
+([`docs/adapter-spec.md`](docs/adapter-spec.md) §10). The UI's Ask page and
+`docket search` use the same coordinator, so they agree.
+
+- Each adapter answers in its own terms: entities and passages from keyword or
+  semantic search, counts and typed tables from a graph query, facts,
+  timelines. Nothing is merged into one score; a count from a graph is never
+  turned into a list of documents.
+- They are asked at most `query.maxConcurrentAdapters` at once, all within one
+  `query.timeoutMs` deadline. One that fails, breaks the adapter contract or
+  misses the deadline is reported as that adapter's failure; the others'
+  answers stand. Ctrl-C (or closing the UI's request) cancels the adapters
+  still answering.
+- Every answer is validated against the contract, and every canonical
+  reference in it is checked against the files as they stood when the
+  question was asked: a result naming a record the files do not hold in scope
+  is left out with a warning, a reference to another scope is dropped, and a
+  reference to an older revision is marked as coming from an index behind the
+  files. Block and evidence ids are prefixed with the adapter instance id, so
+  `graph:row-1` is unique across the answer.
+- Coverage is stated per adapter: `every match` only when the engine
+  enumerated everything matching in scope, otherwise `top matches only` - a
+  sample, never a count.
+- Unless `--no-synthesis` (or `query.synthesis: false`), the summarize model
+  writes a short answer from the results, citing exhibits as
+  `[service.orders]` and evidence as `[graph:row-1]`: it is told to say which
+  facts were derived by an engine, what each result covers, and to give
+  disagreeing counts side by side rather than choose one. Its prompt holds the
+  most relevant parts of each exhibit and piece of evidence - including the
+  entities on the paths between what was found - within one total budget.
+  Summaries are cached in `.docket/.cache/chat/`, keyed by the question and
+  how it was read (scope, time zone, the day, the conversation), each
+  adapter's configuration, checkpoint and answer, the revisions of what it
+  cites, the paths between them, the model and its instructions. An adapter
+  whose freshness is unknown makes its summary uncacheable.
+
+`--json` prints the whole coordinated answer - per-adapter blocks, evidence,
+the status of each evidence reference, freshness and diagnostics, every
+canonical reference found once with the adapters that found it, and the
+paths between them - and leaves the summary out unless `--synthesis` asks for
+it. `--timezone` sets the zone relative times are read in.
 
 ## Evidence and confidence
 
@@ -504,11 +565,13 @@ variable holding one — `passwordEnv`, `apiKeyEnv`, `tokenEnv` — and reads th
 value itself; docket never writes a value into a manifest, error, log or API
 response.
 
-`docket search` asks the instances `query.defaultAdapters` names, or every
-instance with the `query` role. `timeoutMs`, `maxConcurrentAdapters` and
-`synthesis` are for the shared query coordinator
-([`docs/adapter-spec.md`](docs/adapter-spec.md) §10); they are checked now but
-nothing reads them yet. `docket init` writes a version 2 file.
+`docket ask`, `docket search` and the UI ask the instances
+`query.defaultAdapters` names, or every instance with the `query` role, unless
+a question names its own. `timeoutMs` is the deadline every adapter answers
+within, `maxConcurrentAdapters` how many answer at once, and `synthesis`
+whether a summary is written by default
+([`docs/adapter-spec.md`](docs/adapter-spec.md) §10). `docket init` writes a
+version 2 file.
 
 ### Set up a provider: `docket adapter add`
 
@@ -604,8 +667,9 @@ reprojects nothing.
 and `edges.jsonl` under `output` (default `.docket/.index`) — a readable view
 of exactly what projections receive. Output is deterministic, so rebuilds are
 byte-identical and diffable. It is the default, and the only adapter `docket
-search` has out of the box: a lexical keyword search over titles, ids, tags and
-bodies.
+ask` has out of the box: a lexical keyword search over titles, ids, tags and
+bodies, answering with each matching entity and the paragraphs of it that
+matched, at the revision it was projected.
 
 **`mem0`** (`@docket/adapter-mem0`) stores each resource as one verbatim memory
 (`infer: false`): the title, type, id, confidence, body, links, evidence and
@@ -670,9 +734,14 @@ resource and one relationship per (source, rel, target), with `confidence`,
 `evidenceCount`, `sources` and `evidence` on both, so a query can ask for what
 rests on code alone — and a full-text index over the documents. It needs the
 optional `neo4j-driver` package and a running Neo4j server, local or hosted.
-`docket search` asks it with a full-text query, or, with `cypher` set, has a
-local Ollama model write a read-only Cypher query against the graph's schema
-(falling back to full-text when that fails or finds nothing).
+A question is answered with a full-text query, or, with `cypher` set, a local
+Ollama model writes a read-only Cypher query against the graph's schema. The
+query must bind every pattern it matches to the instance's scope or it is not
+run; its rows are kept as the values they are - a single row of numbers as
+metrics, anything else as a typed table, relationships as a graph - each row
+cited as a derived fact. It counts as exhaustive only when it ran to
+completion; full-text, or a cypher query that fails or finds nothing, answers
+with the best matches instead.
 
 ```yaml
 adapters:

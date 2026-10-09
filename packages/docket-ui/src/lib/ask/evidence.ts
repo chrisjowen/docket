@@ -1,6 +1,7 @@
 import type { CanonicalReference, RetrievedEvidence } from '@docket/contracts'
 
 import type { UiGraph } from '$lib/types.js'
+import type { ReferenceStatus } from './wire.js'
 
 /**
  * How far a piece of evidence can be trusted as the casebook's own: whether it
@@ -33,8 +34,25 @@ export const resolves = (reference: CanonicalReference, casebook: Casebook): boo
 export const isDerived = (evidence: RetrievedEvidence): boolean =>
   evidence.kind === 'derived-fact' || evidence.derivation !== undefined
 
-export const standingOf = (evidence: RetrievedEvidence, casebook: Casebook): Standing => {
-  const resolved = evidence.canonicalRefs.some((reference) => resolves(reference, casebook))
+/**
+ * Whether reference `index` of `evidence` resolves: as the coordinator checked
+ * it against the files when the question was asked - revision and span
+ * included - when it says; otherwise against the loaded casebook.
+ */
+export const referenceResolves = (
+  evidence: RetrievedEvidence,
+  index: number,
+  casebook: Casebook,
+  statuses?: readonly ReferenceStatus[]
+): boolean => {
+  const status = statuses?.[index]
+  if (status !== undefined) return status === 'resolved'
+  const reference = evidence.canonicalRefs[index]
+  return reference !== undefined && resolves(reference, casebook)
+}
+
+export const standingOf = (evidence: RetrievedEvidence, casebook: Casebook, statuses?: readonly ReferenceStatus[]): Standing => {
+  const resolved = evidence.canonicalRefs.some((_, index) => referenceResolves(evidence, index, casebook, statuses))
   if (isDerived(evidence)) return resolved ? 'derived' : 'derived-unresolved'
   return resolved ? 'canonical' : 'unresolved'
 }

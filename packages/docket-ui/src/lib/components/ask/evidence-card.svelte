@@ -11,7 +11,7 @@
 
   const workspace = getWorkspace()
   const view = getAskView()
-  const standing = $derived(standingOf(evidence, view.casebook))
+  const standing = $derived(standingOf(evidence, view.casebook, result.references?.[evidence.id]))
   const byEngine = $derived(standing === 'derived' || standing === 'derived-unresolved')
   const active = $derived(workspace.inspector?.kind === 'evidence' && workspace.inspector.evidenceId === evidence.id)
   const where = $derived(evidence.canonicalRefs[0])

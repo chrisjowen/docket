@@ -21,15 +21,14 @@ piece of evidence (docs/adapter-spec.md §13):
 
 The API it reads is defined in
 [`packages/docket/src/open/types.ts`](../docket/src/open/types.ts):
-`GET /api/graph` for every entity and relationship, `GET /api/ask?q=` for
-`docket search` answers, and `GET /api/chat?q=` for those answers summarized
-by a model. Ask and Adapters are written against the coordinator's API -
-`POST /api/ask` and `GET /api/adapters`, as
-[`src/lib/ask/wire.ts`](src/lib/ask/wire.ts) describes them - and validate
-every adapter answer with `@docket/contracts`. Until the server provides them,
-Ask answers through `GET /api/ask` (or `GET /api/chat` with a summary),
-translated into one entity block per source, and Adapters says status is not
-available.
+`GET /api/graph` for every entity and relationship. Ask, Adapters and the
+evidence inspector read the coordinator's API - `POST /api/ask`,
+`GET /api/adapters` and `POST /api/evidence`, whose types
+[`packages/docket/src/query/wire.ts`](../docket/src/query/wire.ts) defines -
+and validate every adapter answer with `@docket/contracts`. Against a server
+without the coordinator, Ask answers through the legacy `GET /api/ask` (or
+`GET /api/chat` with a summary), translated into one entity block per source,
+and Adapters says status is not available.
 
 Each resource type is drawn with its icon: the `icon` its ontology entry
 declares, else docket's built-in one for that type name, else a generic one.
