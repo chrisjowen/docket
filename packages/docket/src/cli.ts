@@ -5,6 +5,7 @@ import { Command, Option } from 'commander'
 import { adapterAdd, adaptersList, displayCommand, type AdapterAddPlan } from './commands/adapter.js'
 import { askCommand, formatAdapters, formatAnswer } from './commands/ask.js'
 import { configMigrate } from './commands/config.js'
+import { graph } from './commands/graph.js'
 import { init } from './commands/init.js'
 import { open } from './commands/open.js'
 import {
@@ -270,6 +271,34 @@ program
     console.log(`✓ ${links} relationships`)
     if (dangling > 0) console.log(`⚠ ${dangling} unresolved relationships`)
     report(result.diagnostics)
+  })
+
+program
+  .command('graph')
+  .description('Print every exhibit and link, read from the canonical files: what docket open draws (read-only)')
+  .option('--json', `print the graph as versioned JSON, schema "docket.graph" (docs/graph-json.md)`)
+  .option('--root <dir>', 'resolve .docket.yaml from this directory instead of the working one')
+  .addHelpText(
+    'after',
+    '\nExits 0 whenever it prints the graph, with any invalid files reported in its diagnostics.\n' +
+      'Exits 1, printing nothing on stdout, when no .docket.yaml is found or --root is not a directory.'
+  )
+  .action(async (options: { json?: boolean; root?: string }) => {
+    const result = await graph({ root: options.root })
+    // A reader gets the diagnostics in the JSON; they never fail the command.
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2))
+      return
+    }
+    const dangling = result.edges.filter((edge) => edge.dangling).length
+    const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length
+    console.log(`${result.project.name}  ${result.project.root}`)
+    console.log(`  ${result.entities.length} exhibits, ${result.edges.length} links${dangling > 0 ? ` (${dangling} dangling)` : ''}`)
+    console.log(`  ${result.types.length} resource types, ${result.relationships.length} relationships`)
+    console.log(`  ${result.diagnostics.length} diagnostics${errors > 0 ? ` (${errors} errors)` : ''}`)
+    console.log(
+      `  index: ${result.index.synced ? (result.index.behind === 0 ? 'up to date' : `${result.index.behind} behind`) : 'never synced'}`
+    )
   })
 
 program
