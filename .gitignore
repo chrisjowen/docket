@@ -8,3 +8,5 @@ dist/
 # The web UI's SvelteKit output; the docket build copies it into dist/ui.
 .svelte-kit/
 packages/docket-ui/build/
+.docket/.index/
+.docket/.cache/
