@@ -244,6 +244,7 @@ docket ask --adapter <id> --no-synthesis <question...>  # one adapter (repeatabl
 docket search <query...>    # the documents each adapter found: ask's compatibility view
 docket adapters list        # the configured adapter instances, without connecting to any
 docket adapters status      # each instance's health and how far its index lags the files (--json)
+docket graph --json         # every exhibit and link, read from the files, as versioned JSON (--root <dir>; docs/graph-json.md)
 docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
@@ -347,7 +348,10 @@ API never changes the canonical files; its one write is chat's answer cache.
 The UI is a SvelteKit app in [`packages/docket-ui`](packages/docket-ui),
 built into the npm package, so `npm i -g @chrisjowen/docket` is all it needs.
 
-The API it reads is plain JSON, for scripts too: `POST /api/ask` (a question,
+The API it reads is plain JSON, for scripts too: `GET /api/graph` returns
+the graph `docket graph --json` prints, without its `schema` and `version`
+(scripts should read the command, whose contract is versioned:
+[docs/graph-json.md](docs/graph-json.md)); `POST /api/ask` (a question,
 optional `adapters`, `conversation`, `synthesis`, `timezone` and `requestId`)
 returns what `docket ask --json` prints; `DELETE /api/ask/<requestId>`
 cancels a question still being answered, as closing its connection does;

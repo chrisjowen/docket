@@ -16,5 +16,6 @@ export {
 export { loadAdapterDefinition } from './adapters/loader.js'
 export { AskCancelledError, AskRequestError, type AskInput } from './query/ask.js'
 export type * from './query/wire.js'
+export { GRAPH_SCHEMA, GRAPH_SCHEMA_VERSION, type GraphContract } from './commands/graph.js'
 export type { AdapterDistribution, TypeScriptRunner } from './adapters/resolve-module.js'
 export type * from '@docket/contracts'

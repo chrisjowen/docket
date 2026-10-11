@@ -5,6 +5,7 @@ import { Command, Option } from 'commander'
 import { adapterAdd, adaptersList, displayCommand, type AdapterAddPlan } from './commands/adapter.js'
 import { askCommand, formatAdapters, formatAnswer } from './commands/ask.js'
 import { configMigrate } from './commands/config.js'
+import { graph } from './commands/graph.js'
 import { init } from './commands/init.js'
 import { open } from './commands/open.js'
 import {
@@ -270,6 +271,22 @@ program
     console.log(`✓ ${links} relationships`)
     if (dangling > 0) console.log(`⚠ ${dangling} unresolved relationships`)
     report(result.diagnostics)
+  })
+
+program
+  .command('graph')
+  .description('Print every exhibit and link, read from the canonical files: what docket open draws (read-only)')
+  .requiredOption('--json', `print the graph as versioned JSON, schema "docket.graph" (docs/graph-json.md)`)
+  .option('--root <dir>', 'resolve .docket.yaml from this directory instead of the working one')
+  .addHelpText(
+    'after',
+    '\nExits 0 whenever it prints the graph, with any invalid files reported in its diagnostics.\n' +
+      'Exits 1, printing nothing on stdout, when --json is missing, no .docket.yaml is found or --root is not a directory.'
+  )
+  .showHelpAfterError()
+  .action(async (options: { root?: string }) => {
+    // A reader gets the diagnostics in the JSON; they never fail the command.
+    console.log(JSON.stringify(await graph({ root: options.root }), null, 2))
   })
 
 program
