@@ -9,8 +9,10 @@ computes confidence.
 ```bash
 docket graph --json                    # the docket this directory belongs to
 docket graph --json --root <dir>       # the docket <dir> belongs to
-docket graph                           # a short summary, for people
 ```
+
+`--json` is required: the command has no other output format. Without it,
+`docket graph` prints its usage on stderr, nothing on stdout, and exits 1.
 
 ## Behaviour
 

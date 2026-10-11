@@ -120,11 +120,12 @@ describe('docket graph --json', () => {
     expect(result.stderr).toContain('is not a directory')
   })
 
-  it('summarizes the graph without --json', async () => {
+  it('fails with its usage and nothing on stdout without --json', async () => {
     const result = await memory(EXAMPLE, 'graph')
 
-    expect(result.code).toBe(0)
-    expect(result.stdout).toContain('21 exhibits, 37 links')
-    expect(result.stdout).toContain('index: never synced')
+    expect(result.code).not.toBe(0)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain("required option '--json' not specified")
+    expect(result.stderr).toContain('Usage: docket graph')
   })
 })
