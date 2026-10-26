@@ -26,6 +26,8 @@ export class SyncState {
   readonly running = $derived(this.starting || this.status?.run?.state === 'running')
 
   #timer: ReturnType<typeof setTimeout> | null = null
+  /** Bumped by each request, so a response to an older one is dropped. */
+  #request = 0
   #finished: () => void
 
   /** `finished` runs once a sync started here ends, so what shows the projections can read them again. */
@@ -35,14 +37,17 @@ export class SyncState {
 
   /** Reads the status again, and keeps reading it while a sync runs. */
   async refresh(): Promise<void> {
+    const request = ++this.#request
     const wasRunning = this.status?.run?.state === 'running'
     try {
       const response = await fetch('/api/sync')
       const body = await readBody(response)
+      if (request !== this.#request) return
       if (!response.ok) throw new Error(requestError(response.status, body, 'read the sync status'))
       this.status = body as UiSyncStatus
       if (this.failure !== null && !this.starting) this.failure = null
     } catch (cause) {
+      if (request !== this.#request) return
       this.failure = cause instanceof Error ? cause.message : String(cause)
     }
     const running = this.status?.run?.state === 'running'
@@ -53,6 +58,7 @@ export class SyncState {
   /** Starts a sync of `adapters`, every adapter enabled for projection when null. */
   async start(adapters: string[] | null): Promise<void> {
     if (this.running) return
+    this.#request++
     this.starting = true
     this.failure = null
     try {
@@ -72,6 +78,7 @@ export class SyncState {
       this.failure =
         cause instanceof TypeError ? requestError(0, null, 'sync') : cause instanceof Error ? cause.message : String(cause)
     } finally {
+      this.#request++
       this.starting = false
     }
     this.#schedule(this.status?.run?.state === 'running')
