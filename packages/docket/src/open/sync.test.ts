@@ -171,6 +171,10 @@ describe('starting a sync from the UI', () => {
     .flat()
     .find((address) => address?.family === 'IPv4' && !address.internal)?.address
   it.skipIf(lan === undefined)('refuses a sync from another machine, even with the token', async () => {
+    // Listening on every interface is the only way another machine reaches it.
+    await server?.close()
+    server = await startUiServer({ cwd: root, uiDir: join(root, 'ui'), port: 0, host: '0.0.0.0' })
+    expect(server.url).toBe(`http://127.0.0.1:${server.port}/`)
     const token = await session()
     const { status, body } = await send(
       'POST',
@@ -181,6 +185,11 @@ describe('starting a sync from the UI', () => {
     )
     expect(status).toBe(403)
     expect((body as { error: string }).error).toContain('machine running docket open')
+  })
+
+  it.skipIf(lan === undefined)('listens on this machine only unless told otherwise', async () => {
+    expect(server?.host).toBe('127.0.0.1')
+    await expect(send('GET', '/api/sync', own(), undefined, lan)).rejects.toThrow(/ECONNREFUSED/)
   })
 
   it('runs docket sync, then says the projections are current and when they synced', async () => {

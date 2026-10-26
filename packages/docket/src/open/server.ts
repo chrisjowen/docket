@@ -32,6 +32,8 @@ export interface UiServerOptions {
   uiDir: string
   /** Exact port, failing when taken. Omitted: `DEFAULT_PORT`, else any free one. */
   port?: number | undefined
+  /** Interface to listen on. Omitted: `DEFAULT_HOST`, this machine only. */
+  host?: string | undefined
   /** What `POST /api/sync` runs. Omitted: `docket sync` itself; tests stand in their own. */
   runSync?: ((options: SyncOptions) => Promise<SyncResult>) | undefined
 }
@@ -39,6 +41,8 @@ export interface UiServerOptions {
 export interface UiServer {
   url: string
   port: number
+  /** The interface it listens on. */
+  host: string
   close(): Promise<void>
 }
 
@@ -57,12 +61,16 @@ const MIME: Record<string, string> = {
 }
 
 /**
- * All interfaces, so the UI is reachable from other machines on the network.
- * The API never changes the canonical files - its writes are the summary
- * cache and, when asked from this machine, a sync of the projections - but it
- * serves the repository's knowledge to whoever can reach it.
+ * Loopback, so only this machine can reach the UI unless `--host` says
+ * otherwise. The API never changes the canonical files - its writes are the
+ * summary cache and, when asked from this machine, a sync of the projections -
+ * but it serves the repository's knowledge to whoever can reach it, so
+ * listening on any other interface is an explicit choice.
  */
-const HOST = '0.0.0.0'
+export const DEFAULT_HOST = '127.0.0.1'
+
+/** Hosts that listen on every interface: the UI is still addressed through loopback. */
+const WILDCARD = new Set(['0.0.0.0', '::'])
 
 /** Addresses a request from this machine arrives from. */
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -120,7 +128,7 @@ const localOnly = (request: IncomingMessage, port: number): void => {
     throw new HttpError(403, `This can only be done on the machine running docket open, at ${here}`)
   }
   const host = request.headers.host ?? ''
-  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) {
+  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}` && host !== `[::1]:${port}`) {
     throw new HttpError(403, `This can only be done from the page docket open serves, at ${here}`)
   }
   const site = request.headers['sec-fetch-site']
@@ -412,7 +420,7 @@ const handle = async (
   response.end('Not found')
 }
 
-const listen = (server: Server, port: number): Promise<void> =>
+const listen = (server: Server, port: number, host: string): Promise<void> =>
   new Promise((done, fail) => {
     const onError = (cause: Error): void => {
       server.off('listening', onListening)
@@ -424,7 +432,7 @@ const listen = (server: Server, port: number): Promise<void> =>
     }
     server.once('error', onError)
     server.once('listening', onListening)
-    server.listen(port, HOST)
+    server.listen(port, host)
   })
 
 /**
@@ -460,22 +468,26 @@ export const startUiServer = async (options: UiServerOptions): Promise<UiServer>
     })
   })
 
+  const host = options.host ?? DEFAULT_HOST
   if (options.port !== undefined) {
-    await listen(server, options.port)
+    await listen(server, options.port, host)
   } else {
     try {
-      await listen(server, DEFAULT_PORT)
+      await listen(server, DEFAULT_PORT, host)
     } catch (cause) {
       if ((cause as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw cause
-      await listen(server, 0)
+      await listen(server, 0, host)
     }
   }
 
   const { port } = server.address() as AddressInfo
   context.port = port
+  // A wildcard is reached through loopback; any other address through itself.
+  const address = WILDCARD.has(host) ? '127.0.0.1' : host.includes(':') ? `[${host}]` : host
   return {
-    url: `http://127.0.0.1:${port}/`,
+    url: `http://${address}:${port}/`,
     port,
+    host,
     close: async () => {
       await new Promise<void>((done, fail) => {
         server.closeAllConnections()

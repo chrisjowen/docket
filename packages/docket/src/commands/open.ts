@@ -10,6 +10,8 @@ export interface OpenOptions {
   cwd?: string | undefined
   /** Exact port. Omitted: 4380 when free, else any free port. */
   port?: number | undefined
+  /** Interface to listen on. Omitted: 127.0.0.1, this machine only. `0.0.0.0` is every interface. */
+  host?: string | undefined
   /** The built web UI. Defaults to the copy shipped in this package. */
   uiDir?: string | undefined
 }
@@ -19,7 +21,8 @@ export interface OpenHandle extends UiServer {
 }
 
 /**
- * Serve the web UI for this repository on every network interface. Long-running: the
+ * Serve the web UI for this repository - on loopback unless `host` names
+ * another interface. Long-running: the
  * returned handle is the only way it stops. It never writes a canonical file;
  * it touches the projections only to search them, or to sync them when the
  * page on this machine asks.
@@ -35,6 +38,6 @@ export const open = async (options: OpenOptions = {}): Promise<OpenHandle> => {
     )
   }
 
-  const server = await startUiServer({ cwd: resolved.projectRoot, uiDir, port: options.port })
+  const server = await startUiServer({ cwd: resolved.projectRoot, uiDir, port: options.port, host: options.host })
   return { ...server, resolved }
 }

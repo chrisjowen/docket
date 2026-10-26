@@ -245,7 +245,7 @@ docket search <query...>    # the documents each adapter found: ask's compatibil
 docket adapters list        # the configured adapter instances, without connecting to any
 docket adapters status      # each instance's health and how far its index lags the files (--json)
 docket graph --json         # every exhibit and link, read from the files, as versioned JSON (--root <dir>; docs/graph-json.md)
-docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
+docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen)
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
 docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid or mempalace: asks, shows the plan, applies it once confirmed
@@ -268,9 +268,12 @@ docket runtime down <id>    # stop and remove its containers; volumes are kept (
 `http://127.0.0.1:4380/` (or any free port when that one is taken; `--port`
 picks one, `--no-open` skips launching the browser). It reads the canonical
 files on every request, so it needs no projection beyond the default `jsonl`.
-It listens on all interfaces (`0.0.0.0`) and answers any Host, so anyone who
-can reach the machine on that port can read the repository's knowledge. The
-API never changes the canonical files; its writes are chat's answer cache and,
+It listens on `127.0.0.1` only, so nothing else on the network can reach it.
+`--host` picks another interface: `--host 0.0.0.0` serves every interface, and
+then anyone who can reach the machine on that port can read the repository's
+knowledge, whatever Host they ask for. Syncing stays limited to the page at
+`127.0.0.1` either way, so a server listening only on another address cannot
+sync. The API never changes the canonical files; its writes are chat's answer cache and,
 when the page asks from this machine, a sync of the projections.
 
 - **Graph** - every entity and relationship as a force-directed graph, each
