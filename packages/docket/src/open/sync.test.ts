@@ -282,6 +282,23 @@ describe('one sync at a time', () => {
     expect((await startSync()).status).toBe(202)
     deferred.release()
   })
+
+  it('reports the freshness read before the sync while it runs, and reads it again once it finishes', async () => {
+    await sync({ cwd: root })
+    const deferred = deferredSync()
+    server = await startUiServer({ cwd: root, uiDir: join(root, 'ui'), port: 0, runSync: deferred.run })
+    expect((await status()).adapters).toEqual([{ id: 'local', state: 'current', lastSyncedAt: expect.any(String) }])
+
+    expect((await startSync()).status).toBe(202)
+    await write('.docket/resources/services/orders.md', ORDERS)
+    const running = await status()
+    expect(running.run?.state).toBe('running')
+    expect(running.adapters).toEqual([{ id: 'local', state: 'current', lastSyncedAt: expect.any(String) }])
+
+    deferred.release()
+    const done = await finished()
+    expect(done.adapters[0]).toMatchObject({ id: 'local', state: 'behind', behind: expect.any(Number) })
+  })
 })
 
 describe('SyncRunner', () => {

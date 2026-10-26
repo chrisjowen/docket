@@ -273,7 +273,13 @@ It listens on `127.0.0.1` only, so nothing else on the network can reach it.
 then anyone who can reach the machine on that port can read the repository's
 knowledge, whatever Host they ask for. Syncing stays limited to the page at
 `127.0.0.1` either way, so a server listening only on another address cannot
-sync. The API never changes the canonical files; its writes are chat's answer cache and,
+sync.
+
+> **Behaviour change:** earlier versions of `docket open` listened on every
+> interface (`0.0.0.0`) by default. To keep reaching the UI from other
+> machines, start it with `docket open --host 0.0.0.0`.
+
+The API never changes the canonical files; its writes are chat's answer cache and,
 when the page asks from this machine, a sync of the projections.
 
 - **Graph** - every entity and relationship as a force-directed graph, each

@@ -16,7 +16,7 @@ import type { AskBody, EvidenceResponse } from '../query/wire.js'
 import { ask } from './ask.js'
 import { chat } from './chat.js'
 import { readGraph } from './graph.js'
-import { SyncBusyError, SyncRunner, syncStatus } from './sync-run.js'
+import { SyncBusyError, SyncRunner } from './sync-run.js'
 import type { UiSession } from './types.js'
 
 /** Tried first so the UI keeps one address between runs; any free port when it is taken. */
@@ -319,7 +319,7 @@ const api = async (request: IncomingMessage, response: ServerResponse, url: URL,
     }
     case '/api/sync': {
       allow('GET', 'HEAD', 'POST')
-      if (method !== 'POST') return syncStatus(cwd, context.sync.current)
+      if (method !== 'POST') return context.sync.status()
       sameOriginChange(request, context.port, context.token)
       const adapters = syncBody(await readJson(request, response, { allowEmpty: true }))
       try {
@@ -329,7 +329,7 @@ const api = async (request: IncomingMessage, response: ServerResponse, url: URL,
         throw cause
       }
       response.statusCode = 202
-      return syncStatus(cwd, context.sync.current)
+      return context.sync.status()
     }
     case '/api/evidence': {
       allow('POST')

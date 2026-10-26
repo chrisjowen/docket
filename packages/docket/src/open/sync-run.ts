@@ -48,6 +48,7 @@ const blocked = (result: SyncResult): string | undefined => {
  */
 export class SyncRunner {
   #run: UiSyncRun | null = null
+  #status: UiSyncStatus | null = null
   #settled: Promise<void> = Promise.resolve()
 
   constructor(
@@ -58,6 +59,17 @@ export class SyncRunner {
   /** The running sync, or the last one; a copy, so callers cannot change it. */
   get current(): UiSyncRun | null {
     return this.#run === null ? null : structuredClone(this.#run)
+  }
+
+  /**
+   * The run and each instance's freshness. While a sync runs the freshness
+   * last read is reused rather than re-reading the repository on every poll.
+   */
+  async status(): Promise<UiSyncStatus> {
+    const run = this.current
+    if (run?.state === 'running' && this.#status !== null) return { ...structuredClone(this.#status), run }
+    this.#status = await syncStatus(this.cwd, run)
+    return structuredClone(this.#status)
   }
 
   /** Resolves once no sync is running. */
@@ -124,7 +136,7 @@ export class SyncRunner {
  * Each instance enabled for projection: how far it lags the files - read from
  * its manifest without connecting to it - and when it last synced in full.
  */
-export const syncStatus = async (cwd: string, run: UiSyncRun | null): Promise<UiSyncStatus> => {
+const syncStatus = async (cwd: string, run: UiSyncRun | null): Promise<UiSyncStatus> => {
   const snapshot = await takeSnapshot(cwd)
   const history = await readSyncHistory(snapshot.resolved)
   const syncedAt = (id: string): { lastSyncedAt?: string } => {
