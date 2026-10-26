@@ -17,7 +17,7 @@ graphs are disposable projections rebuilt from them.
 .docket/decisions/          decisions and why
 .docket/constraints/        rules the system must obey
 .docket/.index/             projections: generated, gitignored, disposable
-.docket/.cache/             answers docket open's chat cached: gitignored, disposable
+.docket/.cache/             chat answers and when each adapter last synced: gitignored, disposable
 ```
 
 Install the Claude Code plugin and set up the repository you are in, in one

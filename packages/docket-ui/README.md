@@ -45,3 +45,7 @@ pnpm dev                          # DOCKET_API=http://127.0.0.1:<port> for anoth
 # Or with POST /api/ask and GET /api/adapters served from src/lib/ask/fixtures.ts:
 pnpm dev:fixtures
 ```
+
+The Sync button only works against `docket open` directly: the server accepts
+a sync only from its own origin on `127.0.0.1`, so one sent through the dev
+proxy is refused.

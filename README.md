@@ -66,7 +66,7 @@ your-repo/
     │   ├── edges.jsonl
     │   ├── manifests/         what sync handed each adapter instance: local.json, ...
     │   └── adapters/          state an adapter instance keeps for itself, if any
-    └── .cache/                answers docket open's chat cached: gitignored, disposable
+    └── .cache/                chat answers and when each adapter last synced: gitignored, disposable
 ```
 
 Directories are only for people: an exhibit's identity is the `id` in its
@@ -270,7 +270,8 @@ picks one, `--no-open` skips launching the browser). It reads the canonical
 files on every request, so it needs no projection beyond the default `jsonl`.
 It listens on all interfaces (`0.0.0.0`) and answers any Host, so anyone who
 can reach the machine on that port can read the repository's knowledge. The
-API never changes the canonical files; its one write is chat's answer cache.
+API never changes the canonical files; its writes are chat's answer cache and,
+when the page asks from this machine, a sync of the projections.
 
 - **Graph** - every entity and relationship as a force-directed graph, each
   type drawn with its own icon and colour, filtered by type and relationship
@@ -290,6 +291,13 @@ API never changes the canonical files; its one write is chat's answer cache.
   assessment; and the dated observations over time - when something happened
   (`eventAt`) and when it was observed (`observedAt`), labelled apart - with
   each chain of `supersedes` decisions.
+- **Sync** - the header's Sync button runs `docket sync` - the same code, not
+  a copy - for every adapter enabled for projection or just one, showing each
+  adapter's result as its pass finishes, when each last synced, and a hint
+  when files changed since. One sync runs at a time. Only the page on the
+  machine running `docket open`, at `127.0.0.1`, can start one: the server
+  checks the request's address, Host and Origin, and a token it makes at
+  launch.
 - **Ask** - its own page: a question put to every adapter configured for
   query, each answer shown as it came - exhibits, passages, facts, counts,
   tables, timelines, graphs - with how the adapter read the question, how much

@@ -20,8 +20,9 @@ export interface OpenHandle extends UiServer {
 
 /**
  * Serve the web UI for this repository on every network interface. Long-running: the
- * returned handle is the only way it stops. Reads only - it never syncs,
- * writes a file or touches a projection beyond searching it.
+ * returned handle is the only way it stops. It never writes a canonical file;
+ * it touches the projections only to search them, or to sync them when the
+ * page on this machine asks.
  */
 export const open = async (options: OpenOptions = {}): Promise<OpenHandle> => {
   // Fail before listening when there is nothing to show.

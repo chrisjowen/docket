@@ -434,9 +434,28 @@ export class ProjectionManager {
     return known
   }
 
-  /** Brings every instance up to `state` for `scope` (every entity when absent). */
-  apply(state: CanonicalState, broken: ReadonlySet<string>, scope?: ReadonlySet<string>): Promise<PassReport[]> {
-    return Promise.all(this.targets.map((target) => target.apply(state, broken, scope)))
+  /** The instances it drives, by id, in configuration order. */
+  get ids(): string[] {
+    return this.targets.map((target) => target.id)
+  }
+
+  /**
+   * Brings every instance up to `state` for `scope` (every entity when
+   * absent), calling `onPass` as each instance finishes its pass.
+   */
+  apply(
+    state: CanonicalState,
+    broken: ReadonlySet<string>,
+    scope?: ReadonlySet<string>,
+    onPass?: (report: PassReport) => void
+  ): Promise<PassReport[]> {
+    return Promise.all(
+      this.targets.map(async (target) => {
+        const report = await target.apply(state, broken, scope)
+        onPass?.(report)
+        return report
+      })
+    )
   }
 
   /**

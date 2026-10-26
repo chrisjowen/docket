@@ -5,6 +5,7 @@
   import { resolve } from '$app/paths'
   import { page } from '$app/state'
   import CircleAlert from '@lucide/svelte/icons/circle-alert'
+  import FolderSync from '@lucide/svelte/icons/folder-sync'
   import Moon from '@lucide/svelte/icons/moon'
   import PanelRight from '@lucide/svelte/icons/panel-right'
   import PanelRightClose from '@lucide/svelte/icons/panel-right-close'
@@ -14,6 +15,7 @@
   import ChatPanel from '$lib/components/chat-panel.svelte'
   import Inspector from '$lib/components/inspector.svelte'
   import QuickSearch from '$lib/components/quick-search.svelte'
+  import SyncPanel from '$lib/components/sync-panel.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
   import { iconOf } from '$lib/icons.js'
@@ -45,6 +47,7 @@
     void workspace.load().then(() => {
       if (initial) workspace.select(initial, { focus: true })
     })
+    void workspace.sync.refresh()
 
     const onhash = () => {
       const id = fromHash()
@@ -53,7 +56,10 @@
     // Coming back to the tab re-reads the files: they may have been edited meanwhile.
     let lastFocus = Date.now()
     const onfocus = () => {
-      if (Date.now() - lastFocus > 2000) void workspace.load()
+      if (Date.now() - lastFocus > 2000) {
+        void workspace.load()
+        if (!workspace.sync.running) void workspace.sync.refresh()
+      }
       lastFocus = Date.now()
     }
     window.addEventListener('hashchange', onhash)
@@ -61,6 +67,7 @@
     return () => {
       window.removeEventListener('hashchange', onhash)
       window.removeEventListener('focus', onfocus)
+      workspace.sync.stop()
     }
   })
 
@@ -100,6 +107,9 @@
     if (current !== '/') await goto(resolve('/'))
     workspace.browseView = 'graph'
   }
+
+  const syncing = $derived(workspace.sync.running)
+  const outOfDate = $derived(workspace.sync.status?.outOfDate ?? false)
 
   const problems = $derived(graph?.diagnostics ?? [])
   const errors = $derived(problems.filter((problem) => problem.severity === 'error').length)
@@ -155,7 +165,10 @@
             variant="ghost"
             size="sm"
             class="hover:text-spine-foreground hover:bg-white/10"
-            onclick={() => (showProblems = !showProblems)}
+            onclick={() => {
+              showProblems = !showProblems
+              if (showProblems) workspace.syncOpen = false
+            }}
             aria-expanded={showProblems}
             aria-label="Validation findings"
           >
@@ -164,6 +177,24 @@
           </Button>
         {/if}
       {/if}
+      <Button
+        variant="ghost"
+        size="sm"
+        class="hover:text-spine-foreground relative hover:bg-white/10"
+        aria-label={syncing ? 'Syncing the projections' : outOfDate ? 'Sync the projections - out of date' : 'Sync the projections'}
+        aria-expanded={workspace.syncOpen}
+        title={outOfDate ? 'Projections out of date with the files' : 'Run docket sync'}
+        onclick={() => {
+          workspace.syncOpen = !workspace.syncOpen
+          if (workspace.syncOpen) showProblems = false
+        }}
+      >
+        <FolderSync class={syncing ? 'animate-pulse' : ''} />
+        <span class="hidden sm:inline">{syncing ? 'Syncing…' : 'Sync'}</span>
+        {#if outOfDate && !syncing}
+          <span class="absolute top-1 right-1 size-1.5 rounded-full bg-amber-300" aria-hidden="true"></span>
+        {/if}
+      </Button>
       <Button
         variant="ghost"
         size="icon-sm"
@@ -211,6 +242,9 @@
     <div class="relative grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto]">
       <div class="relative min-h-0 min-w-0 overflow-hidden">
         {@render children()}
+        {#if workspace.syncOpen}
+          <SyncPanel sync={workspace.sync} onclose={() => (workspace.syncOpen = false)} />
+        {/if}
         {#if showProblems && problems.length > 0}
           <div class="bg-popover absolute top-3 right-3 z-20 flex max-h-[60%] w-96 max-w-[calc(100%-1.5rem)] flex-col rounded-lg border shadow-lg">
             <div class="flex items-center justify-between border-b px-3 py-2">

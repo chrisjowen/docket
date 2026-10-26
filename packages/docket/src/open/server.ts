@@ -7,6 +7,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path'
 
 import type { ConversationTurn } from '@docket/contracts'
 
+import type { SyncOptions, SyncResult } from '../commands/sync.js'
 import { AskCancelledError, AskRequestError, askProject } from '../query/ask.js'
 import { EvidenceRequestError, readEvidenceBody, resolveReferences } from '../query/evidence.js'
 import { takeSnapshot } from '../query/snapshot.js'
@@ -15,6 +16,8 @@ import type { AskBody, EvidenceResponse } from '../query/wire.js'
 import { ask } from './ask.js'
 import { chat } from './chat.js'
 import { readGraph } from './graph.js'
+import { SyncBusyError, SyncRunner, syncStatus } from './sync-run.js'
+import type { UiSession } from './types.js'
 
 /** Tried first so the UI keeps one address between runs; any free port when it is taken. */
 export const DEFAULT_PORT = 4380
@@ -29,6 +32,8 @@ export interface UiServerOptions {
   uiDir: string
   /** Exact port, failing when taken. Omitted: `DEFAULT_PORT`, else any free one. */
   port?: number | undefined
+  /** What `POST /api/sync` runs. Omitted: `docket sync` itself; tests stand in their own. */
+  runSync?: ((options: SyncOptions) => Promise<SyncResult>) | undefined
 }
 
 export interface UiServer {
@@ -53,10 +58,17 @@ const MIME: Record<string, string> = {
 
 /**
  * All interfaces, so the UI is reachable from other machines on the network.
- * The API never changes the canonical files - its one write is the summary
- * cache - but it serves the repository's knowledge to whoever can reach it.
+ * The API never changes the canonical files - its writes are the summary
+ * cache and, when asked from this machine, a sync of the projections - but it
+ * serves the repository's knowledge to whoever can reach it.
  */
 const HOST = '0.0.0.0'
+
+/** Addresses a request from this machine arrives from. */
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+
+/** The header carrying the per-launch session token back. */
+export const SESSION_HEADER = 'x-docket-session'
 
 class HttpError extends Error {
   constructor(
@@ -96,7 +108,55 @@ const MAX_BODY_BYTES = 256 * 1024
 /** A request id the client chose: short and printable, so it is safe to log and echo. */
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/
 
-const readJson = (request: IncomingMessage, response: ServerResponse): Promise<unknown> =>
+/**
+ * Refuses a request that does not come from this machine, addressed to this
+ * server by its loopback name - so neither another machine on the network nor
+ * a page on another site, through a DNS name rebound to 127.0.0.1, gets past
+ * it - or that a browser says another site sent.
+ */
+const localOnly = (request: IncomingMessage, port: number): void => {
+  const here = `http://127.0.0.1:${port}/`
+  if (!LOOPBACK.has(request.socket.remoteAddress ?? '')) {
+    throw new HttpError(403, `This can only be done on the machine running docket open, at ${here}`)
+  }
+  const host = request.headers.host ?? ''
+  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) {
+    throw new HttpError(403, `This can only be done from the page docket open serves, at ${here}`)
+  }
+  const site = request.headers['sec-fetch-site']
+  if (site !== undefined && site !== 'same-origin' && site !== 'none') {
+    throw new HttpError(403, `This can only be done from the page docket open serves, at ${here}`)
+  }
+}
+
+/**
+ * `localOnly`, and a change sent by the page itself: from its own origin,
+ * carrying the token this launch handed it.
+ */
+const sameOriginChange = (request: IncomingMessage, port: number, token: string): void => {
+  localOnly(request, port)
+  const here = `http://127.0.0.1:${port}/`
+  if (request.headers.origin !== `http://${request.headers.host ?? ''}`) {
+    throw new HttpError(403, `This can only be done from the page docket open serves, at ${here}`)
+  }
+  if (request.headers[SESSION_HEADER] !== token) {
+    throw new HttpError(403, 'This page is from an earlier docket open, or its session is missing. Reload the page and try again.')
+  }
+}
+
+/** Checks a `POST /api/sync` body: nothing, or the instances to sync. */
+const syncBody = (body: unknown): string[] | null => {
+  if (body === null || body === undefined) return null
+  if (!isObject(body)) throw new HttpError(400, 'Send a JSON object: { "adapters": ["..."] }, or nothing to sync every adapter.')
+  const { adapters } = body
+  if (adapters === undefined || adapters === null) return null
+  if (!Array.isArray(adapters) || adapters.length === 0 || !adapters.every((id) => typeof id === 'string' && id !== '')) {
+    throw new HttpError(400, 'adapters must be a list of adapter instance ids, or left out to sync every adapter.')
+  }
+  return [...new Set(adapters as string[])]
+}
+
+const readJson = (request: IncomingMessage, response: ServerResponse, options: { allowEmpty?: boolean } = {}): Promise<unknown> =>
   new Promise((done, fail) => {
     const chunks: Buffer[] = []
     let size = 0
@@ -114,7 +174,8 @@ const readJson = (request: IncomingMessage, response: ServerResponse): Promise<u
     request.on('error', fail)
     request.on('end', () => {
       try {
-        done(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        const text = Buffer.concat(chunks).toString('utf8')
+        done(text.trim() === '' && options.allowEmpty ? null : JSON.parse(text))
       } catch {
         fail(new HttpError(400, 'The request body is not JSON.'))
       }
@@ -195,13 +256,20 @@ const coordinatedAsk = async (
   }
 }
 
-const api = async (
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL,
-  cwd: string,
+/** What every request is served from. */
+interface Context {
+  cwd: string
+  uiDir: string
   inFlight: InFlight
-): Promise<unknown> => {
+  sync: SyncRunner
+  /** Made at launch; the page sends it back with every change. */
+  token: string
+  /** Known once listening. */
+  port: number
+}
+
+const api = async (request: IncomingMessage, response: ServerResponse, url: URL, context: Context): Promise<unknown> => {
+  const { cwd, inFlight } = context
   const method = request.method ?? 'GET'
   const allow = (...methods: string[]): void => {
     if (!methods.includes(method)) {
@@ -235,6 +303,26 @@ const api = async (
     case '/api/adapters':
       allow('GET', 'HEAD')
       return adaptersStatus(cwd)
+    case '/api/session': {
+      allow('GET')
+      localOnly(request, context.port)
+      const session: UiSession = { token: context.token }
+      return session
+    }
+    case '/api/sync': {
+      allow('GET', 'HEAD', 'POST')
+      if (method !== 'POST') return syncStatus(cwd, context.sync.current)
+      sameOriginChange(request, context.port, context.token)
+      const adapters = syncBody(await readJson(request, response, { allowEmpty: true }))
+      try {
+        context.sync.start(adapters)
+      } catch (cause) {
+        if (cause instanceof SyncBusyError) throw new HttpError(409, cause.message)
+        throw cause
+      }
+      response.statusCode = 202
+      return syncStatus(cwd, context.sync.current)
+    }
     case '/api/evidence': {
       allow('POST')
       let references
@@ -284,13 +372,13 @@ const serveFile = (response: ServerResponse, file: string, head: boolean): void 
 const handle = async (
   request: IncomingMessage,
   response: ServerResponse,
-  options: { cwd: string; uiDir: string; inFlight: InFlight }
+  options: Context
 ): Promise<void> => {
   const url = new URL(request.url ?? '/', 'http://localhost')
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
     try {
-      const body = await api(request, response, url, options.cwd, options.inFlight)
-      if (!response.destroyed) sendJson(response, 200, body)
+      const body = await api(request, response, url, options)
+      if (!response.destroyed) sendJson(response, response.statusCode === 202 ? 202 : 200, body)
     } catch (cause) {
       const status = cause instanceof HttpError ? cause.status : 500
       if (!response.headersSent && !response.destroyed) {
@@ -344,14 +432,24 @@ const listen = (server: Server, port: number): Promise<void> =>
  * canonical files; questions put to the adapters through the shared
  * coordinator (`POST /api/ask`), optionally summarized by a model; adapter
  * status (`GET /api/adapters`); canonical references resolved for the
- * evidence inspector (`POST /api/evidence`); and the legacy `GET /api/ask`
- * and `GET /api/chat`, translated from the coordinator's answers. Every
+ * evidence inspector (`POST /api/evidence`); the legacy `GET /api/ask`
+ * and `GET /api/chat`, translated from the coordinator's answers; and
+ * `docket sync` (`POST /api/sync`, its progress at `GET /api/sync`). Every
  * request re-reads the files, so a refresh shows edits made since. Nothing it
  * does changes the files; summaries are kept in the docket's disposable
- * `.cache/`.
+ * `.cache/`. Starting a sync is the one request it accepts only from this
+ * machine's own page: from 127.0.0.1, its origin, carrying the token
+ * `GET /api/session` hands that page.
  */
 export const startUiServer = async (options: UiServerOptions): Promise<UiServer> => {
-  const context = { cwd: options.cwd, uiDir: resolve(options.uiDir), inFlight: new Map<string, AbortController>() }
+  const context: Context = {
+    cwd: options.cwd,
+    uiDir: resolve(options.uiDir),
+    inFlight: new Map<string, AbortController>(),
+    sync: new SyncRunner(options.cwd, options.runSync),
+    token: randomUUID(),
+    port: 0
+  }
   const server = createServer((request, response) => {
     handle(request, response, context).catch((cause: unknown) => {
       if (!response.headersSent) {
@@ -374,14 +472,18 @@ export const startUiServer = async (options: UiServerOptions): Promise<UiServer>
   }
 
   const { port } = server.address() as AddressInfo
+  context.port = port
   return {
     url: `http://127.0.0.1:${port}/`,
     port,
-    close: () =>
-      new Promise((done, fail) => {
+    close: async () => {
+      await new Promise<void>((done, fail) => {
         server.closeAllConnections()
         server.close((cause) => (cause ? fail(cause) : done()))
       })
+      // A sync started here finishes and records what it did, rather than stopping half-written.
+      await context.sync.settled()
+    }
   }
 }
 

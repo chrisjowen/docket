@@ -167,3 +167,74 @@ export interface UiChatAnswer {
     message: string
   }
 }
+
+/** `GET /api/session`: what the page must send to change anything. Served only to the machine itself. */
+export interface UiSession {
+  /** Made when `docket open` started; sent back in `x-docket-session`. */
+  token: string
+}
+
+/** How far a sync has got: reading the files, projecting into the instances, writing what they hold. */
+export type UiSyncStage = 'validating' | 'projecting' | 'recording'
+
+/** What one sync did to one adapter instance. */
+export interface UiSyncAdapterResult {
+  id: string
+  /** `waiting`: its pass has not finished. `synced`: everything was acknowledged. `failed`: see `error`. */
+  state: 'waiting' | 'synced' | 'failed'
+  /** Records it was handed - entities, observations and documents. */
+  projected: number
+  removed: number
+  /** Entities it already held as they are. */
+  unchanged: number
+  /** Changes it did not acknowledge, which wait for the next sync. */
+  failed: number
+  /** Why it did not fully sync, in plain words. */
+  error?: string
+}
+
+/** One sync started from the UI - the same run as `docket sync`. */
+export interface UiSyncRun {
+  id: string
+  state: 'running' | 'succeeded' | 'failed'
+  /** The instances asked for; null syncs every one enabled for projection. */
+  adapters: string[] | null
+  startedAt: string
+  finishedAt?: string
+  /** While running: what it is doing now. */
+  stage?: UiSyncStage
+  /** Each instance synced, in configuration order, as its pass finishes. */
+  results: UiSyncAdapterResult[]
+  /** Files with errors, whose records keep what they last projected. */
+  fileErrors: number
+  /** Why the sync failed or synced nothing, in plain words. */
+  error?: string
+}
+
+/** An instance enabled for projection, and how far it lags the files. */
+export interface UiSyncTarget {
+  id: string
+  /**
+   * `current`: holds the files as they are. `behind`: files changed since it
+   * last synced. `unsynced`: never synced with its present configuration.
+   * `unknown`: docket cannot tell.
+   */
+  state: 'current' | 'behind' | 'unsynced' | 'unknown'
+  /** Changes a sync would hand it now. */
+  behind?: number
+  /** When its last full sync finished, as far as this docket recorded. */
+  lastSyncedAt?: string
+}
+
+/** `GET /api/sync`: the latest sync started here, and how out of date each projection is. */
+export interface UiSyncStatus {
+  /** The sync running now or the last one started from this UI; null before the first. */
+  run: UiSyncRun | null
+  adapters: UiSyncTarget[]
+  /** Any instance is behind the files or has never synced. */
+  outOfDate: boolean
+  /** When the most recent full sync of any instance finished. */
+  lastSyncedAt?: string
+  /** Why the projections could not be read, in plain words. */
+  error?: string
+}
