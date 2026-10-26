@@ -141,6 +141,22 @@ evidence:
     observedAt: 2026-10-11
     observedBy: claude
     commit: 9fe78c8
+  - source: code
+    path: packages/docket/src/open/server.ts
+    lines: 70
+    symbol: server listen port
+    note: The `docket open` web server now listens on 127.0.0.1 by default (breaking change from 0.0.0.0), with a --host CLI option to customize the listen address.
+    observedAt: 2026-10-26
+    observedBy: claude
+    session: 545488c7-b406-402b-8f89-e4d88e865c28
+    commit: b74099f
+  - source: docs
+    path: README.md
+    note: Documents the 127.0.0.1 default and how to opt back in with `docket open --host 0.0.0.0` for LAN access.
+    observedAt: 2026-10-26
+    observedBy: claude
+    session: 545488c7-b406-402b-8f89-e4d88e865c28
+    commit: b74099f
 
 provenance:
   capturedBy: claude
