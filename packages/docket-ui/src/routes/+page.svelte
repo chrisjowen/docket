@@ -123,9 +123,11 @@
             <div class="text-muted-foreground border-t px-4 py-3 text-xs">
               Search index:
               {#if !graph.index.synced}
-                not synced - run <code class="font-mono">docket sync</code>
+                not synced -
+                <button type="button" class="text-foreground underline underline-offset-2" onclick={() => (workspace.syncOpen = true)}>sync now</button>
               {:else if graph.index.behind > 0}
-                {graph.index.behind} {graph.index.behind === 1 ? 'file' : 'files'} behind - run <code class="font-mono">docket sync</code>
+                {graph.index.behind} {graph.index.behind === 1 ? 'file' : 'files'} behind -
+                <button type="button" class="text-foreground underline underline-offset-2" onclick={() => (workspace.syncOpen = true)}>sync now</button>
               {:else}
                 up to date
               {/if}

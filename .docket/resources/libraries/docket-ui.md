@@ -35,6 +35,15 @@ evidence:
     observedAt: 2026-10-11
     observedBy: claude
     commit: 9fe78c8
+  - source: code
+    path: packages/docket-ui/src/lib/sync.svelte.ts
+    lines: 5-88
+    symbol: sync UI component
+    note: The UI now has a sync capability that launches docket sync from within docket open, polls GET /api/sync every 500ms while the sync runs, and caches adapter freshness while running to avoid recomputing snapshots on each poll.
+    observedAt: 2026-10-26
+    observedBy: claude
+    session: 545488c7-b406-402b-8f89-e4d88e865c28
+    commit: b74099f
 
 provenance:
   capturedBy: claude

@@ -372,8 +372,9 @@ program
   .command('open')
   .description('Browse, search and ask about the knowledge in a web UI')
   .option('-p, --port <port>', 'port to serve on (default: 4380, or any free port when taken)')
+  .option('--host <address>', 'interface to listen on; 0.0.0.0 serves every network interface', '127.0.0.1')
   .option('--no-open', 'print the address without opening a browser')
-  .action(async (options: { port?: string; open: boolean }) => {
+  .action(async (options: { port?: string; host: string; open: boolean }) => {
     let port: number | undefined
     if (options.port !== undefined) {
       port = Number(options.port)
@@ -381,9 +382,17 @@ program
         throw new Error(`--port must be a port number, got "${options.port}"`)
       }
     }
-    const handle = await open({ port })
+    const host = options.host.trim()
+    if (host === '') throw new Error('--host must be an address to listen on, such as 127.0.0.1 or 0.0.0.0')
+    const handle = await open({ port, host })
+    const reach =
+      handle.host === '127.0.0.1' || handle.host === '::1' || handle.host === 'localhost'
+        ? 'this machine only'
+        : handle.host === '0.0.0.0' || handle.host === '::'
+          ? 'listening on every interface: anyone who can reach this machine can read it'
+          : `listening on ${handle.host}`
     console.log(`docket UI for ${handle.resolved.projectRoot}`)
-    console.log(`  ${handle.url}  (listening on all interfaces)`)
+    console.log(`  ${handle.url}  (${reach})`)
     console.log('Press Ctrl-C to stop.')
     if (options.open) openBrowser(handle.url)
 

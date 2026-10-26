@@ -1,12 +1,26 @@
 import { DEFAULT_SCOPE, openDocket } from '../adapters/docket.js'
 import type { Diagnostic } from '../model/index.js'
 import { ProjectionManager, type PassReport, type TargetReport } from '../projection/manager.js'
+import { recordSync } from '../sync/history.js'
 import { canonicalState } from '../sync/inputs.js'
 import { validate, type ValidateOptions } from './validate.js'
+
+/**
+ * How far a sync has got, as it goes: the files read and checked, the
+ * instances it projects into, each one's pass as it finishes, and the
+ * manifests being written.
+ */
+export type SyncProgress =
+  | { stage: 'validating' }
+  | { stage: 'projecting'; adapters: string[] }
+  | { stage: 'synced'; report: PassReport }
+  | { stage: 'recording' }
 
 export interface SyncOptions extends ValidateOptions {
   /** Sync only these adapter instances, by id. Every instance enabled for projection when absent. */
   adapters?: readonly string[] | undefined
+  /** Told of each stage as the sync reaches it. */
+  onProgress?: ((progress: SyncProgress) => void) | undefined
 }
 
 export interface SyncResult {
@@ -60,6 +74,8 @@ interface ReconcileOptions extends SyncOptions {
  * records, and their files' bodies as documents (docs/adapter-spec.md §8).
  */
 export const reconcile = async (options: ReconcileOptions): Promise<SyncResult> => {
+  const progress = options.onProgress ?? (() => undefined)
+  progress({ stage: 'validating' })
   const { resolved, entities, documents, broken, ontology, diagnostics } = await validate(options)
   const result: SyncResult = { diagnostics, upserted: [], removed: [], unchanged: 0, adapters: [] }
 
@@ -70,7 +86,11 @@ export const reconcile = async (options: ReconcileOptions): Promise<SyncResult> 
   const docket = await openDocket(resolved)
   const manager = await ProjectionManager.forDocket(docket, { only: options.adapters, fresh: options.fresh })
   try {
-    await manager.apply(canonicalState(entities, documents, DEFAULT_SCOPE), broken)
+    progress({ stage: 'projecting', adapters: manager.ids })
+    await manager.apply(canonicalState(entities, documents, DEFAULT_SCOPE), broken, undefined, (report) =>
+      progress({ stage: 'synced', report })
+    )
+    progress({ stage: 'recording' })
     await manager.commit()
   } finally {
     await manager.close()
@@ -83,6 +103,10 @@ export const reconcile = async (options: ReconcileOptions): Promise<SyncResult> 
   result.upserted = entities.map((entity) => entity.id).filter((id) => upserted.has(id))
   result.removed = [...removed].sort()
   result.unchanged = entities.filter((entity) => !upserted.has(entity.id) && !held.has(entity.id)).length
+  await recordSync(
+    resolved,
+    result.adapters.filter((report) => !failed(report)).map((report) => report.id)
+  )
 
   if (result.adapters.some(failed)) throw new SyncError(result)
   return result

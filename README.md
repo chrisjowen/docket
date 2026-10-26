@@ -66,7 +66,7 @@ your-repo/
     │   ├── edges.jsonl
     │   ├── manifests/         what sync handed each adapter instance: local.json, ...
     │   └── adapters/          state an adapter instance keeps for itself, if any
-    └── .cache/                answers docket open's chat cached: gitignored, disposable
+    └── .cache/                chat answers and when each adapter last synced: gitignored, disposable
 ```
 
 Directories are only for people: an exhibit's identity is the `id` in its
@@ -245,7 +245,7 @@ docket search <query...>    # the documents each adapter found: ask's compatibil
 docket adapters list        # the configured adapter instances, without connecting to any
 docket adapters status      # each instance's health and how far its index lags the files (--json)
 docket graph --json         # every exhibit and link, read from the files, as versioned JSON (--root <dir>; docs/graph-json.md)
-docket open                 # browse, search, ask and chat in a web UI, served on all interfaces
+docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen)
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
 docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid or mempalace: asks, shows the plan, applies it once confirmed
@@ -268,9 +268,19 @@ docket runtime down <id>    # stop and remove its containers; volumes are kept (
 `http://127.0.0.1:4380/` (or any free port when that one is taken; `--port`
 picks one, `--no-open` skips launching the browser). It reads the canonical
 files on every request, so it needs no projection beyond the default `jsonl`.
-It listens on all interfaces (`0.0.0.0`) and answers any Host, so anyone who
-can reach the machine on that port can read the repository's knowledge. The
-API never changes the canonical files; its one write is chat's answer cache.
+It listens on `127.0.0.1` only, so nothing else on the network can reach it.
+`--host` picks another interface: `--host 0.0.0.0` serves every interface, and
+then anyone who can reach the machine on that port can read the repository's
+knowledge, whatever Host they ask for. Syncing stays limited to the page at
+`127.0.0.1` either way, so a server listening only on another address cannot
+sync.
+
+> **Behaviour change:** earlier versions of `docket open` listened on every
+> interface (`0.0.0.0`) by default. To keep reaching the UI from other
+> machines, start it with `docket open --host 0.0.0.0`.
+
+The API never changes the canonical files; its writes are chat's answer cache and,
+when the page asks from this machine, a sync of the projections.
 
 - **Graph** - every entity and relationship as a force-directed graph, each
   type drawn with its own icon and colour, filtered by type and relationship
@@ -290,6 +300,13 @@ API never changes the canonical files; its one write is chat's answer cache.
   assessment; and the dated observations over time - when something happened
   (`eventAt`) and when it was observed (`observedAt`), labelled apart - with
   each chain of `supersedes` decisions.
+- **Sync** - the header's Sync button runs `docket sync` - the same code, not
+  a copy - for every adapter enabled for projection or just one, showing each
+  adapter's result as its pass finishes, when each last synced, and a hint
+  when files changed since. One sync runs at a time. Only the page on the
+  machine running `docket open`, at `127.0.0.1`, can start one: the server
+  checks the request's address, Host and Origin, and a token it makes at
+  launch.
 - **Ask** - its own page: a question put to every adapter configured for
   query, each answer shown as it came - exhibits, passages, facts, counts,
   tables, timelines, graphs - with how the adapter read the question, how much

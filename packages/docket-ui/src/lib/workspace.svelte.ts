@@ -4,6 +4,7 @@ import { SvelteSet } from 'svelte/reactivity'
 import { createAskClient, type AdaptersState, type AskClient } from './ask/client.js'
 import { evidenceIndex, type AskOutcome, type EvidenceIndex } from './ask/outcome.js'
 import type { ChatTurn } from './components/chat-panel.svelte'
+import { SyncState } from './sync.svelte.js'
 import type { UiAnswer, UiEdge, UiGraph } from './types.js'
 
 /*
@@ -132,9 +133,18 @@ export class Workspace {
   #adaptersLoading: Promise<void> | null = null
   turns = $state<ChatTurn[]>([])
 
+  /** `docket sync`, started from the page. */
+  readonly sync: SyncState
+  syncOpen = $state(false)
+
   constructor(client: AskClient = createAskClient()) {
     this.client = client
     this.ask = new AskSession(client)
+    // A finished sync changes what the index status and adapter freshness say.
+    this.sync = new SyncState(() => {
+      void this.load()
+      if (this.adapters !== null) void this.loadAdapters(true)
+    })
   }
 
   readonly selected = $derived(this.inspector?.kind === 'exhibit' ? this.inspector.id : null)
