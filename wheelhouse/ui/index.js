@@ -18311,7 +18311,7 @@ function b$(e, t) {
 }
 var x$ = /* @__PURE__ */ new Set(["$$slots", "$$events", "$$legacy", "ref", "id", "children"]), y$ = /* @__PURE__ */ z("<div><div><!></div></div>");
 const _$ = {
-  hash: "svelte-1cg1f0k",
+  hash: "svelte-w8xgs5",
   code: `
 	/* Hide scrollbars cross browser and enable momentum scroll for touch devices */[data-scroll-area-viewport] {scrollbar-width:none !important;-ms-overflow-style:none !important;-webkit-overflow-scrolling:touch !important;}[data-scroll-area-viewport]::-webkit-scrollbar {display:none !important;}:where([data-scroll-area-viewport]) {display:flex;flex-direction:column;align-items:stretch;}:where([data-scroll-area-content]) {flex-grow:1;}`
 };

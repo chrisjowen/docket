@@ -30,7 +30,14 @@ const shadowRootProperties = (): Plugin => ({
  */
 export default defineConfig({
   // Components' own styles go into the shadow root they mount in, not a stylesheet beside the bundle.
-  plugins: [tailwindcss(), svelte({ compilerOptions: { css: 'injected' } }), shadowRootProperties()],
+  // Their scoping class hashes the styles rather than Svelte's default, the file's path, which is
+  // absolute for files outside the working directory (dependencies), so the bundle would depend on
+  // where the repository is checked out.
+  plugins: [
+    tailwindcss(),
+    svelte({ compilerOptions: { css: 'injected', cssHash: ({ css, hash }) => `svelte-${hash(css)}` } }),
+    shadowRootProperties()
+  ],
   resolve: { alias: { $lib: resolve(import.meta.dirname, 'src/lib') } },
   define: { 'process.env.NODE_ENV': JSON.stringify('production') },
   build: {
