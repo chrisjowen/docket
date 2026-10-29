@@ -6,7 +6,7 @@
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
   import { Button } from '$lib/components/ui/button/index.js'
   import ConnectedCasebook from './connected-casebook.svelte'
-  import { connect, isCasebookData, VIEWER, type Connection, type PluginHost, type ServiceView } from './host.js'
+  import { connect, isCasebookData, keepsCasebook, VIEWER, type Connection, type PluginHost, type ServiceView } from './host.js'
 
   /**
    * The casebook inside Wheelhouse. It is drawn from the project's docket
@@ -42,16 +42,15 @@
   let checks = 0
   async function check(): Promise<void> {
     const at = ++checks
-    let view: ServiceView | null = null
+    let view: ServiceView | null | undefined
     try {
       view = host ? await host.service(VIEWER) : null
     } catch {
-      view = null
+      view = undefined
     }
-    const next = await connect(isCasebookData(data) ? data : null, view, origin, probe)
+    if (at !== checks || keepsCasebook(connection, view)) return
+    const next = await connect(isCasebookData(data) ? data : null, view ?? null, origin, probe)
     if (at !== checks) return
-    // A casebook already open stays open: a moment's lost answer is not a reason to close it.
-    if (connection.state === 'connected' && next.state === 'connected' && connection.url === next.url) return
     connection = next
     log = view?.log ?? null
   }

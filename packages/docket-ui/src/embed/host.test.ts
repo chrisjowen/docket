@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { CASEBOOK_SCHEMA, connect, isCasebookData, type CasebookData, type ServiceView } from './host.js'
+import { CASEBOOK_SCHEMA, connect, isCasebookData, keepsCasebook, type CasebookData, type ServiceView } from './host.js'
 
 const WHEELHOUSE = 'http://127.0.0.1:4310'
 const VIEWER = 'http://127.0.0.1:4400'
@@ -74,5 +74,26 @@ describe('connect', () => {
     expect(isCasebookData(data())).toBe(true)
     expect(isCasebookData({ state: 'docket' })).toBe(false)
     expect(isCasebookData(null)).toBe(false)
+  })
+})
+
+describe('keepsCasebook', () => {
+  const open = { state: 'connected', url: VIEWER } as const
+
+  it('keeps an open casebook while the viewer runs where it did, or Wheelhouse cannot be asked', () => {
+    expect(keepsCasebook(open, view())).toBe(true)
+    expect(keepsCasebook(open, undefined)).toBe(true)
+  })
+
+  it('closes it once the viewer stops, fails, moves or is gone', () => {
+    for (const state of ['stopped', 'starting', 'failed', 'occupied', 'unavailable'] as const) {
+      expect(keepsCasebook(open, view({ state }))).toBe(false)
+    }
+    expect(keepsCasebook(open, view({ url: 'http://127.0.0.1:4401' }))).toBe(false)
+    expect(keepsCasebook(open, null)).toBe(false)
+  })
+
+  it('has nothing to keep before the casebook is open', () => {
+    expect(keepsCasebook({ state: 'checking' }, view())).toBe(false)
   })
 })

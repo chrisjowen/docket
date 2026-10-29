@@ -69,6 +69,15 @@ export type Connection =
   /** The viewer is not running (or not for this page): say so, with Launch when Wheelhouse can start it. */
   | { state: 'offline'; title: string; detail: string | null; hint: string | null; launchable: boolean; starting: boolean }
 
+/**
+ * Whether an open casebook stays open after Wheelhouse is asked about the
+ * viewer again (`view` is undefined when it could not be asked). Only the
+ * viewer's service saying it is no longer running, or runs somewhere else,
+ * closes it; a refreshed provider value or a lost answer does not.
+ */
+export const keepsCasebook = (connection: Connection, view: ServiceView | null | undefined): boolean =>
+  connection.state === 'connected' && (view === undefined || (view?.state === 'running' && view.url === connection.url))
+
 /** Whether this is `GET /api/health`'s answer, which only a docket open new enough for Wheelhouse gives. */
 const isHealth = (value: unknown): boolean =>
   typeof value === 'object' && value !== null && (value as { service?: unknown }).service === 'docket-open'
