@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
 @import 'tw-animate-css';
 @import '../lib/styles/casebook.css';
 
@@ -8,7 +8,8 @@
  * its CSS variables. The shadcn-svelte tokens (--background, --foreground,
  * --border, ...) are left to Wheelhouse, so the casebook follows its light
  * and dark themes; the casebook's own (the spine, the graph's series) come
- * from lib/styles/casebook.css.
+ * from lib/styles/casebook.css. Only the sources below are scanned for
+ * classes, so the committed bundle builds the same wherever it is built.
  */
 @source '../lib';
 @source './';
