@@ -54,7 +54,9 @@
 
   /** ⌘K, Ctrl-K or / from anywhere that is not already a text field. */
   function onwindowkeydown(event: KeyboardEvent): void {
-    const typing = event.target instanceof HTMLElement && event.target.closest('input, textarea, [contenteditable]')
+    // The first node on the path, not `target`: inside a shadow root the target is its host.
+    const origin = event.composedPath()[0]
+    const typing = origin instanceof HTMLElement && origin.closest('input, textarea, [contenteditable]')
     if ((event.key === 'k' && (event.metaKey || event.ctrlKey)) || (event.key === '/' && !typing)) {
       event.preventDefault()
       input?.focus()
@@ -64,7 +66,8 @@
 
   $effect(() => {
     if (!open) return
-    document.getElementById(`quick-${active}`)?.scrollIntoView({ block: 'nearest' })
+    // Looked up from the input's own root, which is a shadow root inside Wheelhouse.
+    ;(input?.getRootNode() as Document | ShadowRoot | undefined)?.getElementById(`quick-${active}`)?.scrollIntoView({ block: 'nearest' })
   })
 
   const FIELD_LABEL: Record<string, string> = {

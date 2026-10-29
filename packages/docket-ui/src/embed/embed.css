@@ -1,0 +1,25 @@
+@import 'tailwindcss' source(none);
+@import 'tw-animate-css';
+@import '../lib/styles/casebook.css';
+
+/*
+ * The casebook inside Wheelhouse: these styles go into the element's shadow
+ * root, so they never reach Wheelhouse's page and Wheelhouse's never reach in, except
+ * its CSS variables. The shadcn-svelte tokens (--background, --foreground,
+ * --border, ...) are left to Wheelhouse, so the casebook follows its light
+ * and dark themes; the casebook's own (the spine, the graph's series) come
+ * from lib/styles/casebook.css. Only the sources below are scanned for
+ * classes, so the committed bundle builds the same wherever it is built.
+ */
+@source '../lib';
+@source './';
+
+:host {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}

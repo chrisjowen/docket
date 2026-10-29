@@ -246,6 +246,7 @@ docket adapters list        # the configured adapter instances, without connecti
 docket adapters status      # each instance's health and how far its index lags the files (--json)
 docket graph --json         # every exhibit and link, read from the files, as versioned JSON (--root <dir>; docs/graph-json.md)
 docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen)
+docket open --allow-origin http://127.0.0.1:4310  # also let another page on this machine use it, such as Wheelhouse
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
 docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid or mempalace: asks, shows the plan, applies it once confirmed
@@ -279,6 +280,14 @@ sync.
 > interface (`0.0.0.0`) by default. To keep reaching the UI from other
 > machines, start it with `docket open --host 0.0.0.0`.
 
+`--allow-origin <origin>` (repeatable) names another page on this machine
+that may use the UI's API as docket open's own page does: read every answer
+and, with the launch's token, sync. That is how
+[Wheelhouse](#in-wheelhouse) draws the casebook inside its own page. Only
+http(s) origins on `127.0.0.1`, `localhost` or `[::1]` are accepted; the
+server sends CORS headers to those pages alone, and refuses any other page's
+preflight.
+
 The API never changes the canonical files; its writes are chat's answer cache and,
 when the page asks from this machine, a sync of the projections.
 
@@ -304,9 +313,9 @@ when the page asks from this machine, a sync of the projections.
   a copy - for every adapter enabled for projection or just one, showing each
   adapter's result as its pass finishes, when each last synced, and a hint
   when files changed since. One sync runs at a time. Only the page on the
-  machine running `docket open`, at `127.0.0.1`, can start one: the server
-  checks the request's address, Host and Origin, and a token it makes at
-  launch.
+  machine running `docket open`, at `127.0.0.1` - or a page it was started
+  with `--allow-origin` for - can start one: the server checks the request's
+  address, Host and Origin, and a token it makes at launch.
 - **Ask** - its own page: a question put to every adapter configured for
   query, each answer shown as it came - exhibits, passages, facts, counts,
   tables, timelines, graphs - with how the adapter read the question, how much
@@ -376,6 +385,25 @@ cancels a question still being answered, as closing its connection does;
 `POST /api/evidence` resolves up to 16 canonical references against the files,
 with a bounded excerpt of each. The older `GET /api/ask?q=` and
 `GET /api/chat?q=` still answer, translated from the coordinator's answers.
+`GET /api/health` says this is docket open (`"service": "docket-open"`), the
+repository root it serves and the pages `--allow-origin` let in.
+
+## In Wheelhouse
+
+This repository is also a [Wheelhouse](https://github.com/chrisjowen/wheelhouse)
+plugin. Its **Docket** project tab is the whole casebook - Browse (graph,
+table, history), Ask, Adapters, the inspector, chat, quick search and sync -
+drawn inside Wheelhouse from the project's own `docket open`, which Wheelhouse
+starts on 127.0.0.1 with `--allow-origin` for its page when you click
+**Launch**:
+
+```bash
+wheelhouse plugin install chrisjowen/docket
+```
+
+It needs a docket CLI with `docket open --allow-origin`. See
+[`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its
+settings and how it is built.
 
 ## Asking questions: `docket ask`
 
@@ -961,6 +989,10 @@ To work on the web UI with hot reload, run `docket open --no-open` in a
 repository with a `.docket/`, then `pnpm -C packages/docket-ui dev`; the dev
 server proxies `/api` to it (set `DOCKET_API` if it is not on port 4380).
 
+The Wheelhouse plugin's built files are committed: after changing
+`wheelhouse/src` or the web UI, run `pnpm -C wheelhouse build`. Its tests
+(`pnpm test` runs them) fail while they are out of date.
+
 Layout, phases and track ownership are in [`PLAN.md`](PLAN.md). The full
 specification is [`docs/SPEC.md`](docs/SPEC.md).
 
@@ -974,9 +1006,10 @@ allow publishing from CI without 2FA, so the workflow runs `npm stage publish`:
 the version lands in npm's staging area and goes live only once a maintainer
 approves it.
 
-1. Bump `version` in `packages/docket/package.json`, and `CLI_VERSION` in
-   `packages/claude-plugin/scripts/cli.js` to match (the plugin's tests fail
-   until they agree), and merge it.
+1. Bump `version` in `packages/docket/package.json`, `CLI_VERSION` in
+   `packages/claude-plugin/scripts/cli.js` and `version` in
+   `.wheelhouse-plugin/plugin.json` to match (the plugins' tests fail until
+   they agree), and merge it.
 2. Tag that commit `v<version>` and push the tag, or publish a GitHub release
    for it.
 3. Approve the staged version with 2FA: `npm stage approve <stage-id>`, or the

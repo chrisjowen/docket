@@ -39,7 +39,7 @@ npx docket ask <question...>    # ask the adapters: each answer with its evidenc
 npx docket search <query...>    # the documents each adapter found
 npx docket adapters status      # each adapter's health and how far its index lags the files
 npx docket graph --json         # every exhibit and link as versioned JSON, for other tools to read
-npx docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen)
+npx docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen; --allow-origin for Wheelhouse)
 npx docket ontology list        # what resource types and relationships exist
 npx docket adapter add neo4j    # set up an adapter: asks, shows the plan, applies it once confirmed
 ```

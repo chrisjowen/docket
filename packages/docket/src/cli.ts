@@ -26,6 +26,7 @@ import { confidenceModel, observationConfidence } from './evidence/confidence.js
 import { terminalPrompter } from './install/answers.js'
 import { PROVIDERS } from './install/providers.js'
 import { openBrowser } from './open/browser.js'
+import { allowedOrigin } from './open/server.js'
 import type { RecordRef, TargetReport } from './projection/manager.js'
 import {
   hasErrors,
@@ -374,7 +375,13 @@ program
   .option('-p, --port <port>', 'port to serve on (default: 4380, or any free port when taken)')
   .option('--host <address>', 'interface to listen on; 0.0.0.0 serves every network interface', '127.0.0.1')
   .option('--no-open', 'print the address without opening a browser')
-  .action(async (options: { port?: string; host: string; open: boolean }) => {
+  .option(
+    '--allow-origin <origin>',
+    'another page on this machine that may use the UI\'s API, such as Wheelhouse at http://127.0.0.1:4310 (repeatable)',
+    (value: string, previous: string[]) => [...previous, value],
+    [] as string[]
+  )
+  .action(async (options: { port?: string; host: string; open: boolean; allowOrigin: string[] }) => {
     let port: number | undefined
     if (options.port !== undefined) {
       port = Number(options.port)
@@ -384,7 +391,11 @@ program
     }
     const host = options.host.trim()
     if (host === '') throw new Error('--host must be an address to listen on, such as 127.0.0.1 or 0.0.0.0')
-    const handle = await open({ port, host })
+    for (const origin of options.allowOrigin) {
+      const checked = allowedOrigin(origin)
+      if (!checked.ok) throw new Error(`--allow-origin: ${checked.reason}`)
+    }
+    const handle = await open({ port, host, allowOrigins: options.allowOrigin })
     const reach =
       handle.host === '127.0.0.1' || handle.host === '::1' || handle.host === 'localhost'
         ? 'this machine only'
@@ -393,6 +404,7 @@ program
           : `listening on ${handle.host}`
     console.log(`docket UI for ${handle.resolved.projectRoot}`)
     console.log(`  ${handle.url}  (${reach})`)
+    if (handle.allowOrigins.length > 0) console.log(`  also usable from ${handle.allowOrigins.join(', ')}`)
     console.log('Press Ctrl-C to stop.')
     if (options.open) openBrowser(handle.url)
 

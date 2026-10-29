@@ -10,3 +10,4 @@ dist/
 packages/docket-ui/build/
 .docket/.index/
 .docket/.cache/
+packages/docket-ui/embed/

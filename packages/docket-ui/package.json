@@ -10,7 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:embed": "vite build --config vite.embed.config.ts"
   },
   "devDependencies": {
     "@docket/contracts": "workspace:*",

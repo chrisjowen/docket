@@ -1,6 +1,7 @@
 import { getContext, setContext } from 'svelte'
 import { SvelteSet } from 'svelte/reactivity'
 
+import { apiAt, type DocketApi } from './api.js'
 import { createAskClient, type AdaptersState, type AskClient } from './ask/client.js'
 import { evidenceIndex, type AskOutcome, type EvidenceIndex } from './ask/outcome.js'
 import type { ChatTurn } from './components/chat-panel.svelte'
@@ -104,6 +105,7 @@ export class AskSession {
 }
 
 export class Workspace {
+  readonly api: DocketApi
   readonly client: AskClient
 
   graph = $state.raw<UiGraph | null>(null)
@@ -137,14 +139,16 @@ export class Workspace {
   readonly sync: SyncState
   syncOpen = $state(false)
 
-  constructor(client: AskClient = createAskClient()) {
+  /** Everything is read from, and asked of, `api`: docket open's own origin unless told otherwise. */
+  constructor(api: DocketApi = apiAt(), client: AskClient = createAskClient(api.fetch)) {
+    this.api = api
     this.client = client
     this.ask = new AskSession(client)
     // A finished sync changes what the index status and adapter freshness say.
     this.sync = new SyncState(() => {
       void this.load()
       if (this.adapters !== null) void this.loadAdapters(true)
-    })
+    }, api.fetch)
   }
 
   readonly selected = $derived(this.inspector?.kind === 'exhibit' ? this.inspector.id : null)
@@ -152,7 +156,7 @@ export class Workspace {
   async load(): Promise<void> {
     this.loading = true
     try {
-      const response = await fetch('/api/graph')
+      const response = await this.api.fetch('/api/graph')
       const body = (await response.json()) as UiGraph | { error: string }
       if (!response.ok || 'error' in body) throw new Error('error' in body ? body.error : response.statusText)
       this.graph = body

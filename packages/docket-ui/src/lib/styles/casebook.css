@@ -1,0 +1,103 @@
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * The casebook's own tokens: the bottle-green cloth spine with gilt lettering,
+ * the evidence board's ruled paper and the graph's categorical series. Set on
+ * :host as well as :root, so the casebook drawn in a shadow root inside
+ * another page - Wheelhouse's - has them too. The shadcn-svelte tokens they
+ * sit beside (--background, --foreground, ...) are the page's: docket open's
+ * own in app.css, or Wheelhouse's, which reach into the shadow root.
+ */
+:root,
+:host {
+  --spine: #1f3b2d;
+  --spine-foreground: #ece6d2;
+  --spine-muted: #a9b5a6;
+  --gilt: #b08d3c;
+
+  --graph-surface: #f8f8f3;
+  --graph-rule: #e7e8df;
+  --graph-edge: #bfc2b5;
+  --graph-label: #4b524c;
+  --graph-other: #8a8d84;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  /* Types past the palette get generated hues at this lightness and chroma. */
+  --series-generated-l: 0.58;
+  --series-generated-c: 0.15;
+}
+
+.dark {
+  --spine: #0c120e;
+  --spine-foreground: #e4d9b4;
+  --spine-muted: #8d9a90;
+  --gilt: #c9a752;
+
+  --graph-surface: #141b16;
+  --graph-rule: #1b241e;
+  --graph-edge: #46524a;
+  --graph-label: #bfc6bc;
+  --graph-other: #7f877f;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-generated-l: 0.66;
+  --series-generated-c: 0.14;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-graph-surface: var(--graph-surface);
+  --color-spine: var(--spine);
+  --color-spine-foreground: var(--spine-foreground);
+  --color-spine-muted: var(--spine-muted);
+  --color-gilt: var(--gilt);
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+}
+
+/* Section heads in the side panels: set like a casebook's running heads. */
+@utility section-title {
+  font-family: var(--font-serif);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--foreground);
+}

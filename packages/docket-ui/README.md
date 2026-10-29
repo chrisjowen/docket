@@ -49,3 +49,24 @@ pnpm dev:fixtures
 The Sync button only works against `docket open` directly: the server accepts
 a sync only from its own origin on `127.0.0.1`, so one sent through the dev
 proxy is refused.
+
+## Inside Wheelhouse
+
+The same casebook is docket's Wheelhouse plugin element,
+`<docket-casebook>`: `src/embed/` defines it, mounting the shell
+docket open's page draws (`src/lib/components/casebook.svelte`) in a shadow
+root, with its views kept in memory (`MemoryNavigator`, `src/lib/nav.svelte.ts`)
+rather than as routes, and its API at the project's viewer
+(`apiAt(url)`, `src/lib/api.ts`) rather than the page's own origin. Wheelhouse
+starts that viewer as `docket open --allow-origin <Wheelhouse's page>`, so the
+page may use it. `src/embed/embed.css` leaves the shadcn-svelte colours to
+Wheelhouse, so the casebook follows its themes, and keeps the casebook's own
+(`src/lib/styles/casebook.css`).
+
+```bash
+pnpm build:embed                  # embed/index.js, one ES module
+```
+
+The plugin's build (`wheelhouse/build.mjs` at the repository root) builds the
+same bundle into `wheelhouse/ui/index.js`; see
+[`wheelhouse/README.md`](../../wheelhouse/README.md).
