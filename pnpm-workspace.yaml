@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - wheelhouse
 onlyBuiltDependencies:
   - better-sqlite3
   - esbuild

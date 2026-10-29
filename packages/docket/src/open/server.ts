@@ -17,7 +17,7 @@ import { ask } from './ask.js'
 import { chat } from './chat.js'
 import { readGraph } from './graph.js'
 import { SyncBusyError, SyncRunner } from './sync-run.js'
-import type { UiSession } from './types.js'
+import type { UiHealth, UiSession } from './types.js'
 
 /** Tried first so the UI keeps one address between runs; any free port when it is taken. */
 export const DEFAULT_PORT = 4380
@@ -36,6 +36,12 @@ export interface UiServerOptions {
   host?: string | undefined
   /** What `POST /api/sync` runs. Omitted: `docket sync` itself; tests stand in their own. */
   runSync?: ((options: SyncOptions) => Promise<SyncResult>) | undefined
+  /**
+   * Pages on this machine, besides docket open's own, that may use the API -
+   * such as Wheelhouse's, which draws this UI inside its own page. Each is an
+   * http(s) origin on loopback (`allowedOrigin` checks one). Omitted: none.
+   */
+  allowOrigins?: readonly string[] | undefined
 }
 
 export interface UiServer {
@@ -43,6 +49,8 @@ export interface UiServer {
   port: number
   /** The interface it listens on. */
   host: string
+  /** The other pages allowed to use the API, as `allowedOrigin` normalised them. */
+  allowOrigins: string[]
   close(): Promise<void>
 }
 
@@ -77,6 +85,35 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
 /** The header carrying the per-launch session token back. */
 export const SESSION_HEADER = 'x-docket-session'
+
+/** What `GET /api/health` names itself, so a client can tell docket open from another server on the port. */
+export const HEALTH_SERVICE = 'docket-open'
+
+const LOOPBACK_NAMES = new Set(['127.0.0.1', 'localhost', '[::1]'])
+
+/**
+ * An origin another page may use the API from, normalised (`http://127.0.0.1:4310`),
+ * or why it cannot. Only http(s) pages on this machine: the API serves the
+ * repository's knowledge and starts syncs, so a page elsewhere never gets it.
+ */
+export const allowedOrigin = (raw: string): { ok: true; origin: string } | { ok: false; reason: string } => {
+  let url: URL
+  try {
+    url = new URL(raw.trim())
+  } catch {
+    return { ok: false, reason: `"${raw}" is not an origin such as http://127.0.0.1:4310` }
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return { ok: false, reason: `"${raw}" is not an http or https origin` }
+  }
+  if (!LOOPBACK_NAMES.has(url.hostname)) {
+    return { ok: false, reason: `"${raw}" is not on this machine: only 127.0.0.1, localhost and [::1] may be allowed` }
+  }
+  if ((url.pathname !== '/' && url.pathname !== '') || url.search !== '' || url.hash !== '' || url.username !== '' || url.password !== '') {
+    return { ok: false, reason: `"${raw}" is more than an origin: give the scheme, host and port only` }
+  }
+  return { ok: true, origin: url.origin }
+}
 
 class HttpError extends Error {
   constructor(
@@ -120,9 +157,10 @@ const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/
  * Refuses a request that does not come from this machine, addressed to this
  * server by its loopback name - so neither another machine on the network nor
  * a page on another site, through a DNS name rebound to 127.0.0.1, gets past
- * it - or that a browser says another site sent.
+ * it - or that a browser says another site sent, unless that site is one
+ * `--allow-origin` named.
  */
-const localOnly = (request: IncomingMessage, port: number): void => {
+const localOnly = (request: IncomingMessage, port: number, allowOrigins: ReadonlySet<string>): void => {
   const here = `http://127.0.0.1:${port}/`
   if (!LOOPBACK.has(request.socket.remoteAddress ?? '')) {
     throw new HttpError(403, `This can only be done on the machine running docket open, at ${here}`)
@@ -132,19 +170,20 @@ const localOnly = (request: IncomingMessage, port: number): void => {
     throw new HttpError(403, `This can only be done from the page docket open serves, at ${here}`)
   }
   const site = request.headers['sec-fetch-site']
-  if (site !== undefined && site !== 'same-origin' && site !== 'none') {
+  if (site !== undefined && site !== 'same-origin' && site !== 'none' && !allowOrigins.has(request.headers.origin ?? '')) {
     throw new HttpError(403, `This can only be done from the page docket open serves, at ${here}`)
   }
 }
 
 /**
- * `localOnly`, and a change sent by the page itself: from its own origin,
- * carrying the token this launch handed it.
+ * `localOnly`, and a change sent by the page itself - from its own origin, or
+ * one `--allow-origin` named - carrying the token this launch handed it.
  */
-const sameOriginChange = (request: IncomingMessage, port: number, token: string): void => {
-  localOnly(request, port)
+const pageChange = (request: IncomingMessage, port: number, token: string, allowOrigins: ReadonlySet<string>): void => {
+  localOnly(request, port, allowOrigins)
   const here = `http://127.0.0.1:${port}/`
-  if (request.headers.origin !== `http://${request.headers.host ?? ''}`) {
+  const origin = request.headers.origin ?? ''
+  if (origin !== `http://${request.headers.host ?? ''}` && !allowOrigins.has(origin)) {
     throw new HttpError(403, `This can only be done from the page docket open serves, at ${here}`)
   }
   if (request.headers[SESSION_HEADER] !== token) {
@@ -267,6 +306,8 @@ const coordinatedAsk = async (
 /** What every request is served from. */
 interface Context {
   cwd: string
+  /** Other pages on this machine allowed to use the API. */
+  allowOrigins: ReadonlySet<string>
   uiDir: string
   inFlight: InFlight
   sync: SyncRunner
@@ -311,16 +352,21 @@ const api = async (request: IncomingMessage, response: ServerResponse, url: URL,
     case '/api/adapters':
       allow('GET', 'HEAD')
       return adaptersStatus(cwd)
+    case '/api/health': {
+      allow('GET', 'HEAD')
+      const health: UiHealth = { service: HEALTH_SERVICE, root: cwd, allowOrigins: [...context.allowOrigins] }
+      return health
+    }
     case '/api/session': {
       allow('GET')
-      localOnly(request, context.port)
+      localOnly(request, context.port, context.allowOrigins)
       const session: UiSession = { token: context.token }
       return session
     }
     case '/api/sync': {
       allow('GET', 'HEAD', 'POST')
       if (method !== 'POST') return context.sync.status()
-      sameOriginChange(request, context.port, context.token)
+      pageChange(request, context.port, context.token, context.allowOrigins)
       const adapters = syncBody(await readJson(request, response, { allowEmpty: true }))
       try {
         context.sync.start(adapters)
@@ -377,6 +423,38 @@ const serveFile = (response: ServerResponse, file: string, head: boolean): void 
   else createReadStream(file).pipe(response)
 }
 
+/** The methods and request headers another allowed page may use. */
+const CORS_METHODS = 'GET, HEAD, POST, DELETE'
+const CORS_HEADERS = `content-type, ${SESSION_HEADER}`
+
+/**
+ * Lets a page `--allow-origin` named read the API's answers, and answers its
+ * preflight; a preflight from any other page is refused. True when the
+ * request was a preflight, answered here. Other cross-origin requests go on
+ * without these headers, so the browser keeps their answers from the page.
+ */
+const crossOrigin = (request: IncomingMessage, response: ServerResponse, allowOrigins: ReadonlySet<string>): boolean => {
+  if (allowOrigins.size > 0) response.setHeader('vary', 'Origin')
+  const origin = request.headers.origin
+  const allowed = origin !== undefined && allowOrigins.has(origin)
+  if (allowed) {
+    response.setHeader('access-control-allow-origin', origin)
+    response.setHeader('access-control-expose-headers', 'x-request-id')
+  }
+  if (request.method !== 'OPTIONS') return false
+  if (!allowed) {
+    sendJson(response, 403, { error: 'Only docket open\'s own page, and the pages it was started with --allow-origin for, can use this API.' })
+    return true
+  }
+  response.writeHead(204, {
+    'access-control-allow-methods': CORS_METHODS,
+    'access-control-allow-headers': CORS_HEADERS,
+    'access-control-max-age': '600'
+  })
+  response.end()
+  return true
+}
+
 const handle = async (
   request: IncomingMessage,
   response: ServerResponse,
@@ -384,6 +462,7 @@ const handle = async (
 ): Promise<void> => {
   const url = new URL(request.url ?? '/', 'http://localhost')
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+    if (crossOrigin(request, response, options.allowOrigins)) return
     try {
       const body = await api(request, response, url, options)
       if (!response.destroyed) sendJson(response, response.statusCode === 202 ? 202 : 200, body)
@@ -447,11 +526,20 @@ const listen = (server: Server, port: number, host: string): Promise<void> =>
  * does changes the files; summaries are kept in the docket's disposable
  * `.cache/`. Starting a sync is the one request it accepts only from this
  * machine's own page: from 127.0.0.1, its origin, carrying the token
- * `GET /api/session` hands that page.
+ * `GET /api/session` hands that page. `allowOrigins` names other pages on this
+ * machine that are as good as its own - Wheelhouse's, which draws this UI in
+ * its own page: they may read every answer (CORS) and, with the token, sync.
+ * `GET /api/health` says which docket this is and which pages it allows.
  */
 export const startUiServer = async (options: UiServerOptions): Promise<UiServer> => {
+  const origins = (options.allowOrigins ?? []).map((raw) => {
+    const checked = allowedOrigin(raw)
+    if (!checked.ok) throw new Error(`Cannot allow ${checked.reason}.`)
+    return checked.origin
+  })
   const context: Context = {
     cwd: options.cwd,
+    allowOrigins: new Set(origins),
     uiDir: resolve(options.uiDir),
     inFlight: new Map<string, AbortController>(),
     sync: new SyncRunner(options.cwd, options.runSync),
@@ -488,6 +576,7 @@ export const startUiServer = async (options: UiServerOptions): Promise<UiServer>
     url: `http://${address}:${port}/`,
     port,
     host,
+    allowOrigins: [...context.allowOrigins],
     close: async () => {
       await new Promise<void>((done, fail) => {
         server.closeAllConnections()

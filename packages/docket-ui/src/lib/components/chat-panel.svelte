@@ -22,6 +22,7 @@
   import { ScrollArea } from '$lib/components/ui/scroll-area/index.js'
   import { boardAnswer, citationsAsMentions } from '$lib/model.js'
   import type { UiAnswer, UiGraph } from '$lib/types.js'
+  import { getWorkspace } from '$lib/workspace.svelte.js'
   import Notes from './notes.svelte'
   import TypeMark from './type-mark.svelte'
 
@@ -35,6 +36,7 @@
   }
 
   let { graph, turns = $bindable(), onselect, onshow }: Props = $props()
+  const workspace = getWorkspace()
 
   let question = $state('')
   let end = $state<HTMLElement | null>(null)
@@ -77,7 +79,7 @@
 
     let settled: ChatTurn
     try {
-      const response = await fetch(`/api/chat?q=${encodeURIComponent(query)}`)
+      const response = await workspace.api.fetch(`/api/chat?q=${encodeURIComponent(query)}`)
       const body = (await response.json()) as UiChatAnswer | { error: string }
       if (!response.ok || 'error' in body) throw new Error('error' in body ? body.error : response.statusText)
       settled = { question: query, reply: body, error: null }

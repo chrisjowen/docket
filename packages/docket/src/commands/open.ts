@@ -14,6 +14,8 @@ export interface OpenOptions {
   host?: string | undefined
   /** The built web UI. Defaults to the copy shipped in this package. */
   uiDir?: string | undefined
+  /** Other pages on this machine that may use the API, such as Wheelhouse's: http(s) origins on loopback. */
+  allowOrigins?: readonly string[] | undefined
 }
 
 export interface OpenHandle extends UiServer {
@@ -38,6 +40,12 @@ export const open = async (options: OpenOptions = {}): Promise<OpenHandle> => {
     )
   }
 
-  const server = await startUiServer({ cwd: resolved.projectRoot, uiDir, port: options.port, host: options.host })
+  const server = await startUiServer({
+    cwd: resolved.projectRoot,
+    uiDir,
+    port: options.port,
+    host: options.host,
+    allowOrigins: options.allowOrigins
+  })
   return { ...server, resolved }
 }

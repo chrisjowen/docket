@@ -1,3 +1,4 @@
+import type { Fetcher } from './api.js'
 import { requestError } from './sync.js'
 import type { UiSession, UiSyncStatus } from './types.js'
 
@@ -29,10 +30,16 @@ export class SyncState {
   /** Bumped by each request, so a response to an older one is dropped. */
   #request = 0
   #finished: () => void
+  #fetch: Fetcher
 
-  /** `finished` runs once a sync started here ends, so what shows the projections can read them again. */
-  constructor(finished: () => void = () => undefined) {
+  /**
+   * `finished` runs once a sync started here ends, so what shows the
+   * projections can read them again. Requests go through `fetcher`: docket
+   * open's own origin unless told otherwise.
+   */
+  constructor(finished: () => void = () => undefined, fetcher: Fetcher = (path, init) => fetch(path, init)) {
     this.#finished = finished
+    this.#fetch = fetcher
   }
 
   /** Reads the status again, and keeps reading it while a sync runs. */
@@ -40,7 +47,7 @@ export class SyncState {
     const request = ++this.#request
     const wasRunning = this.status?.run?.state === 'running'
     try {
-      const response = await fetch('/api/sync')
+      const response = await this.#fetch('/api/sync')
       const body = await readBody(response)
       if (request !== this.#request) return
       if (!response.ok) throw new Error(requestError(response.status, body, 'read the sync status'))
@@ -63,10 +70,10 @@ export class SyncState {
     this.failure = null
     try {
       // The token is asked for each time, so a docket open restarted since the page loaded still accepts it.
-      const session = await fetch('/api/session')
+      const session = await this.#fetch('/api/session')
       const sessionBody = await readBody(session)
       if (!session.ok) throw new Error(requestError(session.status, sessionBody, 'sync'))
-      const response = await fetch('/api/sync', {
+      const response = await this.#fetch('/api/sync', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-docket-session': (sessionBody as UiSession).token },
         body: JSON.stringify(adapters === null ? {} : { adapters })

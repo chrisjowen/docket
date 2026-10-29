@@ -6,6 +6,7 @@ import {
   type ConversationTurn
 } from '@docket/contracts'
 
+import type { Fetcher } from '$lib/api.js'
 import type { UiAnswer, UiChatAnswer } from '$lib/types.js'
 import { fromLegacyAnswer, fromLegacyChat, LEGACY_LIMIT } from './legacy.js'
 import { showOutcome, type AskOutcome } from './outcome.js'
@@ -104,7 +105,7 @@ export const readAdapters = (body: unknown): AdaptersResponse => {
   }
 }
 
-export const createAskClient = (fetcher: typeof fetch = (...args) => fetch(...args)): AskClient => {
+export const createAskClient = (fetcher: Fetcher = (path, init) => fetch(path, init)): AskClient => {
   /** Whether the server has `POST /api/ask`; unknown until the first question. */
   let coordinator: boolean | undefined
 

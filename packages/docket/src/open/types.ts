@@ -168,6 +168,15 @@ export interface UiChatAnswer {
   }
 }
 
+/** `GET /api/health`: that this is docket open, for which repository, and which other pages may use it. */
+export interface UiHealth {
+  service: 'docket-open'
+  /** The repository root it serves. */
+  root: string
+  /** Pages besides its own that may use the API (`docket open --allow-origin`). */
+  allowOrigins: string[]
+}
+
 /** `GET /api/session`: what the page must send to change anything. Served only to the machine itself. */
 export interface UiSession {
   /** Made when `docket open` started; sent back in `x-docket-session`. */

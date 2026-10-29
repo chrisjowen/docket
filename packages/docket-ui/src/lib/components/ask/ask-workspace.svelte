@@ -1,7 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { goto } from '$app/navigation'
-  import { resolve } from '$app/paths'
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
   import ArrowRight from '@lucide/svelte/icons/arrow-right'
   import Check from '@lucide/svelte/icons/check'
@@ -18,6 +16,7 @@
   import { casebookOf } from '$lib/ask/evidence.js'
   import { compareMetrics } from '$lib/ask/outcome.js'
   import type { UiGraph } from '$lib/types.js'
+  import { getNav } from '$lib/nav.svelte.js'
   import { getWorkspace, type BoardScope } from '$lib/workspace.svelte.js'
   import AdapterSection from './adapter-section.svelte'
   import SynthesisCard from './synthesis-card.svelte'
@@ -26,6 +25,7 @@
   let { graph }: { graph: UiGraph } = $props()
 
   const workspace = getWorkspace()
+  const nav = getNav()
   const session = workspace.ask
 
   const casebook = $derived(casebookOf(graph))
@@ -66,7 +66,7 @@
   }
 
   async function onboard(scope: BoardScope): Promise<void> {
-    await goto(resolve('/'))
+    await nav.go('browse')
     workspace.showScope(scope)
   }
 
@@ -177,7 +177,9 @@
                   href="#adapter-{result.adapter}"
                   onclick={(event) => {
                     event.preventDefault()
-                    document.getElementById(`adapter-${result.adapter}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    // From the link's own root, which is a shadow root inside Wheelhouse.
+                    const root = event.currentTarget.getRootNode() as Document | ShadowRoot
+                    root.getElementById(`adapter-${result.adapter}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                   }}
                   class="hover:bg-muted flex items-center gap-1 rounded-full border px-2 py-0.5 {result.state === 'failed' ? 'border-destructive/50 text-destructive' : ''}"
                 >
