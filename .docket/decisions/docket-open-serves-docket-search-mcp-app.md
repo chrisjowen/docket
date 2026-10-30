@@ -16,7 +16,7 @@ links:
         path: packages/docket/src/open/server.ts
         lines: 473-520
         symbol: mcp
-        note: POST /mcp is checked by localOnly, as a sync is, and must be application/json, so only this machine (or a page --allow-origin named) reaches it.
+        note: POST /mcp is checked by localOnly, as a sync is, and must be application/json, so only programs on this machine reach it: it answers no CORS preflight, so no browser page can, even one --allow-origin named.
         observedAt: 2026-10-30
         observedBy: claude
         session: c478579d-7213-4499-b781-c69121601e8b
