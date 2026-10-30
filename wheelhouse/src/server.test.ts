@@ -13,6 +13,7 @@ import plugin, {
   CASEBOOK_SCHEMA,
   clearCliCache,
   DEFAULT_ORIGINS,
+  MCP_SERVER,
   openCommand,
   pageOrigin,
   preferredPort,
@@ -31,6 +32,7 @@ const manifest = JSON.parse(await readFile(path.join(repo, '.wheelhouse-plugin',
     enabledWhenFile: string
     contributions: { id: string; slot: string }[]
     services: { id: string; scope: string }[]
+    mcpServers: { id: string; service: string }[]
   }
 }
 
@@ -81,6 +83,7 @@ describe('the manifest', () => {
     expect(manifest.name).toBe('docket')
     expect(manifest.wheelhouse.contributions).toEqual(plugin.contributions.map(({ id, slot }) => ({ id, slot })))
     expect(manifest.wheelhouse.services).toEqual(plugin.services.map(({ id, scope }) => ({ id, scope })))
+    expect(manifest.wheelhouse.mcpServers).toEqual(plugin.mcpServers.map(({ id, service }) => ({ id, service })))
     expect(manifest.wheelhouse.apiVersion).toBe(1)
     expect(manifest.wheelhouse.enabledWhenFile).toBe('.docket.yaml')
   })
@@ -90,12 +93,18 @@ describe('the manifest', () => {
     expect(existsSync(path.join(repo, manifest.wheelhouse.ui))).toBe(true)
     const built = (await import(path.join(repo, manifest.wheelhouse.server))).default as typeof plugin
     expect(built.contributions).toEqual(plugin.contributions)
+    expect(built.mcpServers).toEqual(plugin.mcpServers)
     expect(built.services.map(({ id, scope, title }) => ({ id, scope, title }))).toEqual(
       plugin.services.map(({ id, scope, title }) => ({ id, scope, title }))
     )
     expect(built.providers.map(({ id, scope, ttlMs }) => ({ id, scope, ttlMs }))).toEqual(
       plugin.providers.map(({ id, scope, ttlMs }) => ({ id, scope, ttlMs }))
     )
+  })
+
+  it('serves docket’s MCP server from its own viewer, at docket open’s /mcp', () => {
+    expect(plugin.mcpServers).toEqual([{ id: 'docket', title: 'Docket', service: 'viewer', path: '/mcp' }])
+    expect(plugin.services.map((s) => s.id)).toContain(MCP_SERVER.service)
   })
 
   it('draws the tab with an element under the plugin’s own prefix', () => {
@@ -322,5 +331,31 @@ describe.skipIf(!existsSync(cli))('the viewer, started as Wheelhouse starts it',
 
     const other = await fetch(`${spec.url}/api/graph`, { headers: { origin: 'http://127.0.0.1:5173' } })
     expect(other.headers.get('access-control-allow-origin')).toBeNull()
+
+    // docket's MCP server, asked as Wheelhouse's MCP client asks it: Streamable HTTP, advertising MCP Apps.
+    const mcp = async (method: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> => {
+      const response = await fetch(`${spec.url}${MCP_SERVER.path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+      })
+      expect(response.status).toBe(200)
+      const reply = (await response.json()) as { result?: Record<string, unknown>; error?: { message: string } }
+      if (!reply.result) throw new Error(reply.error?.message ?? 'no result')
+      return reply.result
+    }
+    const init = await mcp('initialize', {
+      protocolVersion: '2025-11-25',
+      capabilities: { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } },
+      clientInfo: { name: 'wheelhouse', version: '0' }
+    })
+    expect(init.protocolVersion).toBe('2025-11-25')
+    const { tools } = (await mcp('tools/list')) as { tools: { name: string; _meta: { ui: { resourceUri: string } } }[] }
+    expect(tools.map((tool) => tool.name)).toEqual(['docket_search'])
+    const { contents } = (await mcp('resources/read', { uri: tools[0]!._meta.ui.resourceUri })) as { contents: { mimeType: string; text: string }[] }
+    expect(contents[0]!.mimeType).toBe('text/html;profile=mcp-app')
+    expect(contents[0]!.text).toMatch(/^<!doctype html>/)
+    const found = (await mcp('tools/call', { name: 'docket_search', arguments: { query: 'anything' } })) as { structuredContent: { schema: string; project: { root: string } } }
+    expect(found.structuredContent.schema).toBe('docket-search.v1')
   }, 30_000)
 })

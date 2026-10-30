@@ -42,12 +42,21 @@ describe("session-start hook", () => {
     assert.match(context, /add evidence to what the docket already has/);
   });
 
-  it("stays silent outside a docket repository", () => {
+  it("outside a docket repository, says only how to search the docket of a project it is asked about", async () => {
     const box = setup();
+    box.installDocket();
     const result = runHook(SCRIPT, input(box), box.env({ CLAUDE_PROJECT_DIR: box.dir }));
 
     assert.equal(result.status, 0);
-    assert.equal(result.stdout, "");
+    const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
+    assert.match(context, /When asked about a project whose clone has `\.docket\.yaml`, search its docket/);
+    assert.match(context, /`docket search <query>` in that clone/);
+    assert.ok(context.includes(`${NPX_DOCKET} search <query>`), context);
+    assert.match(context, /`docket_search`/);
+    // Nothing to capture into, and nothing to sync, here.
+    assert.doesNotMatch(context, /`remember` skill/);
+    await sleep(500);
+    assert.equal(box.readCalls().length, 0);
   });
 
   it("starts the sync in the background, so a slow sync never delays the session", async () => {

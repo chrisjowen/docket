@@ -7,11 +7,12 @@
   "scripts": {
     "dev": "vite dev",
     "dev:fixtures": "DOCKET_UI_FIXTURES=1 vite dev",
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.mcp-app.config.ts",
     "preview": "vite preview",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "vitest run",
-    "build:embed": "vite build --config vite.embed.config.ts"
+    "build:embed": "vite build --config vite.embed.config.ts",
+    "build:mcp-app": "vite build --config vite.mcp-app.config.ts"
   },
   "devDependencies": {
     "@docket/contracts": "workspace:*",

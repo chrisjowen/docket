@@ -80,8 +80,17 @@ export interface PluginService {
   resolve(ctx: ServiceContext): Promise<ServiceResolution>
 }
 
+/** An MCP server whose apps the plugin draws: Streamable HTTP at `path` on the address of the plugin's companion `service`. */
+export interface PluginMcpServer {
+  id: string
+  title: string
+  service: string
+  path: string
+}
+
 export interface WheelhousePlugin {
   providers: Provider[]
   contributions: Contribution[]
   services: PluginService[]
+  mcpServers: PluginMcpServer[]
 }

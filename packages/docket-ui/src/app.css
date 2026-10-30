@@ -1,55 +1,14 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './lib/styles/casebook.css';
+@import './lib/styles/tokens.css';
 
 /*
  * A bound casebook: pages of cool paper ruled faintly for the evidence board,
- * set in docket open's own page. shadcn-svelte tokens map onto it; the
- * casebook's own tokens are in lib/styles/casebook.css.
+ * set in docket open's own page. shadcn-svelte tokens map onto it
+ * (lib/styles/tokens.css); the casebook's own tokens are in
+ * lib/styles/casebook.css.
  */
-:root {
-  --radius: 0.375rem;
-  --background: #f4f5ef;
-  --foreground: #1a1e1b;
-  --card: #fbfbf7;
-  --card-foreground: #1a1e1b;
-  --popover: #fbfbf7;
-  --popover-foreground: #1a1e1b;
-  --primary: #1f3b2d;
-  --primary-foreground: #f4f1e4;
-  --secondary: #e6e9df;
-  --secondary-foreground: #1f3b2d;
-  --muted: #e9ebe2;
-  --muted-foreground: #5d665f;
-  --accent: #e3e7da;
-  --accent-foreground: #1f3b2d;
-  --destructive: #a8322b;
-  --border: #d9dbd0;
-  --input: #cfd3c6;
-  --ring: #b08d3c;
-}
-
-.dark {
-  --background: #111713;
-  --foreground: #e8ebe4;
-  --card: #18201b;
-  --card-foreground: #e8ebe4;
-  --popover: #18201b;
-  --popover-foreground: #e8ebe4;
-  --primary: #d9c58f;
-  --primary-foreground: #142019;
-  --secondary: #223029;
-  --secondary-foreground: #e8ebe4;
-  --muted: #1e2922;
-  --muted-foreground: #9aa69d;
-  --accent: #26352c;
-  --accent-foreground: #e8ebe4;
-  --destructive: #e0675e;
-  --border: #2a362f;
-  --input: #34423a;
-  --ring: #c9a752;
-}
-
 @layer base {
   html,
   body {

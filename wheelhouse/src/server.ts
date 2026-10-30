@@ -20,8 +20,11 @@ import type {
  * Wheelhouse's page, so the page may use its API. The server entry only
  * works out where the docket is and how to start its viewer; it never runs
  * anything that writes, and Wheelhouse starts the viewer only on the
- * captain's click. Its id, version, contract, enable rule, slot and service
- * are in `.wheelhouse-plugin/plugin.json`.
+ * captain's click. The viewer is also docket's MCP server, `docket`, at
+ * `/mcp`: its `docket_search` tool returns the resources a search finds with
+ * an MCP app that draws them and their links on the casebook's board
+ * (docs/mcp.md), for Wheelhouse to show. Its id, version, contract, enable
+ * rule, slot, service and MCP server are in `.wheelhouse-plugin/plugin.json`.
  *
  * Settings (Wheelhouse's plugins.json, `plugins.docket.settings`), all optional:
  *   bin      absolute path of the docket CLI; otherwise `docket` on PATH.
@@ -38,6 +41,9 @@ const DOCKET_FILE = '.docket.yaml'
 
 /** Where `wheelhouse open` serves its pages unless told another port. */
 export const DEFAULT_ORIGINS = ['http://127.0.0.1:4310', 'http://localhost:4310']
+
+/** docket's MCP server, on the viewer: `docket open` serves it at `/mcp` (docs/mcp.md). */
+export const MCP_SERVER = { id: 'docket', title: 'Docket', service: 'viewer', path: '/mcp' } as const
 
 /** The element's schema: `wheelhouse-docket-casebook.v1`, which docket-ui's src/embed/host.ts reads. */
 export const CASEBOOK_SCHEMA = 'wheelhouse-docket-casebook.v1'
@@ -255,7 +261,8 @@ const plugin: WheelhousePlugin = {
       provider: 'casebook',
       render: { element: 'docket-casebook' }
     }
-  ]
+  ],
+  mcpServers: [{ ...MCP_SERVER }]
 }
 
 export default plugin
