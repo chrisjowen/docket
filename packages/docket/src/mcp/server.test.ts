@@ -174,8 +174,15 @@ describe('docket open /mcp', () => {
     expect(graph.omitted).toBe(6)
   })
 
+  it('takes the project a host routes the call by, and searches its own docket', async () => {
+    const { text, graph, isError } = await searchFor({ query: 'orders', project: 'some-wheelhouse-project-id' })
+    expect(isError).toBeFalsy()
+    expect(graph.matches).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'service.orders' })]))
+    expect(text).toContain('service.orders')
+  })
+
   it('refuses arguments it does not take, an unknown tool and an unknown method as JSON-RPC errors', async () => {
-    for (const args of [{}, { query: '  ' }, { query: 'x', limit: 0 }, { query: 'x', limit: MAX_SEARCH_LIMIT + 1 }, { query: 'x', root: '/' }]) {
+    for (const args of [{}, { query: '  ' }, { query: 'x', limit: 0 }, { query: 'x', limit: MAX_SEARCH_LIMIT + 1 }, { query: 'x', root: '/' }, { query: 'x', project: 7 }]) {
       const { error } = await rpc('tools/call', { name: SEARCH_TOOL, arguments: args })
       expect(error?.code).toBe(-32602)
     }

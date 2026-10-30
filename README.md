@@ -410,8 +410,8 @@ wheelhouse plugin install chrisjowen/docket
 ```
 
 The plugin also declares the viewer's `/mcp` as its MCP server, `docket`, so
-Wheelhouse can call `docket_search` for a project and draw its app
-([docs/mcp.md](docs/mcp.md)).
+Wheelhouse can call `docket_search` for a project, naming it in the call's
+`project` argument, and draw its app ([docs/mcp.md](docs/mcp.md)).
 
 It needs a docket CLI with `docket open --allow-origin`. See
 [`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its

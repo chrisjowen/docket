@@ -43,7 +43,8 @@ that project's docket.
     "type": "object",
     "properties": {
       "query": { "type": "string", "minLength": 1 },
-      "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 }
+      "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 },
+      "project": { "type": "string" }
     },
     "required": ["query"],
     "additionalProperties": false
@@ -55,10 +56,14 @@ that project's docket.
 
 - `query` is what to look for, in words. It is trimmed and must not be empty.
 - `limit` is the number of hits asked of each projection, as `docket search -n` takes.
+- `project` is the project the host means. Wheelhouse sends its project id,
+  and picks the project's `docket` server by it; a call without it is not
+  drawn as an app. The server searches its own docket whatever it says, so it
+  is not checked against the docket's name.
 - The tool only reads, so Wheelhouse runs it, and an app's call to it, without
   asking. Its `_meta.ui` gives no `visibility`, so both the model and the app
   can call it.
-- If the arguments are wrong (no query, a limit out of range, any other key) or
+- If the arguments are wrong (no query, a limit out of range, a project that is not a string, any other key) or
   the tool name is unknown, the answer is JSON-RPC error `-32602`. If the docket
   cannot be read (no `.docket.yaml`, say), the answer is a result with
   `isError: true` and the reason as text.
