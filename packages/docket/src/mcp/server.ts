@@ -42,6 +42,10 @@ export const searchTool = {
         maximum: MAX_SEARCH_LIMIT,
         default: DEFAULT_SEARCH_LIMIT,
         description: 'Hits asked of each projection.'
+      },
+      project: {
+        type: 'string',
+        description: 'The project the host means, such as the Wheelhouse project id it routes the call by. Each server searches one docket, so it is not used.'
       }
     },
     required: ['query'],
@@ -105,9 +109,10 @@ export const defaultAppFile = (): string => join(import.meta.dirname, '..', 'mcp
 /** The `docket_search` arguments, checked, or why they will not do. */
 const searchArguments = (raw: unknown): { query: string; limit: number } => {
   const args = raw === undefined ? {} : raw
-  if (!isObject(args)) throw new RpcError(INVALID_PARAMS, 'docket_search takes { "query": "...", "limit"?: n }.')
-  const unknown = Object.keys(args).filter((key) => key !== 'query' && key !== 'limit')
+  if (!isObject(args)) throw new RpcError(INVALID_PARAMS, 'docket_search takes { "query": "...", "limit"?: n, "project"?: "..." }.')
+  const unknown = Object.keys(args).filter((key) => key !== 'query' && key !== 'limit' && key !== 'project')
   if (unknown.length > 0) throw new RpcError(INVALID_PARAMS, `docket_search does not take ${unknown.map((key) => `"${key}"`).join(', ')}.`)
+  if (args.project !== undefined && typeof args.project !== 'string') throw new RpcError(INVALID_PARAMS, 'project must be a string.')
   const query = typeof args.query === 'string' ? args.query.trim() : ''
   if (query === '') throw new RpcError(INVALID_PARAMS, 'Say what to look for: query is empty.')
   const limit = args.limit ?? DEFAULT_SEARCH_LIMIT

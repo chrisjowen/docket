@@ -53,8 +53,8 @@ on the `viewer` service at `/mcp`:
 "mcpServers": [{ "id": "docket", "service": "viewer" }]
 ```
 
-Its one tool, `docket_search` (`{ "query": "...", "limit"?: n }`, read-only),
-returns the resources a search of the project's docket finds, as text and as
+Its one tool, `docket_search` (read-only, given a `query` and the Wheelhouse
+`project` it routes by), returns the resources a search of the project's docket finds, as text and as
 `docket-search.v1` structured content. Its app, `ui://docket/search.html`
 (`text/html;profile=mcp-app`, no network), draws them and the resources one
 link away on the casebook's evidence board. From the app you can search again,
