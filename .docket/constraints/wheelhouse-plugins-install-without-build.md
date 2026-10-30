@@ -8,6 +8,18 @@ tags:
 
 links:
   - rel: governs
+    target: system.wheelhouse
+    evidence:
+      - source: code
+        path: src/lib/server/plugins/install.ts
+        lines: 135
+        repository: https://github.com/chrisjowen/wheelhouse
+        commit: be343ba
+        note: "Wheelhouse's plugin installation model enforces this constraint: install removes .git, imports the server entry with no build and no npm install."
+        observedAt: 2026-10-31
+        observedBy: claude
+        session: db7232ae-da49-4682-9743-5f577fc5b78e
+  - rel: governs
     target: decision.wheelhouse-plugin-ships-docket-cli
     evidence:
       - source: docs
