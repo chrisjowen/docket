@@ -100,7 +100,10 @@ A Claude Code plugin, installed from this repository's marketplace
   (`DOCKET_REVIEW_STOP_LINES`).
 
 `review.js` exits immediately when `DOCKET_REVIEW` is set (line 73) and sets
-it in the review agent's own environment so its hooks stay quiet. Firstmate
+it in the review agent's own environment so other tools can recognise it. The
+review agent runs with every hook disabled (`--settings
+'{"disableAllHooks":true}'` in `scripts/review-runner.js`), so no repository or
+plugin SessionStart hook can act on the session it reviews. Firstmate
 workers set `DOCKET_REVIEW=1` deliberately to keep automatic reviews off and
 capture knowledge in pull requests instead.
 
