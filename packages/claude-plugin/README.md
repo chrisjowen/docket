@@ -146,6 +146,9 @@ queued or running; the next one picks up what it did not cover. The review agent
 - runs one at a time per repository: a session that ends while another review is
   running is reviewed once that one finishes
 - leaves no session behind in your `/resume` list
+- runs no hooks, neither the repository's nor any plugin's, so a SessionStart hook
+  cannot act on the session it reviews; its environment has `DOCKET_REVIEW=1`, so
+  other tools can recognise it
 
 Lines count as reviewed only once a review succeeds, so a missing, signed-out or failing
 `claude` leaves them for the next review of that session. A session in which you never

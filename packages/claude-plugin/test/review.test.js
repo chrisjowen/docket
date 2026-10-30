@@ -128,6 +128,18 @@ describe("review hook at session end", () => {
     assert.equal(flag(call, "--permission-mode"), "dontAsk");
   });
 
+  it("runs the reviewer with every hook off and marked as a review", async () => {
+    const { box, transcript, input } = setup();
+    fs.writeFileSync(transcript, transcriptLines(3));
+
+    runHook(SCRIPT, input(), box.env({ CLAUDE_PROJECT_DIR: box.repo }));
+
+    const [call] = await reviewed(box);
+    assert.deepEqual(JSON.parse(flag(call, "--settings")), { disableAllHooks: true });
+    assert.ok(!call.argv.includes("--bare"));
+    assert.equal(call.review, "1");
+  });
+
   it("takes the model from DOCKET_REVIEW_MODEL", async () => {
     const { box, transcript, input } = setup();
     fs.writeFileSync(transcript, transcriptLines(3));

@@ -90,6 +90,11 @@ function claudeArgs(job, from) {
     "--model",
     job.model,
     "--no-session-persistence",
+    // No hooks, the repository's or any plugin's: a SessionStart hook in the
+    // reviewer could take over the session it reviews, for example by grabbing
+    // the project's session lock. Not --bare, which also skips OAuth logins.
+    "--settings",
+    JSON.stringify({ disableAllHooks: true }),
     "--permission-mode",
     "dontAsk",
     "--allowedTools",
