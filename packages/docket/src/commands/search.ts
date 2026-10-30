@@ -1,7 +1,7 @@
 import { askProject } from '../query/ask.js'
 import { toSearchResult, type SearchResult } from '../query/legacy.js'
 
-export type { FoundDocument, SearchResult, SourceResult } from '../query/legacy.js'
+export type { FoundDocument, SearchResult, SourceGraph, SourceGraphEdge, SourceGraphNode, SourceResult } from '../query/legacy.js'
 
 export const DEFAULT_SEARCH_LIMIT = 10
 
@@ -14,7 +14,8 @@ export interface SearchOptions {
 
 /**
  * Asks every adapter enabled for query, through the shared coordinator, and
- * reports each one's entity hits as it gave them - the document-hit
+ * reports each one's entity hits as it gave them, with any subgraph it
+ * returned - the document-hit
  * compatibility view of `docket ask` (docs/adapter-spec.md §14). Answers are
  * not merged into one score: a keyword count, a vector similarity and a graph
  * path are different evidence, weighed by whoever reads them.

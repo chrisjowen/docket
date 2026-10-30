@@ -31,7 +31,8 @@ export const searchTool = {
   description:
     'Search this project\'s docket - its typed project knowledge (services, decisions, constraints, owners, ' +
     'dependencies) - for the resources that match a query. Returns each match with its canonical file and its ' +
-    'links, and draws the matches and the resources one link away as a graph.',
+    'links, the paths and relationships the projections returned with why they hold, and draws them, with the ' +
+    'resources one link away as context, as a graph.',
   inputSchema: {
     type: 'object',
     properties: {

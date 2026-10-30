@@ -157,6 +157,27 @@ evidence:
     observedBy: claude
     session: 545488c7-b406-402b-8f89-e4d88e865c28
     commit: b74099f
+  - source: code
+    path: packages/docket/src/mcp/server.ts
+    symbol: searchTool, PROTOCOL_VERSIONS
+    note: "docket now serves an MCP server at POST /mcp with one tool, docket_search, supporting protocol versions 2025-11-25, 2025-06-18, 2025-03-26. The server is stateless, loopback-only, and returns results with adapter subgraphs, confidence scores, evidence citations and an MCP app UI for drawing on the evidence board."
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
+  - source: code
+    path: packages/docket/src/mcp/search.ts
+    symbol: searchGraph, searchText
+    note: searchGraph builds the docket_search board from search's result - matches, then the adapters' returned subgraph nodes, links and paths (via adapter), then canonical one-hop neighbours and declared links (via canonical) - and searchText lists the returned paths and each returned link's why.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
+  - source: code
+    path: packages/docket/src/query/legacy.ts
+    symbol: toSearchResult
+    note: The search result transformer now preserves adapter graph blocks as SourceResult.graph, mapping nodes to canonical ids when applicable and including edge confidence and evidence citations.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
 
 provenance:
   capturedBy: claude

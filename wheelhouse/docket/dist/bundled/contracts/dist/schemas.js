@@ -183,7 +183,13 @@ export const resultBlockSchema = z.discriminatedUnion('kind', [
         ...blockBaseShape,
         kind: z.literal('graph'),
         nodes: z.array(z.looseObject({ id: nonEmpty, label: z.string(), type: z.string().optional(), ref: canonicalReferenceSchema.optional() })),
-        edges: z.array(z.looseObject({ source: nonEmpty, target: nonEmpty, rel: nonEmpty, evidenceIds: evidenceIds.optional() })),
+        edges: z.array(z.looseObject({
+            source: nonEmpty,
+            target: nonEmpty,
+            rel: nonEmpty,
+            confidence: z.number().min(0).max(1).optional(),
+            evidenceIds: evidenceIds.optional()
+        })),
         paths: z.array(z.array(nonEmpty).min(1)).optional()
     }),
     z.looseObject({ ...blockBaseShape, kind: z.literal('metric'), label: nonEmpty, value: finite, unit: z.string().optional() }),

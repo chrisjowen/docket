@@ -23,6 +23,26 @@ evidence:
     observedAt: 2026-10-11
     observedBy: claude
     commit: 9fe78c8
+  - source: code
+    path: packages/contracts/src/types.ts
+    symbol: GraphEdge
+    note: GraphEdge gains an optional, additive confidence (0 to 1) beside its evidenceIds; GraphBlock already held nodes, edges and ordered paths.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
+  - source: code
+    path: packages/contracts/src/schemas.ts
+    symbol: resultBlockSchema
+    note: The graph block's edge validator accepts an optional confidence from 0 to 1; the looseObject schemas keep the change additive.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
+  - source: code
+    path: packages/contracts/src/validate.test.ts
+    note: A test checks a graph edge confidence of 0.9 validates and 1.5 is rejected.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
 
 provenance:
   capturedBy: claude

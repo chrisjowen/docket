@@ -345,6 +345,8 @@ export interface GraphEdge {
   source: string
   target: string
   rel: string
+  /** How far the adapter holds the relationship supported, from 0 to 1 - e.g. the confidence it stored with it. */
+  confidence?: number
   evidenceIds?: string[]
 }
 

@@ -60,6 +60,20 @@ evidence:
     observedAt: 2026-10-11
     observedBy: claude
     commit: 9fe78c8
+  - source: code
+    path: packages/adapter-neo4j/src/cypher-search.ts
+    symbol: graphOf
+    note: The model-written Cypher path's graph block (relationships and paths among the rows, each edge citing its row's evidence) now also carries each edge's stored relationship confidence, when it is a number from 0 to 1. The default full-text path still returns no graph block.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
+  - source: code
+    path: packages/adapter-neo4j/src/cypher-search.test.ts
+    symbol: shows relationships among the rows as a graph
+    note: The graph-block unit test, run against a fake port with no Neo4j server, checks nodes, edges, each edge's row evidence and its confidence.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
 
 provenance:
   capturedBy: claude

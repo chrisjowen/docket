@@ -9,11 +9,12 @@
   import { iconOf } from '$lib/icons.js'
   import { setTypeStyle } from '$lib/type-style.js'
   import type { AppBridge, ToolResult } from './bridge.js'
-  import { boardOf, searchOf, typeColours, type SearchGraph } from './board.js'
+  import { boardOf, hasSubgraph, searchOf, typeColours, type SearchGraph, type SearchNode } from './board.js'
 
   /**
-   * docket_search's app: the resources the search found and the ones a link
-   * away, on the casebook's evidence board, with the matches listed beside it.
+   * docket_search's app: the resources the search found, the subgraphs the
+   * projections returned, and the resources a link away as faded context, on
+   * the casebook's evidence board, with the matches and paths listed beside it.
    * It searches again through the same tool, and opens a resource in docket
    * open's casebook when the host lets it open links.
    */
@@ -68,6 +69,9 @@
       : null
   )
   const titleOf = (id: string): string => graph?.nodes.find((node) => node.id === id)?.title ?? id
+  const subgraph = $derived(graph ? hasSubgraph(graph) : false)
+  const roleOf = (node: SearchNode): string =>
+    node.match ? 'a match' : node.via === 'adapter' ? 'returned by a projection' : 'one link away, from the files'
 
   let nonce = 0
   function pick(id: string | null): void {
@@ -114,6 +118,15 @@
 
   const fullscreen = $derived(displayMode() === 'fullscreen')
 </script>
+
+{#snippet provenance(link: SearchGraph['links'][number])}
+  {#if link.via === 'adapter'}
+    <span class="text-muted-foreground">· {link.foundBy?.join(', ')}{link.confidence === undefined ? '' : ` · confidence ${link.confidence}`}</span>
+    {#each link.why ?? [] as why, index (index)}
+      <span class="text-muted-foreground block pl-2 text-[11px] break-words">{why}</span>
+    {/each}
+  {/if}
+{/snippet}
 
 <div class="bg-background text-foreground flex flex-col {fullscreen ? 'h-screen' : 'h-[30rem]'}">
   <header class="flex flex-wrap items-center gap-2 border-b px-3 py-2">
@@ -183,18 +196,24 @@
               </div>
             </div>
             {#if picked.ghost}
-              <p class="text-muted-foreground text-xs">No file in the docket defines it yet.</p>
+              <p class="text-muted-foreground text-xs">No file in the docket defines it yet{picked.via === 'adapter' ? ': a projection returned it' : ''}.</p>
             {:else}
-              <p class="text-muted-foreground text-xs">{picked.type}{picked.match ? ' · a match' : ' · one link away'}</p>
+              <p class="text-muted-foreground text-xs">{picked.type} · {roleOf(picked)}</p>
               {#if picked.path}<p class="text-muted-foreground font-mono text-[11px] break-all">{picked.path}</p>{/if}
             {/if}
             {#if pickedLinks}
               <ul class="mt-1 flex flex-col gap-0.5 text-xs">
                 {#each pickedLinks.outgoing as link (`${link.rel}\u0000${link.target}`)}
-                  <li><span class="text-muted-foreground">{link.rel} →</span> <button class="text-left hover:underline" onclick={() => pick(link.target)}>{titleOf(link.target)}</button></li>
+                  <li class={subgraph && link.via === 'canonical' ? 'opacity-60' : ''}>
+                    <span class="text-muted-foreground">{link.rel} →</span> <button class="text-left hover:underline" onclick={() => pick(link.target)}>{titleOf(link.target)}</button>
+                    {@render provenance(link)}
+                  </li>
                 {/each}
                 {#each pickedLinks.incoming as link (`${link.source}\u0000${link.rel}`)}
-                  <li><button class="text-left hover:underline" onclick={() => pick(link.source)}>{titleOf(link.source)}</button> <span class="text-muted-foreground">{link.rel} →</span></li>
+                  <li class={subgraph && link.via === 'canonical' ? 'opacity-60' : ''}>
+                    <button class="text-left hover:underline" onclick={() => pick(link.source)}>{titleOf(link.source)}</button> <span class="text-muted-foreground">{link.rel} →</span>
+                    {@render provenance(link)}
+                  </li>
                 {/each}
               </ul>
             {/if}
@@ -221,6 +240,23 @@
               <li class="text-muted-foreground px-3 py-2 text-xs">No matches.</li>
             {/each}
           </ul>
+          {#if graph.paths.length > 0}
+            <p class="text-muted-foreground border-t px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide uppercase">Paths returned</p>
+            <ol class="flex flex-col gap-1 px-3 pb-2 text-xs">
+              {#each graph.paths as path, index (index)}
+                <li class="flex flex-wrap items-center gap-x-1">
+                  {#each path.nodes as id, step (step)}
+                    {#if step > 0}<span class="text-muted-foreground">→</span>{/if}
+                    <button class="text-left hover:underline" onclick={() => pick(id)}>{titleOf(id)}</button>
+                  {/each}
+                  <span class="text-muted-foreground">· {path.foundBy.join(', ')}</span>
+                </li>
+              {/each}
+            </ol>
+          {/if}
+          {#if subgraph && graph.nodes.some((node) => node.via === 'canonical')}
+            <p class="text-muted-foreground px-3 pb-2 text-xs">Faded: one link away in the files, not returned by a projection.</p>
+          {/if}
           {#if graph.omitted > 0}
             <p class="text-muted-foreground px-3 pb-2 text-xs">{graph.omitted} more linked resources are left off the board.</p>
           {/if}

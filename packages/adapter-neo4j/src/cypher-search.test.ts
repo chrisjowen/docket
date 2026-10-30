@@ -13,13 +13,13 @@ let element = 0
 const node = (id: string, properties: Record<string, unknown> = {}, labels = ['Memory']): Node =>
   new neo4j.types.Node(neo4j.int((element += 1)), labels, { scope: SCOPE, id, title: id, hash: `sha256:${id}`, stub: false, ...properties }, `n-${id}-${element}`)
 
-const relationship = (start: Node, rel: string, end: Node): Relationship =>
+const relationship = (start: Node, rel: string, end: Node, properties: Record<string, unknown> = {}): Relationship =>
   new neo4j.types.Relationship(
     neo4j.int((element += 1)),
     start.identity,
     end.identity,
     rel.toUpperCase(),
-    { rel },
+    { rel, ...properties },
     `r-${element}`,
     start.elementId,
     end.elementId
@@ -123,12 +123,12 @@ describe('rowsAnswer', () => {
     ])
   })
 
-  it('shows relationships among the rows as a graph, each edge citing its row', () => {
+  it('shows relationships among the rows as a graph, each edge citing its row and carrying its confidence', () => {
     const orders = node('service.orders', { type: 'service' })
     const ledger = node('datasource.ledger', { type: 'datasource' })
     const stub = node('team.ghost', { stub: true, title: undefined })
     const records = [
-      record({ s: orders, r: relationship(orders, 'depends_on', ledger), d: ledger }),
+      record({ s: orders, r: relationship(orders, 'depends_on', ledger, { confidence: 0.9 }), d: ledger }),
       record({ s: orders, r: relationship(orders, 'owned_by', stub), d: stub })
     ]
     const answer = rowsAnswer(port(records), { request: request(), run: run(records, 'MATCH (s:Memory {scope: $scope})-[r]->(d) RETURN s, r, d\nLIMIT 11'), writtenBy: 'a model', hits: [] })
@@ -145,7 +145,7 @@ describe('rowsAnswer', () => {
         { id: 'team.ghost', label: 'team.ghost' }
       ],
       edges: [
-        { source: 'service.orders', target: 'datasource.ledger', rel: 'depends_on', evidenceIds: ['row-1'] },
+        { source: 'service.orders', target: 'datasource.ledger', rel: 'depends_on', confidence: 0.9, evidenceIds: ['row-1'] },
         { source: 'service.orders', target: 'team.ghost', rel: 'owned_by', evidenceIds: ['row-2'] }
       ]
     })

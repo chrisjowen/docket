@@ -3,7 +3,8 @@ import { toSearchResult } from '../query/legacy.js';
 export const DEFAULT_SEARCH_LIMIT = 10;
 /**
  * Asks every adapter enabled for query, through the shared coordinator, and
- * reports each one's entity hits as it gave them - the document-hit
+ * reports each one's entity hits as it gave them, with any subgraph it
+ * returned - the document-hit
  * compatibility view of `docket ask` (docs/adapter-spec.md §14). Answers are
  * not merged into one score: a keyword count, a vector similarity and a graph
  * path are different evidence, weighed by whoever reads them.

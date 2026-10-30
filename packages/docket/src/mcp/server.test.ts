@@ -138,16 +138,18 @@ describe('docket open /mcp', () => {
     expect(graph.matches[0]).toMatchObject({ type: 'service', title: 'Orders API', path: '.docket/resources/services/orders.md', foundBy: ['local'] })
 
     const nodes = new Map(graph.nodes.map((node) => [node.id, node]))
-    expect(nodes.get('service.orders')).toMatchObject({ match: true, ghost: false })
-    expect(nodes.get('team.payments')).toMatchObject({ match: false, ghost: false, title: 'Payments', path: '.docket/resources/teams/payments.md' })
+    expect(nodes.get('service.orders')).toMatchObject({ match: true, ghost: false, via: 'adapter' })
+    // The local projection returns no subgraph: the neighbours and links are canonical context, read from the files.
+    expect(nodes.get('team.payments')).toMatchObject({ match: false, ghost: false, via: 'canonical', title: 'Payments', path: '.docket/resources/teams/payments.md' })
     // No file defines the ledger yet: it is drawn as a ghost.
-    expect(nodes.get('service.ledger')).toMatchObject({ match: false, ghost: true })
+    expect(nodes.get('service.ledger')).toMatchObject({ match: false, ghost: true, via: 'canonical' })
     expect(graph.links).toEqual(
       expect.arrayContaining([
-        { source: 'service.orders', rel: 'owned_by', target: 'team.payments' },
-        { source: 'service.orders', rel: 'depends_on', target: 'service.ledger' }
+        { source: 'service.orders', rel: 'owned_by', target: 'team.payments', via: 'canonical' },
+        { source: 'service.orders', rel: 'depends_on', target: 'service.ledger', via: 'canonical' }
       ])
     )
+    expect(graph.paths).toEqual([])
     expect(graph.omitted).toBe(0)
     expect(graph.types).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'service', count: 1 }), expect.objectContaining({ name: 'team', count: 1 })]))
     expect(graph.sources).toEqual([expect.objectContaining({ name: 'local', hits: 1 })])

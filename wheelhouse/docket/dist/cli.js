@@ -17,6 +17,7 @@ import { failureOf, sync, SyncError } from './commands/sync.js';
 import { validate } from './commands/validate.js';
 import { watch } from './commands/watch.js';
 import { DEFAULT_ASK_RESULTS } from './query/ask.js';
+import { describePath } from './query/legacy.js';
 import { adaptersStatus } from './query/status.js';
 import { confidenceModel, observationConfidence } from './evidence/confidence.js';
 import { terminalPrompter } from './install/answers.js';
@@ -279,6 +280,8 @@ program
                 if (hit.detail)
                     console.log(`    ${hit.detail}`);
             }
+            for (const path of source.graph?.paths ?? [])
+                console.log(`  path: ${describePath(source.graph?.edges ?? [], path)}`);
         }
         if (result.sources.length === 0)
             console.log('No configured projection can search.');
