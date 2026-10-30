@@ -63,10 +63,10 @@ that project's docket.
 - The tool only reads, so Wheelhouse runs it, and an app's call to it, without
   asking. Its `_meta.ui` gives no `visibility`, so both the model and the app
   can call it.
-- If the arguments are wrong (no query, a limit out of range, a project that is not a string, any other key) or
-  the tool name is unknown, the answer is JSON-RPC error `-32602`. If the docket
-  cannot be read (no `.docket.yaml`, say), the answer is a result with
-  `isError: true` and the reason as text.
+- If the arguments are wrong (no query, a limit out of range, a project that
+  is not a string, any other key) or the tool name is unknown, the answer is
+  JSON-RPC error `-32602`. If the docket cannot be read (no `.docket.yaml`,
+  say), the answer is a result with `isError: true` and the reason as text.
 
 It runs `docket search` (every adapter enabled for query, through the shared
 coordinator) and reads the graph from the canonical files, as `docket open`'s
