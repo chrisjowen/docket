@@ -10,8 +10,9 @@ search and sync.
 wheelhouse plugin install chrisjowen/docket
 ```
 
-Wheelhouse fetches the repository at a commit, shows what the plugin adds and
-asks before it keeps it. Restart Wheelhouse to load it. Installing needs no
+Wheelhouse fetches the repository at a commit, shows what the plugin adds (its
+tab, its `viewer` service and its MCP app server, `docket`) and asks before it
+keeps it. Restart Wheelhouse to load it. Installing needs no
 build: the built files are committed.
 
 A Wheelhouse that still has its own Docket plugin built in (the read-only
@@ -42,6 +43,32 @@ docket open --host 127.0.0.1 --port <port> --no-open \
 answers, ask, and sync with the token the viewer hands it. A viewer started
 by hand without it serves docket's own page only, and the tab says to stop it
 and launch it from Wheelhouse.
+
+### docket's MCP server
+
+The viewer is also docket's MCP server. The plugin declares it as `docket`,
+on the `viewer` service at `/mcp`:
+
+```json
+"mcpServers": [{ "id": "docket", "service": "viewer" }]
+```
+
+Its one tool, `docket_search` (`{ "query": "...", "limit"?: n }`, read-only),
+returns the resources a search of the project's docket finds, as text and as
+`docket-search.v1` structured content. Its app, `ui://docket/search.html`
+(`text/html;profile=mcp-app`, no network), draws them and the resources one
+link away on the casebook's evidence board. From the app you can search again,
+pick a resource to see its file and links, open it in docket's own page, or go
+full screen. The plugin draws the app in no slot of its own; it is there for
+whatever in Wheelhouse calls `docket_search` for a project. The viewer must be
+running, as for the tab. [`docs/mcp.md`](../docs/mcp.md) is the tool's
+contract.
+
+Agents learn to search a project's docket from docket's Claude Code plugin
+(`packages/claude-plugin`). Its session-start hook tells a session outside
+any docket, such as Firstmate's, to search the docket of a project it is
+asked about. The hook comes with the plugin and goes with it, and writes
+nothing to any project's files.
 
 The element draws in its own shadow root. docket's styles stay inside it;
 Wheelhouse's colour variables reach in, so the casebook follows Wheelhouse's
@@ -111,7 +138,7 @@ In Wheelhouse's `plugins.json`, all optional:
 The server entry never runs anything that writes. Its provider reads whether
 the clone has `.docket.yaml` and asks `docket open --help` whether this docket
 can allow Wheelhouse's page; its service works out the viewer's command, port
-and health check. Wheelhouse checks the viewer by `GET /api/health`, whose
+and health check; its MCP server is the viewer's `/mcp`. Wheelhouse checks the viewer by `GET /api/health`, whose
 `root` must be the project's docket. Everything else the casebook does goes to
 the viewer, as on docket open's own page: its writes are chat's answer cache
 and, when you sync, the projections.
@@ -119,7 +146,7 @@ and, when you sync, the projections.
 ## Layout
 
 ```
-.wheelhouse-plugin/plugin.json   the manifest: id, version, contract, entries, enable rule, slot, service
+.wheelhouse-plugin/plugin.json   the manifest: id, version, contract, entries, enable rule, slot, service, MCP server
 wheelhouse/server/index.js       the server entry Wheelhouse imports (built from src/server.ts)
 wheelhouse/ui/index.js           <docket-casebook> (built from packages/docket-ui/src/embed)
 wheelhouse/src/                  the server entry's source and the plugin's tests

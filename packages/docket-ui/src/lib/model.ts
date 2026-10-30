@@ -7,8 +7,11 @@ export const SERIES_SLOTS = 8
  * One slot per type, by how many entities have it - most common first - so a
  * type keeps its colour however the view is filtered.
  */
-export const typeSlots = (entities: readonly UiEntity[]): Map<string, number> => {
-  const counts = countBy(entities, (entity) => entity.type)
+export const typeSlots = (entities: readonly UiEntity[]): Map<string, number> =>
+  slotsByCount(countBy(entities, (entity) => entity.type))
+
+/** The same slots from how many entities have each type. */
+export const slotsByCount = (counts: ReadonlyMap<string, number>): Map<string, number> => {
   const ordered = [...counts.entries()].sort(([a, x], [b, y]) => y - x || compare(a, b))
   return new Map(ordered.map(([type], index) => [type, index + 1]))
 }

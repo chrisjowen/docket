@@ -386,7 +386,15 @@ cancels a question still being answered, as closing its connection does;
 with a bounded excerpt of each. The older `GET /api/ask?q=` and
 `GET /api/chat?q=` still answer, translated from the coordinator's answers.
 `GET /api/health` says this is docket open (`"service": "docket-open"`), the
-repository root it serves and the pages `--allow-origin` let in.
+repository root it serves, the pages `--allow-origin` let in, and where its
+MCP server answers.
+
+`POST /mcp` is docket's MCP server, for programs on this machine. It speaks
+Streamable HTTP and has one tool, `docket_search`. The tool returns what a
+search finds as text, with an MCP app (`ui://docket/search.html`) that draws
+the matches and the resources one link away on the casebook's evidence board.
+A host that draws MCP apps, such as Wheelhouse, shows that board.
+[docs/mcp.md](docs/mcp.md) is its contract.
 
 ## In Wheelhouse
 
@@ -400,6 +408,10 @@ starts on 127.0.0.1 with `--allow-origin` for its page when you click
 ```bash
 wheelhouse plugin install chrisjowen/docket
 ```
+
+The plugin also declares the viewer's `/mcp` as its MCP server, `docket`, so
+Wheelhouse can call `docket_search` for a project and draw its app
+([docs/mcp.md](docs/mcp.md)).
 
 It needs a docket CLI with `docket open --allow-origin`. See
 [`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its

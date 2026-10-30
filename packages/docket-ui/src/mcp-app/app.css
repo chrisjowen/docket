@@ -1,0 +1,22 @@
+@import 'tailwindcss' source(none);
+@import 'tw-animate-css';
+@import '../lib/styles/casebook.css';
+@import '../lib/styles/tokens.css';
+
+/*
+ * docket_search's app, in the frame an MCP host draws it in: docket's own
+ * tokens, which the host's style variables override where it gives them
+ * (bridge.ts, HOST_TOKENS). Only the sources below are scanned for classes.
+ */
+@source '../lib/components/graph-view.svelte';
+@source '../lib/components/type-mark.svelte';
+@source '../lib/components/ui/button';
+@source './';
+
+html,
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans, system-ui, -apple-system, 'Segoe UI', sans-serif);
+}

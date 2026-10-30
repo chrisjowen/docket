@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { init } from '../commands/init.js'
 import { open } from '../commands/open.js'
-import { allowedOrigin, HEALTH_SERVICE, SESSION_HEADER, startUiServer, type UiServer } from './server.js'
+import { allowedOrigin, HEALTH_SERVICE, MCP_PATH, SESSION_HEADER, startUiServer, type UiServer } from './server.js'
 import type { UiHealth, UiSession, UiSyncStatus } from './types.js'
 
 const PAYMENTS = '---\nid: team.payments\ntype: team\ntitle: Payments\n---\n\nThe payments team.\n'
@@ -87,7 +87,7 @@ describe('GET /api/health', () => {
     expect(server.allowOrigins).toEqual([WHEELHOUSE])
     const { status, body } = await send('GET', '/api/health', { host: `127.0.0.1:${server.port}` })
     expect(status).toBe(200)
-    expect(body).toEqual({ service: HEALTH_SERVICE, root: expect.any(String), allowOrigins: [WHEELHOUSE] } satisfies UiHealth)
+    expect(body).toEqual({ service: HEALTH_SERVICE, root: expect.any(String), allowOrigins: [WHEELHOUSE], mcp: MCP_PATH } satisfies UiHealth)
     expect((body as UiHealth).root).toContain('docket-open-origins-')
   })
 })

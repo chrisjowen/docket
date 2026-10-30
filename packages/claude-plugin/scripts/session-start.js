@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // SessionStart hook (SPEC §54).
 // Injects docket context and starts one `docket sync` pass in the background,
-// through npx when no CLI is installed. Never starts a daemon, never blocks or
-// fails the session.
+// through npx when no CLI is installed. Outside a docket repository - such as
+// a supervisor's home that manages other projects - it says only how to search
+// the docket of a project Claude is asked about. Never starts a daemon, never
+// blocks or fails the session.
 
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
@@ -40,9 +42,23 @@ as the session goes, so keep your attention on the task.
 
 Never edit \`.docket/.index/\`; it is generated.`;
 
+// Installed with the plugin and gone with it: nothing is written to any
+// project's AGENTS.md or CLAUDE.md.
+const PROJECTS_CONTEXT = `Projects you are asked about may keep a docket: their typed project
+knowledge (services, decisions, constraints, owners, dependencies) as
+Markdown under \`.docket/\`, with \`.docket.yaml\` at the clone's root.
+
+When asked about a project whose clone has \`.docket.yaml\`, search its docket
+before reading its code. If a docket MCP server is connected, call its
+\`docket_search\` tool: it draws the matches and their links as a graph in
+the chat. Only when no docket MCP server is connected, run
+\`docket search <query>\` in that clone (\`${NPX_DOCKET} search <query>\`
+if \`docket\` is not on the path). Then read the canonical files it names.`;
+
 const root = projectRoot();
 
 if (!fs.existsSync(path.join(root, ".docket"))) {
+  emit(PROJECTS_CONTEXT);
   process.exit(0);
 }
 
@@ -52,14 +68,18 @@ try {
   // CLI absent or sync failed to start. Not fatal: the docket files are still authoritative.
 }
 
-process.stdout.write(
-  JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "SessionStart",
-      additionalContext: CONTEXT,
-    },
-  }),
-);
+emit(CONTEXT);
+
+function emit(additionalContext) {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "SessionStart",
+        additionalContext,
+      },
+    }),
+  );
+}
 
 /**
  * One reconciliation pass so projections reflect the checked-out branch. It

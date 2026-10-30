@@ -5,6 +5,7 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 var DOCKET_FILE = ".docket.yaml";
 var DEFAULT_ORIGINS = ["http://127.0.0.1:4310", "http://localhost:4310"];
+var MCP_SERVER = { id: "docket", title: "Docket", service: "viewer", path: "/mcp" };
 var CASEBOOK_SCHEMA = "wheelhouse-docket-casebook.v1";
 var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var LOOPBACK = /* @__PURE__ */ new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -158,12 +159,14 @@ var plugin = {
       provider: "casebook",
       render: { element: "docket-casebook" }
     }
-  ]
+  ],
+  mcpServers: [{ ...MCP_SERVER }]
 };
 var server_default = plugin;
 export {
   CASEBOOK_SCHEMA,
   DEFAULT_ORIGINS,
+  MCP_SERVER,
   allowsOrigins,
   clearCliCache,
   server_default as default,

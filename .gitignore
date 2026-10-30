@@ -11,3 +11,4 @@ packages/docket-ui/build/
 .docket/.index/
 .docket/.cache/
 packages/docket-ui/embed/
+packages/docket-ui/mcp-app/

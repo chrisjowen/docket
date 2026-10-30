@@ -175,6 +175,8 @@ export interface UiHealth {
   root: string
   /** Pages besides its own that may use the API (`docket open --allow-origin`). */
   allowOrigins: string[]
+  /** Where its MCP server answers, over Streamable HTTP (docs/mcp.md). */
+  mcp: '/mcp'
 }
 
 /** `GET /api/session`: what the page must send to change anything. Served only to the machine itself. */

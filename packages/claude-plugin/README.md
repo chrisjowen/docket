@@ -98,7 +98,7 @@ an unbumped change never reaches installed copies.
 | **`remember` skill** | Writing to the docket well: when to capture unasked, procedure, file format, evidence, what's worth keeping |
 | **`ontology` skill** | Inspecting and extending `.docket/entities.yaml` |
 | **`docket` on the path** | The plugin's `bin/docket`: the project's or your CLI, else the pinned release through `npx` |
-| **SessionStart hook** | Injects docket context, including when to capture without being asked, and starts a best-effort `docket sync` in the background |
+| **SessionStart hook** | Injects docket context, including when to capture without being asked, and starts a best-effort `docket sync` in the background. Outside a docket repository, such as a supervisor's home that manages other projects, it says only to search the docket of a project Claude is asked about (with a connected docket MCP server's `docket_search`, which draws the matches as a graph in the chat, or else `docket search` in its clone) |
 | **Stop, PreCompact and SessionEnd hooks** | Start a background review of the unreviewed part of the session, which collects evidence into `.docket/` |
 
 ### Capturing without being asked

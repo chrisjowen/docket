@@ -8,6 +8,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path'
 import type { ConversationTurn } from '@docket/contracts'
 
 import type { SyncOptions, SyncResult } from '../commands/sync.js'
+import { createMcpServer, INVALID_REQUEST, PARSE_ERROR, type McpServer } from '../mcp/server.js'
 import { AskCancelledError, AskRequestError, askProject } from '../query/ask.js'
 import { EvidenceRequestError, readEvidenceBody, resolveReferences } from '../query/evidence.js'
 import { takeSnapshot } from '../query/snapshot.js'
@@ -42,6 +43,8 @@ export interface UiServerOptions {
    * http(s) origin on loopback (`allowedOrigin` checks one). Omitted: none.
    */
   allowOrigins?: readonly string[] | undefined
+  /** docket's search app for `/mcp`. Omitted: the one the build puts in `dist/mcp-app`. */
+  mcpAppFile?: string | undefined
 }
 
 export interface UiServer {
@@ -88,6 +91,9 @@ export const SESSION_HEADER = 'x-docket-session'
 
 /** What `GET /api/health` names itself, so a client can tell docket open from another server on the port. */
 export const HEALTH_SERVICE = 'docket-open'
+
+/** Where docket's MCP server answers, over Streamable HTTP (docs/mcp.md). */
+export const MCP_PATH = '/mcp'
 
 const LOOPBACK_NAMES = new Set(['127.0.0.1', 'localhost', '[::1]'])
 
@@ -315,6 +321,8 @@ interface Context {
   token: string
   /** Known once listening. */
   port: number
+  /** docket's MCP server, made once listening: it links to this page. */
+  mcp: McpServer | null
 }
 
 const api = async (request: IncomingMessage, response: ServerResponse, url: URL, context: Context): Promise<unknown> => {
@@ -354,7 +362,7 @@ const api = async (request: IncomingMessage, response: ServerResponse, url: URL,
       return adaptersStatus(cwd)
     case '/api/health': {
       allow('GET', 'HEAD')
-      const health: UiHealth = { service: HEALTH_SERVICE, root: cwd, allowOrigins: [...context.allowOrigins] }
+      const health: UiHealth = { service: HEALTH_SERVICE, root: cwd, allowOrigins: [...context.allowOrigins], mcp: MCP_PATH }
       return health
     }
     case '/api/session': {
@@ -455,12 +463,64 @@ const crossOrigin = (request: IncomingMessage, response: ServerResponse, allowOr
   return true
 }
 
+/**
+ * `POST /mcp`: one JSON-RPC message to docket's MCP server, answered as JSON
+ * (Streamable HTTP without sessions or a stream of its own). It is for
+ * programs on this machine only, such as Wheelhouse's MCP client, which sends
+ * no browser headers. A browser page, even one `--allow-origin` named, cannot
+ * reach it: it cannot send JSON without a preflight, and /mcp answers none.
+ */
+const mcp = async (request: IncomingMessage, response: ServerResponse, context: Context): Promise<void> => {
+  const reply = (status: number, body: unknown): void => sendJson(response, status, body)
+  if (request.method !== 'POST') {
+    response.writeHead(405, { allow: 'POST', 'content-type': MIME['.json'] as string })
+    response.end(JSON.stringify({ error: `${MCP_PATH} answers POST: one JSON-RPC message (MCP Streamable HTTP).` }))
+    return
+  }
+  try {
+    localOnly(request, context.port, context.allowOrigins)
+  } catch (cause) {
+    reply(cause instanceof HttpError ? cause.status : 403, { error: cause instanceof Error ? cause.message : String(cause) })
+    return
+  }
+  if (!/^application\/json\b/i.test(request.headers['content-type'] ?? '')) {
+    reply(415, { error: `Send ${MCP_PATH} a JSON-RPC message as application/json.` })
+    return
+  }
+  let message: unknown
+  try {
+    message = await readJson(request, response)
+  } catch (cause) {
+    if (cause instanceof HttpError && cause.status === 413) {
+      reply(413, { error: cause.message })
+      return
+    }
+    reply(400, { jsonrpc: '2.0', id: null, error: { code: PARSE_ERROR, message: 'The request body is not JSON.' } })
+    return
+  }
+  if (Array.isArray(message)) {
+    reply(400, { jsonrpc: '2.0', id: null, error: { code: INVALID_REQUEST, message: 'Send one JSON-RPC message, not a batch.' } })
+    return
+  }
+  const answer = await (context.mcp as McpServer).handle(message)
+  if (answer === null) {
+    response.writeHead(202)
+    response.end()
+    return
+  }
+  reply(200, answer)
+}
+
 const handle = async (
   request: IncomingMessage,
   response: ServerResponse,
   options: Context
 ): Promise<void> => {
   const url = new URL(request.url ?? '/', 'http://localhost')
+  if (url.pathname === MCP_PATH) {
+    await mcp(request, response, options)
+    return
+  }
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
     if (crossOrigin(request, response, options.allowOrigins)) return
     try {
@@ -530,6 +590,7 @@ const listen = (server: Server, port: number, host: string): Promise<void> =>
  * machine that are as good as its own - Wheelhouse's, which draws this UI in
  * its own page: they may read every answer (CORS) and, with the token, sync.
  * `GET /api/health` says which docket this is and which pages it allows.
+ * `POST /mcp` is docket's MCP server (docs/mcp.md), for this machine only.
  */
 export const startUiServer = async (options: UiServerOptions): Promise<UiServer> => {
   const origins = (options.allowOrigins ?? []).map((raw) => {
@@ -544,7 +605,8 @@ export const startUiServer = async (options: UiServerOptions): Promise<UiServer>
     inFlight: new Map<string, AbortController>(),
     sync: new SyncRunner(options.cwd, options.runSync),
     token: randomUUID(),
-    port: 0
+    port: 0,
+    mcp: null
   }
   const server = createServer((request, response) => {
     handle(request, response, context).catch((cause: unknown) => {
@@ -572,6 +634,7 @@ export const startUiServer = async (options: UiServerOptions): Promise<UiServer>
   context.port = port
   // A wildcard is reached through loopback; any other address through itself.
   const address = WILDCARD.has(host) ? '127.0.0.1' : host.includes(':') ? `[${host}]` : host
+  context.mcp = createMcpServer({ cwd: options.cwd, appFile: options.mcpAppFile, viewer: `http://${address}:${port}/` })
   return {
     url: `http://${address}:${port}/`,
     port,
