@@ -38,6 +38,16 @@ export interface SlotEntry {
 
 export const CASEBOOK_SCHEMA = 'wheelhouse-docket-casebook.v1'
 
+/** The docket CLI the viewer runs, as the plugin's provider says. */
+export interface DocketCli {
+  /** `plugin`: the docket the plugin ships, built from its own commit; `settings`: the `bin` its settings name. */
+  source: 'plugin' | 'settings'
+  /** Its version, or null when it does not say. */
+  version: string | null
+  /** The command that runs it. */
+  command: string
+}
+
 /** The provider's value: the project's docket, and the pages its viewer is started to allow. */
 export interface CasebookData {
   schema: typeof CASEBOOK_SCHEMA
@@ -51,6 +61,8 @@ export interface CasebookData {
   origins: string[]
   /** What stops the viewer working with Wheelhouse, such as a docket too old for it. */
   problem: string | null
+  /** The docket the viewer runs; null when the project keeps no docket, absent from an older plugin. */
+  docket?: DocketCli | null
 }
 
 /** The viewer's service id in docket's Wheelhouse manifest. */
@@ -58,6 +70,15 @@ export const VIEWER = 'viewer'
 
 export const isCasebookData = (value: unknown): value is CasebookData =>
   typeof value === 'object' && value !== null && (value as { schema?: unknown }).schema === CASEBOOK_SCHEMA
+
+/** One line naming the docket the viewer runs, or null when the provider does not say. */
+export const describeDocket = (docket: DocketCli | null | undefined): string | null => {
+  if (!docket) return null
+  const which = docket.version ? `docket ${docket.version}` : 'a docket that does not say its version'
+  return docket.source === 'plugin'
+    ? `Runs ${which}, shipped with this plugin.`
+    : `Runs ${which} at ${docket.command}, set by "bin" in the plugin’s settings.`
+}
 
 /** Where the element stands: what it can draw. */
 export type Connection =

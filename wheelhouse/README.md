@@ -13,7 +13,8 @@ wheelhouse plugin install chrisjowen/docket
 Wheelhouse fetches the repository at a commit, shows what the plugin adds (its
 tab, its `viewer` service and its MCP app server, `docket`) and asks before it
 keeps it. Restart Wheelhouse to load it. Installing needs no
-build: the built files are committed.
+build: the built files are committed, the docket the plugin runs among them
+(see [The docket it runs](#the-docket-it-runs)).
 
 A Wheelhouse that still has its own Docket plugin built in (the read-only
 Chart) refuses an installed plugin with the same name, `docket`, until that
@@ -32,12 +33,16 @@ docket viewer: `docket open`, declared as the plugin's `viewer` service.
 Until the viewer answers, the tab says so, with **Launch** (Wheelhouse starts
 it, then opens docket's own page in a new tab, as it does for every plugin
 service) and the command that starts it by hand. Wheelhouse starts it on
-127.0.0.1, on a port of its own per project, as
+127.0.0.1, on a port of its own per project, with the docket the plugin ships
+and Wheelhouse's own node, as
 
 ```sh
-docket open --host 127.0.0.1 --port <port> --no-open \
+<node> <plugin>/wheelhouse/docket/dist/cli.js open --host 127.0.0.1 --port <port> --no-open \
   --allow-origin http://127.0.0.1:4310 --allow-origin http://localhost:4310
 ```
+
+where `<plugin>` is where Wheelhouse installed the plugin
+(`~/.wheelhouse/plugins/docket`).
 
 `--allow-origin` lets Wheelhouse's page use the viewer's API: read its
 answers, ask, and sync with the token the viewer hands it. A viewer started
@@ -100,6 +105,29 @@ Every view and action of docket open's page, inventoried from
 | The light and dark switch                                                                                          | Wheelhouse's own: the casebook follows Wheelhouse's theme                                               |
 | Each view and the selected exhibit in the address (`/ask`, `#<id>`), so a reload or a link keeps them              | Kept while the tab is open; the page's address is Wheelhouse's, so it does not carry them              |
 
+## The docket it runs
+
+The plugin ships the docket it runs: `wheelhouse/docket/` is docket's CLI
+built from the plugin's own commit (`packages/docket/dist`, as npm would have
+it: the CLI, the web UI `docket open` serves, docket_search's app, the
+ontologies and the adapters docket ships), with the npm packages it imports
+bundled into `dist/vendor/`. Wheelhouse installs and updates a plugin by
+fetching its repository, with no build and no `npm install`, so these files
+are committed, and the viewer and its MCP server are always the docket the
+plugin was built with. Installing or updating the plugin
+(`wheelhouse plugin update docket`, or **Update** in Settings → Plugins) brings
+the matching docket; nothing is installed globally, and the `docket` on your
+`PATH` is left alone.
+
+Wheelhouse runs it with the node it runs on itself, which, like docket, is
+Node 22 or later, and asks it nothing before starting it: it is the plugin's
+own commit. docket's optional drivers (`neo4j-driver`, `mem0ai`) are not
+shipped; a project whose adapters need them installs them, as with docket from
+npm.
+
+The tab says which docket the viewer runs (`Runs docket 0.5.0, shipped with
+this plugin.`) while the viewer is not open, and its problems name it too.
+
 ## Settings
 
 In Wheelhouse's `plugins.json`, all optional:
@@ -119,8 +147,12 @@ In Wheelhouse's `plugins.json`, all optional:
 }
 ```
 
-- `bin` is the docket CLI; otherwise `docket` on `PATH`. A docket whose
+- `bin` is a docket CLI to run instead of the one the plugin ships: an
+  absolute path, or a command name looked up on `PATH` (`"docket"` for the
+  one installed there). The plugin asks it `docket --version` and
+  `docket open --help`; the tab names the version it says, and a docket whose
   `docket open` has no `--allow-origin` is too old, and the tab says so.
+  Without `bin` the plugin runs the docket it ships.
 - `roots` shows another docket for a project, such as docket's
   `examples/acme-platform`; turn the plugin on for that project with
   `"projects": { "<id>": true }`.
@@ -136,8 +168,10 @@ In Wheelhouse's `plugins.json`, all optional:
 ## How it reads docket
 
 The server entry never runs anything that writes. Its provider reads whether
-the clone has `.docket.yaml` and asks `docket open --help` whether this docket
-can allow Wheelhouse's page; its service works out the viewer's command, port
+the clone has `.docket.yaml` and which docket the viewer runs: the one the
+plugin ships, whose version its `package.json` says, or the `bin` the settings
+name, which it asks `docket --version` and `docket open --help` (whether it can
+allow Wheelhouse's page). Its service works out the viewer's command, port
 and health check; its MCP server is the viewer's `/mcp`. Wheelhouse checks the viewer by `GET /api/health`, whose
 `root` must be the project's docket. Everything else the casebook does goes to
 the viewer, as on docket open's own page: its writes are chat's answer cache
@@ -149,8 +183,9 @@ and, when you sync, the projections.
 .wheelhouse-plugin/plugin.json   the manifest: id, version, contract, entries, enable rule, slot, service, MCP server
 wheelhouse/server/index.js       the server entry Wheelhouse imports (built from src/server.ts)
 wheelhouse/ui/index.js           <docket-casebook> (built from packages/docket-ui/src/embed)
+wheelhouse/docket/               the docket the plugin runs (copied from packages/docket/dist)
 wheelhouse/src/                  the server entry's source and the plugin's tests
-wheelhouse/build.mjs             bundles both with esbuild and Vite
+wheelhouse/build.mjs             bundles the first two with esbuild and Vite, and copies the third
 ```
 
 The element is docket-ui itself: `packages/docket-ui/src/embed` mounts the
@@ -161,12 +196,14 @@ memory, built by `packages/docket-ui/vite.embed.config.ts`.
 ## Build and test
 
 ```sh
-pnpm -C wheelhouse build    # write server/index.js and ui/index.js
+pnpm build                  # at the root: docket, which docket/ is copied from
+pnpm -C wheelhouse build    # write server/index.js, ui/index.js and docket/
 pnpm -C wheelhouse check    # fail when they differ from what the sources build
 pnpm -C wheelhouse test     # check, then the server entry's and the element's tests
 ```
 
-Commit the built files with the sources. Bump `version` in
+Commit the built files with the sources, after any change to docket, its web
+UI or its adapters as well as to the plugin. Bump `version` in
 `.wheelhouse-plugin/plugin.json` with `packages/docket/package.json`; a test
-checks that they agree. The test that starts a real viewer runs the built CLI,
-so run `pnpm build` at the root first.
+checks that they agree. The test that starts a real viewer runs the docket the
+plugin ships.

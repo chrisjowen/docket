@@ -12,3 +12,6 @@ packages/docket-ui/build/
 .docket/.cache/
 packages/docket-ui/embed/
 packages/docket-ui/mcp-app/
+# Except the docket that docket's Wheelhouse plugin ships and runs, which
+# wheelhouse/build.mjs builds and checks.
+!/wheelhouse/docket/**

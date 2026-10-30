@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" />
+    <title>docket</title>
+    <script>
+      // Before first paint, so a dark-mode viewer never sees a white flash.
+      try {
+        const saved = localStorage.getItem('docket-theme')
+        const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+        document.documentElement.classList.toggle('dark', dark)
+      } catch {}
+    </script>
+    <link href="/_app/immutable/entry/start.Do5tNYSw.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/D_0AMPHw.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/CJUh_LI2.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/VZ9MZowz.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.CJarsl2D.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/B2KLH6JI.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/v3eW5w4f.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/CD11jVFS.js" rel="modulepreload">
+		<link href="/_app/immutable/nodes/0.DGmT1nud.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/Dzfa7d24.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/C2xYpNYo.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DNTR7v4L.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/Cy1lh4Ka.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/Ba6Wf77z.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/Clp0jUeD.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/D6Pj5nkK.js" rel="modulepreload">
+		
+		<link href="/_app/immutable/assets/scroll-area.bHHIbcsu.css" rel="stylesheet">
+		<link href="/_app/immutable/assets/0.Bfsm7y5h.css" rel="stylesheet">
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">
+			<script>
+				{
+					__sveltekit_1vzl74 = {
+						base: ""
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("/_app/immutable/entry/start.Do5tNYSw.js"),
+						import("/_app/immutable/entry/app.CJarsl2D.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element);
+					});
+				}
+			</script>
+		</div>
+  </body>
+</html>

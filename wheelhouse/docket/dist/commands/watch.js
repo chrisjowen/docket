@@ -1,0 +1,80 @@
+import { openDocket } from '../adapters/docket.js';
+import { loadConfig } from '../config/loader.js';
+import { error } from '../model/diagnostic.js';
+import { ProjectionManager } from '../projection/manager.js';
+import { createReconciler } from '../watcher/reconciler.js';
+import { watchSource } from '../watcher/watcher.js';
+/**
+ * Minimal stdout reporter so `docket watch` is usable on its own (spec §34).
+ * The CLI passes its own - formatting is Track E's.
+ */
+export const consoleReporter = (event) => {
+    switch (event.kind) {
+        case 'added':
+        case 'updated':
+        case 'removed':
+            console.log(`✓ ${event.id} ${event.kind}`);
+            break;
+        case 'ontology-reloaded':
+            console.log('✓ ontology reloaded');
+            break;
+        case 'watching':
+            console.log(`watching ${event.root}`);
+            break;
+        case 'diagnostics':
+            for (const diagnostic of event.diagnostics) {
+                const where = diagnostic.path ? ` ${diagnostic.path}` : '';
+                console.error(`${diagnostic.severity.toUpperCase()}${where} ${diagnostic.message}`);
+            }
+            break;
+    }
+};
+/**
+ * Run the foreground watcher (spec §34). Syncs the whole source root first so
+ * the index is already correct when the first event arrives, then keeps it that
+ * way. Long-running: the returned handle is the only way it stops.
+ */
+export const watch = async (options = {}) => {
+    const resolved = await loadConfig(options.cwd);
+    const report = options.report ?? consoleReporter;
+    const docket = await openDocket(resolved);
+    const manager = await ProjectionManager.forDocket(docket);
+    // A watcher runs for hours: an instance that cannot start now would never
+    // be synced, so it fails to start rather than watching without it.
+    const failures = manager.failures;
+    if (failures.length > 0) {
+        await manager.close();
+        throw new AggregateError(failures.map(({ id, error }) => new Error(`${id}: ${error}`)), `projection init failed: ${failures.map(({ id }) => id).join(', ')}`);
+    }
+    report({ kind: 'watching', root: resolved.memoryRoot });
+    const reconciler = createReconciler(resolved, manager, report);
+    await reconciler.sync();
+    const fail = (cause) => {
+        const event = {
+            kind: 'diagnostics',
+            diagnostics: [
+                error('watch-failure', cause instanceof Error ? cause.message : String(cause))
+            ]
+        };
+        report(event);
+    };
+    const watcher = await watchSource(resolved, {
+        onSource: (path) => reconciler.reconcile(path),
+        onOntology: () => reconciler.reconcileOntology(),
+        onCatchUp: () => reconciler.sync(),
+        onError: fail
+    });
+    let closing;
+    const close = () => {
+        closing ??= watcher
+            .close()
+            .then(() => manager.close())
+            .then((failures) => {
+            for (const { id, error } of failures)
+                fail(new Error(`adapter ${id}: ${error}`));
+        });
+        return closing;
+    };
+    options.signal?.addEventListener('abort', () => void close(), { once: true });
+    return { resolved, close, idle: () => watcher.idle() };
+};

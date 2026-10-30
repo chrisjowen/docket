@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { CASEBOOK_SCHEMA, connect, isCasebookData, keepsCasebook, type CasebookData, type ServiceView } from './host.js'
+import { CASEBOOK_SCHEMA, connect, describeDocket, isCasebookData, keepsCasebook, type CasebookData, type ServiceView } from './host.js'
 
 const WHEELHOUSE = 'http://127.0.0.1:4310'
 const VIEWER = 'http://127.0.0.1:4400'
@@ -74,6 +74,23 @@ describe('connect', () => {
     expect(isCasebookData(data())).toBe(true)
     expect(isCasebookData({ state: 'docket' })).toBe(false)
     expect(isCasebookData(null)).toBe(false)
+  })
+})
+
+describe('describeDocket', () => {
+  it('names the docket the viewer runs and where it comes from', () => {
+    expect(describeDocket({ source: 'plugin', version: '0.6.0', command: '/usr/bin/node /p/docket/dist/cli.js' })).toBe(
+      'Runs docket 0.6.0, shipped with this plugin.'
+    )
+    expect(describeDocket({ source: 'settings', version: '0.5.0', command: '/opt/docket' })).toBe(
+      'Runs docket 0.5.0 at /opt/docket, set by "bin" in the plugin’s settings.'
+    )
+    expect(describeDocket({ source: 'settings', version: null, command: 'docket' })).toContain('a docket that does not say its version')
+  })
+
+  it('says nothing when the provider does not say', () => {
+    expect(describeDocket(null)).toBeNull()
+    expect(describeDocket(undefined)).toBeNull()
   })
 })
 

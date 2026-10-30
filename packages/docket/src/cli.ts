@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 
 import { Command, Option } from 'commander'
@@ -103,11 +104,14 @@ const printAttributes = (
   }
 }
 
+const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
+
 const program = new Command()
 
 program
   .name('docket')
   .description('Capture and classify project knowledge as Markdown: files are authoritative, indexes are disposable.')
+  .version(version)
 
 program
   .command('init')
