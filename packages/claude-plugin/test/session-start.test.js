@@ -50,9 +50,9 @@ describe("session-start hook", () => {
     assert.equal(result.status, 0);
     const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
     assert.match(context, /When asked about a project whose clone has `\.docket\.yaml`, search its docket/);
-    assert.match(context, /`docket search <query>` in that clone/);
+    assert.match(context, /If a docket MCP server is connected, call its\s+`docket_search` tool/);
+    assert.match(context, /Only when no docket MCP server is connected, run\s+`docket search <query>` in that clone/);
     assert.ok(context.includes(`${NPX_DOCKET} search <query>`), context);
-    assert.match(context, /`docket_search`/);
     // Nothing to capture into, and nothing to sync, here.
     assert.doesNotMatch(context, /`remember` skill/);
     await sleep(500);

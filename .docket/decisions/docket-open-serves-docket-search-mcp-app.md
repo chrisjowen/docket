@@ -57,7 +57,7 @@ evidence:
     path: packages/claude-plugin/scripts/session-start.js
     lines: 47-62
     symbol: PROJECTS_CONTEXT
-    note: Outside a docket repository the SessionStart hook says to search the docket of a project the session is asked about, with docket search or a connected docket_search.
+    note: Outside a docket repository the SessionStart hook says to search the docket of a project the session is asked about, preferring a connected docket MCP server's docket_search, which draws the matches as a graph in the chat, and falling back to docket search in its clone when none is connected.
     observedAt: 2026-10-30
     observedBy: claude
     session: c478579d-7213-4499-b781-c69121601e8b
@@ -92,5 +92,7 @@ Agents learn to search a project's docket from the docket Claude Code plugin,
 not from the Wheelhouse plugin: Wheelhouse plugins have no install hook and
 installing one runs no code. The plugin's SessionStart hook, outside any
 docket repository (a supervisor's home such as Firstmate's), tells the session
-to search the docket of a project it is asked about. It comes and goes with the
+to search the docket of a project it is asked about: with a connected docket
+MCP server's `docket_search`, which draws the graph in the chat, or else with
+`docket search` in the project's clone. It comes and goes with the
 plugin and writes nothing to any project's AGENTS.md or CLAUDE.md.

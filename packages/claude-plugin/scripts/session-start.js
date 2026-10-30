@@ -49,10 +49,11 @@ knowledge (services, decisions, constraints, owners, dependencies) as
 Markdown under \`.docket/\`, with \`.docket.yaml\` at the clone's root.
 
 When asked about a project whose clone has \`.docket.yaml\`, search its docket
-before reading its code: run \`docket search <query>\` in that clone
-(\`${NPX_DOCKET} search <query>\` if \`docket\` is not on the path), or call
-a connected docket MCP server's \`docket_search\` tool, which also draws the
-matches and their links as a graph. Then read the canonical files it names.`;
+before reading its code. If a docket MCP server is connected, call its
+\`docket_search\` tool: it draws the matches and their links as a graph in
+the chat. Only when no docket MCP server is connected, run
+\`docket search <query>\` in that clone (\`${NPX_DOCKET} search <query>\`
+if \`docket\` is not on the path). Then read the canonical files it names.`;
 
 const root = projectRoot();
 

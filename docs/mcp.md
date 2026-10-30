@@ -20,7 +20,7 @@ The server is in `packages/docket/src/mcp/`, the app in
 | Sessions | None. `initialize` returns no `mcp-session-id`, so every request stands on its own. |
 | Protocol versions | `2025-11-25`, `2025-06-18`, `2025-03-26`. `initialize` returns the client's version when it is one of these, else the newest. |
 | Capabilities | `tools`, `resources`. |
-| Who may call | This machine only: a request from a loopback address with a loopback `Host` (`127.0.0.1`, `localhost` or `[::1]` and the port). A browser request that another site sent is refused (403) unless `--allow-origin` named that site. A program, such as Wheelhouse's MCP client, sends no browser headers and is answered. The body must be `application/json` (else 415), so a page on another site cannot post to it without a preflight, which is refused. |
+| Who may call | This machine only: a request from a loopback address with a loopback `Host` (`127.0.0.1`, `localhost` or `[::1]` and the port). It is for programs, such as Wheelhouse's MCP client, which send no browser headers. A browser page cannot reach it, even one `--allow-origin` named: the body must be `application/json` (else 415), which a page cannot send without a CORS preflight, and `/mcp` answers no preflight (405, with no CORS headers). |
 | Discovery | `GET /api/health` includes `"mcp": "/mcp"`. |
 
 Notifications (`notifications/initialized` and the rest) are answered with 202

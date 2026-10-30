@@ -465,10 +465,10 @@ const crossOrigin = (request: IncomingMessage, response: ServerResponse, allowOr
 
 /**
  * `POST /mcp`: one JSON-RPC message to docket's MCP server, answered as JSON
- * (Streamable HTTP without sessions or a stream of its own). It answers this
- * machine only, as a sync does - a program such as Wheelhouse's MCP client,
- * which sends no browser headers, or a page `--allow-origin` named; a page on
- * another site cannot send it JSON without a preflight, which it refuses.
+ * (Streamable HTTP without sessions or a stream of its own). It is for
+ * programs on this machine only, such as Wheelhouse's MCP client, which sends
+ * no browser headers. A browser page, even one `--allow-origin` named, cannot
+ * reach it: it cannot send JSON without a preflight, and /mcp answers none.
  */
 const mcp = async (request: IncomingMessage, response: ServerResponse, context: Context): Promise<void> => {
   const reply = (status: number, body: unknown): void => sendJson(response, status, body)
