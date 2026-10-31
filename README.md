@@ -807,14 +807,22 @@ resource and one relationship per (source, rel, target), with `confidence`,
 `evidenceCount`, `sources` and `evidence` on both, so a query can ask for what
 rests on code alone — and a full-text index over the documents. It needs the
 optional `neo4j-driver` package and a running Neo4j server, local or hosted.
-A question is answered with a full-text query, or, with `cypher` set, a local
-Ollama model writes a read-only Cypher query against the graph's schema. The
-query must bind every pattern it matches to the instance's scope or it is not
-run; its rows are kept as the values they are - a single row of numbers as
-metrics, anything else as a typed table, relationships as a graph - each row
-cited as a derived fact. It counts as exhaustive only when it ran to
-completion; full-text, or a cypher query that fails or finds nothing, answers
-with the best matches instead.
+A question is answered by one Cypher query the adapter writes itself: the
+full-text matches, and from each its best few paths of up to `traverse.hops`
+relationships (2 by default), ranked by the product of their relationships'
+confidence and damped where they end at a well-connected node. The matches are
+the answer's entities; the paths are its graph, each relationship in its stored
+direction with its confidence, and each path a derived fact saying why it holds
+(`service.orders -depends_on-> service.ledger (0.95, code+manifest)`). The
+nodes a path reaches are context, not matches. `traverse.minConfidence` and
+`traverse.rels` narrow which relationships a path may follow. With `cypher`
+set, a local Ollama model writes a read-only Cypher query against the graph's
+schema instead. The query must bind every pattern it matches to the instance's
+scope or it is not run; its rows are kept as the values they are - a single
+row of numbers as metrics, anything else as a typed table, relationships as a
+graph - each row cited as a derived fact. It counts as exhaustive only when it
+ran to completion; the adapter's own query, or a cypher query that fails or
+finds nothing, answers with the best matches instead.
 
 ```yaml
 adapters:
@@ -826,6 +834,10 @@ adapters:
       passwordEnv: NEO4J_PASSWORD       # unset: connect without auth
       # database: neo4j
       # scope: payments-project
+      # traverse:                       # how far a search reaches from each match
+      #   hops: 2                       # default; 1 to 3
+      #   minConfidence: 0              # default; follow only relationships this well supported
+      #   rels: [depends_on, owned_by]  # default: every relationship
       # cypher:
       #   model: "qwen2.5:7b"           # Ollama at http://localhost:11434
 ```

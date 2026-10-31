@@ -119,15 +119,3 @@ export const fulltextQuery = (text: string): string =>
     .map((word) => word.replace(/["()?]/g, '').replace(LUCENE_SPECIAL, (c) => `\\${c}`))
     .filter((word) => word.length > 0 && word !== '\\')
     .join(' OR ')
-
-export interface Neighbour {
-  direction: 'out' | 'in'
-  rel: string
-  id: string
-}
-
-/** A node's links, as a line a reader can scan: `depends_on → x; ← uses y`. */
-export const describeNeighbours = (neighbours: readonly Neighbour[]): string =>
-  neighbours
-    .map((n) => (n.direction === 'out' ? `${n.rel} → ${n.id}` : `← ${n.rel} ${n.id}`))
-    .join('; ')

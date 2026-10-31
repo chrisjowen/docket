@@ -93,7 +93,3 @@ export const fulltextQuery = (text) => text
     .map((word) => word.replace(/["()?]/g, '').replace(LUCENE_SPECIAL, (c) => `\\${c}`))
     .filter((word) => word.length > 0 && word !== '\\')
     .join(' OR ');
-/** A node's links, as a line a reader can scan: `depends_on → x; ← uses y`. */
-export const describeNeighbours = (neighbours) => neighbours
-    .map((n) => (n.direction === 'out' ? `${n.rel} → ${n.id}` : `← ${n.rel} ${n.id}`))
-    .join('; ');
