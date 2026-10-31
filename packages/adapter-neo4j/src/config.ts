@@ -1,6 +1,9 @@
 import { ollamaModelSchema } from '@docket/adapter-kit'
 import { z } from 'zod'
 
+/** The furthest a search expands from a match: past three hops, most graphs reach everything. */
+export const MAX_HOPS = 3
+
 /**
  * A Neo4j graph of the documents and their links. The password is read from the
  * environment, never from the file; with `passwordEnv` unset the driver
@@ -30,9 +33,22 @@ export const neo4jConfigSchema = z.preprocess(
     scope: z.string().min(1).optional(),
     /**
      * Answer searches by having a local Ollama model write a read-only Cypher
-     * query against the graph's schema. Without it, search is full-text only.
+     * query against the graph's schema. Without it - or when its query fails
+     * or finds nothing - search is full-text matches and the paths from them.
      */
-    cypher: z.strictObject(ollamaModelSchema.shape).optional()
+    cypher: z.strictObject(ollamaModelSchema.shape).optional(),
+    /**
+     * How far a search reaches from each full-text match: up to `hops`
+     * relationships (default 2), each of confidence at least `minConfidence`
+     * (default 0), and of the `rels` named when set. Every field is optional.
+     */
+    traverse: z
+      .strictObject({
+        hops: z.number().int().min(1).max(MAX_HOPS).optional(),
+        minConfidence: z.number().min(0).max(1).optional(),
+        rels: z.array(z.string().min(1)).min(1).optional()
+      })
+      .optional()
   })
 )
 

@@ -4,7 +4,6 @@ import { entityInput, entityLink } from '@docket/adapter-kit/testing'
 
 import {
   NODE_PROPERTIES,
-  describeNeighbours,
   fulltextQuery,
   labelFor,
   nodeProperties,
@@ -34,16 +33,6 @@ describe('graph model', () => {
     expect(fulltextQuery('where do uploads go?')).toBe('where OR do OR uploads OR go')
     expect(fulltextQuery('a:b (c) "d"')).toBe('a\\:b OR c OR d')
     expect(fulltextQuery('  ')).toBe('')
-  })
-
-  it('describes a node by its links in both directions', () => {
-    expect(
-      describeNeighbours([
-        { direction: 'out', rel: 'depends_on', id: 'datasource.postgres' },
-        { direction: 'in', rel: 'uses', id: 'service.web' }
-      ])
-    ).toBe('depends_on → datasource.postgres; ← uses service.web')
-    expect(describeNeighbours([])).toBe('')
   })
 
   describe('merged entities', () => {

@@ -1,13 +1,11 @@
-import { checkoutScope, ollamaChat, questionTerms, relevantExcerpt, searchAnswer } from '../../adapter-kit/dist/index.js';
+import { checkoutScope, ollamaChat, questionTerms } from '../../adapter-kit/dist/index.js';
 import { cypherAnswer, cypherSearch } from './cypher-search.js';
-import { describeNeighbours, fulltextQuery, labelFor, NODE_PROPERTIES, nodeProperties, relationshipRows } from './graph-model.js';
-const FULLTEXT_INDEX = 'memory_text';
+import { fulltextQuery, labelFor, NODE_PROPERTIES, nodeProperties, relationshipRows } from './graph-model.js';
+import { DEFAULT_TRAVERSAL, FULLTEXT_INDEX, hitOf, matchesOf, PATHS_PER_MATCH, subgraphAnswer, subgraphQuery } from './subgraph-search.js';
 /** How long a generated query may run before it is abandoned. */
 const CYPHER_TIMEOUT_MS = 10_000;
 /** Lucene's English analyzer: drops stop words and stems, so `ordering` finds `orders`. */
 const FULLTEXT_ANALYZER = 'english';
-/** The most of a matched node's body a full-text answer quotes as its passage. */
-const PASSAGE_CHARS = 600;
 /**
  * neo4j-driver is an optional dependency: only repositories that configure a
  * neo4j projection need it installed, so it is loaded on first use.
@@ -43,9 +41,11 @@ class Neo4jProjection {
     scope = '';
     /** Writes Cypher from a question; absent unless `cypher` is configured. */
     chat;
+    traversal;
     constructor(config, dependencies = {}) {
         this.config = config;
         this.chat = dependencies.chat ?? (config.cypher ? ollamaChat(config.cypher) : undefined);
+        this.traversal = { ...DEFAULT_TRAVERSAL, ...config.traverse };
     }
     async init(context) {
         const neo4j = await loadDriver();
@@ -106,12 +106,12 @@ class Neo4jProjection {
     /**
      * With `cypher` configured, the model writes a query from the question and
      * its rows are the answer, with the query in the note. When it fails or finds
-     * nothing - or without `cypher` - the answer is full-text search, and the
-     * note says why.
+     * nothing - or without `cypher` - the answer is full-text matches, each with
+     * its paths as the detail, and the note says why.
      */
     async search(query, limit) {
         if (!this.chat)
-            return { hits: await this.fulltextSearch(query, limit) };
+            return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS) };
         let reason;
         try {
             const answer = await cypherSearch(this.cypherPort(), this.chat, query);
@@ -122,20 +122,24 @@ class Neo4jProjection {
         catch (cause) {
             reason = `cypher failed: ${cause instanceof Error ? cause.message : String(cause)}`;
         }
-        return { hits: await this.fulltextSearch(query, limit), note: `${reason}\nfell back to full-text` };
+        return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS), note: `${reason}\nfell back to full-text` };
     }
     /**
      * With `cypher` configured, the model writes a query from the question and
      * the rows are the answer, kept as the values they are: a count is a
      * metric, a list a typed table, relationships a graph (docs/adapter-spec.md
      * §9, §15 step 5). When it fails or finds nothing - or without `cypher` -
-     * the answer is full-text search, saying why.
+     * the answer is the full-text matches and the paths from them, saying why.
      */
     async answer(request) {
-        const remaining = Date.parse(request.budget.deadline) - Date.now();
-        if (!(remaining > 0))
-            throw new Error('neo4j adapter: the question\'s deadline has already passed');
-        const timeoutMs = Math.min(remaining, CYPHER_TIMEOUT_MS);
+        const deadline = Date.parse(request.budget.deadline);
+        const timeLeft = () => {
+            const remaining = deadline - Date.now();
+            if (!(remaining > 0))
+                throw new Error('neo4j adapter: the question\'s deadline has already passed');
+            return Math.min(remaining, CYPHER_TIMEOUT_MS);
+        };
+        const timeoutMs = timeLeft();
         const diagnostics = [];
         if (this.chat) {
             let reason;
@@ -151,63 +155,59 @@ class Neo4jProjection {
             catch (cause) {
                 reason = `The Cypher query failed: ${cause instanceof Error ? cause.message : String(cause)}`;
             }
-            diagnostics.push({ severity: 'info', code: 'cypher-fallback', message: `${reason}\nAnswered with full-text search instead.` });
+            diagnostics.push({ severity: 'info', code: 'cypher-fallback', message: `${reason}\nAnswered with full-text matches and the paths from them instead.` });
         }
-        const answer = searchAnswer({ hits: await this.fulltextSearch(request.question, request.budget.maxResults) }, request, {
-            description: `Neo4j full-text search (English analyzer) over titles, bodies, ids and tags in scope "${this.scope}"`,
-            assumptions: ['Ranked by Lucene relevance: the best matches, not every match, and never a count.'],
-            nativeQuery: fulltextQuery(request.question)
+        const { hops, minConfidence, rels } = this.traversal;
+        const reach = [
+            `up to ${hops} hop${hops === 1 ? '' : 's'}`,
+            ...(minConfidence > 0 ? [`of confidence at least ${minConfidence}`] : []),
+            ...(rels ? [`along ${rels.join(', ')}`] : [])
+        ].join(' ');
+        const matches = await this.subgraphSearch(request.question, request.budget.maxResults, timeLeft());
+        const answer = subgraphAnswer(matches, request, {
+            description: `Neo4j full-text search (English analyzer) over titles, bodies, ids and tags in scope "${this.scope}", ` +
+                `each match followed ${reach} through the graph`,
+            assumptions: [
+                'Matches are ranked by Lucene relevance: the best matches, not every match, and never a count.',
+                `Each match keeps its best ${PATHS_PER_MATCH} paths, ranked by the product of their relationships' confidence ` +
+                    'and damped where they end at a well-connected node. The nodes they reach are context, not matches.'
+            ],
+            nativeQuery: `${subgraphQuery(hops)}\n// $lucene: ${fulltextQuery(request.question)}`
         });
         return { ...answer, diagnostics: [...diagnostics, ...answer.diagnostics] };
     }
+    async subgraphHits(query, limit, timeoutMs) {
+        const terms = questionTerms(query);
+        return (await this.subgraphSearch(query, limit, timeoutMs)).map((match) => hitOf(match, terms));
+    }
     /**
-     * Full-text matches, each with its links in `detail` - the neighbourhood is
-     * what a graph adds to a search - the part of its body that matched, and the
-     * revision it was projected at. Linked documents are not answers of their
-     * own: the best-connected ones would otherwise come back for every query.
+     * The full-text matches for `query` and the best paths from each, in one
+     * query (subgraph-search.ts). The documents a path reaches are not matches
+     * of their own: the best-connected ones would otherwise come back for every
+     * query.
      */
-    async fulltextSearch(query, limit) {
+    async subgraphSearch(query, limit, timeoutMs) {
         const lucene = fulltextQuery(query);
         if (!lucene)
             return [];
-        const matches = await this.run(`CALL db.index.fulltext.queryNodes('${FULLTEXT_INDEX}', $lucene) YIELD node, score
-       WHERE node.scope = $scope AND node.stub = false
-       RETURN node.id AS id, node.hash AS hash, node.title AS title, node.content AS content, score
-       ORDER BY score DESC, id LIMIT $limit`, { lucene, scope: this.scope, limit: this.requireNeo4j().int(limit) });
-        const terms = questionTerms(query);
-        const hits = [];
-        for (const match of matches) {
-            const id = match.id;
-            const detail = describeNeighbours(await this.neighbours(id));
-            const body = typeof match.content === 'string' && match.content.trim() !== '' ? match.content : String(match.title ?? '');
-            const passage = relevantExcerpt(body, terms, PASSAGE_CHARS).text;
-            hits.push({
-                id,
-                score: match.score,
-                ...(detail ? { detail } : {}),
-                ...(typeof match.hash === 'string' ? { revision: match.hash } : {}),
-                ...(passage ? { passage: { text: passage } } : {})
-            });
-        }
-        return hits;
+        const neo4j = this.requireNeo4j();
+        const { hops, minConfidence, rels } = this.traversal;
+        const records = await this.read(subgraphQuery(hops), {
+            lucene,
+            scope: this.scope,
+            matches: neo4j.int(limit),
+            paths: neo4j.int(PATHS_PER_MATCH * 2),
+            minConfidence,
+            rels: rels ? [...rels] : null
+        }, timeoutMs);
+        return matchesOf(this.rowsOf(records));
     }
     cypherPort() {
         const neo4j = this.requireNeo4j();
         return {
             scope: this.scope,
             schema: () => this.schema(),
-            read: async (cypher, timeoutMs = CYPHER_TIMEOUT_MS) => {
-                const session = this.requireDriver().session(this.sessionConfig());
-                try {
-                    const result = await session.executeRead((tx) => tx.run(cypher, { scope: this.scope }), {
-                        timeout: timeoutMs
-                    });
-                    return result.records;
-                }
-                finally {
-                    await session.close();
-                }
-            },
+            read: (cypher, timeoutMs = CYPHER_TIMEOUT_MS) => this.read(cypher, { scope: this.scope }, timeoutMs),
             documents: async (ids) => {
                 if (ids.length === 0)
                     return new Map();
@@ -254,16 +254,6 @@ class Neo4jProjection {
         await this.driver?.close();
         this.driver = null;
     }
-    async neighbours(id) {
-        const rows = await this.run(`MATCH (n:Memory {scope: $scope, id: $id})-[r]-(m:Memory {scope: $scope})
-       RETURN startNode(r) = n AS out, r.rel AS rel, m.id AS id
-       ORDER BY out DESC, rel, id`, { scope: this.scope, id });
-        return rows.map((row) => ({
-            direction: row.out ? 'out' : 'in',
-            rel: row.rel,
-            id: row.id
-        }));
-    }
     /** Swaps the node's type label for `label`, or just removes it when `label` is null. */
     async replaceTypeLabel(tx, id, label) {
         const result = await tx.run('MATCH (n:Memory {scope: $scope, id: $id}) RETURN labels(n) AS labels', {
@@ -301,9 +291,23 @@ class Neo4jProjection {
             await session.close();
         }
     }
+    /** Runs `cypher` in a read transaction the server abandons after `timeoutMs`. */
+    async read(cypher, parameters, timeoutMs) {
+        const session = this.requireDriver().session(this.sessionConfig());
+        try {
+            const result = await session.executeRead((tx) => tx.run(cypher, parameters), { timeout: timeoutMs });
+            return result.records;
+        }
+        finally {
+            await session.close();
+        }
+    }
     async run(cypher, parameters = {}) {
         const result = await this.requireDriver().executeQuery(cypher, parameters, this.sessionConfig());
-        return result.records.map((record) => {
+        return this.rowsOf(result.records);
+    }
+    rowsOf(records) {
+        return records.map((record) => {
             const row = record.toObject();
             return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, this.requireNeo4j().isInt(value) ? Number(value) : value]));
         });

@@ -1,7 +1,7 @@
 import neo4j, { type Driver } from 'neo4j-driver'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
-import type { EntityInput } from '@docket/contracts'
+import { validateAdapterAnswer, type AskRequest, type EntityInput, type GraphBlock } from '@docket/contracts'
 import type { EntityProjection } from '@docket/adapter-kit'
 import { entityInput, entityLink } from '@docket/adapter-kit/testing'
 
@@ -9,10 +9,15 @@ import type { Neo4jConfig } from './config.js'
 import { createNeo4jProjection } from './neo4j-projection.js'
 
 /**
- * Runs against a real Neo4j: `NEO4J_TEST_URL=bolt://localhost:7687`, auth off.
- * Skipped without it. Every test works in its own scope and clears it after.
+ * Runs against a real Neo4j: `NEO4J_TEST_URL=bolt://127.0.0.1:27687`, with
+ * the password in `NEO4J_PASSWORD` or auth off without it (see the README).
+ * Skipped without a URL. Every test works in its own scope and clears it after.
  */
 const URL = process.env.NEO4J_TEST_URL
+const PASSWORD_ENV = 'NEO4J_PASSWORD'
+const PASSWORD = process.env[PASSWORD_ENV]
+/** How the projection is told to log in: as the server expects, from the same variable. */
+const AUTH = PASSWORD ? { passwordEnv: PASSWORD_ENV } : {}
 
 const CONTEXT = { projectRoot: '/repos/acme' }
 
@@ -43,6 +48,7 @@ describe.skipIf(!URL)('neo4j projection', () => {
       url: URL ?? '',
       username: 'neo4j',
       scope,
+      ...AUTH,
       ...overrides
     })
     await created.init?.(CONTEXT)
@@ -70,8 +76,7 @@ describe.skipIf(!URL)('neo4j projection', () => {
     )
 
   beforeAll(() => {
-    // No token, as the projection connects to a NEO4J_AUTH=none server.
-    driver = neo4j.driver(URL ?? '')
+    driver = PASSWORD ? neo4j.driver(URL ?? '', neo4j.auth.basic('neo4j', PASSWORD)) : neo4j.driver(URL ?? '')
   })
 
   afterAll(async () => {
@@ -236,14 +241,14 @@ describe.skipIf(!URL)('neo4j projection', () => {
       })
     )
 
-    // Only text matches are answers. Their links travel in `detail`, rather than
+    // Only text matches are answers. The paths from them travel in `detail`, rather than
     // as hits of their own - well-linked documents would otherwise answer everything.
     expect(await projection.search?.('orders', 10)).toEqual({
       hits: [
         {
           id: 'service.api',
           score: expect.any(Number),
-          detail: 'depends_on → datasource.postgres; ← uses service.web',
+          detail: 'service.api -depends_on-> datasource.postgres; service.api <-uses- service.web',
           revision: 'sha256:api',
           passage: { text: 'Takes orders and stores them.' }
         }
@@ -257,6 +262,116 @@ describe.skipIf(!URL)('neo4j projection', () => {
 
     expect(await projection.search?.('the and of', 10)).toEqual({ hits: [] })
     expect((await projection.search?.('ordering', 10))?.hits.map((hit) => hit.id)).toEqual(['service.api'])
+  })
+
+  describe('without a model', () => {
+    const ask = (question: string): AskRequest => {
+      const now = new Date()
+      return {
+        requestId: 'native',
+        question,
+        context: { scope: 'default', now: now.toISOString(), timezone: 'UTC' },
+        budget: { maxResults: 10, maxEvidenceBytes: 10_000, deadline: new Date(now.getTime() + 30_000).toISOString() }
+      }
+    }
+
+    const graphOf = (answer: { blocks: readonly { kind: string }[] } | undefined) =>
+      answer?.blocks.find((block) => block.kind === 'graph') as GraphBlock | undefined
+
+    /** The scout report's case: orders depends on ledger, which depends on a database no file describes. */
+    const payments = async (graph: EntityProjection) => {
+      await graph.upsert(
+        makeDocument({
+          id: 'service.orders',
+          title: 'Orders',
+          content: 'Takes orders and records them.\n',
+          revision: 'sha256:orders',
+          links: [
+            entityLink({ rel: 'depends_on', target: 'service.ledger', confidence: 0.95, sources: ['code', 'manifest'] }),
+            entityLink({ rel: 'owned_by', target: 'team.payments', confidence: 0.6 })
+          ]
+        })
+      )
+      await graph.upsert(
+        makeDocument({
+          id: 'service.ledger',
+          title: 'Ledger',
+          content: 'Double-entry bookkeeping.\n',
+          revision: 'sha256:ledger',
+          links: [entityLink({ rel: 'depends_on', target: 'datasource.ledger-db', confidence: 0.9, sources: ['runtime'] })]
+        })
+      )
+      await graph.upsert(makeDocument({ id: 'team.payments', type: 'team', title: 'Payments', content: 'Runs checkout.\n', revision: 'sha256:payments', links: [] }))
+    }
+
+    it('answers with the matches and the paths from them', async () => {
+      await fresh()
+      await payments(projection)
+      const request = ask('what do orders rely on?')
+
+      const answer = await projection.answer?.(request)
+
+      expect(answer && validateAdapterAnswer(answer, request)).toEqual(answer)
+      expect(answer?.blocks.map((block) => block.kind)).toEqual(['entities', 'graph', 'passages'])
+      // Only the text match is an entity; what its paths reach is context.
+      expect(answer?.blocks[0]).toMatchObject({ entities: [{ ref: { kind: 'entity', id: 'service.orders', revision: 'sha256:orders' } }] })
+      const graph = graphOf(answer)
+      expect(graph?.paths).toEqual([
+        ['service.orders', 'service.ledger', 'datasource.ledger-db'],
+        ['service.orders', 'team.payments']
+      ])
+      expect(graph?.edges).toEqual([
+        { source: 'service.orders', target: 'service.ledger', rel: 'depends_on', confidence: 0.95, evidenceIds: ['path-1'] },
+        { source: 'service.ledger', target: 'datasource.ledger-db', rel: 'depends_on', confidence: 0.9, evidenceIds: ['path-1'] },
+        { source: 'service.orders', target: 'team.payments', rel: 'owned_by', confidence: 0.6, evidenceIds: ['path-2'] }
+      ])
+      expect(graph?.nodes).toContainEqual({ id: 'datasource.ledger-db', label: 'datasource.ledger-db' })
+      expect(answer?.evidence.find((item) => item.id === 'path-1')).toMatchObject({
+        kind: 'derived-fact',
+        text: 'service.orders -depends_on-> service.ledger (0.95, code+manifest) -depends_on-> datasource.ledger-db (0.9, runtime)'
+      })
+      expect(answer?.interpretation.nativeQuery).toContain("db.index.fulltext.queryNodes('memory_text', $lucene)")
+      expect(answer?.coverage).toEqual({ mode: 'top-k', truncated: false, scope: 'default' })
+    })
+
+    it('reaches as far as traverse allows', async () => {
+      await fresh()
+      await payments(projection)
+      const pathsWith = async (traverse: Neo4jConfig['traverse']) =>
+        graphOf(await (await open({ traverse })).answer?.(ask('orders')))?.paths
+
+      expect(await pathsWith({ hops: 1 })).toEqual([
+        ['service.orders', 'service.ledger'],
+        ['service.orders', 'team.payments']
+      ])
+      expect(await pathsWith({ minConfidence: 0.7 })).toEqual([['service.orders', 'service.ledger', 'datasource.ledger-db']])
+      expect(await pathsWith({ rels: ['owned_by'] })).toEqual([['service.orders', 'team.payments']])
+    })
+
+    it('ranks paths by confidence, damped where they end at a well-connected node', async () => {
+      await fresh()
+      await projection.upsert(
+        makeDocument({
+          id: 'service.orders',
+          title: 'Orders',
+          content: 'Takes orders.\n',
+          links: [
+            entityLink({ rel: 'uses', target: 'platform.hub', confidence: 0.9 }),
+            entityLink({ rel: 'uses', target: 'library.shaky', confidence: 0.3 }),
+            entityLink({ rel: 'uses', target: 'library.leaf', confidence: 0.9 })
+          ]
+        })
+      )
+      for (const n of [1, 2, 3, 4, 5]) {
+        await projection.upsert(
+          makeDocument({ id: `service.x${n}`, title: `X${n}`, content: 'Elsewhere.\n', links: [entityLink({ rel: 'uses', target: 'platform.hub' })] })
+        )
+      }
+
+      const graph = graphOf(await (await open({ traverse: { hops: 1 } })).answer?.(ask('orders')))
+
+      expect(graph?.paths?.map((path) => path.at(-1))).toEqual(['library.leaf', 'platform.hub', 'library.shaky'])
+    })
   })
 
   describe('with a model writing Cypher', () => {
@@ -276,7 +391,7 @@ describe.skipIf(!URL)('neo4j projection', () => {
       scope = `test-${Math.random().toString(36).slice(2)}`
       const fake = model(cypher)
       const created = createNeo4jProjection(
-        { type: 'neo4j', url: URL ?? '', username: 'neo4j', scope },
+        { type: 'neo4j', url: URL ?? '', username: 'neo4j', scope, ...AUTH },
         { chat: fake.chat }
       )
       await created.init?.(CONTEXT)

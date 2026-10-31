@@ -40,6 +40,18 @@ describe('neo4j adapter', () => {
     expect(() => neo4j.validateConfig({ cypher: { model: 'm', modle: 'n' } })).toThrow(/Unrecognized key: "modle"/)
   })
 
+  it('takes how far a search reaches from each match, within bounds', () => {
+    expect(neo4j.validateConfig({ traverse: { hops: 3, minConfidence: 0.5, rels: ['depends_on'] } })).toMatchObject({
+      traverse: { hops: 3, minConfidence: 0.5, rels: ['depends_on'] }
+    })
+    expect(neo4j.validateConfig({ traverse: {} })).toMatchObject({ traverse: {} })
+    expect(() => neo4j.validateConfig({ traverse: { hops: 4 } })).toThrow()
+    expect(() => neo4j.validateConfig({ traverse: { hops: 1.5 } })).toThrow()
+    expect(() => neo4j.validateConfig({ traverse: { minConfidence: 2 } })).toThrow()
+    expect(() => neo4j.validateConfig({ traverse: { rels: [] } })).toThrow()
+    expect(() => neo4j.validateConfig({ traverse: { depth: 2 } })).toThrow(/Unrecognized key: "depth"/)
+  })
+
   it('names itself and its contract major', () => {
     expect(neo4j).toMatchObject({ apiVersion: 1, name: 'neo4j' })
   })
