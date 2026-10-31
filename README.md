@@ -392,7 +392,8 @@ MCP server answers.
 `POST /mcp` is docket's MCP server, for programs on this machine. It speaks
 Streamable HTTP and has one tool, `docket_search`. The tool returns what a
 search finds as text, with an MCP app (`ui://docket/search.html`) that draws
-the matches and the resources one link away on the casebook's evidence board.
+the matches and the subgraphs the projections returned on the casebook's
+evidence board, with the resources one link away as faded context.
 A host that draws MCP apps, such as Wheelhouse, shows that board.
 [docs/mcp.md](docs/mcp.md) is its contract.
 

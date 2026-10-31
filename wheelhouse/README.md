@@ -61,8 +61,9 @@ on the `viewer` service at `/mcp`:
 Its one tool, `docket_search` (read-only, given a `query` and the Wheelhouse
 `project` it routes by), returns the resources a search of the project's docket finds, as text and as
 `docket-search.v1` structured content. Its app, `ui://docket/search.html`
-(`text/html;profile=mcp-app`, no network), draws them and the resources one
-link away on the casebook's evidence board. From the app you can search again,
+(`text/html;profile=mcp-app`, no network), draws them, the subgraphs the
+projections returned and the resources one link away on the casebook's
+evidence board. From the app you can search again,
 pick a resource to see its file and links, open it in docket's own page, or go
 full screen. The plugin draws the app in no slot of its own; it is there for
 whatever in Wheelhouse calls `docket_search` for a project. The viewer must be

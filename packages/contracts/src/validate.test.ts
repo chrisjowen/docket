@@ -207,6 +207,26 @@ describe('validateAdapterAnswer', () => {
     expect(() => validateAdapterAnswer(graph)).toThrow(/edge end "b" is not a node[\s\S]*path node "c" is not a node/)
   })
 
+  it('takes a graph edge confidence from 0 to 1', () => {
+    const graph = (confidence: number) =>
+      answer({
+        blocks: [
+          {
+            kind: 'graph',
+            id: 'g',
+            evidenceIds: [],
+            nodes: [
+              { id: 'a', label: 'A' },
+              { id: 'b', label: 'B' }
+            ],
+            edges: [{ source: 'a', target: 'b', rel: 'depends_on', confidence }]
+          }
+        ]
+      })
+    expect(() => validateAdapterAnswer(graph(0.9))).not.toThrow()
+    expect(() => validateAdapterAnswer(graph(1.5))).toThrow(/confidence/)
+  })
+
   it('types table cells by column, keeping large counts as decimal strings', () => {
     const table = (cells: Record<string, unknown>) =>
       answer({

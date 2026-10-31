@@ -11,21 +11,39 @@ export interface Board {
   emphasis: { nodes: Set<string>; links: Set<string> } | null
 }
 
+/** Whether a projection returned a subgraph for the search: anything on the board besides matches it found. */
+export const hasSubgraph = (graph: SearchGraph): boolean =>
+  graph.links.some((link) => link.via === 'adapter') || graph.nodes.some((node) => !node.match && node.via === 'adapter')
+
 /**
- * The evidence board for a search, as the casebook draws it: every match and
- * neighbour, every link between them, labelled as the casebook labels its
- * board. With a resource picked, it and what it links to stand out.
+ * The evidence board for a search, as the casebook draws it: every match,
+ * every node and link of the subgraphs the projections returned, and the
+ * canonical context - neighbours one link away and the links the files
+ * declare between them - labelled as the casebook labels its board. When a
+ * projection returned a subgraph, it stays at full strength and the canonical
+ * context fades (docs/adapter-spec.md §13); when none did, nothing fades. With
+ * a resource picked, it and what it links to stand out.
  */
 export const boardOf = (graph: SearchGraph, selected: string | null): Board => {
   const nodes: GraphNode[] = graph.nodes.map((node) => ({ id: node.id, title: node.title, type: node.type, ghost: node.ghost }))
-  const links: GraphLink[] = graph.links.map((link) => ({ key: edgeKey(link), ...link }))
-  if (selected === null || !graph.nodes.some((node) => node.id === selected)) return { nodes, links, emphasis: null }
+  const links: GraphLink[] = graph.links.map((link) => ({ key: edgeKey(link), source: link.source, rel: link.rel, target: link.target }))
+  if (selected !== null && graph.nodes.some((node) => node.id === selected)) {
+    return {
+      nodes,
+      links,
+      emphasis: {
+        nodes: neighbourhood(graph.links, selected),
+        links: new Set(links.filter((link) => link.source === selected || link.target === selected).map((link) => link.key))
+      }
+    }
+  }
+  if (!hasSubgraph(graph)) return { nodes, links, emphasis: null }
   return {
     nodes,
     links,
     emphasis: {
-      nodes: neighbourhood(graph.links, selected),
-      links: new Set(links.filter((link) => link.source === selected || link.target === selected).map((link) => link.key))
+      nodes: new Set(graph.nodes.filter((node) => node.via !== 'canonical').map((node) => node.id)),
+      links: new Set(graph.links.filter((link) => link.via !== 'canonical').map(edgeKey))
     }
   }
 }

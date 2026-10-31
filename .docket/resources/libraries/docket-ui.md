@@ -44,6 +44,26 @@ evidence:
     observedBy: claude
     session: 545488c7-b406-402b-8f89-e4d88e865c28
     commit: b74099f
+  - source: code
+    path: packages/docket-ui/src/mcp-app/app.svelte
+    symbol: docket_search MCP app
+    note: The docket_search MCP app is a Svelte component that draws the resources matched by docket search on the casebook's evidence board, with subgraphs adapters returned at full strength and canonical one-hop neighbours faded as context.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
+  - source: code
+    path: packages/docket-ui/src/mcp-app/board.ts
+    symbol: boardOf, hasSubgraph, searchOf, typeColours
+    note: boardOf turns a docket-search.v1 result into graph-view nodes and links; when hasSubgraph finds an adapter-returned subgraph, its emphasis keeps it at full strength and fades the via-canonical context.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
+  - source: docs
+    path: docs/mcp.md
+    note: Comprehensive documentation of the MCP server contract, transport, tool specification and the MCP app UI, including the docket-search.v1 structured content format and how adapters return graph blocks with paths, confidence and evidence.
+    observedAt: 2026-10-31
+    observedBy: claude
+    session: 29d20822-5a35-4f89-ab0c-e01f6f705eec
 
 provenance:
   capturedBy: claude

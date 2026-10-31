@@ -72,12 +72,42 @@ It runs `docket search` (every adapter enabled for query, through the shared
 coordinator) and reads the graph from the canonical files, as `docket open`'s
 `GET /api/graph` does.
 
+### The board
+
+The board shows what the projections returned, not relationships guessed
+between their hits (`docs/adapter-spec.md` §13). It is filled in this order,
+up to 60 resources:
+
+1. The matches: the entities each projection's entities blocks name.
+2. The subgraphs the projections returned, as their graph blocks hold them:
+   their nodes, their relationships with the evidence each cites, and the
+   paths they used. A node that names an entity the files hold takes the
+   entity's id. Any other node is a ghost under the id the projection gave
+   it, prefixed with the projection's id (`neo4j:x`) if that is an entity's
+   id the node does not name. A relationship that two projections returned is
+   drawn once, with both in `foundBy`.
+3. Canonical context: the resources one link away from each match, and every
+   link the files declare between two resources on the board. These have
+   `via: "canonical"`.
+
+When a projection returned a subgraph, the app draws it at full strength and
+the canonical context faded. When none did, as with the keyword and semantic
+projections, the board is the matches and their canonical neighbours, and
+nothing fades.
+
 ### The result
 
 `content` is one `text` item for the model to read. It names each match with
-its id, type, title, canonical file, confidence and links. It then lists the
-resources one link away, says how each projection answered, and says whether
-the search index is behind the files.
+its id, type, title, canonical file, confidence and links. Each returned link
+names the projections that returned it and its confidence. It then lists:
+
+- the other resources the projections returned
+- the paths they used, step by step, each with the evidence its relationships cite as its `why`: `service.orders -depends_on-> service.ledger -depends_on-> datasource.ledger-db (neo4j)`
+- each relationship they returned, with the evidence it cites as its `why`
+- the resources one link away in the files
+
+Last, it says how each projection answered, and whether the search index is
+behind the files.
 
 `structuredContent` is a `docket-search.v1` object, which the app draws
 (`packages/docket/src/mcp/types.ts`):
@@ -92,16 +122,30 @@ the search index is behind the files.
     { "id": "service.orders", "type": "service", "title": "Orders API",
       "path": ".docket/resources/services/orders.md", "confidence": 0.8, "foundBy": ["local"] }
   ],
-  // The matches, then the resources one link away from them, either direction: at most 60.
+  // The matches, the nodes of the subgraphs the projections returned, then the resources
+  // one link away from the matches, either direction: at most 60.
+  // `via` is "adapter" for what a projection returned, "canonical" for context read from the files.
   "nodes": [
-    { "id": "service.orders", "type": "service", "title": "Orders API", "path": "...", "match": true, "ghost": false },
-    { "id": "team.payments", "type": "team", "title": "Payments", "path": "...", "match": false, "ghost": false },
-    // A link target no file defines yet.
-    { "id": "service.ledger", "type": "", "title": "service.ledger", "match": false, "ghost": true }
+    { "id": "service.orders", "type": "service", "title": "Orders API", "path": "...", "match": true, "ghost": false, "via": "adapter" },
+    { "id": "service.ledger", "type": "service", "title": "Ledger", "path": "...", "match": false, "ghost": false, "via": "adapter" },
+    // A node no file defines: here, a link target the projection's graph holds.
+    { "id": "datasource.ledger-db", "type": "", "title": "datasource.ledger-db", "match": false, "ghost": true, "via": "adapter" },
+    { "id": "team.payments", "type": "team", "title": "Payments", "path": "...", "match": false, "ghost": false, "via": "canonical" }
   ],
-  // Every relationship whose two ends are both on the board, as the source's file declares it.
-  "links": [{ "source": "service.orders", "rel": "owned_by", "target": "team.payments" }],
-  // Neighbours left off to keep the board at 60.
+  // The relationships the projections returned, with who returned them, the highest confidence
+  // any gave (0 to 1, when one says) and the text of the evidence they cite. Then every
+  // relationship the files declare between two resources on the board.
+  "links": [
+    { "source": "service.orders", "rel": "depends_on", "target": "service.ledger", "via": "adapter",
+      "foundBy": ["neo4j"], "confidence": 0.9, "why": ["Orders posts to the ledger."] },
+    { "source": "service.ledger", "rel": "depends_on", "target": "datasource.ledger-db", "via": "adapter", "foundBy": ["neo4j"] },
+    { "source": "service.orders", "rel": "owned_by", "target": "team.payments", "via": "canonical" }
+  ],
+  // The paths the projections used, as the ordered ids of the resources on them, each on the board.
+  // Each path's why is the evidence its relationships cite.
+  "paths": [{ "nodes": ["service.orders", "service.ledger", "datasource.ledger-db"], "foundBy": ["neo4j"],
+      "why": ["Orders posts to the ledger."] }],
+  // Returned nodes and neighbours left off to keep the board at 60.
   "omitted": 0,
   // Every resource type, with its icon and how many entities the whole docket has of it,
   // so the app colours types as the casebook does.
@@ -113,6 +157,10 @@ the search index is behind the files.
   "warnings": []
 }
 ```
+
+`via`, `foundBy`, `confidence`, `why` and `paths` were added to
+`docket-search.v1` without changing its schema name: a reader that ignores
+them reads the result as before.
 
 A source that could not answer has `error` instead of hits. When `index`
 says the index is not synced, or is `behind` the files, the search may miss
@@ -152,9 +200,12 @@ The app speaks the MCP Apps bridge:
 
   It asks for nothing else.
 
-On the board, the matches' own links stand out. Picking a resource, on the
-board or in the list beside it, brings it and its neighbours forward and
-shows its file and its links.
+On the board, a subgraph a projection returned stands at full strength. The
+canonical context (`via: "canonical"`) fades, and a note beside the board says
+what the faded part is. The list beside the board shows the matches, then the
+paths the projections returned, each with its why. Picking a resource, on the board or in either
+list, brings it and its neighbours forward. It also shows its file and its
+links, and for each returned link, who returned it, its confidence and why.
 
 ## Building
 

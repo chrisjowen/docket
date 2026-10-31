@@ -460,11 +460,20 @@ const graphOf = (rows: readonly Cell[][], rowEvidence: readonly (string | undefi
       const rel = typeof relationship.properties.rel === 'string' ? relationship.properties.rel : relationship.type.toLowerCase()
       const key = `${source}\u0000${rel}\u0000${target}`
       const evidenceId = rowEvidence[index]
+      // The confidence projected onto the relationship from its evidence (graph-model.ts).
+      const stored = relationship.properties.confidence
+      const confidence = typeof stored === 'number' && stored >= 0 && stored <= 1 ? stored : undefined
       const known = edges.get(key)
       if (known) {
         if (evidenceId !== undefined && !known.evidenceIds?.includes(evidenceId)) known.evidenceIds = [...(known.evidenceIds ?? []), evidenceId]
       } else {
-        edges.set(key, { source, target, rel, ...(evidenceId !== undefined ? { evidenceIds: [evidenceId] } : {}) })
+        edges.set(key, {
+          source,
+          target,
+          rel,
+          ...(confidence !== undefined ? { confidence } : {}),
+          ...(evidenceId !== undefined ? { evidenceIds: [evidenceId] } : {})
+        })
       }
     }
     for (const path of cells.flatMap((cell) => cell.paths)) {

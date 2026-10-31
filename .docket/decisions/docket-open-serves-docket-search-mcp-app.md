@@ -77,8 +77,9 @@ provenance:
 `docket open` is also an MCP server for the docket it serves: `POST /mcp`,
 Streamable HTTP answered as JSON, with no sessions, for this machine only. Its
 one tool, `docket_search`, runs `docket search` and returns the matches, the
-resources one link away (at most 60 on the board) and the links between them,
-as text for the model and as `docket-search.v1` structured content. The tool
+subgraphs the adapters returned, and the resources one link away as faded
+context (at most 60 on the board; see
+[[decision.docket-search-board-draws-adapter-subgraphs]]), as text for the model and as `docket-search.v1` structured content. The tool
 carries an MCP app (`io.modelcontextprotocol/ui`, spec 2026-01-26),
 `ui://docket/search.html`: one self-contained page built from docket-ui's own
 graph view, needing no network, that draws them on the casebook's board.

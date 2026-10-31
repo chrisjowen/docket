@@ -22,8 +22,17 @@ export interface SearchMatch {
 }
 
 /**
- * One entity on the search's board: a match, or a resource one link away from
- * one. A ghost is a link target no file defines yet.
+ * Why something is on the board: a projection returned it (a match, or part of
+ * the subgraph a projection returned), or it is canonical context - a resource
+ * one link away from a match, or a link between two resources on the board,
+ * read from the canonical files rather than returned.
+ */
+export type SearchVia = 'adapter' | 'canonical'
+
+/**
+ * One entity on the search's board: a match, a node of a subgraph a projection
+ * returned, or a resource one link away from a match. A ghost is a link target
+ * or a returned node that no file defines.
  */
 export interface SearchNode {
   id: string
@@ -33,13 +42,32 @@ export interface SearchNode {
   path?: string
   match: boolean
   ghost: boolean
+  via: SearchVia
 }
 
-/** A relationship between two entities on the board, as the source's file declares it. */
+/**
+ * A relationship between two entities on the board: one a projection returned,
+ * or one the source's file declares.
+ */
 export interface SearchLink {
   source: string
   rel: string
   target: string
+  via: SearchVia
+  /** The projections that returned it; absent for canonical context. */
+  foundBy?: string[]
+  /** How far a projection holds it supported, from 0 to 1 - the highest any gave - when one says. */
+  confidence?: number
+  /** The text of the evidence the projections cited for it: why it holds. */
+  why?: string[]
+}
+
+/** A path a projection used, as the ordered ids of the entities on it, each on the board. */
+export interface SearchPath {
+  nodes: string[]
+  foundBy: string[]
+  /** The text of the evidence its relationships cite: why it holds. */
+  why?: string[]
 }
 
 /**
@@ -67,10 +95,12 @@ export interface SearchGraph {
   project: { name: string; root: string }
   /** What the projections found, most relevant first. */
   matches: SearchMatch[]
-  /** The matches and their neighbours, at most `MAX_NODES` of them. */
+  /** The matches, the subgraphs the projections returned, then the matches' neighbours: at most `MAX_NODES`. */
   nodes: SearchNode[]
   links: SearchLink[]
-  /** Neighbours left off the board to keep it readable. */
+  /** The paths the projections used, most relevant first. */
+  paths: SearchPath[]
+  /** Returned nodes and neighbours left off the board to keep it readable. */
   omitted: number
   types: SearchType[]
   sources: SearchSource[]
