@@ -203,7 +203,7 @@ The app speaks the MCP Apps bridge:
 On the board, a subgraph a projection returned stands at full strength. The
 canonical context (`via: "canonical"`) fades, and a note beside the board says
 what the faded part is. The list beside the board shows the matches, then the
-paths the projections returned. Picking a resource, on the board or in either
+paths the projections returned, each with its why. Picking a resource, on the board or in either
 list, brings it and its neighbours forward. It also shows its file and its
 links, and for each returned link, who returned it, its confidence and why.
 
