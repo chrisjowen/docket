@@ -2,7 +2,7 @@
   "name": "@chrisjowen/docket-wheelhouse-plugin",
   "private": true,
   "version": "0.5.0",
-  "description": "Builds docket's Wheelhouse plugin: the server entry and the UI bundle Wheelhouse loads. Never published; Wheelhouse installs it from this repository.",
+  "description": "Builds docket's Wheelhouse plugin: the server entry and the UI bundle Wheelhouse loads, and the docket CLI it runs. Never published; Wheelhouse installs it from this repository.",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",

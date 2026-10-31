@@ -6,7 +6,7 @@
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
   import { Button } from '$lib/components/ui/button/index.js'
   import ConnectedCasebook from './connected-casebook.svelte'
-  import { connect, isCasebookData, keepsCasebook, VIEWER, type Connection, type PluginHost, type ServiceView } from './host.js'
+  import { connect, describeDocket, isCasebookData, keepsCasebook, VIEWER, type Connection, type PluginHost, type ServiceView } from './host.js'
 
   /**
    * The casebook inside Wheelhouse. It is drawn from the project's docket
@@ -33,6 +33,7 @@
   let launching = $state(false)
   let launchFailure = $state<string | null>(null)
   let log = $state<string | null>(null)
+  const docket = $derived(isCasebookData(data) ? describeDocket(data.docket) : null)
 
   const probe = async (url: string): Promise<unknown> => {
     const response = await fetch(`${url.replace(/\/+$/, '')}/api/health`, { cache: 'no-store' })
@@ -126,6 +127,7 @@
         {#if connection.state === 'offline' && connection.launchable}
           <p class="text-muted-foreground text-xs">Wheelhouse opens docket’s own page in a new tab once the viewer answers; the casebook opens here too.</p>
         {/if}
+        {#if docket}<p class="text-muted-foreground text-xs break-words">{docket}</p>{/if}
       </div>
     </div>
   {/if}

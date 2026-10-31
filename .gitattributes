@@ -1,0 +1,4 @@
+# Built by wheelhouse/build.mjs and checked by its tests; review their sources.
+wheelhouse/docket/** linguist-generated=true
+wheelhouse/server/index.js linguist-generated=true
+wheelhouse/ui/index.js linguist-generated=true

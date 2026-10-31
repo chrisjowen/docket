@@ -322,6 +322,15 @@ evidence:
     expect(missing.code).toBe(1)
   })
 
+  it('prints its own version, which docket’s Wheelhouse plugin shows', async () => {
+    root = await makeRepo('memory-e2e')
+    const { version } = JSON.parse(await readFile(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { version: string }
+
+    const result = await memory(root, '--version')
+    expect(result.code).toBe(0)
+    expect(result.stdout.trim()).toBe(version)
+  })
+
   it('refuses to run outside an initialized repository', async () => {
     root = await makeRepo('memory-e2e')
     await rm(join(root, '.docket.yaml'))

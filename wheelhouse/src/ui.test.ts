@@ -26,6 +26,7 @@ const data = (over: Record<string, unknown> = {}) => ({
   configuredRoot: false,
   origins: [location.origin],
   problem: null,
+  docket: { source: 'plugin', version: '0.6.0', command: '/usr/bin/node /p/docket/dist/cli.js' },
   ...over
 })
 
@@ -149,6 +150,7 @@ describe('<docket-casebook>', () => {
     const element = mount({ service: async () => view, launch }, data())
     const text = await shows(element, 'docket’s viewer is not running')
     expect(text).toContain('cd /work/shop && docket open --port 4400')
+    expect(text).toContain('Runs docket 0.6.0, shipped with this plugin.')
     button(element, 'Launch').click()
     await shows(element, '2 exhibits, 1 relationship')
     expect(launch).toHaveBeenCalledWith('viewer')
@@ -196,8 +198,15 @@ describe('<docket-casebook>', () => {
   })
 
   it('says why docket cannot be shown, and when there is no docket', async () => {
-    const old = mount({ service: async () => null, launch: async () => null }, data({ problem: 'The docket CLI (docket) is too old to be shown in Wheelhouse.' }))
-    await shows(old, 'too old to be shown in Wheelhouse')
+    const old = mount(
+      { service: async () => null, launch: async () => null },
+      data({
+        problem: 'The docket CLI the docket plugin’s settings name (/opt/docket) is too old to be shown in Wheelhouse.',
+        docket: { source: 'settings', version: null, command: '/opt/docket' }
+      })
+    )
+    const text = await shows(old, 'too old to be shown in Wheelhouse')
+    expect(text).toContain('Runs a docket that does not say its version at /opt/docket, set by "bin" in the plugin’s settings.')
     const none = mount({ service: async () => null, launch: async () => null }, data({ state: 'none' }))
     await shows(none, 'No docket here')
   })

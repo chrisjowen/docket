@@ -413,9 +413,20 @@ The plugin also declares the viewer's `/mcp` as its MCP server, `docket`, so
 Wheelhouse can call `docket_search` for a project, naming it in the call's
 `project` argument, and draw its app ([docs/mcp.md](docs/mcp.md)).
 
-It needs a docket CLI with `docket open --allow-origin`. See
-[`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its
-settings and how it is built.
+The plugin brings the docket it runs: the CLI built from the plugin's own
+commit, committed under `wheelhouse/docket/`, which Wheelhouse runs with its
+own node. Installing or updating the plugin (`wheelhouse plugin update docket`,
+or **Update** in Wheelhouse's Settings → Plugins) brings the matching docket,
+with no build and nothing installed globally, so the viewer and its MCP server
+are always the plugin's version. The `docket` on your `PATH` is used only when
+the plugin's `bin` setting names it. The shipped docket does not load
+docket's optional drivers (`neo4j-driver`, `mem0ai`) installed in a project; to
+use one, set `bin` to a docket that has the driver installed beside it, such as
+an absolute path to the project's own `node_modules/.bin/docket` or the global
+docket with the driver installed next to it. `bin` is one plugin-wide setting
+that applies to every project. The tab says which docket the viewer runs. See
+[`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its settings
+and how it is built.
 
 ## Asking questions: `docket ask`
 
@@ -1001,8 +1012,9 @@ To work on the web UI with hot reload, run `docket open --no-open` in a
 repository with a `.docket/`, then `pnpm -C packages/docket-ui dev`; the dev
 server proxies `/api` to it (set `DOCKET_API` if it is not on port 4380).
 
-The Wheelhouse plugin's built files are committed: after changing
-`wheelhouse/src` or the web UI, run `pnpm -C wheelhouse build`. Its tests
+The Wheelhouse plugin's built files are committed, the docket it runs
+(`wheelhouse/docket/`) among them: after changing `wheelhouse/src`, the web UI
+or docket itself, run `pnpm build`, then `pnpm -C wheelhouse build`. Its tests
 (`pnpm test` runs them) fail while they are out of date.
 
 Layout, phases and track ownership are in [`PLAN.md`](PLAN.md). The full
