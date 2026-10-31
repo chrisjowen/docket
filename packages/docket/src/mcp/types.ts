@@ -66,6 +66,8 @@ export interface SearchLink {
 export interface SearchPath {
   nodes: string[]
   foundBy: string[]
+  /** The text of the evidence its relationships cite: why it holds. */
+  why?: string[]
 }
 
 /**

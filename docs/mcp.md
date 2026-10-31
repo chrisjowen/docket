@@ -102,7 +102,7 @@ its id, type, title, canonical file, confidence and links. Each returned link
 names the projections that returned it and its confidence. It then lists:
 
 - the other resources the projections returned
-- the paths they used, step by step: `service.orders -depends_on-> service.ledger -depends_on-> datasource.ledger-db (neo4j)`
+- the paths they used, step by step, each with the evidence its relationships cite as its `why`: `service.orders -depends_on-> service.ledger -depends_on-> datasource.ledger-db (neo4j)`
 - each relationship they returned, with the evidence it cites as its `why`
 - the resources one link away in the files
 
@@ -142,7 +142,9 @@ behind the files.
     { "source": "service.orders", "rel": "owned_by", "target": "team.payments", "via": "canonical" }
   ],
   // The paths the projections used, as the ordered ids of the resources on them, each on the board.
-  "paths": [{ "nodes": ["service.orders", "service.ledger", "datasource.ledger-db"], "foundBy": ["neo4j"] }],
+  // Each path's why is the evidence its relationships cite.
+  "paths": [{ "nodes": ["service.orders", "service.ledger", "datasource.ledger-db"], "foundBy": ["neo4j"],
+      "why": ["Orders posts to the ledger."] }],
   // Returned nodes and neighbours left off to keep the board at 60.
   "omitted": 0,
   // Every resource type, with its icon and how many entities the whole docket has of it,

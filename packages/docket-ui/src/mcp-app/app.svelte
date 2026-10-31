@@ -250,6 +250,9 @@
                     <button class="text-left hover:underline" onclick={() => pick(id)}>{titleOf(id)}</button>
                   {/each}
                   <span class="text-muted-foreground">· {path.foundBy.join(', ')}</span>
+                  {#each path.why ?? [] as why, line (line)}
+                    <span class="text-muted-foreground block w-full pl-2 text-[11px] break-words">{why}</span>
+                  {/each}
                 </li>
               {/each}
             </ol>

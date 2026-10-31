@@ -136,13 +136,17 @@ describe('searchGraph', () => {
       },
       { source: 'service.orders', rel: 'owned_by', target: 'team.payments', via: 'canonical' }
     ])
-    expect(found.paths).toEqual([{ nodes: ['service.orders', 'service.ledger', 'datasource.ledger-db'], foundBy: ['graphy'] }])
+    expect(found.paths).toEqual([
+      { nodes: ['service.orders', 'service.ledger', 'datasource.ledger-db'], foundBy: ['graphy'], why: ['Orders posts to the ledger, which writes to ledger-db.'] }
+    ])
     expect(found.sources).toEqual([{ name: 'graphy', hits: 1, note: 'fake native 2-hop DEPENDS_ON traversal' }])
 
     const text = searchText(found)
     expect(text).toContain('links: depends_on -> service.ledger (graphy, confidence 0.9); owned_by -> team.payments')
     expect(text).toContain('Also returned by the projections: service.ledger "Ledger", datasource.ledger-db "Ledger DB".')
-    expect(text).toContain('- service.orders -depends_on-> service.ledger -depends_on-> datasource.ledger-db (graphy)')
+    expect(text).toContain(
+      '- service.orders -depends_on-> service.ledger -depends_on-> datasource.ledger-db (graphy)\n  why: Orders posts to the ledger, which writes to ledger-db.'
+    )
     expect(text).toContain('- service.ledger -depends_on-> datasource.ledger-db (graphy)\n  why: Orders posts to the ledger, which writes to ledger-db.')
     expect(text).toContain('One link away: team.payments "Payments".')
   })
@@ -219,8 +223,8 @@ describe('searchGraph', () => {
     })
     expect(found.matches[0]?.foundBy).toEqual(['graphy', 'other'])
     expect(found.paths).toEqual([
-      { nodes: ['service.orders', 'service.ledger', 'datasource.ledger-db'], foundBy: ['graphy'] },
-      { nodes: ['service.orders', 'service.ledger'], foundBy: ['other'] }
+      { nodes: ['service.orders', 'service.ledger', 'datasource.ledger-db'], foundBy: ['graphy'], why: ['Orders posts to the ledger, which writes to ledger-db.', 'Seen at runtime.'] },
+      { nodes: ['service.orders', 'service.ledger'], foundBy: ['other'], why: ['Orders posts to the ledger, which writes to ledger-db.', 'Seen at runtime.'] }
     ])
   })
 

@@ -109,6 +109,12 @@ export const searchGraph = async (options) => {
                 known.foundBy.push(subgraph.by);
         }
     }
+    for (const path of paths.values()) {
+        const steps = new Set(path.nodes.slice(1).flatMap((id, index) => [`${path.nodes[index]}\u0000${id}`, `${id}\u0000${path.nodes[index]}`]));
+        const why = [...new Set([...links.values()].filter((link) => link.via === 'adapter' && steps.has(`${link.source}\u0000${link.target}`)).flatMap((link) => link.why ?? []))];
+        if (why.length > 0)
+            path.why = why;
+    }
     const counts = new Map();
     for (const entity of graph.entities)
         counts.set(entity.type, (counts.get(entity.type) ?? 0) + 1);
@@ -175,8 +181,11 @@ export const searchText = (found) => {
     const relationships = found.links.filter((link) => link.via === 'adapter');
     if (found.paths.length > 0) {
         lines.push('', 'Paths the projections returned:');
-        for (const path of found.paths)
+        for (const path of found.paths) {
             lines.push(`- ${describePath(relationships, path.nodes)} (${path.foundBy.join(', ')})`);
+            for (const why of path.why ?? [])
+                lines.push(`  why: ${brief(why)}`);
+        }
     }
     if (relationships.length > 0) {
         lines.push('', 'Relationships the projections returned, and why they hold:');
