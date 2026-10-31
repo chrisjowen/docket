@@ -122,10 +122,12 @@ the matching docket; nothing is installed globally, and the `docket` on your
 Wheelhouse runs it with the node it runs on itself, which, like docket, is
 Node 22 or later, and asks it nothing before starting it: it is the plugin's
 own commit. docket's optional drivers (`neo4j-driver`, `mem0ai`) are not
-shipped, and the docket shipped inside the plugin does not find a driver
-installed in the project. A project whose configured projection needs one sets
-`"bin": "docket"` in the plugin's settings, so the viewer and its MCP server run
-the project's own docket, which finds the driver installed beside it.
+shipped, and the docket shipped with the plugin does not load one installed in
+the project. To use one, set `bin` to a docket that has the driver installed
+beside it: an absolute path to the project's own `node_modules/.bin/docket`
+after the project installs docket, or the global docket with the driver
+installed next to it. `bin` is one plugin-wide setting, so it applies to every
+project.
 
 The tab says which docket the viewer runs (`Runs docket 0.5.0, shipped with
 this plugin.`) while the viewer is not open, and its problems name it too.

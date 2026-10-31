@@ -419,10 +419,12 @@ own node. Installing or updating the plugin (`wheelhouse plugin update docket`,
 or **Update** in Wheelhouse's Settings → Plugins) brings the matching docket,
 with no build and nothing installed globally, so the viewer and its MCP server
 are always the plugin's version. The `docket` on your `PATH` is used only when
-the plugin's `bin` setting names it. The shipped docket does not find
-docket's optional drivers (`neo4j-driver`, `mem0ai`) installed in a project, so
-a project whose configured projection needs one sets `"bin": "docket"` to run
-its own docket and driver. The tab says which docket the viewer runs. See [`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its
+the plugin's `bin` setting names it. The shipped docket does not load
+docket's optional drivers (`neo4j-driver`, `mem0ai`) installed in a project; to
+use one, set `bin` to a docket that has the driver installed beside it, such as
+an absolute path to the project's own `node_modules/.bin/docket` or the global
+docket with the driver installed next to it. `bin` is one plugin-wide setting
+that applies to every project. The tab says which docket the viewer runs. See [`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its
 settings and how it is built.
 
 ## Asking questions: `docket ask`
