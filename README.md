@@ -424,8 +424,9 @@ docket's optional drivers (`neo4j-driver`, `mem0ai`) installed in a project; to
 use one, set `bin` to a docket that has the driver installed beside it, such as
 an absolute path to the project's own `node_modules/.bin/docket` or the global
 docket with the driver installed next to it. `bin` is one plugin-wide setting
-that applies to every project. The tab says which docket the viewer runs. See [`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its
-settings and how it is built.
+that applies to every project. The tab says which docket the viewer runs. See
+[`wheelhouse/README.md`](wheelhouse/README.md) for what it shows, its settings
+and how it is built.
 
 ## Asking questions: `docket ask`
 

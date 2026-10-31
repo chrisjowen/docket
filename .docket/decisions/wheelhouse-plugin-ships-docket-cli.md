@@ -86,6 +86,5 @@ shipped docket does not load one installed in the project. A project that needs
 one sets `bin` to a docket that has the driver installed beside it (an absolute
 path to the project's own `node_modules/.bin/docket`, or the global docket with
 the driver installed next to it); `bin` is plugin-wide, so it applies to every
-project. The
-`bin` setting is the escape hatch: an absolute path, or a command name such as
-`docket` to use the one on PATH.
+project. The `bin` setting is the escape hatch: an absolute path, or a command
+name such as `docket` to use the one on PATH.
