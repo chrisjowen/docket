@@ -176,7 +176,7 @@ class Neo4jProjection implements EntityProjection {
    * its paths as the detail, and the note says why.
    */
   async search(query: string, limit: number): Promise<SearchAnswer> {
-    if (!this.chat) return { hits: await this.subgraphHits(query, limit) }
+    if (!this.chat) return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS) }
 
     let reason: string
     try {
@@ -186,7 +186,7 @@ class Neo4jProjection implements EntityProjection {
     } catch (cause) {
       reason = `cypher failed: ${cause instanceof Error ? cause.message : String(cause)}`
     }
-    return { hits: await this.subgraphHits(query, limit), note: `${reason}\nfell back to full-text` }
+    return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS), note: `${reason}\nfell back to full-text` }
   }
 
   /**
@@ -197,9 +197,13 @@ class Neo4jProjection implements EntityProjection {
    * the answer is the full-text matches and the paths from them, saying why.
    */
   async answer(request: AskRequest): Promise<AdapterAnswer> {
-    const remaining = Date.parse(request.budget.deadline) - Date.now()
-    if (!(remaining > 0)) throw new Error('neo4j adapter: the question\'s deadline has already passed')
-    const timeoutMs = Math.min(remaining, CYPHER_TIMEOUT_MS)
+    const deadline = Date.parse(request.budget.deadline)
+    const timeLeft = (): number => {
+      const remaining = deadline - Date.now()
+      if (!(remaining > 0)) throw new Error('neo4j adapter: the question\'s deadline has already passed')
+      return Math.min(remaining, CYPHER_TIMEOUT_MS)
+    }
+    const timeoutMs = timeLeft()
     const diagnostics: Diagnostic[] = []
     if (this.chat) {
       let reason: string
@@ -221,7 +225,8 @@ class Neo4jProjection implements EntityProjection {
       ...(minConfidence > 0 ? [`of confidence at least ${minConfidence}`] : []),
       ...(rels ? [`along ${rels.join(', ')}`] : [])
     ].join(' ')
-    const answer = subgraphAnswer(await this.subgraphSearch(request.question, request.budget.maxResults), request, {
+    const matches = await this.subgraphSearch(request.question, request.budget.maxResults, timeLeft())
+    const answer = subgraphAnswer(matches, request, {
       description:
         `Neo4j full-text search (English analyzer) over titles, bodies, ids and tags in scope "${this.scope}", ` +
         `each match followed ${reach} through the graph`,
@@ -235,9 +240,9 @@ class Neo4jProjection implements EntityProjection {
     return { ...answer, diagnostics: [...diagnostics, ...answer.diagnostics] }
   }
 
-  private async subgraphHits(query: string, limit: number): Promise<SearchHit[]> {
+  private async subgraphHits(query: string, limit: number, timeoutMs: number): Promise<SearchHit[]> {
     const terms = questionTerms(query)
-    return (await this.subgraphSearch(query, limit)).map((match) => hitOf(match, terms))
+    return (await this.subgraphSearch(query, limit, timeoutMs)).map((match) => hitOf(match, terms))
   }
 
   /**
@@ -246,21 +251,24 @@ class Neo4jProjection implements EntityProjection {
    * of their own: the best-connected ones would otherwise come back for every
    * query.
    */
-  private async subgraphSearch(query: string, limit: number): Promise<Match[]> {
+  private async subgraphSearch(query: string, limit: number, timeoutMs: number): Promise<Match[]> {
     const lucene = fulltextQuery(query)
     if (!lucene) return []
     const neo4j = this.requireNeo4j()
     const { hops, minConfidence, rels } = this.traversal
-    return matchesOf(
-      await this.run(subgraphQuery(hops), {
+    const records = await this.read(
+      subgraphQuery(hops),
+      {
         lucene,
         scope: this.scope,
         matches: neo4j.int(limit),
         paths: neo4j.int(PATHS_PER_MATCH * 2),
         minConfidence,
         rels: rels ? [...rels] : null
-      })
+      },
+      timeoutMs
     )
+    return matchesOf(this.rowsOf(records))
   }
 
   private cypherPort(): CypherPort {
@@ -268,17 +276,7 @@ class Neo4jProjection implements EntityProjection {
     return {
       scope: this.scope,
       schema: () => this.schema(),
-      read: async (cypher, timeoutMs = CYPHER_TIMEOUT_MS) => {
-        const session = this.requireDriver().session(this.sessionConfig())
-        try {
-          const result = await session.executeRead((tx) => tx.run(cypher, { scope: this.scope }), {
-            timeout: timeoutMs
-          })
-          return result.records as Neo4jRecord[]
-        } finally {
-          await session.close()
-        }
-      },
+      read: (cypher, timeoutMs = CYPHER_TIMEOUT_MS) => this.read(cypher, { scope: this.scope }, timeoutMs),
       documents: async (ids) => {
         if (ids.length === 0) return new Map()
         const rows = await this.run(
@@ -386,9 +384,24 @@ class Neo4jProjection implements EntityProjection {
     }
   }
 
+  /** Runs `cypher` in a read transaction the server abandons after `timeoutMs`. */
+  private async read(cypher: string, parameters: Record<string, unknown>, timeoutMs: number): Promise<Neo4jRecord[]> {
+    const session = this.requireDriver().session(this.sessionConfig())
+    try {
+      const result = await session.executeRead((tx) => tx.run(cypher, parameters), { timeout: timeoutMs })
+      return result.records as Neo4jRecord[]
+    } finally {
+      await session.close()
+    }
+  }
+
   private async run(cypher: string, parameters: Record<string, unknown> = {}): Promise<Record<string, unknown>[]> {
     const result = await this.requireDriver().executeQuery(cypher, parameters, this.sessionConfig())
-    return result.records.map((record) => {
+    return this.rowsOf(result.records)
+  }
+
+  private rowsOf(records: readonly Neo4jRecord[]): Record<string, unknown>[] {
+    return records.map((record) => {
       const row = record.toObject() as Record<string, unknown>
       return Object.fromEntries(
         Object.entries(row).map(([key, value]) => [key, this.requireNeo4j().isInt(value) ? Number(value) : value])
