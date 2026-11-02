@@ -50,17 +50,19 @@ function preferredPort(projectId) {
   return 4381 + h % 400;
 }
 var shellWord = (s) => /^[\w./:@-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`;
-var viewerArgs = (port, origins) => [
+var viewerArgs = (port, origins, watch) => [
   "open",
   "--host",
   "127.0.0.1",
   "--port",
   String(port),
   "--no-open",
-  ...origins.flatMap((origin) => ["--allow-origin", origin])
+  ...origins.flatMap((origin) => ["--allow-origin", origin]),
+  ...watch ? ["--watch"] : []
 ];
-var openCommand = (docket, root, port, origins) => `cd ${shellWord(root)} && ${[...docket, ...viewerArgs(port, origins).filter((arg) => arg !== "--no-open")].map(shellWord).join(" ")}`;
+var openCommand = (docket, root, port, origins, watch) => `cd ${shellWord(root)} && ${[...docket, ...viewerArgs(port, origins, watch).filter((arg) => arg !== "--no-open")].map(shellWord).join(" ")}`;
 var allowsOrigins = (help) => /(^|\s)--allow-origin\b/m.test(help);
+var keepsIndex = (help) => /(^|\s)--watch\b/m.test(help);
 var versionOf = (stdout) => {
   const version = stdout.trim();
   return /^\d+\.\d+\.\d+[\w.+-]*$/.test(version) ? version : null;
@@ -83,10 +85,11 @@ function shippedCli(dir = SHIPPED_DOCKET, node = process.execPath) {
     return {
       argv,
       info,
-      problem: `The docket this plugin ships is missing from ${dir}. Update or reinstall the docket plugin, or set "bin" in its settings to a docket CLI.`
+      problem: `The docket this plugin ships is missing from ${dir}. Update or reinstall the docket plugin, or set "bin" in its settings to a docket CLI.`,
+      watches: true
     };
   }
-  return { argv, info, problem: null };
+  return { argv, info, problem: null, watches: true };
 }
 var asked = /* @__PURE__ */ new Map();
 var ASK_TTL_MS = 6e4;
@@ -99,7 +102,12 @@ function configuredCli(ctx, bin, project) {
   const run = (args) => ctx.exec({ argv: [bin, ...args], cwd: "project", project, timeoutMs: 5e3, maxBytes: 64 * 1024 });
   const value = Promise.all([run(["open", "--help"]), run(["--version"])]).then(([help, said]) => {
     const version = said.ok ? versionOf(said.stdout) : null;
-    const cli = (problem) => ({ argv: [bin], info: { source: "settings", version, command: shellWord(bin) }, problem });
+    const cli = (problem) => ({
+      argv: [bin],
+      info: { source: "settings", version, command: shellWord(bin) },
+      problem,
+      watches: help.ok && keepsIndex(help.stdout)
+    });
     const named = `The docket CLI the docket plugin\u2019s settings name (${bin}${version ? `, docket ${version}` : ""})`;
     const shipped = shippedVersion(SHIPPED_DOCKET);
     const instead = `remove "bin" to run the docket this plugin ships${shipped ? ` (${shipped})` : ""}`;
@@ -162,16 +170,19 @@ async function viewer(ctx) {
   const port = settings.ports[project.id] ?? await ctx.servicePort(preferredPort(project.id), Object.values(settings.ports));
   const url = `http://127.0.0.1:${port}`;
   const cli = await docketCli(ctx, settings, project.id);
-  const hint = openCommand(cli.argv, where.root, port, settings.origins);
+  const hint = openCommand(cli.argv, where.root, port, settings.origins, cli.watches);
   if (cli.problem) return { available: false, reason: cli.problem, hint };
   return {
     available: true,
     hint,
+    ...cli.watches ? {} : {
+      note: `The docket CLI the docket plugin\u2019s settings name (${cli.info.command}) cannot keep the search index current (its docket open has no --watch), so searches use the index as it last synced: run \`docket sync\` in the project after its docket changes, or update that docket.`
+    },
     spec: {
       url,
       health: `${url}/api/health`,
       identity: { url: `${url}/api/health`, path: ["root"], value: realRoot(where.root) },
-      argv: [...cli.argv, ...viewerArgs(port, settings.origins)],
+      argv: [...cli.argv, ...viewerArgs(port, settings.origins, cli.watches)],
       cwd: where.root,
       binds: "loopback"
     }
@@ -200,6 +211,7 @@ export {
   allowsOrigins,
   clearCliCache,
   server_default as default,
+  keepsIndex,
   openCommand,
   pageOrigin,
   preferredPort,

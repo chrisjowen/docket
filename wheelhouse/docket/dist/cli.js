@@ -337,6 +337,7 @@ program
     .option('--host <address>', 'interface to listen on; 0.0.0.0 serves every network interface', '127.0.0.1')
     .option('--no-open', 'print the address without opening a browser')
     .option('--allow-origin <origin>', 'another page on this machine that may use the UI\'s API, such as Wheelhouse at http://127.0.0.1:4310 (repeatable)', (value, previous) => [...previous, value], [])
+    .option('--watch', 'sync the projections that are missing or behind the files at start, and again whenever they change')
     .action(async (options) => {
     let port;
     if (options.port !== undefined) {
@@ -353,7 +354,26 @@ program
         if (!checked.ok)
             throw new Error(`--allow-origin: ${checked.reason}`);
     }
-    const handle = await open({ port, host, allowOrigins: options.allowOrigin });
+    const handle = await open({
+        port,
+        host,
+        allowOrigins: options.allowOrigin,
+        watch: options.watch
+            ? {
+                onRun: (run) => {
+                    for (const result of run.results) {
+                        if (result.state === 'failed')
+                            console.error(`${result.id} did not sync: ${result.error ?? 'failed'}`);
+                        else if (result.projected + result.removed > 0)
+                            console.log(`synced ${result.id}: ${result.projected} projected, ${result.removed} removed`);
+                    }
+                    if (run.error !== undefined && run.results.length === 0)
+                        console.error(run.error);
+                },
+                onError: (cause) => console.error(`watch: ${cause instanceof Error ? cause.message : String(cause)}`)
+            }
+            : undefined
+    });
     const reach = handle.host === '127.0.0.1' || handle.host === '::1' || handle.host === 'localhost'
         ? 'this machine only'
         : handle.host === '0.0.0.0' || handle.host === '::'
@@ -363,6 +383,8 @@ program
     console.log(`  ${handle.url}  (${reach})`);
     if (handle.allowOrigins.length > 0)
         console.log(`  also usable from ${handle.allowOrigins.join(', ')}`);
+    if (handle.watching)
+        console.log('  keeping the projections current as the files change');
     console.log('Press Ctrl-C to stop.');
     if (options.open)
         openBrowser(handle.url);

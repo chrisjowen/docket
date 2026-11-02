@@ -18,14 +18,15 @@ import type {
  * element (`wheelhouse/ui/index.js`, built from docket-ui), which draws the
  * casebook from the project's docket viewer: `docket open`, started as the
  * plugin's `viewer` service on 127.0.0.1 with `--allow-origin` for
- * Wheelhouse's page, so the page may use its API. The server entry only
- * works out where the docket is and how to start its viewer; it never runs
- * anything that writes, and Wheelhouse starts the viewer only on the
- * captain's click. The viewer is the docket this plugin ships
- * (`wheelhouse/docket/`, built from the same commit by build.mjs), run with
- * Wheelhouse's own node, so installing or updating the plugin brings the
- * docket it was built with. The viewer is also docket's MCP server, `docket`, at
- * `/mcp`: its `docket_search` tool returns the resources a search finds with
+ * Wheelhouse's page, so the page may use its API, and with `--watch`, so it
+ * syncs the search index when it is missing or behind and keeps it current
+ * as the docket's files change. The server entry only works out where the
+ * docket is and how to start its viewer; it never runs anything that writes,
+ * and Wheelhouse starts the viewer only on the captain's click. The viewer is
+ * the docket this plugin ships (`wheelhouse/docket/`, built from the same
+ * commit by build.mjs), run with Wheelhouse's own node, so installing or
+ * updating the plugin brings the docket it was built with. The viewer is
+ * also docket's MCP server, `docket`, at `/mcp`: its `docket_search` tool returns the resources a search finds with
  * an MCP app that draws them and their links on the casebook's board
  * (docs/mcp.md), for Wheelhouse to show. Its id, version, contract, enable
  * rule, slot, service and MCP server are in `.wheelhouse-plugin/plugin.json`.
@@ -135,23 +136,32 @@ export function preferredPort(projectId: string): number {
 /** A path or argument as one shell word, for a command the captain copies. */
 const shellWord = (s: string): string => (/^[\w./:@-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`)
 
-/** `docket open`'s arguments for the viewer of a docket: loopback, this port, these pages allowed, no browser. */
-export const viewerArgs = (port: number, origins: string[]): string[] => [
+/**
+ * `docket open`'s arguments for the viewer of a docket: loopback, this port,
+ * these pages allowed, no browser, and - when that docket can - keeping the
+ * search index current (`--watch`), so a clone whose generated index was
+ * never built, or has fallen behind its files, is synced as the viewer starts.
+ */
+export const viewerArgs = (port: number, origins: string[], watch: boolean): string[] => [
   'open',
   '--host',
   '127.0.0.1',
   '--port',
   String(port),
   '--no-open',
-  ...origins.flatMap((origin) => ['--allow-origin', origin])
+  ...origins.flatMap((origin) => ['--allow-origin', origin]),
+  ...(watch ? ['--watch'] : [])
 ]
 
 /** The command that starts a docket's viewer by hand, with `docket` the words that run the docket CLI. */
-export const openCommand = (docket: string[], root: string, port: number, origins: string[]): string =>
-  `cd ${shellWord(root)} && ${[...docket, ...viewerArgs(port, origins).filter((arg) => arg !== '--no-open')].map(shellWord).join(' ')}`
+export const openCommand = (docket: string[], root: string, port: number, origins: string[], watch: boolean): string =>
+  `cd ${shellWord(root)} && ${[...docket, ...viewerArgs(port, origins, watch).filter((arg) => arg !== '--no-open')].map(shellWord).join(' ')}`
 
 /** Whether a docket CLI's `docket open --help` offers `--allow-origin`, which Wheelhouse needs. */
 export const allowsOrigins = (help: string): boolean => /(^|\s)--allow-origin\b/m.test(help)
+
+/** Whether a docket CLI's `docket open --help` offers `--watch`, which keeps the search index current. */
+export const keepsIndex = (help: string): boolean => /(^|\s)--watch\b/m.test(help)
 
 /** The version `docket --version` prints, or null for a docket too old to say. */
 export const versionOf = (stdout: string): string | null => {
@@ -167,6 +177,8 @@ interface Cli {
   argv: string[]
   info: DocketCli
   problem: string | null
+  /** Whether its docket open keeps the search index current (`--watch`). */
+  watches: boolean
 }
 
 const shippedVersion = (dir: string): string | null => {
@@ -192,10 +204,11 @@ export function shippedCli(dir: string = SHIPPED_DOCKET, node: string = process.
     return {
       argv,
       info,
-      problem: `The docket this plugin ships is missing from ${dir}. Update or reinstall the docket plugin, or set "bin" in its settings to a docket CLI.`
+      problem: `The docket this plugin ships is missing from ${dir}. Update or reinstall the docket plugin, or set "bin" in its settings to a docket CLI.`,
+      watches: true
     }
   }
-  return { argv, info, problem: null }
+  return { argv, info, problem: null, watches: true }
 }
 
 /** What a configured docket CLI says about itself, asked at most once a minute per CLI. */
@@ -218,7 +231,12 @@ function configuredCli(ctx: ProviderContext, bin: string, project: string): Prom
   const run = (args: string[]) => ctx.exec({ argv: [bin, ...args], cwd: 'project', project, timeoutMs: 5_000, maxBytes: 64 * 1024 })
   const value = Promise.all([run(['open', '--help']), run(['--version'])]).then(([help, said]): Cli => {
     const version = said.ok ? versionOf(said.stdout) : null
-    const cli = (problem: string | null): Cli => ({ argv: [bin], info: { source: 'settings', version, command: shellWord(bin) }, problem })
+    const cli = (problem: string | null): Cli => ({
+      argv: [bin],
+      info: { source: 'settings', version, command: shellWord(bin) },
+      problem,
+      watches: help.ok && keepsIndex(help.stdout)
+    })
     const named = `The docket CLI the docket plugin’s settings name (${bin}${version ? `, docket ${version}` : ''})`
     const shipped = shippedVersion(SHIPPED_DOCKET)
     const instead = `remove "bin" to run the docket this plugin ships${shipped ? ` (${shipped})` : ''}`
@@ -290,7 +308,8 @@ async function casebook(ctx: ProviderContext): Promise<Available<CasebookData>> 
  * it - on 127.0.0.1, allowing Wheelhouse's page. Wheelhouse checks that the
  * viewer answering there serves this project's docket. A docket too old to
  * allow Wheelhouse's page, or missing, is not started: the casebook could not
- * use it.
+ * use it. One too old to keep the search index current (`--watch`) is started
+ * without it, with a note saying so.
  */
 async function viewer(ctx: ServiceContext): Promise<ServiceResolution> {
   const project = ctx.project
@@ -301,16 +320,21 @@ async function viewer(ctx: ServiceContext): Promise<ServiceResolution> {
   const port = settings.ports[project.id] ?? (await ctx.servicePort(preferredPort(project.id), Object.values(settings.ports)))
   const url = `http://127.0.0.1:${port}`
   const cli = await docketCli(ctx, settings, project.id)
-  const hint = openCommand(cli.argv, where.root, port, settings.origins)
+  const hint = openCommand(cli.argv, where.root, port, settings.origins, cli.watches)
   if (cli.problem) return { available: false, reason: cli.problem, hint }
   return {
     available: true,
     hint,
+    ...(cli.watches
+      ? {}
+      : {
+          note: `The docket CLI the docket plugin’s settings name (${cli.info.command}) cannot keep the search index current (its docket open has no --watch), so searches use the index as it last synced: run \`docket sync\` in the project after its docket changes, or update that docket.`
+        }),
     spec: {
       url,
       health: `${url}/api/health`,
       identity: { url: `${url}/api/health`, path: ['root'], value: realRoot(where.root) },
-      argv: [...cli.argv, ...viewerArgs(port, settings.origins)],
+      argv: [...cli.argv, ...viewerArgs(port, settings.origins, cli.watches)],
       cwd: where.root,
       binds: 'loopback'
     }

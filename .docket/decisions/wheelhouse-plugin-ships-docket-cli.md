@@ -15,7 +15,7 @@ links:
         path: wheelhouse/build.mjs
         lines: 111-190
         symbol: shippedDocket
-        note: Copies packages/docket/dist (no maps or .d.ts) into wheelhouse/docket/, bundles docket's npm dependencies into dist/vendor/ and rewrites their imports; peer drivers stay imports. pnpm check fails on any drift or stray file.
+        note: Copies packages/docket/dist (no maps or .d.ts) into wheelhouse/docket/, bundles docket's npm dependencies into dist/vendor/ and rewrites their imports; peer drivers stay imports, except neo4j-driver, which is vendored the same way. pnpm check fails on any drift or stray file.
         observedAt: 2026-10-31
         observedBy: claude
         session: db7232ae-da49-4682-9743-5f577fc5b78e
@@ -81,9 +81,9 @@ whatever `docket` was on PATH.
 `wheelhouse/build.mjs` builds the copy from `packages/docket/dist` (so it needs
 the root `pnpm build` first) and checks it, so every change to docket, its web
 UI or its adapters must be followed by `pnpm -C wheelhouse build` and committed.
-docket's optional drivers (`neo4j-driver`, `mem0ai`) are not shipped, and the
-shipped docket does not load one installed in the project. A project that needs
-one sets `bin` to a docket that has the driver installed beside it (an absolute
+The shipped docket bundles the optional `neo4j-driver`, so a project's neo4j
+adapter works with it; `mem0ai` is not shipped, and the shipped docket does not
+load one installed in the project. A project that needs it sets `bin` to a docket that has the driver installed beside it (an absolute
 path to the project's own `node_modules/.bin/docket`, or the global docket with
 the driver installed next to it); `bin` is plugin-wide, so it applies to every
 project. The `bin` setting is the escape hatch: an absolute path, or a command

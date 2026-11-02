@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import type { ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
+import type { KeepIndexOptions } from '../open/keep-index.js'
 import { defaultUiDir, startUiServer, type UiServer } from '../open/server.js'
 
 export interface OpenOptions {
@@ -16,6 +17,8 @@ export interface OpenOptions {
   uiDir?: string | undefined
   /** Other pages on this machine that may use the API, such as Wheelhouse's: http(s) origins on loopback. */
   allowOrigins?: readonly string[] | undefined
+  /** Keep the projections current: sync the ones missing or behind the files now, and whenever the files change. */
+  watch?: boolean | KeepIndexOptions | undefined
 }
 
 export interface OpenHandle extends UiServer {
@@ -26,8 +29,8 @@ export interface OpenHandle extends UiServer {
  * Serve the web UI for this repository - on loopback unless `host` names
  * another interface. Long-running: the
  * returned handle is the only way it stops. It never writes a canonical file;
- * it touches the projections only to search them, or to sync them when the
- * page on this machine asks.
+ * it touches the projections only to search them, to sync them when the
+ * page on this machine asks, and, with `watch`, to keep them current.
  */
 export const open = async (options: OpenOptions = {}): Promise<OpenHandle> => {
   // Fail before listening when there is nothing to show.
@@ -45,7 +48,8 @@ export const open = async (options: OpenOptions = {}): Promise<OpenHandle> => {
     uiDir,
     port: options.port,
     host: options.host,
-    allowOrigins: options.allowOrigins
+    allowOrigins: options.allowOrigins,
+    watch: options.watch
   })
   return { ...server, resolved }
 }

@@ -6,8 +6,8 @@ import { defaultUiDir, startUiServer } from '../open/server.js';
  * Serve the web UI for this repository - on loopback unless `host` names
  * another interface. Long-running: the
  * returned handle is the only way it stops. It never writes a canonical file;
- * it touches the projections only to search them, or to sync them when the
- * page on this machine asks.
+ * it touches the projections only to search them, to sync them when the
+ * page on this machine asks, and, with `watch`, to keep them current.
  */
 export const open = async (options = {}) => {
     // Fail before listening when there is nothing to show.
@@ -22,7 +22,8 @@ export const open = async (options = {}) => {
         uiDir,
         port: options.port,
         host: options.host,
-        allowOrigins: options.allowOrigins
+        allowOrigins: options.allowOrigins,
+        watch: options.watch
     });
     return { ...server, resolved };
 };

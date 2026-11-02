@@ -12,7 +12,7 @@ const FULLTEXT_ANALYZER = 'english';
  */
 const loadDriver = async () => {
     try {
-        return (await import('neo4j-driver')).default;
+        return (await import('../../../vendor/neo4j-driver.js')).default;
     }
     catch (cause) {
         throw new Error('The neo4j projection needs the "neo4j-driver" package. Install it next to ' +

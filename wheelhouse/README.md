@@ -38,7 +38,7 @@ and Wheelhouse's own node, as
 
 ```sh
 <node> <plugin>/wheelhouse/docket/dist/cli.js open --host 127.0.0.1 --port <port> --no-open \
-  --allow-origin http://127.0.0.1:4310 --allow-origin http://localhost:4310
+  --allow-origin http://127.0.0.1:4310 --allow-origin http://localhost:4310 --watch
 ```
 
 where `<plugin>` is where Wheelhouse installed the plugin
@@ -48,6 +48,14 @@ where `<plugin>` is where Wheelhouse installed the plugin
 answers, ask, and sync with the token the viewer hands it. A viewer started
 by hand without it serves docket's own page only, and the tab says to stop it
 and launch it from Wheelhouse.
+
+`--watch` keeps the project's search index current: as the viewer starts it
+syncs every projection that was never built or is behind the files (a fresh
+clone's generated `.docket/.index` included), and it syncs again whenever the
+docket's files change, so the casebook and `docket_search` never search an
+empty or stale index. A `bin` docket whose `docket open` has no `--watch` is
+started without it, and Wheelhouse notes that its searches use the index as it
+last synced.
 
 ### docket's MCP server
 
@@ -122,12 +130,14 @@ the matching docket; nothing is installed globally, and the `docket` on your
 
 Wheelhouse runs it with the node it runs on itself, which, like docket, is
 Node 22 or later, and asks it nothing before starting it: it is the plugin's
-own commit. docket's optional drivers (`neo4j-driver`, `mem0ai`) are not
-shipped, and the docket shipped with the plugin does not load one installed in
-the project. To use one, set `bin` to a docket that has the driver installed
-beside it: an absolute path to the project's own `node_modules/.bin/docket`
-after the project installs docket, or the global docket with the driver
-installed next to it. `bin` is one plugin-wide setting, so it applies to every
+own commit. It brings docket's optional `neo4j-driver` with it, bundled into
+`dist/vendor/` like its other packages, so a project's neo4j adapter works
+with nothing to install. `mem0ai` is not shipped (its self-hosted mode needs
+native modules), and the docket shipped with the plugin does not load one
+installed in the project. To use mem0, set `bin` to a docket that has mem0ai
+installed beside it: an absolute path to the project's own
+`node_modules/.bin/docket` after the project installs docket, or the global
+docket with mem0ai installed next to it. `bin` is one plugin-wide setting, so it applies to every
 project.
 
 The tab says which docket the viewer runs (`Runs docket 0.5.0, shipped with
@@ -176,11 +186,12 @@ The server entry never runs anything that writes. Its provider reads whether
 the clone has `.docket.yaml` and which docket the viewer runs: the one the
 plugin ships, whose version its `package.json` says, or the `bin` the settings
 name, which it asks `docket --version` and `docket open --help` (whether it can
-allow Wheelhouse's page). Its service works out the viewer's command, port
+allow Wheelhouse's page, and whether it can keep the search index current).
+Its service works out the viewer's command, port
 and health check; its MCP server is the viewer's `/mcp`. Wheelhouse checks the viewer by `GET /api/health`, whose
 `root` must be the project's docket. Everything else the casebook does goes to
 the viewer, as on docket open's own page: its writes are chat's answer cache
-and, when you sync, the projections.
+and the projections, which it syncs itself (`--watch`) and when you sync.
 
 ## Layout
 

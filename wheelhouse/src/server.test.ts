@@ -13,6 +13,7 @@ import plugin, {
   CASEBOOK_SCHEMA,
   clearCliCache,
   DEFAULT_ORIGINS,
+  keepsIndex,
   MCP_SERVER,
   openCommand,
   pageOrigin,
@@ -43,7 +44,10 @@ const manifest = JSON.parse(await readFile(path.join(repo, '.wheelhouse-plugin',
 const SHIPPED = [process.execPath, path.join(SHIPPED_DOCKET, 'dist', 'cli.js')]
 const docketVersion = (JSON.parse(await readFile(path.join(repo, 'packages', 'docket', 'package.json'), 'utf8')) as { version: string }).version
 
-const HELP_NOW = 'Usage: docket open [options]\n  --host <address>\n  --no-open\n  --allow-origin <origin>  another page on this machine\n'
+const HELP_NOW =
+  'Usage: docket open [options]\n  --host <address>\n  --no-open\n  --allow-origin <origin>  another page on this machine\n  --watch  sync the projections\n'
+/** A docket open that allows Wheelhouse's page but cannot keep the search index current. */
+const HELP_NO_WATCH = 'Usage: docket open [options]\n  --host <address>\n  --no-open\n  --allow-origin <origin>  another page on this machine\n'
 const HELP_OLD = 'Usage: docket open [options]\n  --host <address>\n  --no-open\n'
 
 const project = (over: Partial<Project> = {}): Project => ({
@@ -140,15 +144,30 @@ describe('the docket the plugin ships', () => {
     expect(shippedCli()).toEqual({
       argv: SHIPPED,
       info: { source: 'plugin', version: docketVersion, command: SHIPPED.join(' ') },
-      problem: null
+      problem: null,
+      watches: true
     })
   })
 
-  it('prints its version, and its docket open allows Wheelhouse’s page', async () => {
+  it('prints its version, and its docket open allows Wheelhouse’s page and keeps the search index current', async () => {
     const run = (...args: string[]) =>
       new Promise<string>((done, fail) => execFile(SHIPPED[0]!, [SHIPPED[1]!, ...args], (error, stdout) => (error ? fail(error) : done(stdout))))
     expect(versionOf(await run('--version'))).toBe(docketVersion)
-    expect(allowsOrigins(await run('open', '--help'))).toBe(true)
+    const help = await run('open', '--help')
+    expect(allowsOrigins(help)).toBe(true)
+    expect(keepsIndex(help)).toBe(true)
+  })
+
+  it('brings neo4j-driver with it, so a project’s neo4j adapter works without installing anything', async () => {
+    const adapter = await readFile(path.join(SHIPPED_DOCKET, 'dist', 'bundled', 'adapter-neo4j', 'dist', 'neo4j-projection.js'), 'utf8')
+    expect(adapter).toContain("import('../../../vendor/neo4j-driver.js')")
+    expect(adapter).not.toMatch(/import\(\s*['"]neo4j-driver['"]\s*\)/)
+    const driver = (await import(path.join(SHIPPED_DOCKET, 'dist', 'vendor', 'neo4j-driver.js'))) as {
+      default: { driver: unknown; auth: { basic: unknown }; isInt: unknown }
+    }
+    expect(typeof driver.default.driver).toBe('function')
+    expect(typeof driver.default.auth.basic).toBe('function')
+    expect(typeof driver.default.isInt).toBe('function')
   })
 
   it('says so when the plugin’s copy is missing', () => {
@@ -195,6 +214,11 @@ describe('settings', () => {
       expect(preferredPort(id)).toBeGreaterThanOrEqual(4381)
       expect(preferredPort(id)).toBeLessThanOrEqual(4780)
     }
+  })
+
+  it('knows a docket open that can keep the search index current', () => {
+    expect(keepsIndex(HELP_NOW)).toBe(true)
+    expect(keepsIndex(HELP_NO_WATCH)).toBe(false)
   })
 
   it('knows a docket open that can allow Wheelhouse’s page', () => {
@@ -287,7 +311,7 @@ describe('the viewer service', () => {
     const url = `http://127.0.0.1:${port}`
     expect(resolution).toEqual({
       available: true,
-      hint: openCommand(SHIPPED, '/work/shop', port, DEFAULT_ORIGINS),
+      hint: openCommand(SHIPPED, '/work/shop', port, DEFAULT_ORIGINS, true),
       spec: {
         url,
         health: `${url}/api/health`,
@@ -303,14 +327,15 @@ describe('the viewer service', () => {
           '--allow-origin',
           'http://127.0.0.1:4310',
           '--allow-origin',
-          'http://localhost:4310'
+          'http://localhost:4310',
+          '--watch'
         ],
         cwd: '/work/shop',
         binds: 'loopback'
       }
     })
-    expect(openCommand(['docket'], '/work/my shop', 4400, ['http://127.0.0.1:4310'])).toBe(
-      "cd '/work/my shop' && docket open --host 127.0.0.1 --port 4400 --allow-origin http://127.0.0.1:4310"
+    expect(openCommand(['docket'], '/work/my shop', 4400, ['http://127.0.0.1:4310'], true)).toBe(
+      "cd '/work/my shop' && docket open --host 127.0.0.1 --port 4400 --allow-origin http://127.0.0.1:4310 --watch"
     )
   })
 
@@ -322,9 +347,18 @@ describe('the viewer service', () => {
       available: true,
       spec: {
         url: 'http://127.0.0.1:4400',
-        argv: ['/opt/docket', 'open', '--host', '127.0.0.1', '--port', '4400', '--no-open', '--allow-origin', 'http://127.0.0.1:5173']
+        argv: ['/opt/docket', 'open', '--host', '127.0.0.1', '--port', '4400', '--no-open', '--allow-origin', 'http://127.0.0.1:5173', '--watch']
       }
     })
+    expect(resolution).not.toHaveProperty('note')
+  })
+
+  it('starts a docket that cannot keep the search index current without --watch, and says so', async () => {
+    const resolution = await service.resolve(fake({ help: { ok: true, stdout: HELP_NO_WATCH }, settings: { bin: '/opt/docket' } }).ctx)
+    expect(resolution).toMatchObject({ available: true, note: expect.stringContaining('docket sync') })
+    if (!resolution.available) throw new Error(resolution.reason)
+    expect(resolution.spec.argv).not.toContain('--watch')
+    expect(resolution.hint).not.toContain('--watch')
   })
 
   it('does not start a docket too old for Wheelhouse’s page, and says how to start one by hand', async () => {
@@ -372,6 +406,13 @@ describe('the viewer, started as Wheelhouse starts it', () => {
     const root = path.join(dir, 'shop')
     await mkdir(root)
     await new Promise<void>((done, fail) => execFile(SHIPPED[0]!, [SHIPPED[1]!, 'init'], { cwd: root }, (error) => (error ? fail(error) : done())))
+    // A clone as it arrives: canonical files, and no search index built from them.
+    await mkdir(path.join(root, '.docket', 'resources', 'services'), { recursive: true })
+    await writeFile(
+      path.join(root, '.docket', 'resources', 'services', 'orders.md'),
+      '---\nid: service.orders\ntype: service\ntitle: Orders\n---\n\nTakes orders.\n'
+    )
+    expect(existsSync(path.join(root, '.docket', '.index', 'nodes.jsonl'))).toBe(false)
 
     // No "bin": the docket the plugin ships.
     const port = await freePort()
@@ -431,6 +472,17 @@ describe('the viewer, started as Wheelhouse starts it', () => {
     expect(contents[0]!.text).toMatch(/^<!doctype html>/)
     const found = (await mcp('tools/call', { name: 'docket_search', arguments: { query: 'anything' } })) as { structuredContent: { schema: string; project: { root: string } } }
     expect(found.structuredContent.schema).toBe('docket-search.v1')
+
+    // The viewer built the search index it was started without, so a search finds what the files hold.
+    type Searched = { structuredContent: { matches: { id: string }[]; sources: { name: string; hits: number; error?: string }[] } }
+    let orders: Searched | undefined
+    for (let attempt = 0; attempt < 100; attempt++) {
+      orders = (await mcp('tools/call', { name: 'docket_search', arguments: { query: 'orders', project: 'shop' } })) as Searched
+      if (orders.structuredContent.matches.length > 0) break
+      await new Promise((done) => setTimeout(done, 100))
+    }
+    expect(orders?.structuredContent.matches.map((match) => match.id)).toEqual(['service.orders'])
+    expect(orders?.structuredContent.sources).toEqual([expect.objectContaining({ name: 'local', hits: 1 })])
 
     // docket's own page, which Launch opens.
     const page = await fetch(`${spec.url}/`)

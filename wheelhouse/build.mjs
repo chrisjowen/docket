@@ -14,8 +14,9 @@
  * (`pnpm build` at the repository root).
  */
 import { existsSync, readdirSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
-import { isBuiltin } from 'node:module'
+import { createRequire, isBuiltin } from 'node:module'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { build as esbuild } from 'esbuild'
 import { build as vite } from 'vite'
 
@@ -67,10 +68,22 @@ const walk = (dir, prefix = '') =>
 
 /** `from '<spec>'`, `import '<spec>'` and `import('<spec>')`: what the specifier rewrite and check read. */
 const SPECIFIER = /(?<![\w$.'"])(from\s*|import\s*\(?\s*)(['"])([^'"]+)\2/g
+/** `import('<spec>')`: a dynamic import, which may use any name the module exports. */
+const DYNAMIC = /(?<![\w$.'"])import\s*\(\s*(['"])([^'"]+)\1\s*\)/g
 /** An import or re-export with a clause, whose names a vendored module must export. */
 const CLAUSE = /(?<![\w$.'"])(import|export)\s+([^'";]*?)\s*from\s*(['"])([^'"]+)\3/g
 /** A specifier that names a package, as opposed to text that happens to follow `from` in a string. */
 const PACKAGE = /^(@[\w.-]+\/)?[\w-][\w.-]*(\/[\w.-]+)*$/
+
+/**
+ * docket's optional drivers the plugin's docket ships, vendored like its
+ * dependencies, because nothing installs them beside it and the shipped
+ * docket does not load one installed in the project. neo4j-driver is plain
+ * JavaScript, so it bundles into one committed file, loaded only when a
+ * project configures a neo4j adapter. mem0ai is not shipped: its self-hosted
+ * mode needs native modules, which cannot be committed for every platform.
+ */
+const SHIPPED_DRIVERS = ['neo4j-driver']
 
 const packageOf = (spec) => (spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0])
 
@@ -105,8 +118,9 @@ const namesImported = (clause, kind, spec, file) => {
  * CLI, the web UI docket open serves, docket_search's app, the ontologies and
  * the adapters it ships - with no source maps or type declarations, and the
  * npm packages it imports bundled into dist/vendor/, since nothing installs
- * them. docket's optional drivers (its peer dependencies) stay imports, as
- * they are for docket installed from npm.
+ * them, and so are the optional drivers it ships (`SHIPPED_DRIVERS`). Its
+ * other optional drivers (its peer dependencies) stay imports, as they are
+ * for docket installed from npm.
  */
 const shippedDocket = async () => {
   const dist = path.join(docket, 'dist')
@@ -114,8 +128,15 @@ const shippedDocket = async () => {
     throw new Error(`No built docket at ${dist}. Build the workspace with \`pnpm build\` at the repository root first.`)
   }
   const manifest = JSON.parse(readFileSync(path.join(docket, 'package.json'), 'utf8'))
-  const vendored = new Set(Object.keys(manifest.dependencies ?? {}))
   const peers = new Set(Object.keys(manifest.peerDependencies ?? {}))
+  for (const driver of SHIPPED_DRIVERS) {
+    if (!peers.has(driver)) throw new Error(`${driver} is not one of docket's optional drivers; remove it from SHIPPED_DRIVERS.`)
+  }
+  const vendored = new Set([...Object.keys(manifest.dependencies ?? {}), ...SHIPPED_DRIVERS])
+  const requireFromDocket = createRequire(path.join(docket, 'package.json'))
+  /** Every name a package exports, for a module that imports it dynamically. */
+  const exportsOf = async (spec) =>
+    Object.keys(await import(pathToFileURL(requireFromDocket.resolve(spec)).href)).filter((name) => /^[A-Za-z_$][\w$]*$/.test(name) && !name.startsWith('__'))
   const vendorFile = (spec) => `vendor/${spec.replace(/^@/, '').replace(/\//g, '__')}.js`
 
   const files = new Map()
@@ -136,8 +157,14 @@ const shippedDocket = async () => {
       for (const name of namesImported(clause, kind, spec, rel)) names.add(name)
       imports.set(spec, names)
     }
+    for (const [, , spec] of source.matchAll(DYNAMIC)) {
+      if (!vendored.has(spec)) continue
+      const names = imports.get(spec) ?? new Set()
+      for (const name of ['default', ...(await exportsOf(spec))]) names.add(name)
+      imports.set(spec, names)
+    }
     source = source.replace(SPECIFIER, (match, keyword, quote, spec) => {
-      if (!PACKAGE.test(spec) || isBuiltin(spec) || peers.has(packageOf(spec))) return match
+      if (!PACKAGE.test(spec) || isBuiltin(spec) || (peers.has(packageOf(spec)) && !vendored.has(spec))) return match
       if (!vendored.has(spec)) {
         throw new Error(`${rel} imports ${spec}, which is neither one of docket's dependencies nor one of its optional drivers.`)
       }

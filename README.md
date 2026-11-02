@@ -247,6 +247,7 @@ docket adapters status      # each instance's health and how far its index lags 
 docket graph --json         # every exhibit and link, read from the files, as versioned JSON (--root <dir>; docs/graph-json.md)
 docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen)
 docket open --allow-origin http://127.0.0.1:4310  # also let another page on this machine use it, such as Wheelhouse
+docket open --watch         # also sync the projections that are missing or behind at start, and as the files change
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
 docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid or mempalace: asks, shows the plan, applies it once confirmed
@@ -288,8 +289,18 @@ http(s) origins on `127.0.0.1`, `localhost` or `[::1]` are accepted; the
 server sends CORS headers to those pages alone, and refuses any other page's
 preflight.
 
+`--watch` keeps the projections current while the UI runs: at start it syncs
+every adapter enabled for projection that was never synced or is behind the
+files (a fresh clone, whose generated `.docket/.index` was never built, gets
+one before anyone searches it), and it syncs again whenever a source file or
+the ontology changes. Each of those is the same sync as the Sync button's,
+shown on the page as it runs, for only the adapters that lag; one adapter
+failing to sync leaves the others synced and is tried again on the next
+change.
+
 The API never changes the canonical files; its writes are chat's answer cache and,
-when the page asks from this machine, a sync of the projections.
+when the page asks from this machine or `--watch` keeps them current, a sync of
+the projections.
 
 - **Graph** - every entity and relationship as a force-directed graph, each
   type drawn with its own icon and colour, filtered by type and relationship
@@ -403,8 +414,8 @@ This repository is also a [Wheelhouse](https://github.com/chrisjowen/wheelhouse)
 plugin. Its **Docket** project tab is the whole casebook - Browse (graph,
 table, history), Ask, Adapters, the inspector, chat, quick search and sync -
 drawn inside Wheelhouse from the project's own `docket open`, which Wheelhouse
-starts on 127.0.0.1 with `--allow-origin` for its page when you click
-**Launch**:
+starts on 127.0.0.1 with `--allow-origin` for its page and `--watch`, so a
+search finds what the files hold, when you click **Launch**:
 
 ```bash
 wheelhouse plugin install chrisjowen/docket
@@ -420,9 +431,9 @@ own node. Installing or updating the plugin (`wheelhouse plugin update docket`,
 or **Update** in Wheelhouse's Settings → Plugins) brings the matching docket,
 with no build and nothing installed globally, so the viewer and its MCP server
 are always the plugin's version. The `docket` on your `PATH` is used only when
-the plugin's `bin` setting names it. The shipped docket does not load
-docket's optional drivers (`neo4j-driver`, `mem0ai`) installed in a project; to
-use one, set `bin` to a docket that has the driver installed beside it, such as
+the plugin's `bin` setting names it. The shipped docket brings the optional
+`neo4j-driver` with it, so a project's neo4j adapter works with nothing to
+install. It does not load `mem0ai` installed in a project; to use mem0, set `bin` to a docket that has the driver installed beside it, such as
 an absolute path to the project's own `node_modules/.bin/docket` or the global
 docket with the driver installed next to it. `bin` is one plugin-wide setting
 that applies to every project. The tab says which docket the viewer runs. See

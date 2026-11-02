@@ -8,6 +8,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path'
 import type { ConversationTurn } from '@docket/contracts'
 
 import type { SyncOptions, SyncResult } from '../commands/sync.js'
+import { loadConfig } from '../config/loader.js'
 import { createMcpServer, INVALID_REQUEST, PARSE_ERROR, type McpServer } from '../mcp/server.js'
 import { AskCancelledError, AskRequestError, askProject } from '../query/ask.js'
 import { EvidenceRequestError, readEvidenceBody, resolveReferences } from '../query/evidence.js'
@@ -17,6 +18,7 @@ import type { AskBody, EvidenceResponse } from '../query/wire.js'
 import { ask } from './ask.js'
 import { chat } from './chat.js'
 import { readGraph } from './graph.js'
+import { keepIndex, type IndexKeeper, type KeepIndexOptions } from './keep-index.js'
 import { SyncBusyError, SyncRunner } from './sync-run.js'
 import type { UiHealth, UiSession } from './types.js'
 
@@ -45,6 +47,13 @@ export interface UiServerOptions {
   allowOrigins?: readonly string[] | undefined
   /** docket's search app for `/mcp`. Omitted: the one the build puts in `dist/mcp-app`. */
   mcpAppFile?: string | undefined
+  /**
+   * Keep the projections current (`--watch`): sync every instance that is
+   * missing or behind the files once listening, and again whenever they
+   * change (`keepIndex`). Omitted: the projections are synced only when the
+   * page asks.
+   */
+  watch?: boolean | KeepIndexOptions | undefined
 }
 
 export interface UiServer {
@@ -54,6 +63,10 @@ export interface UiServer {
   host: string
   /** The other pages allowed to use the API, as `allowedOrigin` normalised them. */
   allowOrigins: string[]
+  /** Whether it keeps the projections current as the files change (`watch`). */
+  watching: boolean
+  /** Resolves once the catch-up syncs `watch` queued have finished; at once when not watching. */
+  idle(): Promise<void>
   close(): Promise<void>
 }
 
@@ -74,8 +87,8 @@ const MIME: Record<string, string> = {
 /**
  * Loopback, so only this machine can reach the UI unless `--host` says
  * otherwise. The API never changes the canonical files - its writes are the
- * summary cache and, when asked from this machine, a sync of the projections -
- * but it serves the repository's knowledge to whoever can reach it, so
+ * summary cache and, when asked from this machine or started with `--watch`,
+ * a sync of the projections - but it serves the repository's knowledge to whoever can reach it, so
  * listening on any other interface is an explicit choice.
  */
 export const DEFAULT_HOST = '127.0.0.1'
@@ -591,6 +604,8 @@ const listen = (server: Server, port: number, host: string): Promise<void> =>
  * its own page: they may read every answer (CORS) and, with the token, sync.
  * `GET /api/health` says which docket this is and which pages it allows.
  * `POST /mcp` is docket's MCP server (docs/mcp.md), for this machine only.
+ * With `watch` it also syncs, by itself, every projection that is missing or
+ * behind the files, at start and whenever they change.
  */
 export const startUiServer = async (options: UiServerOptions): Promise<UiServer> => {
   const origins = (options.allowOrigins ?? []).map((raw) => {
@@ -635,12 +650,28 @@ export const startUiServer = async (options: UiServerOptions): Promise<UiServer>
   // A wildcard is reached through loopback; any other address through itself.
   const address = WILDCARD.has(host) ? '127.0.0.1' : host.includes(':') ? `[${host}]` : host
   context.mcp = createMcpServer({ cwd: options.cwd, appFile: options.mcpAppFile, viewer: `http://${address}:${port}/` })
+  let keeper: IndexKeeper | null = null
+  if (options.watch) {
+    try {
+      keeper = await keepIndex(await loadConfig(options.cwd), context.sync, options.watch === true ? {} : options.watch)
+    } catch (cause) {
+      server.closeAllConnections()
+      await new Promise<void>((done) => server.close(() => done()))
+      throw cause
+    }
+  }
   return {
     url: `http://${address}:${port}/`,
     port,
     host,
     allowOrigins: [...context.allowOrigins],
+    watching: keeper !== null,
+    idle: async () => {
+      await keeper?.idle()
+      await context.sync.settled()
+    },
     close: async () => {
+      await keeper?.close()
       await new Promise<void>((done, fail) => {
         server.closeAllConnections()
         server.close((cause) => (cause ? fail(cause) : done()))
