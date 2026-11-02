@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -118,6 +118,31 @@ describe('docket open --watch', () => {
     await eventually(async () => (await found('orders')).includes('service.orders'))
     await server.idle()
     expect((await status()).outOfDate).toBe(false)
+  })
+
+  it('leaves no sync running once it reports that it could not watch', async () => {
+    let started = 0
+    let finished = 0
+    const runSync = async (options: SyncOptions): Promise<SyncResult> => {
+      started += 1
+      try {
+        await new Promise((done) => setTimeout(done, 500))
+        return await sync(options)
+      } finally {
+        finished += 1
+      }
+    }
+    // The watcher cannot write its probe into a read-only memory root.
+    await chmod(join(root, '.docket'), 0o555)
+    try {
+      await expect(start({ watch: true, runSync })).rejects.toThrow()
+      const ran = started
+      expect(finished).toBe(ran)
+      await new Promise((done) => setTimeout(done, 1000))
+      expect([started, finished]).toEqual([ran, ran])
+    } finally {
+      await chmod(join(root, '.docket'), 0o755)
+    }
   })
 
   it('leaves the projections alone without --watch', async () => {

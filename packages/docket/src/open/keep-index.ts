@@ -66,12 +66,19 @@ export const keepIndex = async (resolved: ResolvedConfig, runner: SyncRunner, op
   }
 
   schedule()
-  const watcher = await watchSource(resolved, {
-    onSource: schedule,
-    onOntology: schedule,
-    onCatchUp: schedule,
-    onError
-  })
+  let watcher: Awaited<ReturnType<typeof watchSource>>
+  try {
+    watcher = await watchSource(resolved, {
+      onSource: schedule,
+      onOntology: schedule,
+      onCatchUp: schedule,
+      onError
+    })
+  } catch (cause) {
+    closed = true
+    while (active) await active
+    throw cause
+  }
 
   const idle = async (): Promise<void> => {
     await watcher.idle()
