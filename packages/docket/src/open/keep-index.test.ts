@@ -132,10 +132,13 @@ describe('docket open --watch', () => {
         finished += 1
       }
     }
+    const watches = (): number => process.getActiveResourcesInfo().filter((resource) => resource === 'FSEventWrap').length
+    const watchingBefore = watches()
     // The watcher cannot write its probe into a read-only memory root.
     await chmod(join(root, '.docket'), 0o555)
     try {
       await expect(start({ watch: true, runSync })).rejects.toThrow()
+      expect(watches()).toBe(watchingBefore)
       const ran = started
       expect(finished).toBe(ran)
       await new Promise((done) => setTimeout(done, 1000))

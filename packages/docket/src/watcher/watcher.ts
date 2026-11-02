@@ -119,38 +119,44 @@ export const watchSource = async (
   }
   watcher.on('error', handlers.onError)
 
-  // Until the initial walk finishes chokidar has not registered the existing
-  // tree, and a file created in that window is silently treated as pre-existing.
-  await new Promise<void>((done) => watcher.once('ready', done))
-
-  // `ready` only means chokidar's own walk finished. On macOS the OS watch can
-  // take a moment longer to start delivering, and a change in that window
-  // produces no event at all. Write a throwaway file and wait to hear about it,
-  // then catch up on anything that slipped through before events were flowing.
-  // It is a dotfile outside `include`, so it never reaches a handler.
-  const probe = join(resolved.memoryRoot, `.watch-probe-${process.pid}`)
-  let timeout: NodeJS.Timeout | undefined
-  const delivering = new Promise<void>((done) => {
-    const heard = (path: string): void => {
-      if (resolve(path) !== probe) return
-      watcher.off('add', heard)
-      done()
-    }
-    watcher.on('add', heard)
-    timeout = setTimeout(() => {
-      watcher.off('add', heard)
-      done()
-    }, PROBE_TIMEOUT_MS)
-  })
   try {
-    await writeFile(probe, '')
-    await delivering
-  } finally {
-    clearTimeout(timeout)
-    await rm(probe, { force: true })
+    // Until the initial walk finishes chokidar has not registered the existing
+    // tree, and a file created in that window is silently treated as pre-existing.
+    await new Promise<void>((done) => watcher.once('ready', done))
+
+    // `ready` only means chokidar's own walk finished. On macOS the OS watch can
+    // take a moment longer to start delivering, and a change in that window
+    // produces no event at all. Write a throwaway file and wait to hear about it,
+    // then catch up on anything that slipped through before events were flowing.
+    // It is a dotfile outside `include`, so it never reaches a handler.
+    const probe = join(resolved.memoryRoot, `.watch-probe-${process.pid}`)
+    let timeout: NodeJS.Timeout | undefined
+    const delivering = new Promise<void>((done) => {
+      const heard = (path: string): void => {
+        if (resolve(path) !== probe) return
+        watcher.off('add', heard)
+        done()
+      }
+      watcher.on('add', heard)
+      timeout = setTimeout(() => {
+        watcher.off('add', heard)
+        done()
+      }, PROBE_TIMEOUT_MS)
+    })
+    try {
+      await writeFile(probe, '')
+      await delivering
+    } finally {
+      clearTimeout(timeout)
+      await rm(probe, { force: true })
+    }
+    queue = queue.then(() => handlers.onCatchUp()).catch(handlers.onError)
+    await queue
+  } catch (cause) {
+    debouncer.cancel()
+    await watcher.close()
+    throw cause
   }
-  queue = queue.then(() => handlers.onCatchUp()).catch(handlers.onError)
-  await queue
 
   return {
     idle: () => queue,
