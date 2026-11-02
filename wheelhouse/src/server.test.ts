@@ -159,16 +159,25 @@ describe('the docket the plugin ships', () => {
   })
 
   it('brings neo4j-driver with it, so a project’s neo4j adapter works without installing anything', async () => {
-    const adapter = await readFile(path.join(SHIPPED_DOCKET, 'dist', 'bundled', 'adapter-neo4j', 'dist', 'neo4j-projection.js'), 'utf8')
-    expect(adapter).toContain("import('../../../vendor/neo4j-driver.js')")
-    expect(adapter).not.toMatch(/import\(\s*['"]neo4j-driver['"]\s*\)/)
-    const driver = (await import(path.join(SHIPPED_DOCKET, 'dist', 'vendor', 'neo4j-driver.js'))) as {
-      default: { driver: unknown; auth: { basic: unknown }; isInt: unknown }
+    const adapter = (await import(path.join(SHIPPED_DOCKET, 'dist', 'bundled', 'adapter-neo4j', 'dist', 'neo4j-projection.js'))) as {
+      createNeo4jProjection: (config: { url: string; username: string; scope: string }) => {
+        init: (context: { projectRoot: string }) => Promise<void>
+        close: () => Promise<void>
+      }
     }
-    expect(typeof driver.default.driver).toBe('function')
-    expect(typeof driver.default.auth.basic).toBe('function')
-    expect(typeof driver.default.isInt).toBe('function')
-  })
+    const projection = adapter.createNeo4jProjection({ url: 'bolt://127.0.0.1:1', username: 'neo4j', scope: 'shipped-test' })
+    try {
+      const failure = await projection.init({ projectRoot: repo }).then(
+        () => undefined,
+        (error: unknown) => error as { code?: string; message: string }
+      )
+      expect(failure?.message).not.toContain('needs the "neo4j-driver" package')
+      expect(failure?.code).toBe('ServiceUnavailable')
+      expect(failure?.message).toContain('ECONNREFUSED')
+    } finally {
+      await projection.close()
+    }
+  }, 30_000)
 
   it('says so when the plugin’s copy is missing', () => {
     const cli = shippedCli('/nowhere/docket/', '/usr/bin/node')
