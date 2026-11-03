@@ -14,7 +14,8 @@ import {
   type AdapterServices,
   type CanonicalInput,
   type CanonicalReader,
-  type MemoryAdapter
+  type MemoryAdapter,
+  type ModelClient
 } from '@docket/contracts'
 
 import { stableStringify } from '@docket/adapter-kit'
@@ -28,6 +29,8 @@ import {
 } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import { validate } from '../commands/validate.js'
+import { projectManifestStore } from '../manifest/state.js'
+import type { ManifestStore } from '../manifest/store.js'
 import { hashContent } from '../source/hashing.js'
 import { canonicalState } from '../sync/inputs.js'
 import { standardDistribution } from './distribution.js'
@@ -104,6 +107,8 @@ export interface Docket {
    * v1 file and its v2 migration hash alike, so migrating reprojects nothing.
    */
   readonly projectionsFingerprint: string
+  /** Where sync keeps each instance's manifest. */
+  readonly manifests: ManifestStore
   /**
    * Puts a question to the adapters enabled for query through the shared
    * coordinator, reading the canonical files afresh (docs/adapter-spec.md §10, §12).
@@ -120,6 +125,10 @@ export interface OpenDocketOptions {
   canonical?: CanonicalReader | undefined
   /** The adapter packages this docket ships with. Defaults to the standard distribution's. */
   distribution?: AdapterDistribution | undefined
+  /** Chat models offered to every adapter instance as `AdapterServices.models`, by name. Defaults to none. */
+  models?: Readonly<Record<string, ModelClient>> | undefined
+  /** Where sync keeps each instance's manifest. Defaults to the files under the project's state root. */
+  manifests?: ManifestStore | undefined
 }
 
 export interface CreateDocketOptions extends OpenDocketOptions {
@@ -208,7 +217,8 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
       scope: DEFAULT_SCOPE,
       logger: stderrLogger(entry.id),
       canonical,
-      secrets: { getEnv: async (name) => process.env[name] }
+      secrets: { getEnv: async (name) => process.env[name] },
+      ...(options.models ? { models: options.models } : {})
     }
 
     return {
@@ -237,6 +247,7 @@ export const openDocket = async (resolved: ResolvedConfig, options: OpenDocketOp
     resolved,
     adapters,
     projectionsFingerprint: hashContent(stableStringify(fingerprinted)),
+    manifests: options.manifests ?? projectManifestStore(resolved),
     // Loaded on first use: the coordinator itself opens dockets.
     ask: async (input) => (await (await import('../query/ask.js')).askProject(resolved.projectRoot, input, options)).answer
   }

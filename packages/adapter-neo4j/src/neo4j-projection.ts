@@ -8,9 +8,10 @@ import type {
   Relationship
 } from 'neo4j-driver'
 
-import type { AdapterAnswer, AskRequest, Diagnostic, EntityInput, ResultKind } from '@docket/contracts'
+import type { AdapterAnswer, AdapterServices, AskRequest, Diagnostic, EntityInput, ResultKind } from '@docket/contracts'
 import {
   checkoutScope,
+  modelChat,
   ollamaChat,
   questionTerms,
   type Chat,
@@ -79,7 +80,7 @@ class Neo4jProjection implements EntityProjection {
   private driver: Driver | null = null
   private neo4j: Neo4jApi | null = null
   private scope = ''
-  /** Writes Cypher from a question; absent unless `cypher` is configured. */
+  /** Writes Cypher from a question; absent unless `cypher` is configured or docket offers a `cypher` model. */
   private readonly chat: Chat | undefined
   private readonly traversal: Traversal
 
@@ -87,7 +88,8 @@ class Neo4jProjection implements EntityProjection {
     private readonly config: Neo4jConfig,
     dependencies: Neo4jProjectionDependencies = {}
   ) {
-    this.chat = dependencies.chat ?? (config.cypher ? ollamaChat(config.cypher) : undefined)
+    const offered = dependencies.models?.cypher
+    this.chat = dependencies.chat ?? (config.cypher ? ollamaChat(config.cypher) : offered ? modelChat(offered) : undefined)
     this.traversal = { ...DEFAULT_TRAVERSAL, ...config.traverse }
   }
 
@@ -170,10 +172,11 @@ class Neo4jProjection implements EntityProjection {
   }
 
   /**
-   * With `cypher` configured, the model writes a query from the question and
-   * its rows are the answer, with the query in the note. When it fails or finds
-   * nothing - or without `cypher` - the answer is full-text matches, each with
-   * its paths as the detail, and the note says why.
+   * With `cypher` configured, or a `cypher` model docket offers, the model
+   * writes a query from the question and its rows are the answer, with the
+   * query in the note. When it fails or finds nothing - or without a model -
+   * the answer is full-text matches, each with its paths as the detail, and
+   * the note says why.
    */
   async search(query: string, limit: number): Promise<SearchAnswer> {
     if (!this.chat) return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS) }
@@ -190,11 +193,12 @@ class Neo4jProjection implements EntityProjection {
   }
 
   /**
-   * With `cypher` configured, the model writes a query from the question and
-   * the rows are the answer, kept as the values they are: a count is a
-   * metric, a list a typed table, relationships a graph (docs/adapter-spec.md
-   * §9, §15 step 5). When it fails or finds nothing - or without `cypher` -
-   * the answer is the full-text matches and the paths from them, saying why.
+   * With `cypher` configured, or a `cypher` model docket offers, the model
+   * writes a query from the question and the rows are the answer, kept as the
+   * values they are: a count is a metric, a list a typed table, relationships
+   * a graph (docs/adapter-spec.md §9, §15 step 5). When it fails or finds
+   * nothing - or without a model - the answer is the full-text matches and the
+   * paths from them, saying why.
    */
   async answer(request: AskRequest): Promise<AdapterAnswer> {
     const deadline = Date.parse(request.budget.deadline)
@@ -447,6 +451,8 @@ export const neo4jValues = (
 export interface Neo4jProjectionDependencies {
   /** Replaces the configured model - for tests. */
   chat?: Chat
+  /** The models docket offers (`AdapterServices.models`): `cypher` writes Cypher when `cypher` is not configured. */
+  models?: AdapterServices['models']
 }
 
 export function createNeo4jProjection(

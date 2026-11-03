@@ -1,3 +1,4 @@
+import type { ModelClient } from '@docket/contracts'
 import { z } from 'zod'
 
 /** A local Ollama chat model. */
@@ -50,3 +51,15 @@ export const ollamaChat =
     if (typeof content !== 'string') throw new Error(`Ollama ${config.model} returned no message`)
     return content
   }
+
+/** A model docket offers (`AdapterServices.models`), asked the way an adapter asks its own. */
+export const modelChat =
+  (model: ModelClient): Chat =>
+  (prompt, options = {}) =>
+    model.chat(
+      [
+        { role: 'system', content: prompt.system },
+        { role: 'user', content: prompt.user }
+      ],
+      options.signal ? { signal: options.signal } : {}
+    )

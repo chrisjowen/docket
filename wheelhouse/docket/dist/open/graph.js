@@ -1,5 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
 import matter from '../vendor/gray-matter.js';
 import { DEFAULT_SCOPE, openDocket } from '../adapters/docket.js';
 import { validate } from '../commands/validate.js';
@@ -11,10 +10,12 @@ import { MATTER_OPTIONS } from '../source/parser.js';
 /** Dates and other YAML-specific values become what JSON would make of them. */
 const plain = (value) => JSON.parse(JSON.stringify(value ?? {}));
 /** The whole frontmatter, including fields the document model does not carry. */
-const readFrontmatter = async (file) => {
+const frontmatterOf = (raw) => {
+    if (raw === undefined)
+        return {};
     try {
         // Read the way the parser reads it: YAML 1.2, and no gray-matter cache.
-        return plain(matter(await readFile(file, 'utf8'), MATTER_OPTIONS).data);
+        return plain(matter(raw, MATTER_OPTIONS).data);
     }
     catch {
         return {};
@@ -68,6 +69,7 @@ export const indexStatus = async (resolved, entities, documents, broken) => {
     const slots = docket.adapters.filter((slot) => slot.roles.includes('projection'));
     const manifests = await loadAdapterManifests(resolved, slots, {
         legacyFingerprint: docket.projectionsFingerprint,
+        store: docket.manifests,
         configured: slots.map((slot) => slot.id)
     });
     if ([...manifests.values()].some((loaded) => loaded.reset))
@@ -81,14 +83,16 @@ export const indexStatus = async (resolved, entities, documents, broken) => {
     return { synced: true, behind: behind.size };
 };
 /**
- * Every entity and relationship, read from the canonical files on each call -
- * never from a projection - so the UI shows exactly what the repository says,
- * synced or not. Entities are what projections receive: every file declaring
- * an id merged into one, with its confidence computed from the evidence.
+ * Every entity and relationship, read from the canonical documents on each
+ * call - never from a projection - so the UI shows exactly what the
+ * repository says, synced or not. Entities are what projections receive:
+ * every file declaring an id merged into one, with its confidence computed
+ * from the evidence. Read from `source`, or from the files under the project
+ * `.docket.yaml` at or above the directory `from` is in.
  */
-export const readGraph = async (cwd) => {
-    const { resolved, ontology, entities, documents, broken, diagnostics } = await validate({ cwd });
-    const frontmatters = await Promise.all(entities.map((entity) => readFrontmatter(join(resolved.projectRoot, entity.path))));
+export const readGraph = async (from) => {
+    const { resolved, ontology, entities, documents, broken, diagnostics, files } = await validate(typeof from === 'string' ? { cwd: from } : { source: from });
+    const frontmatters = entities.map((entity) => frontmatterOf(files.get(entity.path)));
     const known = new Set(entities.map((entity) => entity.id));
     const edges = entities.flatMap((entity) => entity.links.map((link) => ({
         source: entity.id,

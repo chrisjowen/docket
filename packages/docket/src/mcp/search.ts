@@ -1,4 +1,6 @@
+import { filesystemSource, type CanonicalSource } from '../canonical/source.js'
 import { DEFAULT_SEARCH_LIMIT, search } from '../commands/search.js'
+import { loadConfig } from '../config/loader.js'
 import { iconFor } from '../ontology/icons.js'
 import { readGraph } from '../open/graph.js'
 import { describePath } from '../query/legacy.js'
@@ -10,9 +12,18 @@ export const MAX_SEARCH_LIMIT = 50
 /** The most entities the board carries: every match, then returned nodes, then neighbours, until it is full. */
 export const MAX_NODES = 60
 
-export interface SearchGraphOptions {
-  /** The docket's directory: `.docket.yaml` is resolved from it. */
-  cwd: string
+export type SearchGraphOptions = (
+  | {
+      /** Where the canonical documents come from. */
+      source: CanonicalSource
+      cwd?: undefined
+    }
+  | {
+      /** The docket's directory: `.docket.yaml` is resolved from it, and the files under it are the source. */
+      cwd: string
+      source?: undefined
+    }
+) & {
   query: string
   /** Hits asked of each projection. */
   limit?: number | undefined
@@ -30,9 +41,10 @@ export interface SearchGraphOptions {
  * canonical files.
  */
 export const searchGraph = async (options: SearchGraphOptions): Promise<SearchGraph> => {
+  const source = options.source ?? filesystemSource(await loadConfig(options.cwd))
   const [result, graph] = await Promise.all([
-    search(options.query, { cwd: options.cwd, limit: options.limit ?? DEFAULT_SEARCH_LIMIT }),
-    readGraph(options.cwd)
+    search(options.query, { source, limit: options.limit ?? DEFAULT_SEARCH_LIMIT }),
+    readGraph(source)
   ])
 
   const documents = new Map(result.documents.map((document) => [document.id, document]))

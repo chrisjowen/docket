@@ -1,16 +1,9 @@
 import { rm } from 'node:fs/promises'
 
 import { stateRootOf, type ResolvedConfig } from '../config/config.js'
-import {
-  ADAPTER_MANIFEST_VERSION,
-  checkpointOf,
-  emptyRecords,
-  listAdapterManifests,
-  readAdapterManifest,
-  resetPendingFingerprint,
-  type AdapterManifest
-} from './adapter-manifest.js'
+import { ADAPTER_MANIFEST_VERSION, checkpointOf, emptyRecords, resetPendingFingerprint, type AdapterManifest } from './adapter-manifest.js'
 import { entryPaths, manifestPath, readManifest } from './manifest.js'
+import { fileManifestStore, type ManifestStore } from './store.js'
 
 /**
  * Where an instance's manifest came from this run:
@@ -57,7 +50,12 @@ export interface LoadManifestsOptions {
   configured: readonly string[]
   /** Instances `docket rebuild` resets: `true` for every one. */
   fresh?: boolean | ReadonlySet<string> | undefined
+  /** Where the instance manifests are. Defaults to the files under the project's state root. */
+  store?: ManifestStore | undefined
 }
+
+/** The files under the project's state root, where every instance's manifest has always been. */
+export const projectManifestStore = (resolved: ResolvedConfig): ManifestStore => fileManifestStore(stateRootOf(resolved))
 
 const empty = (identity: ManifestIdentity): AdapterManifest => {
   const records = emptyRecords()
@@ -93,21 +91,22 @@ export const loadAdapterManifests = async (
   identities: readonly ManifestIdentity[],
   options: LoadManifestsOptions
 ): Promise<Map<string, LoadedManifest>> => {
-  const stateRoot = stateRootOf(resolved)
+  const store = options.store ?? projectManifestStore(resolved)
   const configured = new Set(options.configured)
   const fresh = (id: string): boolean =>
     options.fresh === true || (options.fresh instanceof Set && options.fresh.has(id))
 
   const orphans = new Map<string, AdapterManifest>()
-  for (const id of await listAdapterManifests(stateRoot)) {
+  for (const id of await store.list()) {
     if (configured.has(id) || identities.some((identity) => identity.id === id)) continue
-    const orphan = await readAdapterManifest(stateRoot, id)
+    const orphan = await store.read(id)
     if (orphan) orphans.set(id, orphan)
   }
 
+  // The single manifest docket kept before each instance had its own was only ever a file.
   let legacy: Awaited<ReturnType<typeof readManifest>> | undefined
   const readLegacy = async () => {
-    legacy ??= await readManifest(stateRoot)
+    legacy ??= await readManifest(stateRootOf(resolved))
     return legacy.projections === options.legacyFingerprint ? legacy : undefined
   }
 
@@ -118,7 +117,7 @@ export const loadAdapterManifests = async (
       continue
     }
 
-    const own = await readAdapterManifest(stateRoot, identity.id)
+    const own = await store.read(identity.id)
     if (own && vouchesFor(own, identity)) {
       loaded.set(identity.id, { manifest: own, origin: 'current', reset: false })
       continue
@@ -165,8 +164,11 @@ export const loadAdapterManifests = async (
  * own, so nothing is left to mistake for current state. Until then it stays,
  * for the instances still to migrate from it.
  */
-export const retireLegacyManifest = async (resolved: ResolvedConfig, configured: readonly string[]): Promise<void> => {
-  const stateRoot = stateRootOf(resolved)
-  const written = new Set(await listAdapterManifests(stateRoot))
-  if (configured.every((id) => written.has(id))) await rm(manifestPath(stateRoot), { force: true })
+export const retireLegacyManifest = async (
+  resolved: ResolvedConfig,
+  configured: readonly string[],
+  store: ManifestStore = projectManifestStore(resolved)
+): Promise<void> => {
+  const written = new Set(await store.list())
+  if (configured.every((id) => written.has(id))) await rm(manifestPath(stateRootOf(resolved)), { force: true })
 }

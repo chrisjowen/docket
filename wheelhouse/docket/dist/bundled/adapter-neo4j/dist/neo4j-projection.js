@@ -1,4 +1,4 @@
-import { checkoutScope, ollamaChat, questionTerms } from '../../adapter-kit/dist/index.js';
+import { checkoutScope, modelChat, ollamaChat, questionTerms } from '../../adapter-kit/dist/index.js';
 import { cypherAnswer, cypherSearch } from './cypher-search.js';
 import { fulltextQuery, labelFor, NODE_PROPERTIES, nodeProperties, relationshipRows } from './graph-model.js';
 import { DEFAULT_TRAVERSAL, FULLTEXT_INDEX, hitOf, matchesOf, PATHS_PER_MATCH, subgraphAnswer, subgraphQuery } from './subgraph-search.js';
@@ -39,12 +39,13 @@ class Neo4jProjection {
     driver = null;
     neo4j = null;
     scope = '';
-    /** Writes Cypher from a question; absent unless `cypher` is configured. */
+    /** Writes Cypher from a question; absent unless `cypher` is configured or docket offers a `cypher` model. */
     chat;
     traversal;
     constructor(config, dependencies = {}) {
         this.config = config;
-        this.chat = dependencies.chat ?? (config.cypher ? ollamaChat(config.cypher) : undefined);
+        const offered = dependencies.models?.cypher;
+        this.chat = dependencies.chat ?? (config.cypher ? ollamaChat(config.cypher) : offered ? modelChat(offered) : undefined);
         this.traversal = { ...DEFAULT_TRAVERSAL, ...config.traverse };
     }
     async init(context) {
@@ -104,10 +105,11 @@ class Neo4jProjection {
         await this.run('MATCH (n:Memory {scope: $scope}) DETACH DELETE n', { scope: this.scope });
     }
     /**
-     * With `cypher` configured, the model writes a query from the question and
-     * its rows are the answer, with the query in the note. When it fails or finds
-     * nothing - or without `cypher` - the answer is full-text matches, each with
-     * its paths as the detail, and the note says why.
+     * With `cypher` configured, or a `cypher` model docket offers, the model
+     * writes a query from the question and its rows are the answer, with the
+     * query in the note. When it fails or finds nothing - or without a model -
+     * the answer is full-text matches, each with its paths as the detail, and
+     * the note says why.
      */
     async search(query, limit) {
         if (!this.chat)
@@ -125,11 +127,12 @@ class Neo4jProjection {
         return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS), note: `${reason}\nfell back to full-text` };
     }
     /**
-     * With `cypher` configured, the model writes a query from the question and
-     * the rows are the answer, kept as the values they are: a count is a
-     * metric, a list a typed table, relationships a graph (docs/adapter-spec.md
-     * §9, §15 step 5). When it fails or finds nothing - or without `cypher` -
-     * the answer is the full-text matches and the paths from them, saying why.
+     * With `cypher` configured, or a `cypher` model docket offers, the model
+     * writes a query from the question and the rows are the answer, kept as the
+     * values they are: a count is a metric, a list a typed table, relationships
+     * a graph (docs/adapter-spec.md §9, §15 step 5). When it fails or finds
+     * nothing - or without a model - the answer is the full-text matches and the
+     * paths from them, saying why.
      */
     async answer(request) {
         const deadline = Date.parse(request.budget.deadline);

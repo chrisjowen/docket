@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { ConversationTurn, Diagnostic, InputKind } from '@docket/contracts'
 
 import { openDocket, type AdapterSlot, type Docket, type OpenDocketOptions } from '../adapters/docket.js'
+import type { CanonicalSource } from '../canonical/source.js'
 import { connectingPaths } from '../open/paths.js'
 import { askAdapters } from './coordinator.js'
 import { freshnessOf, freshnessWarning } from './freshness.js'
@@ -225,11 +226,16 @@ export const askWith = async (snapshot: RequestSnapshot, docket: Docket, input: 
 }
 
 /**
- * `askWith` over the project `.docket.yaml` at or above `cwd` is in: the files
- * are read once, and the adapters read through that same snapshot.
+ * `askWith` over a canonical source, or the project `.docket.yaml` at or above
+ * the directory `from` is in: the documents are read once, and the adapters
+ * read through that same snapshot.
  */
-export const askProject = async (cwd: string, input: AskInput, options: OpenDocketOptions = {}): Promise<AskOutcome> => {
-  const snapshot = await takeSnapshot(cwd)
+export const askProject = async (
+  from: string | CanonicalSource,
+  input: AskInput,
+  options: OpenDocketOptions = {}
+): Promise<AskOutcome> => {
+  const snapshot = await takeSnapshot(from)
   const docket = await openDocket(snapshot.resolved, { ...options, canonical: options.canonical ?? snapshot.reader })
   return askWith(snapshot, docket, input)
 }

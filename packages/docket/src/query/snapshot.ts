@@ -1,6 +1,7 @@
 import type { CanonicalReader, InputKind } from '@docket/contracts'
 
 import { DEFAULT_SCOPE } from '../adapters/docket.js'
+import type { CanonicalSource } from '../canonical/source.js'
 import type { ResolvedConfig } from '../config/config.js'
 import { validate } from '../commands/validate.js'
 import type { Diagnostic, MemoryDocument, MemoryEntity } from '../model/index.js'
@@ -56,5 +57,9 @@ export const snapshotOf = (
   }
 }
 
-/** Reads the canonical files under the project `.docket.yaml` at or above `cwd` is in. */
-export const takeSnapshot = async (cwd: string): Promise<RequestSnapshot> => snapshotOf(await validate({ cwd }))
+/**
+ * Reads the canonical documents once: from `source`, or from the files under
+ * the project `.docket.yaml` at or above the directory `from` is in.
+ */
+export const takeSnapshot = async (from: string | CanonicalSource): Promise<RequestSnapshot> =>
+  snapshotOf(await validate(typeof from === 'string' ? { cwd: from } : { source: from }))

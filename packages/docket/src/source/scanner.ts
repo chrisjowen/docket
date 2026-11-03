@@ -25,26 +25,35 @@ const repoRelative = (projectRoot: string, absolute: string): string =>
   relative(projectRoot, absolute).split(sep).join('/')
 
 /**
+ * Every file `source.include` matches and `source.exclude` does not, sorted:
+ * the absolute path to read, and the path recorded on its document.
+ */
+export const sourceFiles = async (resolved: ResolvedConfig): Promise<{ absolute: string; path: string }[]> => {
+  const { source } = resolved.config
+  const [included, excluded] = await Promise.all([
+    matches(source.include, resolved.memoryRoot),
+    matches(source.exclude, resolved.memoryRoot)
+  ])
+  return [...included]
+    .filter((f) => !excluded.has(f))
+    .sort()
+    .map((file) => {
+      const absolute = join(resolved.memoryRoot, file)
+      return { absolute, path: repoRelative(resolved.projectRoot, absolute) }
+    })
+}
+
+/**
  * Walk the source root and parse every included file. Results are sorted by path so
  * repeated scans - and therefore rebuilt projections - are byte-identical (spec §72).
  */
 export const scanSource = async (
   resolved: ResolvedConfig
 ): Promise<ScanResult> => {
-  const { source } = resolved.config
-  const [included, excluded] = await Promise.all([
-    matches(source.include, resolved.memoryRoot),
-    matches(source.exclude, resolved.memoryRoot)
-  ])
-
-  const files = [...included].filter((f) => !excluded.has(f)).sort()
-
   const documents: MemoryDocument[] = []
   const diagnostics: Diagnostic[] = []
 
-  for (const file of files) {
-    const absolute = join(resolved.memoryRoot, file)
-    const path = repoRelative(resolved.projectRoot, absolute)
+  for (const { absolute, path } of await sourceFiles(resolved)) {
     let raw: string
     try {
       raw = await readFile(absolute, 'utf8')

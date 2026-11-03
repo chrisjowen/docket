@@ -29,7 +29,7 @@ const canonicalCheckpoint = (snapshot: RequestSnapshot, kinds: ReadonlySet<Input
  * checkpoint it reports is the files' own; otherwise its freshness is unknown.
  */
 export const freshnessOf = async (
-  docket: Pick<Docket, 'resolved' | 'projectionsFingerprint'> & { adapters: readonly AdapterSlot[] },
+  docket: Pick<Docket, 'resolved' | 'projectionsFingerprint'> & Partial<Pick<Docket, 'manifests'>> & { adapters: readonly AdapterSlot[] },
   snapshot: RequestSnapshot,
   slots: readonly AdapterSlot[],
   known: FreshnessInputs = {}
@@ -37,6 +37,7 @@ export const freshnessOf = async (
   const projected = docket.adapters.filter((slot) => slot.roles.includes('projection'))
   const manifests = await loadAdapterManifests(docket.resolved, projected, {
     legacyFingerprint: docket.projectionsFingerprint,
+    store: docket.manifests,
     configured: projected.map((slot) => slot.id)
   })
 
