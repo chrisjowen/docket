@@ -6,6 +6,8 @@ project tab is the casebook `docket open` serves, the same UI code drawn
 inside Wheelhouse's page: Browse, Ask, Adapters, the inspector, chat, quick
 search and sync.
 
+![Wheelhouse's Docket project tab: docket's own casebook drawn inside Wheelhouse - the Browse graph, the index of exhibit types and relationships, and a decision selected in the inspector with its confidence and evidence](../docs/assets/wheelhouse-docket-tab.png)
+
 ```sh
 wheelhouse plugin install chrisjowen/docket
 ```
@@ -70,6 +72,10 @@ whatever in Wheelhouse calls `docket_search` for a project. The viewer must be
 running, as for the tab. [`docs/mcp.md`](../docs/mcp.md) is the tool's
 contract.
 
+![The docket_search app full screen in Wheelhouse: a search for "neo4j adapter" draws its matches and the subgraphs the adapters returned on the evidence board, with the resources one link away faded as context and the matches and paths returned listed beside it](../docs/assets/docket-search-app.png)
+
+![The same board with the Neo4j adapter picked: the paths Neo4j returned from it drawn at full strength, and beside it its file and each path with the confidence and sources of every relationship on it](../docs/assets/docket-search-app-neo4j.png)
+
 Agents learn to search a project's docket from docket's Claude Code plugin
 (`packages/claude-plugin`). Its session-start hook tells a session outside
 any docket, such as Firstmate's, to search the docket of a project it is
@@ -80,10 +86,14 @@ The element draws in its own shadow root. docket's styles stay inside it;
 Wheelhouse's colour variables reach in, so the casebook follows Wheelhouse's
 light and dark themes, with docket's own spine and graph colours.
 
+![The Docket tab in Wheelhouse's light theme: the same casebook in light colours, with docket's own dark spine and graph colours kept](../docs/assets/wheelhouse-docket-tab-light.png)
+
 ### Parity with `docket open`
 
 Every view and action of docket open's page, inventoried from
 `packages/docket-ui`:
+
+![Ask inside Wheelhouse's Docket tab: "What does the Neo4j adapter depend on?" answered by the local and graph adapters with a summary citing its exhibits, as on docket open's own page](../docs/assets/wheelhouse-docket-ask.png)
 
 | docket open                                                                                                        | In Wheelhouse                                                                                           |
 | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
