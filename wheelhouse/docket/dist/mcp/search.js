@@ -1,4 +1,6 @@
+import { filesystemSource } from '../canonical/source.js';
 import { DEFAULT_SEARCH_LIMIT, search } from '../commands/search.js';
+import { loadConfig } from '../config/loader.js';
 import { iconFor } from '../ontology/icons.js';
 import { readGraph } from '../open/graph.js';
 import { describePath } from '../query/legacy.js';
@@ -17,9 +19,10 @@ export const MAX_NODES = 60;
  * canonical files.
  */
 export const searchGraph = async (options) => {
+    const source = options.source ?? filesystemSource(await loadConfig(options.cwd));
     const [result, graph] = await Promise.all([
-        search(options.query, { cwd: options.cwd, limit: options.limit ?? DEFAULT_SEARCH_LIMIT }),
-        readGraph(options.cwd)
+        search(options.query, { source, limit: options.limit ?? DEFAULT_SEARCH_LIMIT }),
+        readGraph(source)
     ]);
     const documents = new Map(result.documents.map((document) => [document.id, document]));
     const ranked = [...new Set([...result.sources.flatMap((source) => source.hits.map((hit) => hit.id)), ...documents.keys()])];

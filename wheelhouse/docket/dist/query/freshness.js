@@ -20,6 +20,7 @@ export const freshnessOf = async (docket, snapshot, slots, known = {}) => {
     const projected = docket.adapters.filter((slot) => slot.roles.includes('projection'));
     const manifests = await loadAdapterManifests(docket.resolved, projected, {
         legacyFingerprint: docket.projectionsFingerprint,
+        store: docket.manifests,
         configured: projected.map((slot) => slot.id)
     });
     const freshness = new Map();

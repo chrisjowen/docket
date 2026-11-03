@@ -1,7 +1,10 @@
 import { rm } from 'node:fs/promises';
 import { stateRootOf } from '../config/config.js';
-import { ADAPTER_MANIFEST_VERSION, checkpointOf, emptyRecords, listAdapterManifests, readAdapterManifest, resetPendingFingerprint } from './adapter-manifest.js';
+import { ADAPTER_MANIFEST_VERSION, checkpointOf, emptyRecords, resetPendingFingerprint } from './adapter-manifest.js';
 import { entryPaths, manifestPath, readManifest } from './manifest.js';
+import { fileManifestStore } from './store.js';
+/** The files under the project's state root, where every instance's manifest has always been. */
+export const projectManifestStore = (resolved) => fileManifestStore(stateRootOf(resolved));
 const empty = (identity) => {
     const records = emptyRecords();
     return {
@@ -29,20 +32,21 @@ const vouchesFor = (manifest, identity) => manifest.fingerprint === identity.fin
  * kinds an instance had never been handed are projected as new.
  */
 export const loadAdapterManifests = async (resolved, identities, options) => {
-    const stateRoot = stateRootOf(resolved);
+    const store = options.store ?? projectManifestStore(resolved);
     const configured = new Set(options.configured);
     const fresh = (id) => options.fresh === true || (options.fresh instanceof Set && options.fresh.has(id));
     const orphans = new Map();
-    for (const id of await listAdapterManifests(stateRoot)) {
+    for (const id of await store.list()) {
         if (configured.has(id) || identities.some((identity) => identity.id === id))
             continue;
-        const orphan = await readAdapterManifest(stateRoot, id);
+        const orphan = await store.read(id);
         if (orphan)
             orphans.set(id, orphan);
     }
+    // The single manifest docket kept before each instance had its own was only ever a file.
     let legacy;
     const readLegacy = async () => {
-        legacy ??= await readManifest(stateRoot);
+        legacy ??= await readManifest(stateRootOf(resolved));
         return legacy.projections === options.legacyFingerprint ? legacy : undefined;
     };
     const loaded = new Map();
@@ -51,7 +55,7 @@ export const loadAdapterManifests = async (resolved, identities, options) => {
             loaded.set(identity.id, { manifest: empty(identity), origin: 'rebuilt', reset: true });
             continue;
         }
-        const own = await readAdapterManifest(stateRoot, identity.id);
+        const own = await store.read(identity.id);
         if (own && vouchesFor(own, identity)) {
             loaded.set(identity.id, { manifest: own, origin: 'current', reset: false });
             continue;
@@ -94,9 +98,8 @@ export const loadAdapterManifests = async (resolved, identities, options) => {
  * own, so nothing is left to mistake for current state. Until then it stays,
  * for the instances still to migrate from it.
  */
-export const retireLegacyManifest = async (resolved, configured) => {
-    const stateRoot = stateRootOf(resolved);
-    const written = new Set(await listAdapterManifests(stateRoot));
+export const retireLegacyManifest = async (resolved, configured, store = projectManifestStore(resolved)) => {
+    const written = new Set(await store.list());
     if (configured.every((id) => written.has(id)))
-        await rm(manifestPath(stateRoot), { force: true });
+        await rm(manifestPath(stateRootOf(resolved)), { force: true });
 };

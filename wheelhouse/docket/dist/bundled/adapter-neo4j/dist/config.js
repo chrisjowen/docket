@@ -30,8 +30,10 @@ export const neo4jConfigSchema = z.preprocess((value, context) => {
     scope: z.string().min(1).optional(),
     /**
      * Answer searches by having a local Ollama model write a read-only Cypher
-     * query against the graph's schema. Without it - or when its query fails
-     * or finds nothing - search is full-text matches and the paths from them.
+     * query against the graph's schema. Without it, the `cypher` model docket
+     * offers (`AdapterServices.models.cypher`) writes it, when docket offers
+     * one. Without either - or when the query fails or finds nothing - search
+     * is full-text matches and the paths from them.
      */
     cypher: z.strictObject(ollamaModelSchema.shape).optional(),
     /**

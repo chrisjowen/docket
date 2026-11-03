@@ -13,21 +13,31 @@ const matches = async (patterns, cwd) => {
 /** Path as recorded on the document: repo-relative and always posix-separated. */
 const repoRelative = (projectRoot, absolute) => relative(projectRoot, absolute).split(sep).join('/');
 /**
- * Walk the source root and parse every included file. Results are sorted by path so
- * repeated scans - and therefore rebuilt projections - are byte-identical (spec §72).
+ * Every file `source.include` matches and `source.exclude` does not, sorted:
+ * the absolute path to read, and the path recorded on its document.
  */
-export const scanSource = async (resolved) => {
+export const sourceFiles = async (resolved) => {
     const { source } = resolved.config;
     const [included, excluded] = await Promise.all([
         matches(source.include, resolved.memoryRoot),
         matches(source.exclude, resolved.memoryRoot)
     ]);
-    const files = [...included].filter((f) => !excluded.has(f)).sort();
+    return [...included]
+        .filter((f) => !excluded.has(f))
+        .sort()
+        .map((file) => {
+        const absolute = join(resolved.memoryRoot, file);
+        return { absolute, path: repoRelative(resolved.projectRoot, absolute) };
+    });
+};
+/**
+ * Walk the source root and parse every included file. Results are sorted by path so
+ * repeated scans - and therefore rebuilt projections - are byte-identical (spec §72).
+ */
+export const scanSource = async (resolved) => {
     const documents = [];
     const diagnostics = [];
-    for (const file of files) {
-        const absolute = join(resolved.memoryRoot, file);
-        const path = repoRelative(resolved.projectRoot, absolute);
+    for (const { absolute, path } of await sourceFiles(resolved)) {
         let raw;
         try {
             raw = await readFile(absolute, 'utf8');

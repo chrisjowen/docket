@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { unacknowledged } from '../bundled/contracts/dist/index.js';
-import { stateRootOf } from '../config/config.js';
-import { Checkpoint, emptyRecords, INPUT_KINDS, removeAdapterManifest, resetPendingFingerprint, writeAdapterManifest } from '../manifest/adapter-manifest.js';
+import { Checkpoint, emptyRecords, INPUT_KINDS, resetPendingFingerprint } from '../manifest/adapter-manifest.js';
 import { planAdapter } from '../manifest/plan.js';
-import { loadAdapterManifests, retireLegacyManifest } from '../manifest/state.js';
+import { loadAdapterManifests, projectManifestStore, retireLegacyManifest } from '../manifest/state.js';
 /** Changes per batch. A batch is not atomic; this bounds what one request carries. */
 export const BATCH_SIZE = 100;
 /** Attempts per change within one pass. A change still failing waits for the next pass. */
@@ -102,7 +101,7 @@ class ProjectionTarget {
             };
             this.checkpoint = Checkpoint.of(records);
             if (this.reset) {
-                await writeAdapterManifest(stateRootOf(this.context.resolved), {
+                await this.context.store.write(this.slot.id, {
                     ...this.manifest,
                     fingerprint: resetPendingFingerprint(this.slot.fingerprint),
                     owners: {},
@@ -163,10 +162,9 @@ class ProjectionTarget {
             return undefined;
         try {
             await this.port?.flush?.();
-            const stateRoot = stateRootOf(this.context.resolved);
-            await writeAdapterManifest(stateRoot, this.manifest);
+            await this.context.store.write(this.slot.id, this.manifest);
             if (this.adoptedFrom !== undefined) {
-                await removeAdapterManifest(stateRoot, this.adoptedFrom);
+                await this.context.store.remove(this.adoptedFrom);
                 this.adoptedFrom = undefined;
             }
             this.committedCheckpoint = this.checkpoint.toString();
@@ -307,6 +305,7 @@ export class ProjectionManager {
         const selected = options.only === undefined ? projecting : selectSlots(docket.adapters, options.only);
         return ProjectionManager.open(selected, {
             resolved: docket.resolved,
+            store: docket.manifests,
             legacyFingerprint: docket.projectionsFingerprint,
             configured,
             fresh: options.fresh === true ? new Set(selected.map((slot) => slot.id)) : undefined
@@ -315,13 +314,14 @@ export class ProjectionManager {
     /** Opens each slot enabled for projection, each settling its own manifest. One failing to open fails only itself. */
     static async open(slots, options) {
         const enabled = slots.filter((slot) => slot.roles.includes('projection'));
-        const manifests = await loadAdapterManifests(options.resolved, enabled.map(({ id, fingerprint, scope }) => ({ id, fingerprint, scope })), options);
+        const store = options.store ?? projectManifestStore(options.resolved);
+        const manifests = await loadAdapterManifests(options.resolved, enabled.map(({ id, fingerprint, scope }) => ({ id, fingerprint, scope })), { ...options, store });
         const targets = enabled.map((slot) => {
             const loaded = manifests.get(slot.id);
-            return new ProjectionTarget(slot, { resolved: options.resolved, ...loaded });
+            return new ProjectionTarget(slot, { store, ...loaded });
         });
         await Promise.all(targets.map((target) => target.open()));
-        return new ProjectionManager(targets, options);
+        return new ProjectionManager(targets, { ...options, store });
     }
     /** Instances that could not be opened, by id, with why. */
     get failures() {
@@ -364,7 +364,7 @@ export class ProjectionManager {
      */
     async commit() {
         const results = await Promise.all(this.targets.map(async (target) => ({ id: target.id, error: await target.commit() })));
-        await retireLegacyManifest(this.options.resolved, this.options.configured);
+        await retireLegacyManifest(this.options.resolved, this.options.configured, this.options.store);
         return results.flatMap(({ id, error }) => (error === undefined ? [] : [{ id, error }]));
     }
     async close() {

@@ -2,15 +2,18 @@ import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { filesystemSource, type CanonicalSource } from '../canonical/source.js'
 import { DEFAULT_SEARCH_LIMIT } from '../commands/search.js'
+import { loadConfig } from '../config/loader.js'
 import { MAX_SEARCH_LIMIT, searchGraph, searchText } from './search.js'
 
 /*
- * docket's MCP server (docs/mcp.md): one tool, `docket_search`, whose result
- * an MCP Apps host (the `io.modelcontextprotocol/ui` extension, stable spec
- * 2026-01-26) draws with the app at `ui://docket/search.html`: the matching
- * resources and their links on the casebook's evidence board. Transport-free:
- * `docket open` serves it over Streamable HTTP at `/mcp`.
+ * docket's MCP server (docs/mcp.md): the tools of a registry - by default one,
+ * `docket_search`, whose result an MCP Apps host (the
+ * `io.modelcontextprotocol/ui` extension, stable spec 2026-01-26) draws with
+ * the app at `ui://docket/search.html`: the matching resources and their links
+ * on the casebook's evidence board. Transport-free: `docket open` serves it
+ * over Streamable HTTP at `/mcp`.
  */
 
 /** The protocol versions it speaks, newest first. */
@@ -25,7 +28,46 @@ const INSTRUCTIONS =
   'dependencies - kept as Markdown under .docket/. Call docket_search before reading the code when asked about ' +
   'the project, and read the canonical files it names for the full record.'
 
-export const searchTool = {
+/** A tool as `tools/list` describes it. */
+export interface ToolDefinition {
+  name: string
+  title?: string
+  description: string
+  inputSchema: Record<string, unknown>
+  annotations?: Record<string, unknown>
+  _meta?: Record<string, unknown>
+}
+
+/** What a tool answers `tools/call` with. */
+export interface ToolResult {
+  content: { type: 'text'; text: string }[]
+  structuredContent?: object
+  /** The call failed in a way the model should read, rather than as a protocol error. */
+  isError?: boolean
+}
+
+/** What a tool is called with besides its arguments. */
+export interface ToolContext {
+  /** The canonical documents the server answers for, read afresh for each call. */
+  source(): Promise<CanonicalSource>
+  /** `docket open`'s page, when it serves this server; null otherwise. */
+  viewer: string | null
+}
+
+/** One tool: what it is, and how it answers a call. */
+export interface Tool {
+  definition: ToolDefinition
+  /**
+   * Answers a call. Arguments it does not take throw `InvalidArgumentsError`,
+   * a JSON-RPC error; anything else it cannot do is its result, with `isError`.
+   */
+  call(args: unknown, context: ToolContext): Promise<ToolResult>
+}
+
+/** The tools a server offers, by name, in the order `tools/list` gives them. */
+export type ToolRegistry = Record<string, Tool>
+
+const searchDefinition = {
   name: SEARCH_TOOL,
   title: 'Search the docket',
   description:
@@ -54,7 +96,7 @@ export const searchTool = {
   },
   annotations: { title: 'Search the docket', readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   _meta: { ui: { resourceUri: APP_URI } }
-} as const
+} satisfies ToolDefinition
 
 const appResource = {
   uri: APP_URI,
@@ -67,9 +109,20 @@ const appResource = {
 /** The app's `_meta.ui`: it needs no network, so it declares no origins. */
 const APP_META = { ui: { prefersBorder: true } } as const
 
-export interface McpServerOptions {
-  /** The docket's directory: `.docket.yaml` is resolved from it. */
-  cwd: string
+export type McpServerOptions = (
+  | {
+      /** Where the canonical documents come from. */
+      source: CanonicalSource
+      cwd?: undefined
+    }
+  | {
+      /** The docket's directory: `.docket.yaml` is resolved from it on each call, and the files under it are the source. */
+      cwd: string
+      source?: undefined
+    }
+) & {
+  /** The tools it offers. Omitted: `docket_search` alone. */
+  tools?: ToolRegistry | undefined
   /** The app's built HTML. Omitted: `dist/mcp-app/search.html`, beside `dist/mcp`. */
   appFile?: string | undefined
   /** `docket open`'s page, when it serves this server: the app links each resource to the casebook there. */
@@ -98,6 +151,13 @@ class RpcError extends Error {
   }
 }
 
+/** A tool was called with arguments it does not take: answered as JSON-RPC's invalid params. */
+export class InvalidArgumentsError extends RpcError {
+  constructor(message: string) {
+    super(INVALID_PARAMS, message)
+  }
+}
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -110,17 +170,35 @@ export const defaultAppFile = (): string => join(import.meta.dirname, '..', 'mcp
 /** The `docket_search` arguments, checked, or why they will not do. */
 const searchArguments = (raw: unknown): { query: string; limit: number } => {
   const args = raw === undefined ? {} : raw
-  if (!isObject(args)) throw new RpcError(INVALID_PARAMS, 'docket_search takes { "query": "...", "limit"?: n, "project"?: "..." }.')
+  if (!isObject(args)) throw new InvalidArgumentsError('docket_search takes { "query": "...", "limit"?: n, "project"?: "..." }.')
   const unknown = Object.keys(args).filter((key) => key !== 'query' && key !== 'limit' && key !== 'project')
-  if (unknown.length > 0) throw new RpcError(INVALID_PARAMS, `docket_search does not take ${unknown.map((key) => `"${key}"`).join(', ')}.`)
-  if (args.project !== undefined && typeof args.project !== 'string') throw new RpcError(INVALID_PARAMS, 'project must be a string.')
+  if (unknown.length > 0) throw new InvalidArgumentsError(`docket_search does not take ${unknown.map((key) => `"${key}"`).join(', ')}.`)
+  if (args.project !== undefined && typeof args.project !== 'string') throw new InvalidArgumentsError('project must be a string.')
   const query = typeof args.query === 'string' ? args.query.trim() : ''
-  if (query === '') throw new RpcError(INVALID_PARAMS, 'Say what to look for: query is empty.')
+  if (query === '') throw new InvalidArgumentsError('Say what to look for: query is empty.')
   const limit = args.limit ?? DEFAULT_SEARCH_LIMIT
   if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > MAX_SEARCH_LIMIT) {
-    throw new RpcError(INVALID_PARAMS, `limit must be a whole number from 1 to ${MAX_SEARCH_LIMIT}.`)
+    throw new InvalidArgumentsError(`limit must be a whole number from 1 to ${MAX_SEARCH_LIMIT}.`)
   }
   return { query, limit }
+}
+
+/**
+ * `docket_search`: the resources the projections find for a query, drawn by
+ * the app with their links (docs/mcp.md). The default tool.
+ */
+export const searchTool: Tool = {
+  definition: searchDefinition,
+  async call(args, context) {
+    const { query, limit } = searchArguments(args)
+    try {
+      const found = await searchGraph({ source: await context.source(), query, limit, viewer: context.viewer })
+      return { content: [{ type: 'text', text: searchText(found) }], structuredContent: found }
+    } catch (cause) {
+      // A docket that cannot be read is the tool's answer, for the model to read, not a protocol error.
+      return { content: [{ type: 'text', text: `The docket could not be searched: ${cause instanceof Error ? cause.message : String(cause)}` }], isError: true }
+    }
+  }
 }
 
 /**
@@ -129,17 +207,26 @@ const searchArguments = (raw: unknown): { query: string; limit: number } => {
  */
 export const createMcpServer = (options: McpServerOptions) => {
   const appFile = options.appFile ?? defaultAppFile()
+  const tools: ToolRegistry = options.tools ?? { [SEARCH_TOOL]: searchTool }
+  for (const [name, tool] of Object.entries(tools)) {
+    if (tool.definition.name !== name) throw new Error(`The tool registered as "${name}" is named "${tool.definition.name}".`)
+  }
+  const names = Object.keys(tools)
+  const { source: given, cwd } = options
+  const context: ToolContext = {
+    // A directory's `.docket.yaml` is read afresh on each call, so an edit to it applies to the next.
+    source: async () => given ?? filesystemSource(await loadConfig(cwd)),
+    viewer: options.viewer ?? null
+  }
 
   const callTool = async (params: Record<string, unknown>): Promise<Record<string, unknown>> => {
-    if (params.name !== SEARCH_TOOL) throw new RpcError(INVALID_PARAMS, `There is no tool "${String(params.name)}"; the one tool is ${SEARCH_TOOL}.`)
-    const { query, limit } = searchArguments(params.arguments)
-    try {
-      const found = await searchGraph({ cwd: options.cwd, query, limit, viewer: options.viewer })
-      return { content: [{ type: 'text', text: searchText(found) }], structuredContent: found }
-    } catch (cause) {
-      // A docket that cannot be read is the tool's answer, for the model to read, not a protocol error.
-      return { content: [{ type: 'text', text: `The docket could not be searched: ${cause instanceof Error ? cause.message : String(cause)}` }], isError: true }
+    const name = params.name
+    if (typeof name !== 'string' || !Object.hasOwn(tools, name)) {
+      const offered =
+        names.length === 0 ? 'it offers none' : names.length === 1 ? `the one tool is ${names[0]}` : `the tools are ${names.join(', ')}`
+      throw new RpcError(INVALID_PARAMS, `There is no tool "${String(name)}"; ${offered}.`)
     }
+    return { ...(await tools[name]!.call(params.arguments, context)) }
   }
 
   const readApp = async (): Promise<Record<string, unknown>> => {
@@ -166,7 +253,7 @@ export const createMcpServer = (options: McpServerOptions) => {
       case 'ping':
         return {}
       case 'tools/list':
-        return { tools: [searchTool] }
+        return { tools: Object.values(tools).map((tool) => tool.definition) }
       case 'tools/call':
         return callTool(params)
       case 'resources/list':

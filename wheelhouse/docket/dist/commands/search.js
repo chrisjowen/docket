@@ -12,7 +12,7 @@ export const DEFAULT_SEARCH_LIMIT = 10;
  * The files stay the truth. Titles and paths are read from them, and a hit for
  * a document that no longer exists - a projection not yet synced - is dropped.
  */
-export const search = async (query, options = {}) => toSearchResult(await askProject(options.cwd ?? process.cwd(), {
+export const search = async (query, options = {}) => toSearchResult(await askProject(options.source ?? options.cwd ?? process.cwd(), {
     question: query,
     maxResults: options.limit ?? DEFAULT_SEARCH_LIMIT,
     synthesis: false

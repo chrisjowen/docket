@@ -1,3 +1,4 @@
+import type { CanonicalSource } from '../canonical/source.js'
 import { askProject } from '../query/ask.js'
 import { toSearchResult, type SearchResult } from '../query/legacy.js'
 
@@ -8,6 +9,8 @@ export const DEFAULT_SEARCH_LIMIT = 10
 export interface SearchOptions {
   /** Directory to resolve `.docket.yaml` from. Defaults to the working directory. */
   cwd?: string | undefined
+  /** Where the documents come from, instead of the files under `cwd`. */
+  source?: CanonicalSource | undefined
   /** Hits asked of each projection. */
   limit?: number | undefined
 }
@@ -25,7 +28,7 @@ export interface SearchOptions {
  */
 export const search = async (query: string, options: SearchOptions = {}): Promise<SearchResult> =>
   toSearchResult(
-    await askProject(options.cwd ?? process.cwd(), {
+    await askProject(options.source ?? options.cwd ?? process.cwd(), {
       question: query,
       maxResults: options.limit ?? DEFAULT_SEARCH_LIMIT,
       synthesis: false

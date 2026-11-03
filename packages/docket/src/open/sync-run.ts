@@ -151,6 +151,7 @@ const syncStatus = async (cwd: string, run: UiSyncRun | null): Promise<UiSyncSta
     const projected = docket.adapters.filter((slot) => slot.roles.includes('projection'))
     const manifests = await loadAdapterManifests(snapshot.resolved, projected, {
       legacyFingerprint: docket.projectionsFingerprint,
+      store: docket.manifests,
       configured: projected.map((slot) => slot.id)
     })
     const freshness = await freshnessOf(docket, snapshot, projected)

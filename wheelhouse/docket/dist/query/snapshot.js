@@ -23,5 +23,8 @@ export const snapshotOf = (read, scope = DEFAULT_SCOPE) => {
         }
     };
 };
-/** Reads the canonical files under the project `.docket.yaml` at or above `cwd` is in. */
-export const takeSnapshot = async (cwd) => snapshotOf(await validate({ cwd }));
+/**
+ * Reads the canonical documents once: from `source`, or from the files under
+ * the project `.docket.yaml` at or above the directory `from` is in.
+ */
+export const takeSnapshot = async (from) => snapshotOf(await validate(typeof from === 'string' ? { cwd: from } : { source: from }));

@@ -31,3 +31,8 @@ export const ollamaChat = (config, fetchImpl = fetch) => async (prompt, options 
         throw new Error(`Ollama ${config.model} returned no message`);
     return content;
 };
+/** A model docket offers (`AdapterServices.models`), asked the way an adapter asks its own. */
+export const modelChat = (model) => (prompt, options = {}) => model.chat([
+    { role: 'system', content: prompt.system },
+    { role: 'user', content: prompt.user }
+], options.signal ? { signal: options.signal } : {});

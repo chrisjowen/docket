@@ -24,6 +24,20 @@ const fail = (code: string, message: string, path: string): LoadedOntology => ({
   diagnostics: [error(code, message, { path })]
 })
 
+/** Why an ontology file at `path` could not be read: missing, or unreadable. */
+export const unreadableOntology = (cause: unknown, path: string): LoadedOntology =>
+  (cause as NodeJS.ErrnoException).code === 'ENOENT'
+    ? fail(
+        'ontology-missing',
+        `Ontology file not found at ${path}. Run \`docket init\` to create one.`,
+        path
+      )
+    : fail(
+        'ontology-unreadable',
+        `Could not read ontology file ${path}: ${(cause as Error).message}`,
+        path
+      )
+
 /**
  * Read and validate the ontology registry. The path always comes from resolved
  * configuration - never hardcode `.docket/entities.yaml`.
@@ -39,20 +53,13 @@ export const loadOntology = async (
   try {
     raw = await readFile(path, 'utf8')
   } catch (cause) {
-    const code = (cause as NodeJS.ErrnoException).code
-    return code === 'ENOENT'
-      ? fail(
-          'ontology-missing',
-          `Ontology file not found at ${path}. Run \`docket init\` to create one.`,
-          path
-        )
-      : fail(
-          'ontology-unreadable',
-          `Could not read ontology file ${path}: ${(cause as Error).message}`,
-          path
-        )
+    return unreadableOntology(cause, path)
   }
+  return parseOntology(raw, path)
+}
 
+/** Validate the ontology registry's text, read from `path`. Never throws. */
+export const parseOntology = (raw: string, path: string): LoadedOntology => {
   let data: unknown
   try {
     data = parseYaml(raw)

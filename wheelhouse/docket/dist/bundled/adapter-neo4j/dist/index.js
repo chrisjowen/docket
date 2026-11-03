@@ -14,6 +14,6 @@ const definition = entityProjectionDefinition({
     version: packageVersion(new URL('../package.json', import.meta.url)),
     rebuild: 'deterministic',
     validateConfig: (input) => parseAdapterConfig(neo4jConfigSchema, input),
-    createProjection: (config) => createNeo4jProjection(config)
+    createProjection: (config, services) => createNeo4jProjection(config, services.models ? { models: services.models } : {})
 });
 export default definition;

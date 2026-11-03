@@ -270,6 +270,28 @@ describe('createDocket', () => {
       expect.objectContaining({ kind: 'entity', id: 'service.orders', title: 'Orders', scope: 'default' })
     )
   })
+
+  it('offers every instance the models it is given, and none unless given', async () => {
+    const { root } = await project()
+    const definition = await fake()
+    const seen = vi.fn()
+    const probe = {
+      id: 'probe',
+      definition: {
+        ...definition,
+        async create(config: unknown, services: Parameters<AdapterDefinition['create']>[1]) {
+          seen(services.models)
+          return definition.create(config, services)
+        }
+      },
+      config: { label: 'probe' }
+    }
+    const cypher = { chat: async () => 'MATCH (n {scope: $scope}) RETURN n' }
+
+    await (await (await createDocket({ projectRoot: root, registrations: [probe], models: { cypher } })).adapters[1]!.create()).close()
+    await (await (await createDocket({ projectRoot: root, registrations: [probe] })).adapters[1]!.create()).close()
+    expect(seen.mock.calls).toEqual([[{ cypher }], [undefined]])
+  })
 })
 
 describe('v1 projections', () => {

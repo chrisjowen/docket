@@ -9,18 +9,11 @@ import {
 } from '@docket/contracts'
 
 import type { AdapterSlot, Docket } from '../adapters/docket.js'
-import { stateRootOf, type ResolvedConfig } from '../config/config.js'
-import {
-  Checkpoint,
-  emptyRecords,
-  INPUT_KINDS,
-  removeAdapterManifest,
-  resetPendingFingerprint,
-  writeAdapterManifest,
-  type AdapterManifest
-} from '../manifest/adapter-manifest.js'
+import type { ResolvedConfig } from '../config/config.js'
+import { Checkpoint, emptyRecords, INPUT_KINDS, resetPendingFingerprint, type AdapterManifest } from '../manifest/adapter-manifest.js'
 import { planAdapter, type PlannedChange } from '../manifest/plan.js'
-import { loadAdapterManifests, retireLegacyManifest, type ManifestOrigin } from '../manifest/state.js'
+import { loadAdapterManifests, projectManifestStore, retireLegacyManifest, type ManifestOrigin } from '../manifest/state.js'
+import type { ManifestStore } from '../manifest/store.js'
 import type { CanonicalState } from '../sync/inputs.js'
 
 /** Changes per batch. A batch is not atomic; this bounds what one request carries. */
@@ -90,7 +83,7 @@ const batchesOf = (changes: readonly PlannedChange[]): PlannedChange[][] => {
 }
 
 interface TargetContext {
-  resolved: ResolvedConfig
+  store: ManifestStore
   manifest: AdapterManifest
   origin: ManifestOrigin
   reset: boolean
@@ -176,7 +169,7 @@ class ProjectionTarget {
       this.checkpoint = Checkpoint.of(records)
 
       if (this.reset) {
-        await writeAdapterManifest(stateRootOf(this.context.resolved), {
+        await this.context.store.write(this.slot.id, {
           ...this.manifest,
           fingerprint: resetPendingFingerprint(this.slot.fingerprint),
           owners: {},
@@ -235,10 +228,9 @@ class ProjectionTarget {
     if (!this.opened || !this.dirty) return undefined
     try {
       await this.port?.flush?.()
-      const stateRoot = stateRootOf(this.context.resolved)
-      await writeAdapterManifest(stateRoot, this.manifest)
+      await this.context.store.write(this.slot.id, this.manifest)
       if (this.adoptedFrom !== undefined) {
-        await removeAdapterManifest(stateRoot, this.adoptedFrom)
+        await this.context.store.remove(this.adoptedFrom)
         this.adoptedFrom = undefined
       }
       this.committedCheckpoint = this.checkpoint.toString()
@@ -366,6 +358,8 @@ export interface OpenProjectionsOptions {
   configured: readonly string[]
   /** Reset these instances (`true`: all) and project everything into them - `docket rebuild`. */
   fresh?: boolean | ReadonlySet<string> | undefined
+  /** Where the instance manifests are. Defaults to the files under the project's state root. */
+  store?: ManifestStore | undefined
 }
 
 /**
@@ -393,6 +387,7 @@ export class ProjectionManager {
     const selected = options.only === undefined ? projecting : selectSlots(docket.adapters, options.only)
     return ProjectionManager.open(selected, {
       resolved: docket.resolved,
+      store: docket.manifests,
       legacyFingerprint: docket.projectionsFingerprint,
       configured,
       fresh: options.fresh === true ? new Set(selected.map((slot) => slot.id)) : undefined
@@ -402,17 +397,18 @@ export class ProjectionManager {
   /** Opens each slot enabled for projection, each settling its own manifest. One failing to open fails only itself. */
   static async open(slots: readonly AdapterSlot[], options: OpenProjectionsOptions): Promise<ProjectionManager> {
     const enabled = slots.filter((slot) => slot.roles.includes('projection'))
+    const store = options.store ?? projectManifestStore(options.resolved)
     const manifests = await loadAdapterManifests(
       options.resolved,
       enabled.map(({ id, fingerprint, scope }) => ({ id, fingerprint, scope })),
-      options
+      { ...options, store }
     )
     const targets = enabled.map((slot) => {
       const loaded = manifests.get(slot.id)!
-      return new ProjectionTarget(slot, { resolved: options.resolved, ...loaded })
+      return new ProjectionTarget(slot, { store, ...loaded })
     })
     await Promise.all(targets.map((target) => target.open()))
-    return new ProjectionManager(targets, options)
+    return new ProjectionManager(targets, { ...options, store })
   }
 
   /** Instances that could not be opened, by id, with why. */
@@ -465,7 +461,7 @@ export class ProjectionManager {
    */
   async commit(): Promise<{ id: string; error: string }[]> {
     const results = await Promise.all(this.targets.map(async (target) => ({ id: target.id, error: await target.commit() })))
-    await retireLegacyManifest(this.options.resolved, this.options.configured)
+    await retireLegacyManifest(this.options.resolved, this.options.configured, this.options.store)
     return results.flatMap(({ id, error }) => (error === undefined ? [] : [{ id, error }]))
   }
 

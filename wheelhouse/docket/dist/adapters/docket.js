@@ -4,6 +4,7 @@ import { stableStringify } from '../bundled/adapter-kit/dist/index.js';
 import { ADAPTER_ID_PATTERN, ADAPTER_ROLES, stateRootOf, V1_PROJECTION_MODULES } from '../config/config.js';
 import { loadConfig } from '../config/loader.js';
 import { validate } from '../commands/validate.js';
+import { projectManifestStore } from '../manifest/state.js';
 import { hashContent } from '../source/hashing.js';
 import { canonicalState } from '../sync/inputs.js';
 import { standardDistribution } from './distribution.js';
@@ -79,7 +80,8 @@ export const openDocket = async (resolved, options = {}) => {
             scope: DEFAULT_SCOPE,
             logger: stderrLogger(entry.id),
             canonical,
-            secrets: { getEnv: async (name) => process.env[name] }
+            secrets: { getEnv: async (name) => process.env[name] },
+            ...(options.models ? { models: options.models } : {})
         };
         return {
             id: entry.id,
@@ -104,6 +106,7 @@ export const openDocket = async (resolved, options = {}) => {
         resolved,
         adapters,
         projectionsFingerprint: hashContent(stableStringify(fingerprinted)),
+        manifests: options.manifests ?? projectManifestStore(resolved),
         // Loaded on first use: the coordinator itself opens dockets.
         ask: async (input) => (await (await import('../query/ask.js')).askProject(resolved.projectRoot, input, options)).answer
     };
