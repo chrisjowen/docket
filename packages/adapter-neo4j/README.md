@@ -4,7 +4,9 @@ docket's Neo4j adapter: one `(:Memory:<Type>)` node per entity and one typed
 relationship per (source, rel, target), with a full-text index. A question is
 answered by one query the adapter writes itself - the full-text matches and the
 best paths from each, ranked by their relationships' confidence - or through a
-read-only Cypher query a local Ollama model writes.
+read-only Cypher query a model writes: the local Ollama model `cypher` names,
+or, when `cypher` is unset, the `cypher` model docket offers
+(`AdapterServices.models.cypher`), if it offers one.
 
 Its default export is the `AdapterDefinition`
 ([`docs/adapter-spec.md`](../../docs/adapter-spec.md) §7). Its configuration is
