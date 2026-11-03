@@ -27,6 +27,28 @@ behaves as before ([#50](https://github.com/chrisjowen/docket/pull/50)).
   `ToolContext`, `ToolDefinition`, `ToolRegistry`, `ToolResult` and
   `InvalidArgumentsError` are exported.
 
+### Validation in the public API
+
+A host that holds canonical documents somewhere other than a directory can
+now validate them exactly as `docket validate` does, through the package's
+public API instead of reaching into its built modules.
+
+- `validate({ source })`, with `ValidateOptions` and `ValidateResult`: the
+  whole read-only pass over any `CanonicalSource`. `readCanonical(source)`
+  (`CanonicalRead`) reads and parses a source once.
+- Its parts: `parseOntology` (`LoadedOntology`), `parseMemoryFile`
+  (`ParseResult`), `hashContent`, `validateDocuments`
+  (`ValidateDocumentsOptions`), `aggregate` (`AggregateResult`) and
+  `confidenceModel` (`ConfidenceModel`).
+- The configuration and model they work on: `memoryConfigSchema`,
+  `MemoryConfig`, `ResolvedConfig`, `ontologySchema`, `Ontology`,
+  `MemoryDocument`, `MemoryEntity`, `ATTRIBUTE_TYPES`,
+  `EVIDENCE_LOCATION_FIELDS`, and the diagnostic helpers `error` and
+  `warning`. Validation's diagnostic type is exported as
+  `ValidationDiagnostic`, because `Diagnostic` remains the adapter contracts'.
+- The bundled icons: `ICON_NAMES`, `IconName`, `FALLBACK_ICON` and
+  `isIconName`.
+
 ### Also in this release
 
 - `docket open` runs `docket sync` from its header, for every projection
