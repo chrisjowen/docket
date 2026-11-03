@@ -1,10 +1,6 @@
 <p align="center">
-  <img src="docs/assets/docket-hero.svg" alt="A manila case file labelled .docket/ holding a Markdown exhibit stamped EVIDENCE, beside a cork board of exhibit cards joined by red string" width="100%">
+  <img src="docs/assets/docket-banner.png" alt="docket - The casebook of evidence for your repository. A manila case file labelled .docket/ holding exhibits stamped EVIDENCE, joined by red string to exhibit cards under a magnifying glass" width="100%">
 </p>
-
-<h1 align="center">docket</h1>
-
-<h3 align="center">The casebook of evidence for your repository.</h3>
 
 <p align="center">
   Every claim about your system, entered as an exhibit and cited to its source,
@@ -155,6 +151,8 @@ docket watch        # or keep projecting continuously as files change
 docket rebuild      # throw every projection away and rebuild it from the files
 ```
 
+![A terminal: docket validate --strict checks 36 resources and 66 relationships, docket sync reports the local and graph adapters up to date, and docket adapters status shows both ready](docs/assets/cli-sync.png)
+
 **4. Question the witness.** Search every projection at once; each hit points
 at its canonical file:
 
@@ -163,6 +161,8 @@ docket search who owns checkout
 docket ask "how many services depend on the ledger?"
 docket ontology show service    # a service's attributes, links and what each source is worth
 ```
+
+![A terminal: docket search neo4j adapter lists what each adapter found - the local keyword index's hits with their files and confidence, then the Neo4j graph's matches with the paths it followed from each](docs/assets/cli-search.png)
 
 The plugin teaches Claude to ask the docket before it greps the code.
 
@@ -259,10 +259,12 @@ docket runtime status <id>  # state and health of its containers, changing nothi
 docket runtime down <id>    # stop and remove its containers; volumes are kept (--destroy-volumes deletes them)
 ```
 
+![A terminal: docket graph --json piped through jq to one exhibit, the Neo4j adapter, with its 0.99 confidence from code and manifest evidence and its three depends_on links, each with its own confidence and sources](docs/assets/cli-graph.png)
+
 ## Browse it: `docket open`
 
 <p align="center">
-  <img src="docs/assets/docket-open.png" alt="docket open on the acme-platform example: the Browse graph with the Research Assistant agent selected, and its confidence, sources and three pieces of evidence in the Inspector" width="100%">
+  <img src="docs/assets/docket-browse-graph.png" alt="docket open on docket's own casebook: the Browse graph of its libraries, systems, decisions and constraints, each type with its own icon and colour, beside the index of exhibit types and relationships" width="100%">
 </p>
 
 `docket open` serves a web UI for the repository on port 4380 and prints
@@ -300,15 +302,23 @@ when the page asks from this machine, a sync of the projections.
   corroborate it, and every piece of evidence - file and lines, endpoint,
   URLs, when and by whom - merged from all the files that declare its id.
   Each link expands to show the evidence for that relationship.
+
+  ![The inspector beside the graph: the Neo4j adapter exhibit selected, its neighbours highlighted on the board, with 99% confidence from code and manifest sources and three pieces of evidence citing files, lines, commits and sessions](docs/assets/docket-inspector.png)
 - **Quick search** (`⌘K` or `/`) - instant type-ahead over ids, titles, types,
   tags, attributes, notes and relationship names. `type:service`,
   `rel:depends_on` and `tag:core` narrow it down; picking a result focuses
   the graph on it.
+
+  ![Quick search open over the board: "type:library neo4j" lists the Neo4j adapter exhibit first, then the relationships that name it](docs/assets/docket-quick-search.png)
 - **Table** and **History** - beside the graph under Browse: every exhibit or
   observation as a sortable table, filtered by type, source, date observed and
   assessment; and the dated observations over time - when something happened
   (`eventAt`) and when it was observed (`observedAt`), labelled apart - with
   each chain of `supersedes` decisions.
+
+  ![Browse > Table: all 36 exhibits sorted by name, with type, source kinds, confidence, evidence count, when last observed and the file each lives in, filtered by text, type, source, date and assessment](docs/assets/docket-table.png)
+
+  ![Browse > History: observations over time, each dated entry naming the exhibit or link it supports, what was seen and where - a file and line, a URL or a conversation - and by whom](docs/assets/docket-history.png)
 - **Sync** - the header's Sync button runs `docket sync` - the same code, not
   a copy - for every adapter enabled for projection or just one, showing each
   adapter's result as its pass finishes, when each last synced, and a hint
@@ -316,6 +326,8 @@ when the page asks from this machine, a sync of the projections.
   machine running `docket open`, at `127.0.0.1` - or a page it was started
   with `--allow-origin` for - can start one: the server checks the request's
   address, Host and Origin, and a token it makes at launch.
+
+  ![The Sync panel open over the graph: both adapters synced just now, local and graph each reporting 0 projected, 0 removed and 36 unchanged, with a choice of every adapter or one](docs/assets/docket-sync.png)
 - **Ask** - its own page: a question put to every adapter configured for
   query, each answer shown as it came - exhibits, passages, facts, counts,
   tables, timelines, graphs - with how the adapter read the question, how much
@@ -328,9 +340,15 @@ when the page asks from this machine, a sync of the projections.
   opens it with what the files hold at its reference, read when you click.
   Adapters answer from their projections, so run `docket sync` first; the UI
   says when an adapter is behind the files.
+
+  ![Ask: "What does the Neo4j adapter depend on?" answered by the local and graph adapters, with a summary citing exhibits and graph paths, and one piece of derived evidence opened in the inspector, resolved to the canonical files it rests on](docs/assets/docket-ask.png)
+
+  ![Further down the same answer: the graph adapter's block - its full-text search over the scope with how it read the question, and each matching exhibit with its Lucene score and the paths followed from it](docs/assets/docket-ask-neo4j.png)
 - **Adapters** - each configured adapter's roles, connection health and how
   far its index lags the files. It never shows configuration, which can hold
   secrets, and viewing it never starts or pulls anything.
+
+  ![Adapters: the local JSONL and graph Neo4j instances, both ready, each with its roles, version, freshness against the files and the kinds of answer it gives](docs/assets/docket-adapters.png)
 - **Chat** - a conversation with the casebook. Each question runs the same
   search as Ask, then a model summarizes what it found in a few sentences,
   citing each exhibit it relies on; citations link to the exhibit, and the
@@ -397,6 +415,8 @@ evidence board, with the resources one link away as faded context.
 A host that draws MCP apps, such as Wheelhouse, shows that board.
 [docs/mcp.md](docs/mcp.md) is its contract.
 
+![The docket_search app full screen in Wheelhouse: a search for "neo4j adapter" draws its 12 matches and the subgraphs the adapters returned on the evidence board, resources one link away faded as context, with the matches and the paths returned listed beside it](docs/assets/docket-search-app.png)
+
 ## In Wheelhouse
 
 This repository is also a [Wheelhouse](https://github.com/chrisjowen/wheelhouse)
@@ -409,6 +429,8 @@ starts on 127.0.0.1 with `--allow-origin` for its page when you click
 ```bash
 wheelhouse plugin install chrisjowen/docket
 ```
+
+![Wheelhouse's Docket project tab: the casebook's Browse graph inside Wheelhouse, with a decision selected and its evidence and confidence in the inspector](docs/assets/wheelhouse-docket-tab.png)
 
 The plugin also declares the viewer's `/mcp` as its MCP server, `docket`, so
 Wheelhouse can call `docket_search` for a project, naming it in the call's
@@ -473,6 +495,8 @@ the status of each evidence reference, freshness and diagnostics, every
 canonical reference found once with the adapters that found it, and the
 paths between them - and leaves the summary out unless `--synthesis` asks for
 it. `--timezone` sets the zone relative times are read in.
+
+![A terminal: docket ask "What does the Neo4j adapter depend on?" prints a summary citing the exhibits and graph paths it rests on, with their confidences, then each adapter's own answer, starting with the local adapter's ranked entities](docs/assets/cli-ask.png)
 
 ## Evidence and confidence
 
@@ -843,6 +867,8 @@ adapters:
 ```
 
 `uri` is also accepted as `url`, its name in version 1 entries.
+
+![A Neo4j subgraph on the docket_search board: the Neo4j adapter exhibit picked, the paths the adapter's own query returned from it drawn at full strength - depends_on Neo4j, adapter-kit and contracts, governed by the core-imports constraint - and each path listed with the confidence and sources of every relationship on it](docs/assets/docket-search-app-neo4j.png)
 
 ### Sync manifests
 
