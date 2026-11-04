@@ -8,6 +8,28 @@ importers:
 
   .: {}
 
+  packages/adapter-cloud:
+    dependencies:
+      '@docket/adapter-kit':
+        specifier: workspace:*
+        version: link:../adapter-kit
+      '@docket/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.4)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
   packages/adapter-jsonl:
     dependencies:
       '@docket/adapter-kit':
@@ -191,6 +213,9 @@ importers:
         specifier: ^4.1.12
         version: 4.6.5
     devDependencies:
+      '@docket/adapter-cloud':
+        specifier: workspace:*
+        version: link:../adapter-cloud
       '@docket/adapter-jsonl':
         specifier: workspace:*
         version: link:../adapter-jsonl
