@@ -44,8 +44,12 @@ export interface LoadedManifest {
 }
 
 export interface LoadManifestsOptions {
-  /** `Docket.projectionsFingerprint`, which the single legacy manifest was keyed by. */
-  legacyFingerprint: string
+  /**
+   * `Docket.projectionsFingerprint`, which the single legacy manifest was
+   * keyed by. Absent where no legacy manifest can exist - a host's own
+   * source and store - so none is read.
+   */
+  legacyFingerprint?: string | undefined
   /** Every instance `.docket.yaml` enables for projection: a manifest named for any other is an orphan. */
   configured: readonly string[]
   /** Instances `docket rebuild` resets: `true` for every one. */
@@ -106,6 +110,7 @@ export const loadAdapterManifests = async (
   // The single manifest docket kept before each instance had its own was only ever a file.
   let legacy: Awaited<ReturnType<typeof readManifest>> | undefined
   const readLegacy = async () => {
+    if (options.legacyFingerprint === undefined) return undefined
     legacy ??= await readManifest(stateRootOf(resolved))
     return legacy.projections === options.legacyFingerprint ? legacy : undefined
   }

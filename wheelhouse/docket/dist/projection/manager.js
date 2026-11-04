@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { unacknowledged } from '../bundled/contracts/dist/index.js';
-import { Checkpoint, emptyRecords, INPUT_KINDS, resetPendingFingerprint } from '../manifest/adapter-manifest.js';
+import { Checkpoint, checkpointOf, emptyRecords, INPUT_KINDS, resetPendingFingerprint } from '../manifest/adapter-manifest.js';
 import { planAdapter } from '../manifest/plan.js';
 import { loadAdapterManifests, projectManifestStore, retireLegacyManifest } from '../manifest/state.js';
 /** Changes per batch. A batch is not atomic; this bounds what one request carries. */
@@ -104,6 +104,7 @@ class ProjectionTarget {
                 await this.context.store.write(this.slot.id, {
                     ...this.manifest,
                     fingerprint: resetPendingFingerprint(this.slot.fingerprint),
+                    checkpoint: checkpointOf(emptyRecords()),
                     owners: {},
                     records: emptyRecords()
                 });
@@ -162,7 +163,8 @@ class ProjectionTarget {
             return undefined;
         try {
             await this.port?.flush?.();
-            await this.context.store.write(this.slot.id, this.manifest);
+            // With the checkpoint of exactly the records written: a store other than the files keeps it as given.
+            await this.context.store.write(this.slot.id, { ...this.manifest, checkpoint: this.checkpoint.toString() });
             if (this.adoptedFrom !== undefined) {
                 await this.context.store.remove(this.adoptedFrom);
                 this.adoptedFrom = undefined;
@@ -364,7 +366,9 @@ export class ProjectionManager {
      */
     async commit() {
         const results = await Promise.all(this.targets.map(async (target) => ({ id: target.id, error: await target.commit() })));
-        await retireLegacyManifest(this.options.resolved, this.options.configured, this.options.store);
+        if (this.options.legacyFingerprint !== undefined) {
+            await retireLegacyManifest(this.options.resolved, this.options.configured, this.options.store);
+        }
         return results.flatMap(({ id, error }) => (error === undefined ? [] : [{ id, error }]));
     }
     async close() {

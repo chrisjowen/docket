@@ -1,6 +1,6 @@
 {
   "name": "@docket/adapter-kit",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "type": "module",
   "exports": {

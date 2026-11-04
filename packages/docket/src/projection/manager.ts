@@ -10,7 +10,14 @@ import {
 
 import type { AdapterSlot, Docket } from '../adapters/docket.js'
 import type { ResolvedConfig } from '../config/config.js'
-import { Checkpoint, emptyRecords, INPUT_KINDS, resetPendingFingerprint, type AdapterManifest } from '../manifest/adapter-manifest.js'
+import {
+  Checkpoint,
+  checkpointOf,
+  emptyRecords,
+  INPUT_KINDS,
+  resetPendingFingerprint,
+  type AdapterManifest
+} from '../manifest/adapter-manifest.js'
 import { planAdapter, type PlannedChange } from '../manifest/plan.js'
 import { loadAdapterManifests, projectManifestStore, retireLegacyManifest, type ManifestOrigin } from '../manifest/state.js'
 import type { ManifestStore } from '../manifest/store.js'
@@ -172,6 +179,7 @@ class ProjectionTarget {
         await this.context.store.write(this.slot.id, {
           ...this.manifest,
           fingerprint: resetPendingFingerprint(this.slot.fingerprint),
+          checkpoint: checkpointOf(emptyRecords()),
           owners: {},
           records: emptyRecords()
         })
@@ -228,7 +236,8 @@ class ProjectionTarget {
     if (!this.opened || !this.dirty) return undefined
     try {
       await this.port?.flush?.()
-      await this.context.store.write(this.slot.id, this.manifest)
+      // With the checkpoint of exactly the records written: a store other than the files keeps it as given.
+      await this.context.store.write(this.slot.id, { ...this.manifest, checkpoint: this.checkpoint.toString() })
       if (this.adoptedFrom !== undefined) {
         await this.context.store.remove(this.adoptedFrom)
         this.adoptedFrom = undefined
@@ -352,8 +361,12 @@ class ProjectionTarget {
 
 export interface OpenProjectionsOptions {
   resolved: ResolvedConfig
-  /** `Docket.projectionsFingerprint`, which the legacy single manifest was keyed by. */
-  legacyFingerprint: string
+  /**
+   * `Docket.projectionsFingerprint`, which the legacy single manifest was
+   * keyed by. Absent for a host's own source and store, where none can exist
+   * to migrate or retire.
+   */
+  legacyFingerprint?: string | undefined
   /** Every instance `.docket.yaml` enables for projection, synced now or not. */
   configured: readonly string[]
   /** Reset these instances (`true`: all) and project everything into them - `docket rebuild`. */
@@ -461,7 +474,9 @@ export class ProjectionManager {
    */
   async commit(): Promise<{ id: string; error: string }[]> {
     const results = await Promise.all(this.targets.map(async (target) => ({ id: target.id, error: await target.commit() })))
-    await retireLegacyManifest(this.options.resolved, this.options.configured, this.options.store)
+    if (this.options.legacyFingerprint !== undefined) {
+      await retireLegacyManifest(this.options.resolved, this.options.configured, this.options.store)
+    }
     return results.flatMap(({ id, error }) => (error === undefined ? [] : [{ id, error }]))
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
   "keywords": [
     "knowledge",
@@ -26,6 +26,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./adapters/neo4j": {
+      "types": "./dist/bundled/adapter-neo4j/dist/index.d.ts",
+      "import": "./dist/bundled/adapter-neo4j/dist/index.js"
+    },
+    "./adapters/mem0": {
+      "types": "./dist/bundled/adapter-mem0/dist/index.d.ts",
+      "import": "./dist/bundled/adapter-mem0/dist/index.js"
     },
     "./package.json": "./package.json"
   },

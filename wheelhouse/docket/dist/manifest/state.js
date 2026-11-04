@@ -46,6 +46,8 @@ export const loadAdapterManifests = async (resolved, identities, options) => {
     // The single manifest docket kept before each instance had its own was only ever a file.
     let legacy;
     const readLegacy = async () => {
+        if (options.legacyFingerprint === undefined)
+            return undefined;
         legacy ??= await readManifest(stateRootOf(resolved));
         return legacy.projections === options.legacyFingerprint ? legacy : undefined;
     };
