@@ -41,7 +41,6 @@ describe('the published package', () => {
       'canonicalState',
       'planAdapter',
       'Checkpoint',
-      'checkpointOf',
       'emptyRecords',
       'INPUT_KINDS',
       'resetPendingFingerprint',

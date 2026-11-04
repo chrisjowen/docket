@@ -18,26 +18,22 @@ code through the package's public API, instead of patching in an
   batched, retried, reset and recorded exactly as the CLI syncs a project;
   one that fails is reported in `SyncError.result` while the others sync.
   `options` takes the `scope`, `fresh` (a rebuild, of every instance or the
-  ids given), `strict` and `onProgress`. `SyncResult`, `SyncProgress`,
-  `SyncSourceOptions`, `TargetReport`, `PassReport`, `RecordRef`,
-  `RecordFailure` and `ManifestOrigin` are exported with it.
-- Sync's parts: `canonicalState` (`CanonicalState`, `DerivedInput`),
-  `planAdapter` (`AdapterPlan`, `AdapterPlanOptions`, `PlannedChange`), and
-  what a manifest records - `Checkpoint`, `checkpointOf`, `emptyRecords`,
-  `INPUT_KINDS`, `resetPendingFingerprint`, `ADAPTER_MANIFEST_VERSION` and
-  `RecordEntry` - with the contracts' `unacknowledged`.
-- The bundled adapters: `entityProjectionAdapter`, `EntityProjection`,
-  `EntityProjectionAdapterOptions` and `Chat` from the adapter kit, and two
-  new entry points, `@chrisjowen/docket/adapters/neo4j`
+  ids given), `strict` and `onProgress`. `SyncResult`, `SyncProgress` and
+  `SyncSourceOptions` are exported with it.
+- Sync's parts: `canonicalState` (`CanonicalState`), `planAdapter`
+  (`PlannedChange`), and what a manifest records - `Checkpoint`,
+  `emptyRecords`, `INPUT_KINDS` and `resetPendingFingerprint` - with the
+  contracts' `unacknowledged`.
+- The bundled adapters: `entityProjectionAdapter` and `Chat` from the
+  adapter kit, and two new entry points, `@chrisjowen/docket/adapters/neo4j`
   (`createNeo4jProjection`, `neo4jConfigSchema`) and
   `@chrisjowen/docket/adapters/mem0` (`createMem0Projection`,
   `mem0ConfigSchema`).
 - The graph browser: `readGraph`, its `UiGraph`, `UiEntity`, `UiEdge`,
-  `UiAssessment`, `UiIndexStatus` and the types they hold, `iconFor` and
-  `MATTER_OPTIONS`.
-- Searching and asking: `searchText`, `MAX_SEARCH_LIMIT`, `SEARCH_SCHEMA`
-  and the `SearchGraph` types; `askWith` (`AskOutcome`), `snapshotOf`
-  (`RequestSnapshot`), `toSearchResult` (`SearchResult`), `citationsIn` and
+  `UiAssessment` and `UiIndexStatus`, `iconFor` and `MATTER_OPTIONS`.
+- Searching and asking: `searchText`, `MAX_SEARCH_LIMIT`, `SEARCH_SCHEMA`,
+  `SearchGraph`, `SearchLink`, `SearchNode` and `SearchPath`; `askWith`
+  (`AskOutcome`), `snapshotOf`, `toSearchResult`, `citationsIn` and
   `synthesisPrompt`.
 
 ### Fixes

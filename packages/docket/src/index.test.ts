@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import {
   aggregate,
   canonicalState,
-  checkpointOf,
   confidenceModel,
   filesystemSource,
   hashContent,
@@ -27,6 +26,7 @@ import {
   type SyncTarget
 } from './index.js'
 import { loadConfig } from './config/loader.js'
+import { checkpointOf } from './manifest/adapter-manifest.js'
 
 const EXAMPLE = fileURLToPath(new URL('../../../examples/acme-platform', import.meta.url))
 
