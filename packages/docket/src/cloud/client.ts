@@ -24,8 +24,8 @@ const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code'
 
 /** How a login talks to the person signing in. */
 export interface LoginIO {
-  /** Says where to sign in, and the code to enter when there is one. */
-  show(prompt: { url: string; userCode?: string }): void
+  /** Says where to sign in, and the code to enter there. */
+  show(prompt: { url: string; userCode: string }): void
   openBrowser(url: string): void
   sleep(ms: number): Promise<void>
   /** Milliseconds since the epoch. */

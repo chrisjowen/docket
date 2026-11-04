@@ -18,10 +18,10 @@ afterEach(async () => {
 const recordingIO = () => {
   let clock = 1_800_000_000_000
   const io = {
-    shown: [] as { url: string; userCode?: string }[],
+    shown: [] as { url: string; userCode: string }[],
     opened: [] as string[],
     slept: [] as number[],
-    show: (prompt: { url: string; userCode?: string }) => void io.shown.push(prompt),
+    show: (prompt: { url: string; userCode: string }) => void io.shown.push(prompt),
     openBrowser: (url: string) => void io.opened.push(url),
     sleep: async (ms: number) => {
       io.slept.push(ms)

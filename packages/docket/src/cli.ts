@@ -853,8 +853,7 @@ cloudCommand
     const result = await cloudLogin({
       url: options.url,
       io: {
-        show: ({ url, userCode }) =>
-          console.log(userCode === undefined ? `Sign in at:\n  ${url}` : `Enter the code ${userCode} at:\n  ${url}`),
+        show: ({ url, userCode }) => console.log(`Enter the code ${userCode} at:\n  ${url}`),
         openBrowser,
         sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms))
       }
