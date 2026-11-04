@@ -31,7 +31,8 @@ and no other command makes a network call.
   `entities.yaml` as an ontology draft, never publishing it.
 - `docket cloud pull` writes the published ontology; `--resources` writes the
   documents written in the cloud instead, and `--ontology --resources` both.
-  A file you already have is never overwritten.
+  The ontology file is replaced with the published version; a resource
+  document you already have is never overwritten.
 - `docket cloud status`: the link, the sign-in, the ontology against the
   published one, and what a push would send.
 - `docket cloud token create|list|revoke` for CI tokens.
