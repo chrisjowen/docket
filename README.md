@@ -555,8 +555,9 @@ the cloud adapter is reported `unavailable` and the local answers stand.
   prints the cloud's validator diagnostics. If the cloud refuses a batch,
   that batch and the ones after it are not stored and are listed as such;
   only batches it accepted before are. If `entities.yaml` differs from the
-  published ontology, and the cloud accepted the files, it is proposed as a
-  draft for an admin to publish. `push` never publishes it.
+  published ontology, it is proposed as a draft for an admin to publish,
+  even when the files were refused (they may need the types it adds).
+  `push` never publishes it.
 - **`pull`** writes the published ontology to the ontology file. With
   `--resources` it also writes the documents written in the cloud under the
   source root. A file you already have is never overwritten.

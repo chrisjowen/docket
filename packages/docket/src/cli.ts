@@ -918,7 +918,7 @@ cloudCommand
         console.log(`  ontology matches the published version ${result.ontology.version}`)
         break
       case 'differs':
-        console.log(`  ontology differs from the published version ${result.ontology.version}; a push the cloud accepts proposes it as a draft`)
+        console.log(`  ontology differs from the published version ${result.ontology.version}; a push would propose it as a draft`)
         break
       case 'proposed':
         console.log(

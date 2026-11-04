@@ -75,7 +75,7 @@ describe('docket cloud push', () => {
     expect(fixture.cloud.documents).toEqual([])
   })
 
-  it('reports only the batches the cloud stored when it refuses a later one, and proposes no draft', async () => {
+  it('reports only the batches the cloud stored when it refuses a later one, and still proposes the differing ontology as a draft', async () => {
     const large = `${ORDERS}${'x'.repeat(PUSH_BATCH_BYTES)}\n`
     await write(fixture.root, '.docket/resources/service/orders.md', large)
     held('.docket/resources/team/retired.md', 'gone from the checkout')
@@ -95,10 +95,10 @@ describe('docket cloud push', () => {
       uploaded: ['.docket/resources/service/orders.md'],
       removed: ['.docket/resources/team/retired.md'],
       notStored: ['.docket/resources/team/payments.md'],
-      ontology: { state: 'differs', version: 3 }
+      ontology: { state: 'proposed', version: 3, proposal: { draftId: 'draft-1' } }
     })
     expect(fixture.cloud.documents.map((document) => document.path)).toEqual(['.docket/resources/service/orders.md'])
-    expect(fixture.cloud.toolCalls.map((call) => call.name)).toEqual(['docket_ontology'])
+    expect(fixture.cloud.toolCalls.map((call) => call.name)).toEqual(['docket_ontology', 'docket_propose_ontology_change'])
   })
 
   it('sends a differing ontology as a draft, never publishing it', async () => {

@@ -73,8 +73,8 @@ const batches = (upserts: { path: string; raw: string }[]): { path: string; raw:
  * cloud's copy, and the retirement of any the checkout no longer has. Prints
  * nothing itself: the cloud's validator diagnostics come back in the result.
  * A local ontology that differs from the published one is proposed as a
- * draft - the cloud never publishes it from here - unless the cloud refused
- * the files.
+ * draft - the cloud never publishes it from here - even when the cloud
+ * refused the files, which may need the types it adds.
  */
 export const cloudPush = async (options: CloudPushOptions = {}): Promise<CloudPushResult> => {
   const { resolved, link } = await requireCloudLink(options.cwd ?? process.cwd())
@@ -116,7 +116,7 @@ export const cloudPush = async (options: CloudPushOptions = {}): Promise<CloudPu
   } else {
     const yaml = await readFile(resolved.ontologyPath, 'utf8')
     if (hashContent(yaml) === hashContent(cloud.yaml)) ontology = { state: 'same', version: cloud.version }
-    else if (dryRun || !ok) ontology = { state: 'differs', version: cloud.version }
+    else if (dryRun) ontology = { state: 'differs', version: cloud.version }
     else {
       const proposal = await proposeOntology(workspace, yaml, `Proposed by docket cloud push from ${checkout}`)
       ontology = { state: 'proposed', version: cloud.version, proposal }
