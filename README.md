@@ -560,7 +560,8 @@ the cloud adapter is reported `unavailable` and the local answers stand.
   `push` never publishes it.
 - **`pull`** writes the published ontology to the ontology file. With
   `--resources` it writes the documents written in the cloud under the
-  source root instead, and with `--ontology --resources` both. A file you
+  source root instead, and with `--ontology --resources` both. The ontology
+  file is replaced with the published version; a resource document you
   already have is never overwritten.
 - **`token create`** makes an API token for CI, shown once. Set it in CI's
   secrets and name the variable with `docket cloud link --token-env`.

@@ -1,8 +1,8 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
-  "description": "docket 0.6.1, as docket's Wheelhouse plugin ships and runs it. Built by wheelhouse/build.mjs from packages/docket; do not edit.",
+  "description": "docket 0.7.0, as docket's Wheelhouse plugin ships and runs it. Built by wheelhouse/build.mjs from packages/docket; do not edit.",
   "type": "module",
   "engines": {
     "node": ">=22"

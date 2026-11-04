@@ -140,7 +140,7 @@ after the project installs docket, or the global docket with the driver
 installed next to it. `bin` is one plugin-wide setting, so it applies to every
 project.
 
-The tab says which docket the viewer runs (`Runs docket 0.6.1, shipped with
+The tab says which docket the viewer runs (`Runs docket 0.7.0, shipped with
 this plugin.`) while the viewer is not open, and its problems name it too.
 
 ## Settings

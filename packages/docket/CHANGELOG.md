@@ -3,6 +3,49 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.7.0
+
+Includes everything in 0.6.1, which was staged but never published.
+
+### `docket cloud`: share a project's knowledge with a Docket Cloud workspace
+
+A project can now link to a Docket Cloud workspace, sign in, push its
+canonical files and search the workspace beside its local adapters
+([#53](https://github.com/chrisjowen/docket/pull/53)). Every `docket cloud`
+command is optional: a project with no cloud linked works exactly as before,
+and no other command makes a network call.
+
+- `docket cloud link <org>/<workspace>` adds a query-only `cloud` adapter
+  instance to `.docket.yaml`, offline. `--url` names another cloud than
+  `https://docket.chrisjowen.net`; `--token-env` names the variable holding an
+  API token for CI.
+- `docket cloud login`, `logout` and `whoami`: a sign-in is for the linked
+  workspace. `login` uses the device authorization grant (RFC 8628), printing
+  a code and opening the browser to enter it. The session goes to the OS
+  keychain, or to `~/.config/docket/credentials.json` created readable only
+  by you (`DOCKET_KEYCHAIN=off` forces the file); access tokens renew as they
+  are used.
+- `docket cloud push [--dry-run]` sends only the canonical files whose hash
+  differs from the cloud's copy, retires the ones the checkout no longer has,
+  prints the cloud's validator diagnostics, and proposes a differing
+  `entities.yaml` as an ontology draft, never publishing it.
+- `docket cloud pull` writes the published ontology; `--resources` writes the
+  documents written in the cloud instead, and `--ontology --resources` both.
+  The ontology file is replaced with the published version; a resource
+  document you already have is never overwritten.
+- `docket cloud status`: the link, the sign-in, the ontology against the
+  published one, and what a push would send.
+- `docket cloud token create|list|revoke` for CI tokens.
+
+### The cloud adapter
+
+`@docket/adapter-cloud`, bundled in the package, answers `docket search`,
+`ask`, `open` and the local MCP server from the workspace's `docket_search`
+tool. A match this checkout also holds is an entity hit; every match is
+evidence naming the resource. Offline or signed out it reports itself
+`unavailable` and the other adapters' answers stand. `DOCKET_OFFLINE=1` stops
+every cloud request before it leaves the machine.
+
 ## 0.6.1
 
 ### Sync, and what a host reconciles and draws with, in the public API
