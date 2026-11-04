@@ -260,7 +260,7 @@ docket runtime down <id>    # stop and remove its containers; volumes are kept (
 docket cloud link acme/platform  # link to a Docket Cloud workspace: adds a query-only cloud adapter (--url, --token-env)
 docket cloud login          # sign in to the linked workspace with a code in the browser; link first (logout, whoami)
 docket cloud push           # upload the files that changed; a differing ontology becomes a draft (--dry-run)
-docket cloud pull           # write the published ontology here (--resources: also the cloud's documents)
+docket cloud pull           # write the published ontology here (--resources: the cloud's documents instead; both with --ontology)
 docket cloud status         # link, sign-in, ontology against the cloud's, and what a push would send
 docket cloud token create --scopes docket:read --expires 30d  # an API token for CI (token list, token revoke <id>)
 ```
@@ -559,8 +559,9 @@ the cloud adapter is reported `unavailable` and the local answers stand.
   even when the files were refused (they may need the types it adds).
   `push` never publishes it.
 - **`pull`** writes the published ontology to the ontology file. With
-  `--resources` it also writes the documents written in the cloud under the
-  source root. A file you already have is never overwritten.
+  `--resources` it writes the documents written in the cloud under the
+  source root instead, and with `--ontology --resources` both. A file you
+  already have is never overwritten.
 - **`token create`** makes an API token for CI, shown once. Set it in CI's
   secrets and name the variable with `docket cloud link --token-env`.
 

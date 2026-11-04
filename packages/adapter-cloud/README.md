@@ -11,7 +11,7 @@ Its default export is the `AdapterDefinition`
 <org>/<workspace>` writes its instance. The configuration is:
 
 - `url` (default `https://docket.chrisjowen.net`): https, or plain http on
-  127.0.0.1 only.
+  this machine only (`localhost`, `127.x.x.x`, `[::1]`).
 - `workspace`: `<org>/<workspace>`.
 - `tokenEnv` (optional): the name of an environment variable that holds an API
   token, for CI. Without it, the adapter uses the session `docket cloud login`
