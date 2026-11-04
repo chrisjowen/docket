@@ -21,7 +21,7 @@ export { fileManifestStore } from './manifest/store.js';
 export { syncSource as sync, SyncError } from './commands/sync.js';
 export { canonicalState } from './sync/inputs.js';
 export { planAdapter } from './manifest/plan.js';
-export { ADAPTER_MANIFEST_VERSION, Checkpoint, checkpointOf, emptyRecords, INPUT_KINDS, resetPendingFingerprint } from './manifest/adapter-manifest.js';
+export { Checkpoint, emptyRecords, INPUT_KINDS, resetPendingFingerprint } from './manifest/adapter-manifest.js';
 export { unacknowledged } from './bundled/contracts/dist/index.js';
 /**
  * Validation as `docket validate` does it, over any canonical source, and
