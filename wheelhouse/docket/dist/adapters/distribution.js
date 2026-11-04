@@ -1,13 +1,15 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CLOUD_ADAPTER_MODULE } from '../cloud/project.js';
 import { V1_PROJECTION_MODULES } from '../config/config.js';
 import { findPackageDir } from './resolve-module.js';
 /** Where the build copies each distributed package: `dist/bundled/<name without scope>`. */
 const BUNDLED_ROOT = fileURLToPath(new URL('../bundled/', import.meta.url));
 /**
  * The adapter packages the standard `@chrisjowen/docket` distribution ships
- * with - the ones v1 `projections` entries name. Core never imports them: it
+ * with - the ones v1 `projections` entries name, and the cloud adapter
+ * `docket cloud link` configures. Core never imports them: it
  * loads them like any other adapter module, so a minimal core deployment can
  * leave any of them out, and a project can install its own copy instead.
  *
@@ -15,7 +17,7 @@ const BUNDLED_ROOT = fileURLToPath(new URL('../bundled/', import.meta.url));
  * workspace, it is the package installed alongside docket itself.
  */
 export const standardDistribution = {
-    packages: Object.values(V1_PROJECTION_MODULES),
+    packages: [...Object.values(V1_PROJECTION_MODULES), CLOUD_ADAPTER_MODULE],
     find(name) {
         if (!this.packages.includes(name))
             return undefined;
