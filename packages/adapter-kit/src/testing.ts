@@ -81,7 +81,7 @@ export interface FakeCloud {
   /** Search matches `docket_search` returns. */
   matches: { id: string; type: string; title: string; path: string; confidence?: number }[]
   tokens: { id: string; prefix: string; scopes: string[]; description?: string; expiresAt: string; status: string }[]
-  /** Diagnostics a push answers with; an error one refuses it. */
+  /** Diagnostics a push answers with; an error one refuses a push carrying its path, or every push when it has none. */
   pushDiagnostics: { severity: 'error' | 'warning'; code: string; message: string; path?: string }[]
   /** Issues an access token as login would, for tests that start signed in. */
   issue(): { accessToken: string; refreshToken: string }
@@ -101,7 +101,6 @@ export const startFakeCloud = async (options: FakeCloudOptions = {}): Promise<Fa
   const access = new Set<string>()
   const refresh = new Set<string>()
   const devices = new Map<string, number>()
-  const codes = new Map<string, { challenge: string; redirectUri: string }>()
   let issued = 0
   let url = ''
 
@@ -152,9 +151,7 @@ export const startFakeCloud = async (options: FakeCloudOptions = {}): Promise<Fa
         if (route === 'GET /.well-known/oauth-authorization-server') {
           return json(200, {
             issuer: url,
-            authorization_endpoint: `${url}/oauth/authorize`,
             token_endpoint: `${url}/oauth/token`,
-            registration_endpoint: `${url}/oauth/register`,
             revocation_endpoint: `${url}/oauth/revoke`,
             ...(options.deviceFlow === false ? {} : { device_authorization_endpoint: `${url}/oauth/device/auth` })
           })
@@ -170,20 +167,6 @@ export const startFakeCloud = async (options: FakeCloudOptions = {}): Promise<Fa
             expires_in: 600,
             interval: options.interval ?? 5
           })
-        }
-        if (route === 'POST /oauth/register') {
-          return json(201, { client_id: `client-${cloud.requests.length}`, ...(JSON.parse(body) as object) })
-        }
-        if (route === 'GET /oauth/authorize') {
-          // Consent granted at once: straight back to the client with a code.
-          const code = `code-${codes.size + 1}`
-          const redirectUri = target.searchParams.get('redirect_uri') ?? ''
-          codes.set(code, { challenge: target.searchParams.get('code_challenge') ?? '', redirectUri })
-          const back = new URL(redirectUri)
-          back.searchParams.set('code', code)
-          back.searchParams.set('state', target.searchParams.get('state') ?? '')
-          response.writeHead(302, { location: back.toString() })
-          return response.end()
         }
         if (route === 'POST /oauth/revoke') {
           const form = new URLSearchParams(body)
@@ -203,17 +186,6 @@ export const startFakeCloud = async (options: FakeCloudOptions = {}): Promise<Fa
               return json(400, { error: 'authorization_pending' })
             }
             devices.delete(form.get('device_code') ?? '')
-            return json(200, tokenResponse())
-          }
-          if (grant === 'authorization_code') {
-            const issuedCode = codes.get(form.get('code') ?? '')
-            const verifier = form.get('code_verifier') ?? ''
-            const { createHash } = await import('node:crypto')
-            const challenge = createHash('sha256').update(verifier).digest('base64url')
-            if (!issuedCode || issuedCode.challenge !== challenge || issuedCode.redirectUri !== form.get('redirect_uri')) {
-              return json(400, { error: 'invalid_grant' })
-            }
-            codes.delete(form.get('code') ?? '')
             return json(200, tokenResponse())
           }
           if (grant === 'refresh_token') {
@@ -283,7 +255,10 @@ export const startFakeCloud = async (options: FakeCloudOptions = {}): Promise<Fa
         if (path === 'documents/push' && request.method === 'POST') {
           const push = JSON.parse(body) as FakeCloud['pushes'][number]
           cloud.pushes.push(push)
-          const ok = !cloud.pushDiagnostics.some((diagnostic) => diagnostic.severity === 'error')
+          const diagnostics = cloud.pushDiagnostics.filter(
+            (diagnostic) => diagnostic.path === undefined || push.upsert.some((upsert) => upsert.path === diagnostic.path)
+          )
+          const ok = !diagnostics.some((diagnostic) => diagnostic.severity === 'error')
           const created: string[] = []
           const updated: string[] = []
           for (const upsert of push.upsert) {
@@ -297,7 +272,7 @@ export const startFakeCloud = async (options: FakeCloudOptions = {}): Promise<Fa
           if (ok && !push.dryRun) {
             cloud.documents = cloud.documents.filter((document) => !(document.origin === 'cli' && document.originRef === push.checkout && push.remove.includes(document.path)))
           }
-          return json(200, { ok, dryRun: push.dryRun === true, created, updated, unchanged: [], removed: push.remove, diagnostics: cloud.pushDiagnostics })
+          return json(200, { ok, dryRun: push.dryRun === true, created, updated, unchanged: [], removed: push.remove, diagnostics })
         }
         return json(404, { message: 'Not Found' })
       })().catch((cause: unknown) => {

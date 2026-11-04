@@ -258,7 +258,7 @@ docket runtime up <id>      # start its containers, pulling only as its pullPoli
 docket runtime status <id>  # state and health of its containers, changing nothing
 docket runtime down <id>    # stop and remove its containers; volumes are kept (--destroy-volumes deletes them)
 docket cloud link acme/platform  # link to a Docket Cloud workspace: adds a query-only cloud adapter (--url, --token-env)
-docket cloud login          # sign in to the linked workspace in the browser (logout, whoami)
+docket cloud login          # sign in to the linked workspace with a code in the browser; link first (logout, whoami)
 docket cloud push           # upload the files that changed; a differing ontology becomes a draft (--dry-run)
 docket cloud pull           # write the published ontology here (--resources: also the cloud's documents)
 docket cloud status         # link, sign-in, ontology against the cloud's, and what a push would send
@@ -511,7 +511,7 @@ exactly as before, and no other command makes a network call.
 
 ```bash
 docket cloud link acme/platform   # once per project; writes .docket.yaml, needs no network
-docket cloud login                # opens the browser to sign in with GitHub
+docket cloud login                # then sign in to that workspace: a code to enter in the browser, with GitHub
 docket cloud push                 # sends the files whose hash differs from the cloud's copy
 docket search "who owns orders"   # the local adapters and the cloud workspace, side by side
 ```
@@ -539,9 +539,11 @@ the cloud adapter is reported `unavailable` and the local answers stand.
 `DOCKET_OFFLINE=1` stops every request to a cloud before it leaves the machine.
 
 - **Sign-in** is for the one workspace the project is linked to, since its
-  tokens are. `login` uses the device authorization grant (RFC 8628) when the
-  cloud offers it, and otherwise the browser coming back to a port on
-  127.0.0.1 (authorization code with PKCE). The session goes to the OS
+  tokens are, so `link` comes first: `login`, `logout` and `whoami` in an
+  unlinked project name the `docket cloud link` to run. `login` uses the
+  device authorization grant (RFC 8628): it prints a code and opens the
+  browser to enter it. A cloud that does not offer device sign-in is
+  reported as such. The session goes to the OS
   keychain (macOS keychain, or the Secret Service through `secret-tool`).
   Without a keychain, or with `DOCKET_KEYCHAIN=off`, it goes to
   `~/.config/docket/credentials.json`, created readable only by you. Access
@@ -549,10 +551,12 @@ the cloud adapter is reported `unavailable` and the local answers stand.
 - **`push`** sends the checkout's canonical files (`source.include` less
   `source.exclude`) as `cli` documents, keyed by this checkout. It sends only
   the files whose `sha256` differs from the cloud's copy, and retires the ones
-  the checkout no longer has. It prints the cloud's validator diagnostics, and
-  if the cloud refuses the push, nothing is stored. If `entities.yaml` differs
-  from the published ontology, it is proposed as a draft for an admin to
-  publish. `push` never publishes it.
+  the checkout no longer has, in batches under the cloud's request cap. It
+  prints the cloud's validator diagnostics. If the cloud refuses a batch,
+  that batch and the ones after it are not stored and are listed as such;
+  only batches it accepted before are. If `entities.yaml` differs from the
+  published ontology, and the cloud accepted the files, it is proposed as a
+  draft for an admin to publish. `push` never publishes it.
 - **`pull`** writes the published ontology to the ontology file. With
   `--resources` it also writes the documents written in the cloud under the
   source root. A file you already have is never overwritten.

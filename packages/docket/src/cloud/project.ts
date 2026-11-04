@@ -1,4 +1,4 @@
-import { DEFAULT_CLOUD_URL } from '@docket/adapter-kit'
+import { CLOUD_WORKSPACE_PATTERN, DEFAULT_CLOUD_URL } from '@docket/adapter-kit'
 
 import type { ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
@@ -8,9 +8,6 @@ export const CLOUD_ADAPTER_MODULE = '@docket/adapter-cloud'
 
 /** The instance id `docket cloud link` gives the cloud adapter. */
 export const CLOUD_ADAPTER_ID = 'cloud'
-
-/** `acme/platform`: an org and one of its workspaces, as the cloud's URLs name them. */
-export const WORKSPACE_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}\/[a-z0-9][a-z0-9-]{0,62}$/
 
 /** A project's link to a cloud workspace: its `cloud` adapter instance. */
 export interface CloudLink {
@@ -23,7 +20,7 @@ export interface CloudLink {
 }
 
 export const parseWorkspace = (value: string): { org: string; workspace: string } => {
-  if (!WORKSPACE_PATTERN.test(value)) {
+  if (!CLOUD_WORKSPACE_PATTERN.test(value)) {
     throw new Error(`"${value}" is not <org>/<workspace>: give it as the cloud's URLs do, e.g. acme/platform.`)
   }
   const [org, workspace] = value.split('/') as [string, string]
@@ -51,7 +48,7 @@ export const requireCloudLink = async (cwd: string): Promise<{ resolved: Resolve
   const resolved = await loadConfig(cwd)
   const link = cloudLinkOf(resolved)
   if (link === undefined) {
-    throw new Error(`${resolved.projectRoot} is not linked to a cloud workspace. Run \`docket cloud link <org>/<workspace>\` first.`)
+    throw new Error(`Not linked to a cloud workspace: run \`docket cloud link <org>/<workspace>\` first, then \`docket cloud login\`.`)
   }
   return { resolved, link }
 }

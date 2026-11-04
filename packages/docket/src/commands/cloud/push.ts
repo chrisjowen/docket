@@ -33,10 +33,12 @@ export interface CloudPushResult {
   /** The id the cloud keys this checkout's documents by. */
   checkout: string
   dryRun: boolean
-  /** Paths sent because the cloud's copy is missing or differs. */
+  /** Paths the cloud accepted because its copy was missing or differed. */
   uploaded: string[]
-  /** Paths the cloud holds for this checkout that it no longer has. */
+  /** Paths the cloud held for this checkout that it no longer has, retired. */
   removed: string[]
+  /** Changed paths, or ones to retire, the cloud did not store: its batch was refused, or came after one that was. */
+  notStored: string[]
   /** Files whose hash matched the cloud's, so were not sent. */
   unchanged: number
   /** Whether the cloud accepted every batch; false when its validator refused one. */
@@ -71,7 +73,8 @@ const batches = (upserts: { path: string; raw: string }[]): { path: string; raw:
  * cloud's copy, and the retirement of any the checkout no longer has. Prints
  * nothing itself: the cloud's validator diagnostics come back in the result.
  * A local ontology that differs from the published one is proposed as a
- * draft - the cloud never publishes it from here.
+ * draft - the cloud never publishes it from here - unless the cloud refused
+ * the files.
  */
 export const cloudPush = async (options: CloudPushOptions = {}): Promise<CloudPushResult> => {
   const { resolved, link } = await requireCloudLink(options.cwd ?? process.cwd())
@@ -91,13 +94,20 @@ export const cloudPush = async (options: CloudPushOptions = {}): Promise<CloudPu
   const removed = [...remote.keys()].filter((path) => !kept.has(path)).sort()
 
   const responses: PushResponse[] = []
+  const stored: string[] = []
+  const retired: string[] = []
   if (changed.length > 0 || removed.length > 0) {
     for (const [index, batch] of batches(changed.map(({ path, raw }) => ({ path, raw }))).entries()) {
-      const response = await pushDocuments(workspace, { checkout, dryRun, upsert: batch, remove: index === 0 ? removed : [] })
+      const remove = index === 0 ? removed : []
+      const response = await pushDocuments(workspace, { checkout, dryRun, upsert: batch, remove })
       responses.push(response)
       if (!response.ok) break
+      stored.push(...batch.map((upsert) => upsert.path))
+      retired.push(...remove)
     }
   }
+  const ok = responses.every((response) => response.ok)
+  const accepted = new Set([...stored, ...retired])
 
   const cloud = await cloudOntology(workspace)
   let ontology: CloudPushResult['ontology']
@@ -106,7 +116,7 @@ export const cloudPush = async (options: CloudPushOptions = {}): Promise<CloudPu
   } else {
     const yaml = await readFile(resolved.ontologyPath, 'utf8')
     if (hashContent(yaml) === hashContent(cloud.yaml)) ontology = { state: 'same', version: cloud.version }
-    else if (dryRun) ontology = { state: 'differs', version: cloud.version }
+    else if (dryRun || !ok) ontology = { state: 'differs', version: cloud.version }
     else {
       const proposal = await proposeOntology(workspace, yaml, `Proposed by docket cloud push from ${checkout}`)
       ontology = { state: 'proposed', version: cloud.version, proposal }
@@ -117,10 +127,11 @@ export const cloudPush = async (options: CloudPushOptions = {}): Promise<CloudPu
     workspace: workspace.label,
     checkout,
     dryRun,
-    uploaded: changed.map((file) => file.path),
-    removed,
+    uploaded: stored,
+    removed: retired,
+    notStored: [...changed.map((file) => file.path), ...removed].filter((path) => !accepted.has(path)),
     unchanged: local.length - changed.length,
-    ok: responses.every((response) => response.ok),
+    ok,
     diagnostics: responses.flatMap((response) => response.diagnostics),
     ontology
   }

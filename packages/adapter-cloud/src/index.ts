@@ -2,6 +2,7 @@ import {
   CloudApiError,
   CloudAuthError,
   CloudUnreachableError,
+  CLOUD_WORKSPACE_PATTERN,
   CloudWorkspace,
   CredentialStore,
   DEFAULT_CLOUD_URL,
@@ -23,9 +24,6 @@ import { z } from 'zod'
 
 const VERSION = packageVersion(new URL('../package.json', import.meta.url))
 
-/** The cloud's org and workspace slugs, as its URLs carry them. */
-const SLUG = '[a-z0-9-]{1,40}'
-
 /**
  * A `cloud` adapter instance's config, as `docket cloud link` writes it.
  * `tokenEnv` names an environment variable holding an API token - for CI;
@@ -43,7 +41,7 @@ export const cloudConfigSchema = z.strictObject({
         return false
       }
     }, 'must be an https URL (plain http only on this machine)'),
-  workspace: z.string().regex(new RegExp(`^${SLUG}/${SLUG}$`), 'must be <org>/<workspace>, e.g. acme/platform'),
+  workspace: z.string().regex(CLOUD_WORKSPACE_PATTERN, 'must be <org>/<workspace>, e.g. acme/platform'),
   tokenEnv: z
     .string()
     .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be an environment variable name')

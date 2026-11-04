@@ -14,6 +14,9 @@ import { writeFileAtomic } from './atomic-write.js'
 /** The Docket Cloud beta, unless a command or the config names another. */
 export const DEFAULT_CLOUD_URL = 'https://docket.chrisjowen.net'
 
+/** `acme/platform`: an org and one of its workspaces, each a slug as the cloud's URLs carry them. */
+export const CLOUD_WORKSPACE_PATTERN = /^[a-z0-9-]{1,40}\/[a-z0-9-]{1,40}$/
+
 /** Set to anything but `0` or empty, every request to Docket Cloud fails before it leaves the machine. */
 export const OFFLINE_ENV = 'DOCKET_OFFLINE'
 

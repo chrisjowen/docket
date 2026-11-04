@@ -1,6 +1,6 @@
 import { authorizationServer, cloudOrigin, type CredentialLocation, type CredentialStore } from '@docket/adapter-kit'
 
-import { browserLogin, deviceLogin, NotOfferedError, revokeToken, whoAmI, type Identity, type LoginIO } from '../../cloud/client.js'
+import { deviceLogin, revokeToken, whoAmI, type Identity, type LoginIO } from '../../cloud/client.js'
 import { CredentialStore as Store, linkedWorkspace } from '../../cloud/credentials.js'
 import { requireCloudLink } from '../../cloud/project.js'
 
@@ -19,8 +19,6 @@ export interface CloudLoginOptions extends CloudSessionOptions {
 export interface CloudLoginResult {
   /** `acme/platform on https://...`. */
   workspace: string
-  /** How the sign-in went: a device code, or the browser coming back to this machine. */
-  method: 'device' | 'browser'
   location: CredentialLocation
   /** The credentials file, when that is where the session went. */
   file?: string
@@ -28,9 +26,8 @@ export interface CloudLoginResult {
 
 /**
  * Signs in to the workspace the project is linked to - a sign-in is for one
- * workspace, as its tokens are. Uses the device authorization grant when the
- * cloud offers it, and otherwise the browser coming back to a port on this
- * machine. The session goes to the keychain, or a file only the user can read.
+ * workspace, as its tokens are - with the device authorization grant. The
+ * session goes to the keychain, or a file only the user can read.
  */
 export const cloudLogin = async (options: CloudLoginOptions): Promise<CloudLoginResult> => {
   const { link } = await requireCloudLink(options.cwd ?? process.cwd())
@@ -40,11 +37,9 @@ export const cloudLogin = async (options: CloudLoginOptions): Promise<CloudLogin
   const store = options.store ?? new Store()
   const workspace = linkedWorkspace(link, { store, env: {} })
   const server = await authorizationServer(workspace.origin)
-  const method = server.device_authorization_endpoint !== undefined ? 'device' : 'browser'
-  const credential =
-    method === 'device' ? await deviceLogin(server, workspace.resource, options.io) : await browserLogin(server, workspace.resource, options.io)
+  const credential = await deviceLogin(server, workspace.resource, options.io)
   const location = await store.write(workspace.resource, credential)
-  return { workspace: workspace.label, method, location, ...(location === 'file' ? { file: store.file } : {}) }
+  return { workspace: workspace.label, location, ...(location === 'file' ? { file: store.file } : {}) }
 }
 
 export interface CloudLogoutResult {
@@ -74,30 +69,13 @@ export const cloudLogout = async (options: CloudSessionOptions = {}): Promise<Cl
 
 export interface CloudWhoamiResult {
   workspace: string
-  /** Who the cloud says the session acts as, when it says. */
-  identity?: Identity
-  /** Otherwise what the session itself records, proven to work by listing the tools it may call. */
-  session?: { scope?: string; expiresAt?: string; tools: string[]; note: string }
+  /** Who the cloud says the session acts as. */
+  identity: Identity
 }
 
 /** Who the linked workspace's session acts as. */
 export const cloudWhoami = async (options: CloudSessionOptions = {}): Promise<CloudWhoamiResult> => {
   const { link } = await requireCloudLink(options.cwd ?? process.cwd())
   const workspace = linkedWorkspace(link, { store: options.store })
-  try {
-    return { workspace: workspace.label, identity: await whoAmI(workspace) }
-  } catch (cause) {
-    if (!(cause instanceof NotOfferedError)) throw cause
-    const tools = await workspace.listTools()
-    const credential = await workspace.store.read(workspace.resource)
-    return {
-      workspace: workspace.label,
-      session: {
-        ...(credential?.scope ? { scope: credential.scope } : {}),
-        ...(credential?.expiresAt ? { expiresAt: credential.expiresAt } : {}),
-        tools,
-        note: cause.message
-      }
-    }
-  }
+  return { workspace: workspace.label, identity: await whoAmI(workspace) }
 }

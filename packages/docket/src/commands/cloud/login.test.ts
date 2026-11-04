@@ -1,4 +1,4 @@
-import { stat } from 'node:fs/promises'
+import { stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { CredentialStore } from '@docket/adapter-kit'
@@ -15,17 +15,14 @@ afterEach(async () => {
 })
 
 /** A login's terminal and browser, recorded; time passes only as it sleeps. */
-const recordingIO = (browse?: (url: string) => void) => {
+const recordingIO = () => {
   let clock = 1_800_000_000_000
   const io = {
     shown: [] as { url: string; userCode?: string }[],
     opened: [] as string[],
     slept: [] as number[],
     show: (prompt: { url: string; userCode?: string }) => void io.shown.push(prompt),
-    openBrowser: (url: string) => {
-      io.opened.push(url)
-      browse?.(url)
-    },
+    openBrowser: (url: string) => void io.opened.push(url),
     sleep: async (ms: number) => {
       io.slept.push(ms)
       clock += ms
@@ -43,7 +40,7 @@ describe('docket cloud login', () => {
 
     const result = await cloudLogin({ cwd: fixture.root, store, io })
 
-    expect(result).toMatchObject({ method: 'device', location: 'file', file: store.file })
+    expect(result).toMatchObject({ location: 'file', file: store.file })
     expect(io.shown).toEqual([{ url: `${fixture.cloud.url}/device`, userCode: 'WDJB-MJHT' }])
     expect(io.opened).toEqual([`${fixture.cloud.url}/device?user_code=WDJB-MJHT`])
     expect(io.slept).toEqual([7000, 7000, 7000])
@@ -53,20 +50,24 @@ describe('docket cloud login', () => {
     expect(await store.read(`${fixture.cloud.url}/mcp/acme/platform`)).toMatchObject({ clientId: 'docket-cli', refreshToken: expect.any(String) })
   })
 
-  it('signs in through the browser coming back to this machine when the cloud has no device flow', async () => {
+  it('says plainly when the cloud does not offer device sign-in', async () => {
     fixture = await cloudFixture({ deviceFlow: false })
-    // The browser: follows the consent redirect back to the CLI's callback.
-    const io = recordingIO((url) => void fetch(url))
 
-    const result = await cloudLogin({ cwd: fixture.root, store: fixture.store, io })
+    await expect(cloudLogin({ cwd: fixture.root, store: fixture.store, io: recordingIO() })).rejects.toThrow(/does not offer device sign-in yet/)
+    expect(fixture.cloud.tokenRequests).toEqual([])
+  })
 
-    expect(result).toMatchObject({ method: 'browser', location: 'file' })
-    const authorize = new URL(io.opened[0]!)
-    expect(authorize.searchParams.get('code_challenge_method')).toBe('S256')
-    expect(authorize.searchParams.get('resource')).toBe(`${fixture.cloud.url}/mcp/acme/platform`)
-    expect(authorize.searchParams.get('redirect_uri')).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/)
-    expect(fixture.cloud.tokenRequests.map((form) => form.get('grant_type'))).toEqual(['authorization_code'])
-    expect(await fixture.store.read(`${fixture.cloud.url}/mcp/acme/platform`)).toMatchObject({ accessToken: expect.any(String) })
+  it('names the link to run first in a project that is not linked', async () => {
+    fixture = await cloudFixture()
+    await writeFile(join(fixture.root, '.docket.yaml'), 'version: 2\n')
+
+    for (const run of [
+      () => cloudLogin({ cwd: fixture.root, store: fixture.store, io: recordingIO() }),
+      () => cloudLogout({ cwd: fixture.root, store: fixture.store }),
+      () => cloudWhoami({ cwd: fixture.root, store: fixture.store })
+    ]) {
+      await expect(run()).rejects.toThrow('Not linked to a cloud workspace: run `docket cloud link <org>/<workspace>` first, then `docket cloud login`.')
+    }
   })
 
   it('refuses a cloud other than the one the project is linked to', async () => {
@@ -97,13 +98,4 @@ describe('docket cloud whoami', () => {
     expect((await cloudWhoami({ cwd: fixture.root, store: fixture.store })).identity).toMatchObject({ login: 'octocat', role: 'member' })
   })
 
-  it('falls back to what the session records, proven by the tools it may call, when the cloud has no whoami', async () => {
-    fixture = await cloudFixture({ restApi: false })
-    await fixture.signIn()
-
-    const result = await cloudWhoami({ cwd: fixture.root, store: fixture.store })
-
-    expect(result.identity).toBeUndefined()
-    expect(result.session).toMatchObject({ tools: ['docket_search', 'docket_ontology'], note: expect.stringMatching(/does not offer whoami yet/) })
-  })
 })

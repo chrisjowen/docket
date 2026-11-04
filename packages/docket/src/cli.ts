@@ -847,7 +847,7 @@ const cloudCommand = program
 
 cloudCommand
   .command('login')
-  .description('Sign in to the workspace this project is linked to, in the browser')
+  .description('Sign in to the workspace this project is linked to, with a code in the browser; run `docket cloud link <org>/<workspace>` first')
   .option('--url <url>', 'the cloud; it must be the one the project is linked to')
   .action(async (options: { url?: string }) => {
     const result = await cloudLogin({
@@ -880,20 +880,10 @@ cloudCommand
   .command('whoami')
   .description('Show who the linked workspace\'s sign-in acts as')
   .action(async () => {
-    const result = await cloudWhoami()
-    if (result.identity) {
-      const { identity } = result
-      console.log(`${identity.login} (${identity.role}) in ${result.workspace}`)
-      console.log(`  scopes   ${identity.scopes.join(' ')}`)
-      console.log(`  ${identity.token.kind === 'api' ? 'API token' : 'session'} expires ${identity.token.expiresAt}`)
-      return
-    }
-    const session = result.session!
-    console.log(`signed in to ${result.workspace}`)
-    if (session.scope) console.log(`  scopes   ${session.scope}`)
-    if (session.expiresAt) console.log(`  expires  ${session.expiresAt} (renewed as it is used)`)
-    console.log(`  tools    ${session.tools.join(', ')}`)
-    console.log(`  ${session.note}`)
+    const { workspace, identity } = await cloudWhoami()
+    console.log(`${identity.login} (${identity.role}) in ${workspace}`)
+    console.log(`  scopes   ${identity.scopes.join(' ')}`)
+    console.log(`  ${identity.token.kind === 'api' ? 'API token' : 'session'} expires ${identity.token.expiresAt}`)
   })
 
 cloudCommand
@@ -921,12 +911,14 @@ cloudCommand
     console.log(`  ${would} ${result.uploaded.length}, ${result.dryRun ? 'would retire' : 'retired'} ${result.removed.length}, ${result.unchanged} unchanged`)
     for (const path of result.uploaded) console.log(`    + ${path}`)
     for (const path of result.removed) console.log(`    - ${path}`)
+    if (result.notStored.length > 0) console.log(`  ${result.dryRun ? 'would not store' : 'not stored'} ${result.notStored.length}`)
+    for (const path of result.notStored) console.log(`    ! ${path}`)
     switch (result.ontology.state) {
       case 'same':
         console.log(`  ontology matches the published version ${result.ontology.version}`)
         break
       case 'differs':
-        console.log(`  ontology differs from the published version ${result.ontology.version}; a push would propose it as a draft`)
+        console.log(`  ontology differs from the published version ${result.ontology.version}; a push the cloud accepts proposes it as a draft`)
         break
       case 'proposed':
         console.log(
@@ -940,7 +932,11 @@ cloudCommand
     }
     printDiagnostics(result.diagnostics as Diagnostic[])
     if (!result.ok) {
-      console.error('\nThe cloud refused the push: nothing was stored. Fix the errors above and push again.')
+      console.error(
+        result.dryRun
+          ? '\nThe cloud would refuse the push. Fix the errors above and push again.'
+          : `\nThe cloud refused the push: ${result.uploaded.length + result.removed.length > 0 ? 'only the changes listed above were stored' : 'nothing was stored'}. Fix the errors above and push again.`
+      )
       process.exitCode = 1
     }
   })

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cloudFixture, type CloudFixture } from '../../../test/cloud.js'
 import { write } from '../../../test/helpers.js'
 import { hashContent } from '../../source/hashing.js'
-import { cloudPush } from './push.js'
+import { cloudPush, PUSH_BATCH_BYTES } from './push.js'
 
 const ORDERS = '---\nid: service.orders\ntype: service\ntitle: Orders API\n---\n\nHandles orders.\n'
 const PAYMENTS = '---\nid: team.payments\ntype: team\ntitle: Payments\n---\n\nThe payments team.\n'
@@ -70,9 +70,35 @@ describe('docket cloud push', () => {
 
     const result = await push()
 
-    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ ok: false, uploaded: [], removed: [], notStored: ['.docket/resources/service/orders.md', '.docket/resources/team/payments.md'] })
     expect(result.diagnostics).toEqual(fixture.cloud.pushDiagnostics)
     expect(fixture.cloud.documents).toEqual([])
+  })
+
+  it('reports only the batches the cloud stored when it refuses a later one, and proposes no draft', async () => {
+    const large = `${ORDERS}${'x'.repeat(PUSH_BATCH_BYTES)}\n`
+    await write(fixture.root, '.docket/resources/service/orders.md', large)
+    held('.docket/resources/team/retired.md', 'gone from the checkout')
+    fixture.cloud.ontology = { version: 3, yaml: 'version: 1\nresourceTypes: {}\nrelationships: {}\n' }
+    fixture.cloud.pushDiagnostics = [
+      { severity: 'error', code: 'unknown-type', message: 'Type "team" is not in the published ontology.', path: '.docket/resources/team/payments.md' }
+    ]
+
+    const result = await push()
+
+    expect(fixture.cloud.pushes.map((request) => request.upsert.map((upsert) => upsert.path))).toEqual([
+      ['.docket/resources/service/orders.md'],
+      ['.docket/resources/team/payments.md']
+    ])
+    expect(result).toMatchObject({
+      ok: false,
+      uploaded: ['.docket/resources/service/orders.md'],
+      removed: ['.docket/resources/team/retired.md'],
+      notStored: ['.docket/resources/team/payments.md'],
+      ontology: { state: 'differs', version: 3 }
+    })
+    expect(fixture.cloud.documents.map((document) => document.path)).toEqual(['.docket/resources/service/orders.md'])
+    expect(fixture.cloud.toolCalls.map((call) => call.name)).toEqual(['docket_ontology'])
   })
 
   it('sends a differing ontology as a draft, never publishing it', async () => {

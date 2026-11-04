@@ -1,6 +1,3 @@
-import { createHash, randomBytes } from 'node:crypto'
-import { createServer } from 'node:http'
-
 import {
   CloudApiError,
   cloudFetch,
@@ -71,7 +68,7 @@ interface DeviceAuthorization {
  */
 export const deviceLogin = async (server: AuthorizationServer, resource: string, io: LoginIO): Promise<CloudCredential> => {
   const endpoint = server.device_authorization_endpoint
-  if (endpoint === undefined) throw new Error(`${server.issuer} does not offer device authorization`)
+  if (endpoint === undefined) throw new Error(`${server.issuer} does not offer device sign-in yet.`)
   const now = io.now ?? Date.now
   const started = await form(endpoint, { client_id: CLI_CLIENT_ID, scope: LOGIN_SCOPES.join(' '), resource })
   if (!started.ok) {
@@ -106,120 +103,6 @@ export const deviceLogin = async (server: AuthorizationServer, resource: string,
     throw new Error(`The sign-in failed: ${description ?? error}`)
   }
   throw new Error('The sign-in code expired before it was approved; run `docket cloud login` again.')
-}
-
-const base64url = (bytes: Buffer): string => bytes.toString('base64url')
-
-/** Waits for the browser to come back to `/callback` with the authorization's `code`. */
-const awaitCallback = (state: string, timeoutMs: number) => {
-  let settle: { resolve: (code: string) => void; reject: (cause: Error) => void } | undefined
-  const code = new Promise<string>((resolve, reject) => (settle = { resolve, reject }))
-  const server = createServer((request, response) => {
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1')
-    if (url.pathname !== '/callback') {
-      response.writeHead(404).end()
-      return
-    }
-    const error = url.searchParams.get('error')
-    const ok = error === null && url.searchParams.get('state') === state && url.searchParams.get('code') !== null
-    response.writeHead(ok ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' })
-    response.end(
-      ok
-        ? '<!doctype html><title>docket</title><p>Signed in to Docket Cloud. You can close this tab and return to the terminal.</p>'
-        : '<!doctype html><title>docket</title><p>The sign-in did not complete. Return to the terminal.</p>'
-    )
-    const described = url.searchParams.get('error_description')
-    if (error !== null) {
-      settle?.reject(new Error(error === 'access_denied' ? 'The sign-in was declined.' : `The sign-in failed: ${described ?? error}`))
-    }
-    else if (url.searchParams.get('state') !== state) settle?.reject(new Error('The sign-in came back for another request; run `docket cloud login` again.'))
-    else settle?.resolve(url.searchParams.get('code') ?? '')
-  })
-  const timer = setTimeout(() => settle?.reject(new Error('The sign-in was not completed in time; run `docket cloud login` again.')), timeoutMs)
-  const listening = new Promise<number>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address()
-      resolve(typeof address === 'object' && address !== null ? address.port : 0)
-    })
-  })
-  const close = () => {
-    clearTimeout(timer)
-    server.close()
-  }
-  return { code, listening, close }
-}
-
-/**
- * The authorization code grant with PKCE on a loopback redirect (RFC 8252),
- * for a cloud without device authorization: registers this CLI for the one
- * redirect (RFC 7591), opens the browser at the consent screen, and exchanges
- * the code the browser brings back.
- */
-export const browserLogin = async (
-  server: AuthorizationServer,
-  resource: string,
-  io: LoginIO,
-  timeoutMs = 5 * 60_000
-): Promise<CloudCredential> => {
-  if (server.authorization_endpoint === undefined || server.registration_endpoint === undefined) {
-    throw new Error(`${server.issuer} offers neither device authorization nor a browser sign-in this CLI can use`)
-  }
-  const state = base64url(randomBytes(16))
-  const callback = awaitCallback(state, timeoutMs)
-  try {
-    const redirectUri = `http://127.0.0.1:${await callback.listening}/callback`
-    const registered = await cloudFetch(server.registration_endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({
-        client_name: 'docket CLI',
-        redirect_uris: [redirectUri],
-        token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code', 'refresh_token'],
-        response_types: ['code']
-      })
-    })
-    if (!registered.ok) {
-      const { error, description } = await oauthError(registered)
-      throw new Error(`${server.issuer} refused to register this CLI: ${description ?? error}`)
-    }
-    const { client_id: clientId } = (await registered.json()) as { client_id: string }
-
-    const verifier = base64url(randomBytes(32))
-    const authorize = new URL(server.authorization_endpoint)
-    for (const [name, value] of Object.entries({
-      response_type: 'code',
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      scope: LOGIN_SCOPES.join(' '),
-      state,
-      code_challenge: base64url(createHash('sha256').update(verifier).digest()),
-      code_challenge_method: 'S256',
-      resource
-    })) {
-      authorize.searchParams.set(name, value)
-    }
-    io.show({ url: authorize.toString() })
-    io.openBrowser(authorize.toString())
-
-    const code = await callback.code
-    const exchanged = await form(server.token_endpoint, {
-      grant_type: 'authorization_code',
-      code,
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      code_verifier: verifier,
-      resource
-    })
-    if (!exchanged.ok) {
-      const { error, description } = await oauthError(exchanged)
-      throw new Error(`The sign-in failed: ${description ?? error}`)
-    }
-    return credentialFrom((await exchanged.json()) as TokenResponse, { clientId, tokenEndpoint: server.token_endpoint, now: new Date((io.now ?? Date.now)()) })
-  } finally {
-    callback.close()
-  }
 }
 
 /** Revokes a token at the cloud (RFC 7009). Best effort: a failure leaves only the token to expire. */

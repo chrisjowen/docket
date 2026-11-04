@@ -2,6 +2,7 @@ import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import cloudAdapter from '@docket/adapter-cloud'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
@@ -67,6 +68,13 @@ describe('docket cloud link', () => {
   it('refuses a target that is not <org>/<workspace>', async () => {
     await expect(cloudLink('acme', { cwd: root })).rejects.toThrow(/is not <org>\/<workspace>/)
     await expect(cloudLink('acme/platform/extra', { cwd: root })).rejects.toThrow(/is not <org>\/<workspace>/)
+    await expect(cloudLink(`acme/${'w'.repeat(41)}`, { cwd: root })).rejects.toThrow(/is not <org>\/<workspace>/)
+  })
+
+  it('writes a workspace the cloud adapter accepts', async () => {
+    const result = await cloudLink(`-acme/${'w'.repeat(40)}`, { cwd: root })
+
+    expect(cloudAdapter.validateConfig?.(result.entry.config)).toMatchObject({ workspace: `-acme/${'w'.repeat(40)}` })
   })
 
   it('asks for a version 1 file to be migrated first', async () => {
