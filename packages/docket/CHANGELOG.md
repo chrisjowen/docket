@@ -3,6 +3,45 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.6.1
+
+### Sync, and what a host reconciles and draws with, in the public API
+
+A host running docket over its own storage, such as a hosted service, can
+now sync, reconcile, browse the graph and answer searches with docket's own
+code through the package's public API, instead of patching in an
+`./internal/*` export to reach its built modules.
+
+- `sync(source, manifests, adapters, options?)`: `docket sync` over any
+  `CanonicalSource`, into `SyncTarget`s (`{ id, fingerprint, create }`)
+  whose manifests a `ManifestStore` keeps. Each instance is planned,
+  batched, retried, reset and recorded exactly as the CLI syncs a project;
+  one that fails is reported in `SyncError.result` while the others sync.
+  `options` takes the `scope`, `fresh` (a rebuild, of every instance or the
+  ids given), `strict` and `onProgress`. `SyncResult`, `SyncProgress` and
+  `SyncSourceOptions` are exported with it.
+- Sync's parts: `canonicalState` (`CanonicalState`), `planAdapter`
+  (`PlannedChange`), and what a manifest records - `Checkpoint`,
+  `emptyRecords`, `INPUT_KINDS` and `resetPendingFingerprint` - with the
+  contracts' `unacknowledged`.
+- The bundled adapters: `entityProjectionAdapter` and `Chat` from the
+  adapter kit, and two new entry points, `@chrisjowen/docket/adapters/neo4j`
+  (`createNeo4jProjection`, `neo4jConfigSchema`) and
+  `@chrisjowen/docket/adapters/mem0` (`createMem0Projection`,
+  `mem0ConfigSchema`).
+- The graph browser: `readGraph`, its `UiGraph`, `UiEntity`, `UiEdge`,
+  `UiAssessment` and `UiIndexStatus`, `iconFor` and `MATTER_OPTIONS`.
+- Searching and asking: `searchText`, `MAX_SEARCH_LIMIT`, `SEARCH_SCHEMA`,
+  `SearchGraph`, `SearchLink`, `SearchNode` and `SearchPath`; `askWith`
+  (`AskOutcome`), `snapshotOf`, `toSearchResult`, `citationsIn` and
+  `synthesisPrompt`.
+
+### Fixes
+
+- A manifest sync hands a `ManifestStore` now carries the checkpoint of the
+  records it holds. The file store always recomputed it, so local docket is
+  unchanged; a store that keeps manifests as given recorded a stale one.
+
 ## 0.6.0
 
 ### Ports for running docket over something other than a directory
