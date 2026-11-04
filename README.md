@@ -257,6 +257,12 @@ docket runtime plan <id>    # validate a runtimes entry and show what it would r
 docket runtime up <id>      # start its containers, pulling only as its pullPolicy allows
 docket runtime status <id>  # state and health of its containers, changing nothing
 docket runtime down <id>    # stop and remove its containers; volumes are kept (--destroy-volumes deletes them)
+docket cloud link acme/platform  # link to a Docket Cloud workspace: adds a query-only cloud adapter (--url, --token-env)
+docket cloud login          # sign in to the linked workspace with a code in the browser; link first (logout, whoami)
+docket cloud push           # upload the files that changed; a differing ontology becomes a draft (--dry-run)
+docket cloud pull           # write the published ontology here (--resources: the cloud's documents instead; both with --ontology)
+docket cloud status         # link, sign-in, ontology against the cloud's, and what a push would send
+docket cloud token create --scopes docket:read --expires 30d  # an API token for CI (token list, token revoke <id>)
 ```
 
 ![A terminal: docket graph --json piped through jq to one exhibit, the Neo4j adapter, with its 0.99 confidence from code and manifest evidence and its three depends_on links, each with its own confidence and sources](docs/assets/cli-graph.png)
@@ -497,6 +503,67 @@ paths between them - and leaves the summary out unless `--synthesis` asks for
 it. `--timezone` sets the zone relative times are read in.
 
 ![A terminal: docket ask "What does the Neo4j adapter depend on?" prints a summary citing the exhibits and graph paths it rests on, with their confidences, then each adapter's own answer, starting with the local adapter's ranked entities](docs/assets/cli-ask.png)
+
+## Docket Cloud: `docket cloud`
+
+Every `docket cloud` command is optional. A project with no cloud linked works
+exactly as before, and no other command makes a network call.
+
+```bash
+docket cloud link acme/platform   # once per project; writes .docket.yaml, needs no network
+docket cloud login                # then sign in to that workspace: a code to enter in the browser, with GitHub
+docket cloud push                 # sends the files whose hash differs from the cloud's copy
+docket search "who owns orders"   # the local adapters and the cloud workspace, side by side
+```
+
+`link` adds a `cloud` adapter instance through the same config editor as
+`docket adapter add`, with the query role only:
+
+```yaml
+adapters:
+  - id: cloud
+    module: "@docket/adapter-cloud"
+    roles: [query]
+    config:
+      url: https://docket.chrisjowen.net
+      workspace: acme/platform
+      # tokenEnv: DOCKET_CLOUD_TOKEN   # CI: an API token from this variable instead of a sign-in
+```
+
+`docket search`, `docket ask`, `docket open` and the local MCP server then
+include the workspace's answers, from its `docket_search` tool. A match
+this checkout also holds is an entity hit like any other adapter's. A match
+only the cloud holds is shown by `docket ask` as evidence naming the
+resource. When the cloud cannot be reached, or the project is not signed in,
+the cloud adapter is reported `unavailable` and the local answers stand.
+`DOCKET_OFFLINE=1` stops every request to a cloud before it leaves the machine.
+
+- **Sign-in** is for the one workspace the project is linked to, since its
+  tokens are, so `link` comes first: `login`, `logout` and `whoami` in an
+  unlinked project name the `docket cloud link` to run. `login` uses the
+  device authorization grant (RFC 8628): it prints a code and opens the
+  browser to enter it. A cloud that does not offer device sign-in is
+  reported as such. The session goes to the OS
+  keychain (macOS keychain, or the Secret Service through `secret-tool`).
+  Without a keychain, or with `DOCKET_KEYCHAIN=off`, it goes to
+  `~/.config/docket/credentials.json`, created readable only by you. Access
+  tokens renew themselves as they are used.
+- **`push`** sends the checkout's canonical files (`source.include` less
+  `source.exclude`) as `cli` documents, keyed by this checkout. It sends only
+  the files whose `sha256` differs from the cloud's copy, and retires the ones
+  the checkout no longer has, in batches under the cloud's request cap. It
+  prints the cloud's validator diagnostics. If the cloud refuses a batch,
+  that batch and the ones after it are not stored and are listed as such;
+  only batches it accepted before are. If `entities.yaml` differs from the
+  published ontology, it is proposed as a draft for an admin to publish,
+  even when the files were refused (they may need the types it adds).
+  `push` never publishes it.
+- **`pull`** writes the published ontology to the ontology file. With
+  `--resources` it writes the documents written in the cloud under the
+  source root instead, and with `--ontology --resources` both. A file you
+  already have is never overwritten.
+- **`token create`** makes an API token for CI, shown once. Set it in CI's
+  secrets and name the variable with `docket cloud link --token-env`.
 
 ## Evidence and confidence
 
@@ -869,6 +936,10 @@ adapters:
 `uri` is also accepted as `url`, its name in version 1 entries.
 
 ![A Neo4j subgraph on the docket_search board: the Neo4j adapter exhibit picked, the paths the adapter's own query returned from it drawn at full strength - depends_on Neo4j, adapter-kit and contracts, governed by the core-imports constraint - and each path listed with the confidence and sources of every relationship on it](docs/assets/docket-search-app-neo4j.png)
+
+**`cloud`** (`@docket/adapter-cloud`) answers from a Docket Cloud workspace;
+`docket cloud link` sets it up (see [Docket Cloud](#docket-cloud-docket-cloud)).
+It is query-only and projects nothing.
 
 ### Sync manifests
 

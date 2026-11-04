@@ -335,7 +335,7 @@ describe('v1 projections', () => {
     const minimal = { packages: standardDistribution.packages, find: () => undefined }
     await expect(createDocket({ projectRoot: root, distribution: minimal })).rejects.toThrow(
       'Adapter "neo4j" module "@docket/adapter-neo4j" is not included in this build of docket. ' +
-        'The standard @chrisjowen/docket CLI bundles the jsonl, neo4j and mem0 adapters; ' +
+        'The standard @chrisjowen/docket CLI bundles the jsonl, neo4j, mem0 and cloud adapters; ' +
         'a docket build includes neo4j when DOCKET_BUNDLED_ADAPTERS is unset or lists it.'
     )
   })

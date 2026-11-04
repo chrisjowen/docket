@@ -4,10 +4,10 @@
 // none of them:
 //
 // - @docket/contracts and @docket/adapter-kit, which core imports;
-// - the adapter packages v1 projections are served by, which core loads as
-//   adapter modules and never imports. DOCKET_BUNDLED_ADAPTERS picks which
-//   (comma-separated: jsonl,neo4j,mem0 - all by default); set it empty for a
-//   minimal core. The adapter packages are not published, so a build that
+// - the adapter packages v1 projections are served by, and the cloud adapter,
+//   which core loads as adapter modules and never imports.
+//   DOCKET_BUNDLED_ADAPTERS picks which (comma-separated: jsonl,neo4j,mem0,cloud
+//   - all by default); set it empty for a minimal core. The adapter packages are not published, so a build that
 //   leaves one out cannot serve projects that configure it.
 //
 // Fails rather than ship a package that still imports a workspace package.
@@ -20,7 +20,7 @@ const packages = fileURLToPath(new URL('../../', import.meta.url))
 const dist = fileURLToPath(new URL('../dist/', import.meta.url))
 const bundledRoot = join(dist, 'bundled')
 
-const ADAPTERS = ['jsonl', 'neo4j', 'mem0']
+const ADAPTERS = ['jsonl', 'neo4j', 'mem0', 'cloud']
 const selected = process.env.DOCKET_BUNDLED_ADAPTERS
 const adapters = selected === undefined ? ADAPTERS : selected.split(',').map((name) => name.trim()).filter(Boolean)
 for (const adapter of adapters) {

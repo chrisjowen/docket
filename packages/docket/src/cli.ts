@@ -5,6 +5,12 @@ import { createInterface } from 'node:readline/promises'
 import { Command, Option } from 'commander'
 import { adapterAdd, adaptersList, displayCommand, type AdapterAddPlan } from './commands/adapter.js'
 import { askCommand, formatAdapters, formatAnswer } from './commands/ask.js'
+import { cloudLink } from './commands/cloud/link.js'
+import { cloudLogin, cloudLogout, cloudWhoami } from './commands/cloud/login.js'
+import { cloudPull } from './commands/cloud/pull.js'
+import { cloudPush } from './commands/cloud/push.js'
+import { cloudStatus } from './commands/cloud/status.js'
+import { cloudTokenCreate, cloudTokenList, cloudTokenRevoke, parseExpiry, parseScopes } from './commands/cloud/token.js'
 import { configMigrate } from './commands/config.js'
 import { graph } from './commands/graph.js'
 import { init } from './commands/init.js'
@@ -833,6 +839,205 @@ ontologyCommand
       const value = observationConfidence(model, { kind: 'resource', type }, source)
       console.log(`    ${pad(source, sourceWidth)}  ${value}${source in rules ? '  (this type)' : ''}`)
     }
+  })
+
+const cloudCommand = program
+  .command('cloud')
+  .description('Share this project\'s knowledge with a Docket Cloud workspace; nothing here runs unless you ask')
+
+cloudCommand
+  .command('login')
+  .description('Sign in to the workspace this project is linked to, with a code in the browser; run `docket cloud link <org>/<workspace>` first')
+  .option('--url <url>', 'the cloud; it must be the one the project is linked to')
+  .action(async (options: { url?: string }) => {
+    const result = await cloudLogin({
+      url: options.url,
+      io: {
+        show: ({ url, userCode }) => console.log(`Enter the code ${userCode} at:\n  ${url}`),
+        openBrowser,
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      }
+    })
+    console.log(`✓ signed in to ${result.workspace}`)
+    console.log(result.location === 'keychain' ? '  kept in the keychain' : `  kept in ${result.file} (readable only by you)`)
+  })
+
+cloudCommand
+  .command('logout')
+  .description('Forget the sign-in for the linked workspace, and revoke it at the cloud')
+  .action(async () => {
+    const result = await cloudLogout()
+    if (!result.removed) {
+      console.log(`- not signed in to ${result.workspace}`)
+      return
+    }
+    console.log(`✓ signed out of ${result.workspace}`)
+    if (!result.revoked) console.log('  the cloud could not be asked to revoke the session; it expires on its own')
+  })
+
+cloudCommand
+  .command('whoami')
+  .description('Show who the linked workspace\'s sign-in acts as')
+  .action(async () => {
+    const { workspace, identity } = await cloudWhoami()
+    console.log(`${identity.login} (${identity.role}) in ${workspace}`)
+    console.log(`  scopes   ${identity.scopes.join(' ')}`)
+    console.log(`  ${identity.token.kind === 'api' ? 'API token' : 'session'} expires ${identity.token.expiresAt}`)
+  })
+
+cloudCommand
+  .command('link')
+  .argument('<org/workspace>', 'the workspace, as its cloud URL names it: acme/platform')
+  .description('Link this project to a cloud workspace: adds a query-only cloud adapter to .docket.yaml')
+  .option('--url <url>', 'the cloud (default https://docket.chrisjowen.net)')
+  .option('--token-env <name>', 'for CI: an environment variable holding an API token, used instead of a sign-in')
+  .action(async (target: string, options: { url?: string; tokenEnv?: string }) => {
+    const result = await cloudLink(target, options)
+    const { url, workspace } = result.entry.config as { url: string; workspace: string }
+    console.log(`✓ linked to ${workspace} on ${url}: added adapter "${result.entry.id}" to ${result.configFile}`)
+    console.log('  docket search, ask and open now include its answers; offline, it is reported unavailable')
+    console.log(`\nNext:\n  ${options.tokenEnv ? `set ${options.tokenEnv} to a token from \`docket cloud token create\`` : 'docket cloud login'}`)
+  })
+
+cloudCommand
+  .command('push')
+  .description('Upload the canonical files that changed to the linked workspace, and propose a differing ontology as a draft')
+  .option('--dry-run', 'have the cloud check the files and report, changing nothing')
+  .action(async (options: { dryRun?: boolean }) => {
+    const result = await cloudPush({ dryRun: options.dryRun })
+    const would = result.dryRun ? 'would upload' : 'uploaded'
+    console.log(`${result.ok ? '✓' : '✗'} ${result.workspace} (checkout ${result.checkout})`)
+    console.log(`  ${would} ${result.uploaded.length}, ${result.dryRun ? 'would retire' : 'retired'} ${result.removed.length}, ${result.unchanged} unchanged`)
+    for (const path of result.uploaded) console.log(`    + ${path}`)
+    for (const path of result.removed) console.log(`    - ${path}`)
+    if (result.notStored.length > 0) console.log(`  ${result.dryRun ? 'would not store' : 'not stored'} ${result.notStored.length}`)
+    for (const path of result.notStored) console.log(`    ! ${path}`)
+    switch (result.ontology.state) {
+      case 'same':
+        console.log(`  ontology matches the published version ${result.ontology.version}`)
+        break
+      case 'differs':
+        console.log(`  ontology differs from the published version ${result.ontology.version}; a push would propose it as a draft`)
+        break
+      case 'proposed':
+        console.log(
+          `  ontology differs from the published version ${result.ontology.version}: proposed as draft ${result.ontology.proposal.draftId} ` +
+            `(${result.ontology.proposal.classification}); an admin publishes it in the web UI`
+        )
+        break
+      case 'absent':
+        console.log('  no local ontology file to compare')
+        break
+    }
+    printDiagnostics(result.diagnostics as Diagnostic[])
+    if (!result.ok) {
+      console.error(
+        result.dryRun
+          ? '\nThe cloud would refuse the push. Fix the errors above and push again.'
+          : `\nThe cloud refused the push: ${result.uploaded.length + result.removed.length > 0 ? 'only the changes listed above were stored' : 'nothing was stored'}. Fix the errors above and push again.`
+      )
+      process.exitCode = 1
+    }
+  })
+
+cloudCommand
+  .command('pull')
+  .description('Write the published ontology here, and with --resources the documents written in the cloud, for an offline copy')
+  .option('--ontology', 'write the published ontology to the ontology file (the default)')
+  .option('--resources', 'write the cloud-origin documents under the source root; files you have are never overwritten')
+  .action(async (options: { ontology?: boolean; resources?: boolean }) => {
+    const result = await cloudPull(options)
+    console.log(result.workspace)
+    if (result.ontology) {
+      console.log(
+        result.ontology.changed
+          ? `✓ wrote version ${result.ontology.version} of the ontology to ${result.ontology.path}`
+          : `✓ ${result.ontology.path} is already version ${result.ontology.version}`
+      )
+    }
+    if (result.resources) {
+      const { written, unchanged, kept, refused } = result.resources
+      console.log(`✓ wrote ${written.length} documents, ${unchanged.length} already here`)
+      for (const path of written) console.log(`    + ${path}`)
+      for (const path of kept) console.log(`  ! kept ${path}: yours differs from the cloud's`)
+      for (const path of refused) console.log(`  ! skipped ${path}: outside the source root`)
+    }
+  })
+
+cloudCommand
+  .command('status')
+  .description('Show the link, the sign-in, the ontology against the cloud\'s, and what a push would send')
+  .action(async () => {
+    const status = await cloudStatus()
+    if (status.link === undefined) {
+      console.log(`${status.projectRoot} is not linked to a cloud workspace. \`docket cloud link <org>/<workspace>\` links it.`)
+      return
+    }
+    console.log(`linked    ${status.link.workspace} on ${status.link.url} (adapter "${status.link.adapter}")`)
+    const session = status.session
+    console.log(
+      `session   ${
+        session?.kind === 'token-env'
+          ? `the API token in ${session.variable}`
+          : session?.kind === 'session'
+            ? `signed in${session.scope ? ` (${session.scope})` : ''}`
+            : 'signed out: `docket cloud login` signs in'
+      }`
+    )
+    const { ontology, pending } = status
+    if (ontology?.ok) {
+      console.log(`ontology  ${ontology.same ? 'matches' : ontology.local ? 'differs from' : 'missing here; the cloud has'} published version ${ontology.version}`)
+    } else if (ontology) console.log(`ontology  unknown: ${ontology.error}`)
+    if (pending?.ok) {
+      console.log(
+        pending.upload + pending.remove === 0
+          ? 'pending   nothing to push'
+          : `pending   ${pending.upload} to upload, ${pending.remove} to retire: \`docket cloud push\` sends them`
+      )
+    } else if (pending) console.log(`pending   unknown: ${pending.error}`)
+  })
+
+const tokenCommand = cloudCommand.command('token').description('Manage API tokens for CI and other headless agents')
+
+tokenCommand
+  .command('create')
+  .description('Create an API token for the linked workspace; it is shown once')
+  .requiredOption('--scopes <scopes>', 'comma-separated: docket:read, docket:write, ontology:read, ontology:propose', collect, [])
+  .option('--expires <days>', 'how long it lives, 1d to 90d', '30d')
+  .option('--description <text>', 'what it is for')
+  .action(async (options: { scopes: string[]; expires: string; description?: string }) => {
+    const { workspace, token } = await cloudTokenCreate({
+      scopes: parseScopes(options.scopes),
+      days: parseExpiry(options.expires),
+      description: options.description
+    })
+    console.log(`✓ created ${token.id} for ${workspace}, expiring ${token.expiresAt}`)
+    console.log(`  scopes  ${token.scopes.join(' ')}`)
+    console.log('\nThe token - shown only now; keep it in your CI\'s secrets:')
+    console.log(`  ${token.token}`)
+  })
+
+tokenCommand
+  .command('list')
+  .description('List the API tokens for the linked workspace')
+  .action(async () => {
+    const { workspace, tokens } = await cloudTokenList()
+    console.log(workspace)
+    if (tokens.length === 0) console.log('  no tokens')
+    const width = widest(tokens.map((token) => token.id))
+    for (const token of tokens) {
+      const about = token.description ? `  ${token.description}` : ''
+      console.log(`  ${pad(token.id, width)}  ${token.prefix}…  ${token.status}  expires ${token.expiresAt}  ${token.scopes.join(' ')}${about}`)
+    }
+  })
+
+tokenCommand
+  .command('revoke')
+  .argument('<id>', 'the token id, tok_…, from `docket cloud token list`')
+  .description('Revoke an API token; the next call with it fails')
+  .action(async (id: string) => {
+    const result = await cloudTokenRevoke(id)
+    console.log(`✓ revoked ${result.id} in ${result.workspace}`)
   })
 
 /**
