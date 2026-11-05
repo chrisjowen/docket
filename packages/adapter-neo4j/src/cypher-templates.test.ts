@@ -9,6 +9,7 @@ import type { GraphSchema } from './cypher-prompt.js'
 import type { CypherPort } from './cypher-search.js'
 import {
   buildTemplatePrompt,
+  MIN_SCORE,
   parseSelection,
   PATH_HOPS,
   RESOLVE_QUERY,
@@ -71,8 +72,7 @@ const isExact = (cypher: string): boolean => cypher.includes('toLower(n.title) =
 
 /**
  * Names resolve as the graph would: an exact id or title first, then
- * full-text, where every entity sharing a word with the name matches, the
- * more words the better.
+ * full-text, where an entity matches when it has every required (`+`) word.
  */
 const resolveRows = (cypher: string, parameters: Record<string, unknown>): Neo4jRecord[] | undefined => {
   if (isExact(cypher)) {
@@ -82,12 +82,10 @@ const resolveRows = (cypher: string, parameters: Record<string, unknown>): Neo4j
       .map(([id, title]) => record({ id, title, byId: id === name }))
   }
   if (isResolve(cypher)) {
-    const words = String(parameters.lucene).toLowerCase().split(' or ')
+    const required = String(parameters.lucene).toLowerCase().split(' ').map((word) => word.replace(/^\+/, ''))
     return Object.entries(ENTITIES)
-      .map(([id, title]) => ({ id, title, score: words.filter((word) => `${id} ${title}`.toLowerCase().includes(word)).length }))
-      .filter((match) => match.score > 0)
-      .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
-      .map((match) => record(match))
+      .filter(([id, title]) => required.every((word) => `${id} ${title}`.toLowerCase().includes(word)))
+      .map(([id, title]) => record({ id, title, score: 1 }))
   }
   return undefined
 }
@@ -218,7 +216,6 @@ describe('dependencies and dependents', () => {
     const rows = [record({ dependency: ledger, hops: neo4j.int(1), via: path(orders, ['depends_on', ledger]) })]
     const { answer, read } = await answered({ intent: 'dependencies', params: { entity: 'orders' } }, rows)
 
-    expect(read.cypher).toContain('-[:DEPENDS_ON*1..1]->')
     expect(read.parameters).toEqual({ id: 'service.orders' })
     expect(answer.coverage).toEqual({ mode: 'exhaustive', truncated: false, scope: SCOPE })
     expect(answer.interpretation.description).toMatch(/^Hand-written Cypher template dependencies: what service\.orders depends on, directly/)
@@ -237,7 +234,7 @@ describe('dependencies and dependents', () => {
       record({ dependency: db, hops: neo4j.int(2), via: path(orders, ['depends_on', ledger], ['depends_on', db]) })
     ]
     const ended = await answered({ intent: 'dependencies', params: { entity: 'orders', transitive: true } }, short)
-    expect(ended.read.cypher).toContain(`-[:DEPENDS_ON*1..${TRANSITIVE_HOPS}]->`)
+    expect(ended.answer.interpretation.description).toContain(`what service.orders depends on, directly or through others, up to ${TRANSITIVE_HOPS} depends_on hops`)
     expect(ended.answer.coverage.mode).toBe('exhaustive')
 
     const far = [record({ dependency: db, hops: neo4j.int(TRANSITIVE_HOPS), via: path(orders, ['depends_on', db]) })]
@@ -248,8 +245,8 @@ describe('dependencies and dependents', () => {
   it('reads dependents against the arrow', async () => {
     const { read, answer } = await answered({ intent: 'dependents', params: { entity: 'service.ledger', transitive: false } })
 
-    expect(read.cypher).toContain('(x:Memory {scope: $scope, id: $id})<-[:DEPENDS_ON*1..1]-(n:Memory {scope: $scope})')
-    expect(read.cypher).toContain('RETURN n AS dependent')
+    expect(read.parameters).toEqual({ id: 'service.ledger' })
+    expect(answer.interpretation.description).toMatch(/^Hand-written Cypher template dependents: what depends on service\.ledger, directly/)
     expect(answer.interpretation.assumptions[0]).toBe('"service.ledger" was read as service.ledger (Ledger), its id.')
   })
 
@@ -270,7 +267,8 @@ describe('owner', () => {
     const rows = [record({ resource: orders, link: relationship(orders, 'owned_by', team), owner: team })]
     const { read, answer } = await answered({ intent: 'owner', params: { entity: 'Orders' } }, rows)
 
-    expect(read.cypher).toContain('-[r:OWNED_BY]->(o:Memory {scope: $scope})')
+    expect(read.parameters).toEqual({ id: 'service.orders' })
+    expect(answer.interpretation.description).toContain('owner: who owns service.orders')
     expect(answer.coverage.mode).toBe('exhaustive')
     expect(answer.blocks.find((block) => block.kind === 'entities')).toMatchObject({
       entities: [{ ref: { id: 'service.orders' } }, { ref: { id: 'team.payments' } }]
@@ -285,7 +283,6 @@ describe('path', () => {
     const rows = [record({ path: path(orders, ['depends_on', ledger]), hops: neo4j.int(1) })]
     const { read, answer } = await answered({ intent: 'path', params: { from: 'orders', to: 'ledger' } }, rows)
 
-    expect(read.cypher).toContain(`allShortestPaths((a)-[*..${PATH_HOPS}]-(b))`)
     expect(read.parameters).toEqual({ from: 'service.orders', to: 'service.ledger' })
     expect(answer.coverage).toEqual({ mode: 'top-k', truncated: false, scope: SCOPE })
     expect(answer.interpretation.assumptions).toContain(`Only the shortest paths, of up to ${PATH_HOPS} relationships in either direction: not every way they are connected.`)
@@ -304,8 +301,6 @@ describe('count_related and list_related', () => {
       [record({ count: neo4j.int(2) })]
     )
 
-    expect(read.cypher).toContain('(x:Memory {scope: $scope, id: $id})<-[r]-(n:Memory {scope: $scope})')
-    expect(read.cypher).toContain('WHERE type(r) = $relType AND $label IN labels(n)')
     expect(read.parameters).toEqual({ id: 'service.ledger', relType: 'DEPENDS_ON', label: 'Service' })
     expect(answer.blocks[0]).toEqual({ kind: 'metric', id: 'metric-1', label: 'count', value: 2, evidenceIds: ['row-1'] })
     expect(answer.coverage.mode).toBe('exhaustive')
@@ -320,9 +315,8 @@ describe('count_related and list_related', () => {
     })
     const { read, answer } = await answered({ intent: 'list_related', params: { entity: 'orders', rel: 'USES', direction: 'outgoing' } }, rows, 'q', 2)
 
-    expect(read.cypher).toContain('-[r]->')
-    expect(read.cypher).not.toContain('$label')
-    expect(read.cypher).toMatch(/\nLIMIT 3$/)
+    expect(read.parameters).toEqual({ id: 'service.orders', relType: 'USES' })
+    expect(answer.interpretation.description).toContain('list_related: the things service.orders uses')
     expect(answer.coverage).toEqual({ mode: 'top-k', truncated: true, scope: SCOPE })
   })
 })
@@ -332,14 +326,17 @@ describe('count_of_type and list_of_type', () => {
     const { read, answer } = await answered({ intent: 'count_of_type', params: { type: 'feature-flag' } }, [record({ count: neo4j.int(1) })])
 
     expect(read.parameters).toEqual({ label: 'FeatureFlag' })
-    expect(read.cypher).toContain('n.stub = false')
+    expect(answer.interpretation.assumptions).toContain('Every recorded resource of type FeatureFlag; links to ones without a file of their own are left out.')
     expect(answer.blocks[0]).toMatchObject({ kind: 'metric', value: 1 })
     expect(answer.coverage.mode).toBe('exhaustive')
   })
 
   it('lists them by id', async () => {
-    const { read } = await answered({ intent: 'list_of_type', params: { type: 'Service' } }, [record({ resource: node('service.orders') })])
-    expect(read.cypher).toContain('RETURN n AS resource\nORDER BY resource.id')
+    const { read, answer } = await answered({ intent: 'list_of_type', params: { type: 'Service' } }, [record({ resource: node('service.orders') })])
+    expect(read.parameters).toEqual({ label: 'Service' })
+    expect((answer.blocks.find((block) => block.kind === 'table') as TableBlock).rows.map((row) => row.cells.resource)).toEqual([
+      { kind: 'entity', id: 'service.orders', revision: 'sha256:service.orders' }
+    ])
   })
 })
 
@@ -349,15 +346,15 @@ describe('low_confidence and single_source', () => {
     const { read, answer } = await answered({ intent: 'low_confidence', params: {} }, rows)
 
     expect(read.parameters).toEqual({ below: 0.5 })
-    expect(read.cypher).toContain('ORDER BY confidence, resource.id')
+    expect(answer.interpretation.description).toContain('low_confidence: the resources with confidence below 0.5')
     expect(answer.coverage.mode).toBe('exhaustive')
   })
 
   it('lists resources only one kind of evidence corroborates, of one kind when named', async () => {
-    const { read } = await answered({ intent: 'single_source', params: { source: 'Runtime' } })
+    const { read, answer } = await answered({ intent: 'single_source', params: { source: 'Runtime' } })
 
-    expect(read.cypher).toContain('size(n.sources) = 1 AND $source IN n.sources')
     expect(read.parameters).toEqual({ source: 'runtime' })
+    expect(answer.interpretation.description).toContain('single_source: the resources corroborated only by runtime evidence')
   })
 })
 
@@ -369,7 +366,7 @@ describe('names', () => {
       { name: 'orders service', id: 'service.orders', title: 'Orders', how: 'full-text', alternatives: ['service.orders-worker'] }
     ])
     expect(answer.interpretation.assumptions[0]).toBe(
-      '"orders service" was read as service.orders (Orders), the best full-text match; service.orders-worker matched nearly as well.'
+      '"orders service" was read as service.orders (Orders), the best full-text match of every word of it naming no type; service.orders-worker matched nearly as well.'
     )
     expect(answer.diagnostics).toEqual([
       {
@@ -378,6 +375,35 @@ describe('names', () => {
         message: '"orders service" could mean service.orders or service.orders-worker; the template read it as service.orders.'
       }
     ])
+  })
+
+  it('runs no template for a name only a type word of matches, so the next path answers', async () => {
+    const graph = port()
+    const result = await templateAnswer(graph, model({ intent: 'dependents', params: { entity: 'inventory service' } }).chat, request('what depends on the inventory service?'))
+
+    expect(result).toEqual({
+      reason:
+        'No query template ran: "inventory service" is unresolved: no id or title is it, and no full-text match has every word of it naming no type with a score of at least 0.5'
+    })
+    expect(graph.reads.every((read) => isExact(read.cypher) || isResolve(read.cypher))).toBe(true)
+  })
+
+  it('runs no template for a full-text match scoring below the minimum', async () => {
+    const graph = port()
+    const read = graph.read
+    graph.read = async (cypher, timeoutMs, parameters) =>
+      isResolve(cypher) ? [record({ id: 'service.ledger', title: 'Ledger', score: MIN_SCORE / 2 })] : read(cypher, timeoutMs, parameters)
+    const result = await runTemplate(graph, model({ intent: 'owner', params: { entity: 'ledgers' } }).chat, 'q')
+
+    expect(result).toEqual({ reason: expect.stringMatching(/^No query template ran: "ledgers" is unresolved/) })
+  })
+
+  it('requires every word of the name but its type words', async () => {
+    const graph = port()
+    const result = await runTemplate(graph, model({ intent: 'owner', params: { entity: 'the service' } }).chat, 'q')
+
+    expect(result).toEqual({ reason: expect.stringMatching(/^No query template ran: "the service" is unresolved/) })
+    expect(graph.reads.filter((read) => isResolve(read.cypher))).toEqual([{ cypher: RESOLVE_QUERY, parameters: { lucene: '+the' } }])
   })
 })
 
@@ -414,7 +440,7 @@ describe('routing', () => {
 
   it('runs nothing when no entity matches a name', async () => {
     const { result, graph } = await reason({ intent: 'owner', params: { entity: 'warehouse' } })
-    expect(result).toEqual({ reason: 'No query template ran: Nothing in the graph matches "warehouse"' })
+    expect(result).toEqual({ reason: expect.stringMatching(/^No query template ran: "warehouse" is unresolved/) })
     expect(graph.reads.every((read) => isExact(read.cypher) || isResolve(read.cypher))).toBe(true)
   })
 

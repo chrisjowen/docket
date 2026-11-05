@@ -26,6 +26,8 @@ export const PATH_HOPS = 4
 export const LOW_CONFIDENCE = 0.5
 /** A full-text match scoring at least this share of the best is named as another reading of the name. */
 const CLOSE_MATCH = 0.8
+/** A full-text match scoring less is too weak to stand for a name: a word met once in a long body, say. */
+export const MIN_SCORE = 0.5
 
 // ---------------------------------------------------------------------------
 // What the model may choose
@@ -186,11 +188,32 @@ const titleOf = (record: Neo4jRecord): string | undefined => {
   return typeof title === 'string' && title !== '' ? title : undefined
 }
 
+/** Words naming one of the graph's types, singular or plural: they say what kind of thing a name is, not which one. */
+const typeWords = (schema: GraphSchema): Set<string> =>
+  new Set(schema.labels.flatMap(({ label }) => [label.toLowerCase(), `${label.toLowerCase()}s`]))
+
+/** A Lucene query whose every match has each word of `name` but those naming a type. Undefined when no word is left. */
+const requiredQuery = (name: string, types: ReadonlySet<string>): string | undefined => {
+  const terms = name
+    .split(/\s+/)
+    .filter((word) => !types.has(word.toLowerCase()))
+    .map(fulltextQuery)
+    .filter((term) => term !== '')
+  return terms.length === 0 ? undefined : terms.map((term) => `+${term}`).join(' ')
+}
+
 /**
  * The entity `name` means: the one with that id, else the one with that
- * title, else the best full-text match. Undefined when nothing matches.
+ * title, else the best full-text match that has every word of it but those
+ * naming one of `types`, when it scores at least `MIN_SCORE`. Undefined when
+ * none is that sure.
  */
-export const resolveEntity = async (port: CypherPort, name: string, timeoutMs?: number): Promise<Resolved | undefined> => {
+export const resolveEntity = async (
+  port: CypherPort,
+  name: string,
+  types: ReadonlySet<string>,
+  timeoutMs?: number
+): Promise<Resolved | undefined> => {
   const exact = await port.read(EXACT_QUERY, timeoutMs, { name })
   const [first, ...others] = exact
   if (first) {
@@ -205,11 +228,12 @@ export const resolveEntity = async (port: CypherPort, name: string, timeoutMs?: 
     }
   }
 
-  const lucene = fulltextQuery(name)
+  const lucene = requiredQuery(name, types)
   if (!lucene) return undefined
   const [best, ...rest] = await port.read(RESOLVE_QUERY, timeoutMs, { lucene })
   if (!best) return undefined
   const score = Number(best.get('score'))
+  if (!(score >= MIN_SCORE)) return undefined
   const title = titleOf(best)
   return {
     name,
@@ -222,7 +246,7 @@ export const resolveEntity = async (port: CypherPort, name: string, timeoutMs?: 
 
 const reading = (resolved: Resolved): string => {
   const what = `${resolved.id}${resolved.title !== undefined && resolved.title !== resolved.id ? ` (${resolved.title})` : ''}`
-  const how = { id: 'its id', title: 'its title', 'full-text': 'the best full-text match' }[resolved.how]
+  const how = { id: 'its id', title: 'its title', 'full-text': 'the best full-text match of every word of it naming no type' }[resolved.how]
   const others = resolved.alternatives.length > 0 ? `; ${resolved.alternatives.join(', ')} matched nearly as well` : ''
   return `"${resolved.name}" was read as ${what}, ${how}${others}.`
 }
@@ -485,7 +509,7 @@ export interface NoTemplate {
  * Has the model choose a template for `question` and fill in its
  * parameters, looks up the names it gave, and runs the template. A choice
  * of none, one that does not parse or fit the schema, or a name nothing
- * matches is `NoTemplate`; anything else that goes wrong throws.
+ * matches surely enough is `NoTemplate`; anything else that goes wrong throws.
  */
 export const runTemplate = async (
   port: CypherPort,
@@ -500,9 +524,14 @@ export const runTemplate = async (
     if (selection.intent === 'none') return { reason: 'No query template fits the question' }
     const prepared = prepare(selection, schema)
     const entities: Record<string, Resolved> = {}
+    const types = typeWords(schema)
     for (const [key, value] of Object.entries(prepared.names)) {
-      const resolved = await resolveEntity(port, value, options.timeoutMs)
-      if (!resolved) throw new Unfitted(`Nothing in the graph matches "${value}"`)
+      const resolved = await resolveEntity(port, value, types, options.timeoutMs)
+      if (!resolved) {
+        throw new Unfitted(
+          `"${value}" is unresolved: no id or title is it, and no full-text match has every word of it naming no type with a score of at least ${MIN_SCORE}`
+        )
+      }
       entities[key] = resolved
     }
     const query = prepared.build(entities, maxRows)
