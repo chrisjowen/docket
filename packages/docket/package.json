@@ -55,7 +55,8 @@
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval:ask": "vitest run --config eval/vitest.config.ts"
   },
   "dependencies": {
     "chokidar": "^4.0.3",

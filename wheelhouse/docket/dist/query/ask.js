@@ -171,6 +171,7 @@ export const askWith = async (snapshot, docket, input) => {
         answer.synthesis = outcome.synthesis;
         if (outcome.notice)
             answer.notice = outcome.notice;
+        diagnostics.push(...(outcome.diagnostics ?? []));
     }
     return { answer, snapshot, docket, rejected };
 };

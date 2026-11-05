@@ -114,7 +114,7 @@ export {
 export { AskCancelledError, AskRequestError, askWith, type AskInput, type AskOutcome } from './query/ask.js'
 export { snapshotOf } from './query/snapshot.js'
 export { toSearchResult } from './query/legacy.js'
-export { citationsIn, synthesisPrompt } from './query/synthesis.js'
+export { citationsIn, LOW_CONFIDENCE, synthesisDiagnostics, synthesisPrompt } from './query/synthesis.js'
 export type * from './query/wire.js'
 export { GRAPH_SCHEMA, GRAPH_SCHEMA_VERSION, type GraphContract } from './commands/graph.js'
 export type { AdapterDistribution, TypeScriptRunner } from './adapters/resolve-module.js'

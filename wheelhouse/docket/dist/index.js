@@ -53,7 +53,7 @@ export { SEARCH_SCHEMA } from './mcp/types.js';
 export { AskCancelledError, AskRequestError, askWith } from './query/ask.js';
 export { snapshotOf } from './query/snapshot.js';
 export { toSearchResult } from './query/legacy.js';
-export { citationsIn, synthesisPrompt } from './query/synthesis.js';
+export { citationsIn, LOW_CONFIDENCE, synthesisDiagnostics, synthesisPrompt } from './query/synthesis.js';
 export { GRAPH_SCHEMA, GRAPH_SCHEMA_VERSION } from './commands/graph.js';
 /**
  * The kit docket's bundled adapters are built with. The bundled Neo4j and
