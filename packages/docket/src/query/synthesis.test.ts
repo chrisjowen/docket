@@ -264,33 +264,28 @@ describe('synthesize', () => {
     }
   })
 
-  it('reports an answer that cites nothing it was given, but not one saying the files do not answer', async () => {
-    reply = 'Orders was deployed four times last week.'
+  it('reports an answer that cites nothing it was given, but not the refusal the instructions ask for', async () => {
     try {
-      const uncited = await synthesize(input(), options(undefined))
-      expect(uncited.diagnostics).toEqual([expect.objectContaining({ severity: 'warning', code: 'synthesis-uncited' })])
-
       for (const answer of [
+        'Orders was deployed four times last week.',
         'Orders depends on the Ledger, though this is stated with no evidence.',
-        'Orders is owned by Payments, but its SLA is not recorded.',
-        'Orders depends on the Ledger, though that link is not documented by any observation.',
-        'No evidence is recorded for Payments owning Orders.',
-        'Orders is owned by Payments; its SLA is not recorded.',
-        'Orders is owned by Payments. Its SLA is not recorded.',
-        '- Nothing records the SLA of Orders.\n- Orders is owned by Payments.',
         'Orders is owned by Payments and its SLA is not recorded.',
         'Payments owns Orders, its SLA is not documented.',
-        'Orders is owned by Payments, and nothing records its SLA.'
+        'Orders is owned by Payments, and nothing records its SLA.',
+        'Orders is owned by Payments with no record of an SLA.',
+        'Orders is owned by Payments whose SLA is not documented.',
+        'Nothing in these exhibits records how often Orders was deployed.'
       ]) {
         reply = answer
-        expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])
+        expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([
+          expect.objectContaining({ severity: 'warning', code: 'synthesis-uncited' })
+        ])
       }
 
-      reply = 'No deployment count is recorded. None of the exhibits mention deployments.'
-      expect((await synthesize(input(), options(undefined))).diagnostics).toBeUndefined()
-
-      reply = 'Nothing in these exhibits records how often Orders was deployed.'
-      expect((await synthesize(input(), options(undefined))).diagnostics).toBeUndefined()
+      for (const refusal of ['Not recorded in Docket.', 'not recorded in docket']) {
+        reply = refusal
+        expect((await synthesize(input(), options(undefined))).diagnostics).toBeUndefined()
+      }
     } finally {
       reply = SUMMARY
     }

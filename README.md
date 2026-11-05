@@ -492,7 +492,9 @@ and how it is built.
   and link carries its confidence and what that rests on, and the summary
   hedges facts that are unevidenced or below 0.7. A summary citing an id it
   was never given, or answering without citing anything it was given, comes
-  with a `synthesis-unknown-citation` or `synthesis-uncited` warning. Its
+  with a `synthesis-unknown-citation` or `synthesis-uncited` warning. When
+  the casebook does not answer, the summary is exactly "Not recorded in
+  Docket.", which needs no citation. Its
   prompt holds the most relevant parts of each exhibit and piece of
   evidence - including the entities on the paths between what was found -
   within one total budget.
