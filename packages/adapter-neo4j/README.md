@@ -3,10 +3,11 @@
 docket's Neo4j adapter: one `(:Memory:<Type>)` node per entity and one typed
 relationship per (source, rel, target), with a full-text index. A question is
 answered by one query the adapter writes itself - the full-text matches and the
-best paths from each, ranked by their relationships' confidence - or through a
-read-only Cypher query a model writes: the local Ollama model `cypher` names,
-or, when `cypher` is unset, the `cypher` model docket offers
-(`AdapterServices.models.cypher`), if it offers one.
+best paths from each, ranked by their relationships' confidence - or, with a
+model, through a hand-written query template the model chooses and fills in,
+or failing that a read-only Cypher query the model writes. The model is the
+local Ollama model `cypher` names, or, when `cypher` is unset, the `cypher`
+model docket offers (`AdapterServices.models.cypher`), if it offers one.
 
 Its default export is the `AdapterDefinition`
 ([`docs/adapter-spec.md`](../../docs/adapter-spec.md) §7). Its configuration is
@@ -38,9 +39,41 @@ a derived fact citing the entities on it, the "why" its relationships hold:
 a path reaches are context, never matches. The query is the adapter's own, so
 a unit test holds it to the same scope check a model-written query must pass.
 
+## Query templates
+
+`src/cypher-templates.ts` holds ten hand-written, read-only queries for the
+questions asked most. With a model, it is asked first to choose one and fill in
+its parameters, as one JSON object; it never writes Cypher for them.
+
+| Template | Parameters | Answers | Coverage |
+|---|---|---|---|
+| `dependencies` | `entity`, `transitive` | what it depends on, along `depends_on`; transitively up to 6 hops, each by its shortest chain | exhaustive; transitively, only when nothing was reached at the 6th hop |
+| `dependents` | `entity`, `transitive` | what depends on it, the same way | as `dependencies` |
+| `owner` | `entity` | its `owned_by` targets | exhaustive |
+| `path` | `from`, `to` | the shortest paths between them, up to 4 relationships in either direction | top-k: never every connection |
+| `count_related` | `entity`, `rel`, `direction`, `type`? | how many things one relationship links to it | exhaustive |
+| `list_related` | the same | those things | exhaustive |
+| `count_of_type` | `type` | how many recorded resources of a type | exhaustive |
+| `list_of_type` | `type` | those resources | exhaustive |
+| `low_confidence` | `type`?, `below`? (0.5) | resources below a confidence, weakest first | exhaustive |
+| `single_source` | `type`?, `source`? | resources one kind of evidence alone corroborates | exhaustive |
+
+A result its row cap cut short is a top-k, and one holding rows from another
+scope unknown. A name the model gives - `entity`, `from`, `to` - is the entity
+with that id, else with that title, else the best match in the full-text index;
+the answer says how each was read, and warns when another entity matched
+nearly as well. A type or relationship must be one the graph has. Nothing the
+model gives is written into a query: every value is a parameter, every query
+binds every pattern to the scope (a unit test holds each to the same scope
+check a model-written query must pass), and a template that finds nothing
+still answers, since it asked exactly what was meant. When the model chooses
+no template, or one that does not parse, fit the graph's schema or name
+anything in it, the model writes the query instead, and the answer's
+diagnostics say why.
+
 ## Model-written Cypher
 
-A model writes the query from the question and the graph's schema; the adapter
+When no template fits, a model writes the query from the question and the graph's schema; the adapter
 checks it reads only and only in scope, caps its rows, and runs it. A query
 that finds nothing runs once more with every relationship undirected, which
 can change what it means. Nothing checks that the query asks what was meant,

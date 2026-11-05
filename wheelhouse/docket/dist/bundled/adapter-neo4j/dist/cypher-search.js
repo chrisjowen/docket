@@ -39,7 +39,7 @@ const flatten = (port, value) => {
  * mentioned, each with up to three of the rows that mention it as its detail.
  * Nodes from other scopes are skipped, whatever the query matched.
  */
-const hitsOf = async (port, records) => {
+export const hitsOf = async (port, records) => {
     const rows = records.map((record) => record.keys.flatMap((key) => flatten(port, record.get(key))));
     const candidates = rows.flatMap((values) => values.filter((v) => typeof v === 'string'));
     const documents = await port.documents([...new Set(candidates)]);
@@ -238,17 +238,11 @@ const NUMERIC = new Set(['integer', 'number']);
  * numbers is a metric each, any other result a typed table, with the
  * relationships and paths among them as a graph and the documents they
  * mention as entities. Each row is a derived fact of its own, citing the
- * entities it holds at the revisions the graph has them.
- *
- * Coverage is never exhaustive: a model wrote the query, and nothing checks
- * that it asks what was meant - an undirected retry may even read every
- * relationship the other way round - so a count or list from it is never
- * confirmed. The coverage carries the query as unverified, with whether it was
- * retried undirected. A result its row cap or its own `LIMIT` cut short is a
- * top-k; any other - one that ran to completion, held rows from another scope,
- * or fed an aggregate a sample through `SKIP` or an inner `LIMIT` - is unknown.
+ * entities it holds at the revisions the graph has them. Rows holding nodes
+ * from another scope are left out, whatever the query matched; what that and
+ * the row cap mean for coverage is the caller's to say.
  */
-export const rowsAnswer = (port, options) => {
+export const rowsResult = (port, options) => {
     const { request, run } = options;
     const diagnostics = [];
     const all = run.records.map((record) => ({
@@ -267,10 +261,7 @@ export const rowsAnswer = (port, options) => {
     }
     const shown = inScope.slice(0, request.budget.maxResults);
     const keys = all[0]?.keys ?? [];
-    const code = run.cypher.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''");
-    const sampled = /\bSKIP\b/i.test(code) || (code.match(/\bLIMIT\b/gi)?.length ?? 0) > 1;
     const capped = all.length >= run.limit || inScope.length > shown.length;
-    const mode = capped && dropped === 0 && !sampled ? 'top-k' : 'unknown';
     const rows = shown.map((row) => {
         const names = new Map();
         for (const value of row.values) {
@@ -337,31 +328,52 @@ export const rowsAnswer = (port, options) => {
             }))
         });
     }
-    if (run.retried) {
-        diagnostics.push({
-            severity: 'info',
-            code: 'cypher-undirected',
-            message: 'The query found nothing as written, so it was run again with every relationship undirected: its rows may read relationships the other way round from what was asked.'
-        });
-    }
+    return { blocks, evidence, diagnostics, capped, dropped };
+};
+/** What every Cypher answer's rows stand for, however the query was written. */
+export const RECORDED_ONLY = 'Rows, lists and counts cover what the graph holds for this scope - records captured in the canonical files - not anything never recorded.';
+/**
+ * The rows of a query a model wrote, as an answer.
+ *
+ * Coverage is never exhaustive: a model wrote the query, and nothing checks
+ * that it asks what was meant - an undirected retry may even read every
+ * relationship the other way round - so a count or list from it is never
+ * confirmed. The coverage carries the query as unverified, with whether it was
+ * retried undirected. A result its row cap or its own `LIMIT` cut short is a
+ * top-k; any other - one that ran to completion, held rows from another scope,
+ * or fed an aggregate a sample through `SKIP` or an inner `LIMIT` - is unknown.
+ */
+export const rowsAnswer = (port, options) => {
+    const { request, run } = options;
+    const { capped, dropped, ...result } = rowsResult(port, { request, run, hits: options.hits });
+    const code = run.cypher.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''");
+    const sampled = /\bSKIP\b/i.test(code) || (code.match(/\bLIMIT\b/gi)?.length ?? 0) > 1;
+    const mode = capped && dropped === 0 && !sampled ? 'top-k' : 'unknown';
     return {
         interpretation: {
             description: `Read-only Cypher written by ${options.writtenBy} from the graph's schema and run in scope "${request.context.scope}"`,
-            assumptions: [
-                'A model wrote the query from the question: check that it asks what was meant.',
-                'Rows, lists and counts cover what the graph holds for this scope - records captured in the canonical files - not anything never recorded.'
-            ],
+            assumptions: ['A model wrote the query from the question: check that it asks what was meant.', RECORDED_ONLY],
             nativeQuery: run.cypher
         },
-        blocks,
-        evidence,
+        ...result,
         coverage: {
             mode,
             truncated: capped,
             scope: request.context.scope,
             unverifiedQuery: { text: run.cypher, writtenBy: options.writtenBy, undirectedRetry: run.retried }
         },
-        diagnostics
+        diagnostics: [
+            ...result.diagnostics,
+            ...(run.retried
+                ? [
+                    {
+                        severity: 'info',
+                        code: 'cypher-undirected',
+                        message: 'The query found nothing as written, so it was run again with every relationship undirected: its rows may read relationships the other way round from what was asked.'
+                    }
+                ]
+                : [])
+        ]
     };
 };
 /** The relationships and paths among the rows, when they hold any, as a graph. */

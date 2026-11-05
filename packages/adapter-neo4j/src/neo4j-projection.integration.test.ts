@@ -1,7 +1,15 @@
 import neo4j, { type Driver } from 'neo4j-driver'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
-import { validateAdapterAnswer, type AskRequest, type EntityInput, type GraphBlock } from '@docket/contracts'
+import {
+  validateAdapterAnswer,
+  type AdapterAnswer,
+  type AskRequest,
+  type EntityInput,
+  type GraphBlock,
+  type MetricBlock,
+  type TableBlock
+} from '@docket/contracts'
 import type { EntityProjection } from '@docket/adapter-kit'
 import { entityInput, entityLink } from '@docket/adapter-kit/testing'
 
@@ -416,15 +424,17 @@ describe.skipIf(!URL)('neo4j projection', () => {
 
       const answer = await graph.search?.('what is actually deployed', 10)
 
-      expect(answer).toEqual({
-        note: `cypher: ${cypher}\nLIMIT 50`,
-        hits: [
-          { id: 'service.api', detail: 'service.api deployed_to → environment.local', revision: 'sha256:api' },
-          { id: 'environment.local', detail: 'service.api deployed_to → environment.local', revision: 'sha256:api' }
-        ]
-      })
-      // The model is shown this graph's schema, not a generic one.
-      expect(prompts[0]).toContain('(:Service)-[:DEPLOYED_TO]->(:Environment) (1)')
+      // The stand-in answers the template prompt with Cypher too, which chooses no template.
+      const [unfitted, ...rest] = answer?.note?.split('\n') ?? []
+      expect(unfitted).toMatch(/^No query template ran: /)
+      expect(rest.join('\n')).toBe(`unverified model-written cypher: ${cypher}\nLIMIT 50`)
+      expect(answer?.hits).toEqual([
+        { id: 'service.api', detail: 'service.api deployed_to → environment.local', revision: 'sha256:api' },
+        { id: 'environment.local', detail: 'service.api deployed_to → environment.local', revision: 'sha256:api' }
+      ])
+      // Both prompts show this graph's schema, not a generic one.
+      expect(prompts[0]).toContain('- deployed_to: Service -> Environment (1)')
+      expect(prompts[1]).toContain('(:Service)-[:DEPLOYED_TO]->(:Environment) (1)')
     })
 
     it('maps returned ids back to documents', async () => {
@@ -459,7 +469,7 @@ describe.skipIf(!URL)('neo4j projection', () => {
       scope = mine
     })
 
-    it('answers a count with the count, exhaustively, never with documents', async () => {
+    it('answers a count with the count, never with documents, and never as exhaustive', async () => {
       const { projection: graph } = await withModel(
         'MATCH (s:Memory:Service {scope: $scope})-[:DEPLOYED_TO]->(e:Memory {scope: $scope}) RETURN count(e) AS deployments'
       )
@@ -474,7 +484,12 @@ describe.skipIf(!URL)('neo4j projection', () => {
       const answer = await graph.answer?.(request)
 
       expect(answer?.blocks).toEqual([{ kind: 'metric', id: 'metric-1', label: 'deployments', value: 1, evidenceIds: ['row-1'] }])
-      expect(answer?.coverage).toEqual({ mode: 'exhaustive', truncated: false, scope: 'default' })
+      expect(answer?.coverage).toEqual({
+        mode: 'unknown',
+        truncated: false,
+        scope: 'default',
+        unverifiedQuery: { text: expect.stringContaining('RETURN count(e) AS deployments'), writtenBy: 'a model', undirectedRetry: false }
+      })
     })
 
     it('answers grouped values as a typed table, keeping each row', async () => {
@@ -524,6 +539,167 @@ describe.skipIf(!URL)('neo4j projection', () => {
 
       expect(answer?.hits.map((hit) => hit.id)).toEqual(['service.api'])
       expect(answer?.note).toMatch(/found nothing[\s\S]*full-text/)
+    })
+  })
+
+  describe('with a model choosing a query template', () => {
+    /** Answers the template prompt with `selection`, and any other prompt - the one to write Cypher - with `written`. */
+    const chooser = (selection: unknown, written = 'MATCH (s:Memory:Service {scope: $scope}) RETURN s') => {
+      const prompts: string[] = []
+      return {
+        prompts,
+        chat: async (prompt: { system: string; user: string }) => {
+          prompts.push(prompt.system)
+          return prompt.system.includes('hand-written queries') ? JSON.stringify(selection) : written
+        }
+      }
+    }
+
+    const unevidenced = { confidence: 0.5, basis: 'unevidenced' as const, evidenceCount: 0, sources: [] }
+
+    /**
+     * checkout depends on orders, which depends on ledger, which depends on a
+     * database no file describes; Payments owns orders and ledger; orders uses
+     * a cache. Only orders is seen in code alone.
+     */
+    const platform = async (graph: EntityProjection) => {
+      const doc = (id: string, type: string, title: string, links: EntityInput['links'], extra: Partial<EntityInput> = {}) =>
+        graph.upsert(
+          makeDocument({ id, type, title, content: `${title}.\n`, revision: `sha256:${id}`, links, confidence: 0.9, basis: 'evidence', evidenceCount: 2, sources: ['code', 'manifest'], ...extra })
+        )
+      await doc('service.checkout', 'service', 'Checkout', [entityLink({ rel: 'depends_on', target: 'service.orders' })])
+      await doc(
+        'service.orders',
+        'service',
+        'Orders',
+        [
+          entityLink({ rel: 'depends_on', target: 'service.ledger', confidence: 0.95, sources: ['code', 'manifest'] }),
+          entityLink({ rel: 'owned_by', target: 'team.payments' }),
+          entityLink({ rel: 'uses', target: 'datasource.cache' })
+        ],
+        { confidence: 0.6, evidenceCount: 1, sources: ['code'] }
+      )
+      await doc('service.ledger', 'service', 'Ledger', [
+        entityLink({ rel: 'depends_on', target: 'datasource.ledger-db' }),
+        entityLink({ rel: 'owned_by', target: 'team.payments' })
+      ])
+      await doc('team.payments', 'team', 'Payments', [], unevidenced)
+      await doc('datasource.cache', 'datasource', 'Cache', [])
+    }
+
+    const ask = (question: string): AskRequest => {
+      const now = new Date()
+      return {
+        requestId: 'templated',
+        question,
+        context: { scope: 'default', now: now.toISOString(), timezone: 'UTC' },
+        budget: { maxResults: 10, maxEvidenceBytes: 10_000, deadline: new Date(now.getTime() + 30_000).toISOString() }
+      }
+    }
+
+    const answerWith = async (selection: unknown, written?: string) => {
+      scope = `test-${Math.random().toString(36).slice(2)}`
+      const fake = chooser(selection, written)
+      const created = createNeo4jProjection({ type: 'neo4j', url: URL ?? '', username: 'neo4j', scope, ...AUTH }, { chat: fake.chat })
+      await created.init?.(CONTEXT)
+      opened.push(created)
+      await platform(created)
+      const request = ask('a question')
+      const answer = await created.answer?.(request)
+      expect(answer && validateAdapterAnswer(answer, request)).toEqual(answer)
+      return { answer: answer as AdapterAnswer, prompts: fake.prompts, projection: created }
+    }
+
+    /** One column of the answer's table, each cell as text: a reference as its id. */
+    const column = (answer: AdapterAnswer, key: string): unknown[] =>
+      ((answer.blocks.find((block) => block.kind === 'table') as TableBlock | undefined)?.rows ?? []).map((row) => {
+        const cell = row.cells[key]
+        return typeof cell === 'object' && cell !== null && 'id' in cell ? cell.id : cell
+      })
+
+    const metric = (answer: AdapterAnswer): unknown => (answer.blocks.find((block) => block.kind === 'metric') as MetricBlock | undefined)?.value
+
+    it('answers with the template alone, asking the model once', async () => {
+      const { answer, prompts } = await answerWith({ intent: 'dependencies', params: { entity: 'orders' } })
+
+      expect(prompts).toHaveLength(1)
+      expect(column(answer, 'dependency')).toEqual(['service.ledger'])
+      expect(column(answer, 'via')).toEqual(['service.orders -depends_on-> service.ledger'])
+      expect(answer.coverage).toEqual({ mode: 'exhaustive', truncated: false, scope: 'default' })
+      expect(answer.interpretation.description).toMatch(/^Hand-written Cypher template dependencies/)
+      expect(answer.interpretation.nativeQuery).toContain('// $id: "service.orders"')
+    })
+
+    it('follows dependents transitively, each by its shortest chain', async () => {
+      const { answer } = await answerWith({ intent: 'dependents', params: { entity: 'the ledger', transitive: true } })
+
+      expect(column(answer, 'dependent')).toEqual(['service.orders', 'service.checkout'])
+      expect(column(answer, 'hops')).toEqual([1, 2])
+      expect(answer.coverage.mode).toBe('exhaustive')
+    })
+
+    it('follows dependencies to documents not yet written', async () => {
+      const { answer } = await answerWith({ intent: 'dependencies', params: { entity: 'checkout', transitive: true } })
+
+      expect(column(answer, 'dependency')).toEqual(['service.orders', 'service.ledger', 'datasource.ledger-db'])
+      expect(column(answer, 'hops')).toEqual([1, 2, 3])
+    })
+
+    it('finds an owner', async () => {
+      const { answer } = await answerWith({ intent: 'owner', params: { entity: 'Orders' } })
+
+      expect(column(answer, 'owner')).toEqual(['team.payments'])
+      expect(answer.blocks.find((block) => block.kind === 'graph')).toMatchObject({
+        edges: [{ source: 'service.orders', target: 'team.payments', rel: 'owned_by' }]
+      })
+    })
+
+    it('finds the shortest paths between two entities, in either direction, as a top-k', async () => {
+      const { answer } = await answerWith({ intent: 'path', params: { from: 'checkout', to: 'payments' } })
+
+      expect(column(answer, 'path')).toEqual(['service.checkout -depends_on-> service.orders -owned_by-> team.payments'])
+      expect(answer.coverage.mode).toBe('top-k')
+    })
+
+    it('counts and lists what a relationship links to an entity', async () => {
+      const counted = await answerWith({ intent: 'count_related', params: { entity: 'payments', rel: 'owned_by', direction: 'incoming', type: 'service' } })
+      expect(metric(counted.answer)).toBe(2)
+      expect(counted.answer.coverage.mode).toBe('exhaustive')
+
+      const listed = await answerWith({ intent: 'list_related', params: { entity: 'orders', rel: 'uses', direction: 'outgoing' } })
+      expect(column(listed.answer, 'related')).toEqual(['datasource.cache'])
+    })
+
+    it('counts and lists the recorded resources of a type', async () => {
+      expect(metric((await answerWith({ intent: 'count_of_type', params: { type: 'Service' } })).answer)).toBe(3)
+      expect(column((await answerWith({ intent: 'list_of_type', params: { type: 'teams' } })).answer, 'resource')).toEqual(['team.payments'])
+    })
+
+    it('lists weakly evidenced resources', async () => {
+      const low = await answerWith({ intent: 'low_confidence', params: { below: 0.7 } })
+      expect(column(low.answer, 'resource')).toEqual(['team.payments', 'service.orders'])
+      expect(column(low.answer, 'confidence')).toEqual([0.5, 0.6])
+
+      const single = await answerWith({ intent: 'single_source', params: { source: 'code' } })
+      expect(column(single.answer, 'resource')).toEqual(['service.orders'])
+      expect(column(single.answer, 'observations')).toEqual([1])
+    })
+
+    it('falls back to a query the model writes, labelled unverified, when no template fits', async () => {
+      const { answer, prompts } = await answerWith({ intent: 'none' })
+
+      expect(prompts).toHaveLength(2)
+      expect(answer.coverage).toMatchObject({ mode: 'unknown', unverifiedQuery: { writtenBy: 'a model', undirectedRetry: false } })
+      expect(answer.diagnostics).toEqual([expect.objectContaining({ code: 'template-unfitted', message: 'No query template fits the question, so a model wrote the query.' })])
+      expect(new Set(column(answer, 's'))).toEqual(new Set(['service.checkout', 'service.orders', 'service.ledger']))
+    })
+
+    it('searches with a template, noting it', async () => {
+      const { projection: graph } = await answerWith({ intent: 'owner', params: { entity: 'ledger' } })
+
+      const found = await graph.search?.('who owns the ledger', 10)
+      expect(found?.hits.map((hit) => hit.id)).toEqual(['service.ledger', 'team.payments'])
+      expect(found?.note).toMatch(/^template owner: MATCH/)
     })
   })
 

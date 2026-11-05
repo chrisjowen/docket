@@ -908,14 +908,21 @@ direction with its confidence, and each path a derived fact saying why it holds
 (`service.orders -depends_on-> service.ledger (0.95, code+manifest)`). The
 nodes a path reaches are context, not matches. `traverse.minConfidence` and
 `traverse.rels` narrow which relationships a path may follow. With `cypher`
-set, a local Ollama model writes a read-only Cypher query against the graph's
-schema instead. The query must bind every pattern it matches to the instance's
-scope or it is not run; its rows are kept as the values they are - a single
-row of numbers as metrics, anything else as a typed table, relationships as a
-graph - each row cited as a derived fact. Nothing checks that the query asks
-what was meant, so its result is never exhaustive and is marked unverified
-(see [the adapter's README](packages/adapter-neo4j/README.md#model-written-cypher));
-the adapter's own query, or a cypher query that fails or finds nothing,
+set, a local Ollama model first chooses one of the adapter's hand-written
+query templates - what depends on what, who owns something, how two things
+connect, how many of a type something is linked to, what is weakly evidenced -
+and fills in its parameters, the names in it looked up through the full-text
+index (see [the adapter's README](packages/adapter-neo4j/README.md#query-templates)).
+When no template fits, the model writes a read-only Cypher query against the
+graph's schema instead. That query must bind every pattern it matches to the
+instance's scope or it is not run. Either way the rows are kept as the values
+they are - a single row of numbers as metrics, anything else as a typed table,
+relationships as a graph - each row cited as a derived fact. A template's
+result is exhaustive where it enumerates every match; nothing checks that a
+model-written query asks what was meant, so its result is never exhaustive and
+is marked unverified
+(see [the adapter's README](packages/adapter-neo4j/README.md#model-written-cypher)).
+The adapter's own query, or a cypher query that fails or finds nothing,
 answers with the best matches instead.
 
 ```yaml

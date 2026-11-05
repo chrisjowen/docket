@@ -8,8 +8,8 @@ export { createNeo4jProjection, type Neo4jProjectionDependencies } from './neo4j
 
 /**
  * The Neo4j adapter: entities as typed nodes and relationships, searched by
- * full-text matches and the paths from them, or through generated read-only
- * Cypher. `neo4j-driver` is loaded
+ * full-text matches and the paths from them, or through hand-written query
+ * templates and generated read-only Cypher. `neo4j-driver` is loaded
  * when an instance is created, so importing this module needs no driver.
  */
 const definition = entityProjectionDefinition<Neo4jConfig>({
