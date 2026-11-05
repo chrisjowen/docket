@@ -270,19 +270,20 @@ describe('synthesize', () => {
       const uncited = await synthesize(input(), options(undefined))
       expect(uncited.diagnostics).toEqual([expect.objectContaining({ severity: 'warning', code: 'synthesis-uncited' })])
 
-      reply = 'Orders depends on the Ledger, owned by Payments, though this is stated with no evidence.'
-      expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])
+      for (const answer of [
+        'Orders depends on the Ledger, though this is stated with no evidence.',
+        'Orders is owned by Payments, but its SLA is not recorded.',
+        'Orders depends on the Ledger, though that link is not documented by any observation.',
+        'No evidence is recorded for Payments owning Orders.',
+        'Orders is owned by Payments; its SLA is not recorded.',
+        'Orders is owned by Payments. Its SLA is not recorded.',
+        '- Nothing records the SLA of Orders.\n- Orders is owned by Payments.'
+      ]) {
+        reply = answer
+        expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])
+      }
 
-      reply = 'Orders is owned by Payments; its SLA is not recorded.'
-      expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])
-
-      reply = 'Orders is owned by Payments. Its SLA is not recorded.'
-      expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])
-
-      reply = 'No deployment of Orders is recorded. The exhibits cover only its owner.'
-      expect((await synthesize(input(), options(undefined))).diagnostics).toBeUndefined()
-
-      reply = 'None of the exhibits says how often Orders was deployed.'
+      reply = 'No deployment count is recorded. None of the exhibits mention deployments.'
       expect((await synthesize(input(), options(undefined))).diagnostics).toBeUndefined()
 
       reply = 'Nothing in these exhibits records how often Orders was deployed.'

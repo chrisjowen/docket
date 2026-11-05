@@ -303,8 +303,18 @@ const describeEvidence = (adapter, item, statuses, text) => {
         text
     ].join('\n');
 };
-/** How a summary's leading sentence says the casebook does not answer the question, as the instructions ask it to. */
+/** How a sentence of a summary says the casebook does not answer the question, as the instructions ask it to. */
 const ABSTAINS = /\b(?:not|never|isn't|aren't|wasn't|weren't) (?:been )?(?:recorded|documented|mentioned|stated|given|found|captured)\b|\bno (?:record|mention|exhibit|information|result)s?\b|\bno\b[^.]*?\b(?:is|are|was|were) (?:recorded|documented|mentioned|stated|given|found|captured)\b|\bnothing\b[^.]*?\b(?:found|record(?:s|ed)?|says?|shows?|mentions?|answers?)\b|\bnone of (?:the|these)\b|\b(?:don't|doesn't|do not|does not|cannot|can't) (?:say|record|answer|tell|determine|mention|show|give)\b/i;
+/** What makes a sentence more than an abstention: a clause that goes on to answer, or a hedge on a fact it gives. */
+const ANSWERS_TOO = /\b(?:but|however|though|although|while|whereas|yet|except)\b|\b(?:no|without) evidence\b|\bstated in the file\b/i;
+/** Whether a summary only says the casebook does not answer the question: every sentence and bullet an abstention, none answering too. */
+const abstains = (text) => {
+    const sentences = text
+        .split(/(?<=[.!?;])\s+|\n+/)
+        .map((sentence) => sentence.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, '').trim())
+        .filter((sentence) => sentence !== '');
+    return sentences.length > 0 && sentences.every((sentence) => ABSTAINS.test(sentence) && !ANSWERS_TOO.test(sentence));
+};
 /** Tokens shaped like an entity id (`service.orders`) or an evidence id (`graph:row-1`). */
 const ID_TOKENS = /[A-Za-z0-9][A-Za-z0-9._#:-]*[A-Za-z0-9]/g;
 /**
@@ -345,7 +355,7 @@ export const synthesisDiagnostics = (text, input, built) => {
                 `${one ? 'it is' : 'they are'} not counted as citations, and what ${one ? 'it backs' : 'they back'} may be made up.`
         });
     }
-    if (citationsIn(text, given).length === 0 && !ABSTAINS.test(text.trim().split(/(?<=[.!?;])\s+/)[0] ?? '')) {
+    if (citationsIn(text, given).length === 0 && !abstains(text)) {
         diagnostics.push({
             severity: 'warning',
             code: 'synthesis-uncited',
