@@ -90,7 +90,7 @@ export const formatAnswer = (answer) => {
             continue;
         }
         const { interpretation, coverage, blocks, diagnostics } = result.answer;
-        lines.push(`${result.adapter}  ${COVERAGE[coverage.mode]}${coverage.truncated ? ', cut short' : ''}${took}`);
+        lines.push(`${result.adapter}  ${COVERAGE[coverage.mode]}${coverage.truncated ? ', cut short' : ''}${coverage.unverifiedQuery ? `, unverified query by ${coverage.unverifiedQuery.writtenBy}` : ''}${took}`);
         if (interpretation.description)
             lines.push(`  ${interpretation.description.replace(/\n/g, '\n  ')}`);
         if (interpretation.timeRange)

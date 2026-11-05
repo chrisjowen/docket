@@ -912,9 +912,11 @@ set, a local Ollama model writes a read-only Cypher query against the graph's
 schema instead. The query must bind every pattern it matches to the instance's
 scope or it is not run; its rows are kept as the values they are - a single
 row of numbers as metrics, anything else as a typed table, relationships as a
-graph - each row cited as a derived fact. It counts as exhaustive only when it
-ran to completion; the adapter's own query, or a cypher query that fails or
-finds nothing, answers with the best matches instead.
+graph - each row cited as a derived fact. Nothing checks that the query asks
+what was meant, so its result is never exhaustive and is marked unverified
+(see [the adapter's README](packages/adapter-neo4j/README.md#model-written-cypher));
+the adapter's own query, or a cypher query that fails or finds nothing,
+answers with the best matches instead.
 
 ```yaml
 adapters:

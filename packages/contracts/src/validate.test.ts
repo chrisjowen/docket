@@ -162,6 +162,18 @@ describe('validateAdapterAnswer', () => {
     )
   })
 
+  it('carries an unverified model-written query, and never calls its result exhaustive', () => {
+    const unverifiedQuery = { text: 'MATCH (d {scope: $scope}) RETURN count(d) AS n', writtenBy: 'a model', undirectedRetry: true }
+    const unknown = answer({ coverage: { mode: 'unknown', truncated: false, scope: 'payments', unverifiedQuery } })
+    expect(validateAdapterAnswer(unknown).coverage.unverifiedQuery).toEqual(unverifiedQuery)
+    expect(() => validateAdapterAnswer(answer({ coverage: { mode: 'exhaustive', truncated: false, scope: 'payments', unverifiedQuery } }))).toThrow(
+      /coverage.mode: a result from an unverified model-written query is never exhaustive/
+    )
+    expect(() =>
+      validateAdapterAnswer(answer({ coverage: { mode: 'unknown', truncated: false, scope: 'payments', unverifiedQuery: { ...unverifiedQuery, text: '' } } }))
+    ).toThrow(/coverage.unverifiedQuery.text/)
+  })
+
   it('rejects references to evidence the answer does not carry', () => {
     expect(() => validateAdapterAnswer(answer({ evidence: [] }))).toThrow(/blocks.1.evidenceIds.0: no evidence has id "e1"/)
   })

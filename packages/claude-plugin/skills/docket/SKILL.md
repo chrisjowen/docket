@@ -45,7 +45,9 @@ rows the engine computed, not documents - with `coverage.mode` saying whether
 it covered `exhaustive`ly or is a `top-k` sample (never a count), and
 `evidence` citing canonical references whose status (`resolved`, `stale`,
 `unresolved`) is under `references`. Treat `derived-fact` evidence as an
-engine's computation, and read the canonical file before relying on it.
+engine's computation, and read the canonical file before relying on it. A part
+with `coverage.unverifiedQuery` came from a query a model wrote: check the
+query asks what was meant before trusting its counts or lists.
 
 When what you then read in the code, config or infrastructure confirms or
 contradicts a hit, or shows something search did not find, record it with the

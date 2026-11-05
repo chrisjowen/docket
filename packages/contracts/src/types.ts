@@ -412,6 +412,15 @@ export type ResultBlock =
   | TableBlock
   | TimelineBlock
 
+/** A query a model wrote and an engine ran, as it ran. */
+export interface UnverifiedQuery {
+  text: string
+  /** The model that wrote it, e.g. `Ollama qwen2.5-coder:7b`, or `a model` when not known. */
+  writtenBy: string
+  /** It found nothing as written, so it ran again with every relationship undirected: it may match relationships the other way round. */
+  undirectedRetry: boolean
+}
+
 export interface AdapterAnswer {
   interpretation: {
     description: string
@@ -427,6 +436,12 @@ export interface AdapterAnswer {
     truncated: boolean
     scope: string
     checkpoint?: string
+    /**
+     * Set when a model wrote the query the result came from. Nothing checked
+     * that it asks what was meant, so its rows are never a confirmed count or
+     * complete list, and the result is never `exhaustive`.
+     */
+    unverifiedQuery?: UnverifiedQuery
   }
   diagnostics: Diagnostic[]
 }

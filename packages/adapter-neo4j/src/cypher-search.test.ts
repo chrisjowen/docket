@@ -51,7 +51,7 @@ const run = (records: Neo4jRecord[], cypher = 'MATCH (d:Memory:Deployment {scope
 })
 
 describe('rowsAnswer', () => {
-  it('keeps a count as an exhaustive metric, not a list of documents', () => {
+  it('keeps a count as a metric, not a list of documents, and never exhaustive: the query is unverified', () => {
     const records = [record({ deployments: neo4j.int(4) })]
     const answer = rowsAnswer(port(records), { request: request(), run: run(records), writtenBy: 'Ollama qwen', hits: [] })
 
@@ -62,7 +62,12 @@ describe('rowsAnswer', () => {
     expect(answer.evidence).toEqual([
       { id: 'row-1', kind: 'derived-fact', text: 'deployments: 4', canonicalRefs: [], derivation: { engine: 'neo4j' } }
     ])
-    expect(answer.coverage).toEqual({ mode: 'exhaustive', truncated: false, scope: SCOPE })
+    expect(answer.coverage).toEqual({
+      mode: 'unknown',
+      truncated: false,
+      scope: SCOPE,
+      unverifiedQuery: { text: run(records).cypher, writtenBy: 'Ollama qwen', undirectedRetry: false }
+    })
     expect(answer.interpretation.nativeQuery).toContain('count(d)')
   })
 
@@ -103,7 +108,7 @@ describe('rowsAnswer', () => {
     expect(answer.blocks.find((block) => block.kind === 'entities')).toMatchObject({
       entities: [{ ref: { kind: 'entity', id: 'service.orders', revision: 'sha256:service.orders' } }]
     })
-    expect(answer.coverage.mode).toBe('exhaustive')
+    expect(answer.coverage.mode).toBe('unknown')
   })
 
   it('keeps a count past the safe integer range as a decimal string, never a rounded number', () => {
@@ -156,7 +161,7 @@ describe('rowsAnswer', () => {
     const records = Array.from({ length: 3 }, (_, index) => record({ d: node(`deployment.${index}`) }))
     const answer = rowsAnswer(port(records), { request: request(2), run: run(records, 'MATCH (d:Memory {scope: $scope}) RETURN d\nLIMIT 3', 3), writtenBy: 'a model', hits: [] })
 
-    expect(answer.coverage).toEqual({ mode: 'top-k', truncated: true, scope: SCOPE })
+    expect(answer.coverage).toMatchObject({ mode: 'top-k', truncated: true, scope: SCOPE, unverifiedQuery: { undirectedRetry: false } })
     expect((answer.blocks[0] as TableBlock).rows).toHaveLength(2)
   })
 
@@ -166,7 +171,7 @@ describe('rowsAnswer', () => {
     expect(rowsAnswer(port(records), { request: request(), run: run(records, cypher), writtenBy: 'a model', hits: [] }).coverage.mode).toBe('unknown')
   })
 
-  it('leaves out rows holding nodes from another scope, and stops calling the result exhaustive', () => {
+  it('leaves out rows holding nodes from another scope, and says so', () => {
     const foreign = new neo4j.types.Node(neo4j.int(99), ['Memory'], { scope: 'elsewhere', id: 'service.secret' }, 'n-foreign')
     const records = [record({ s: node('service.orders') }), record({ s: foreign })]
     const answer = rowsAnswer(port(records), { request: request(), run: run(records, 'MATCH (s:Memory {scope: $scope}) RETURN s\nLIMIT 11'), writtenBy: 'a model', hits: [] })
@@ -179,6 +184,28 @@ describe('rowsAnswer', () => {
 })
 
 describe('cypherAnswer', () => {
+  it('says when a query that found nothing was retried undirected, and carries the query that ran', async () => {
+    const records = [record({ n: neo4j.int(3) })]
+    const graph = port([])
+    graph.read.mockResolvedValueOnce([]).mockResolvedValueOnce(records)
+    const chat = async () => 'MATCH (s:Memory {scope: $scope})-[:DEPENDS_ON]->(d:Memory {scope: $scope}) RETURN count(s) AS n'
+
+    const { answer } = await cypherAnswer(graph, chat, request(), { writtenBy: 'Ollama qwen' })
+
+    expect(validateAdapterAnswer(answer, request())).toEqual(answer)
+    expect(answer.coverage).toEqual({
+      mode: 'unknown',
+      truncated: false,
+      scope: SCOPE,
+      unverifiedQuery: {
+        text: 'MATCH (s:Memory {scope: $scope})-[:DEPENDS_ON]-(d:Memory {scope: $scope}) RETURN count(s) AS n\nLIMIT 11',
+        writtenBy: 'Ollama qwen',
+        undirectedRetry: true
+      }
+    })
+    expect(answer.diagnostics).toEqual([expect.objectContaining({ code: 'cypher-undirected', message: expect.stringMatching(/the other way round/) })])
+  })
+
   it('refuses a query that does not bind every pattern to the scope, before running it', async () => {
     const graph = port([record({ n: neo4j.int(7) })])
     const chat = async (_prompt: ChatPrompt) => 'MATCH (d:Memory:Deployment) RETURN count(d) AS n'

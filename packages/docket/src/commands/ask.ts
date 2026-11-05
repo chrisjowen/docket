@@ -108,7 +108,9 @@ export const formatAnswer = (answer: CoordinatedAnswer): string[] => {
       continue
     }
     const { interpretation, coverage, blocks, diagnostics } = result.answer
-    lines.push(`${result.adapter}  ${COVERAGE[coverage.mode]}${coverage.truncated ? ', cut short' : ''}${took}`)
+    lines.push(
+      `${result.adapter}  ${COVERAGE[coverage.mode]}${coverage.truncated ? ', cut short' : ''}${coverage.unverifiedQuery ? `, unverified query by ${coverage.unverifiedQuery.writtenBy}` : ''}${took}`
+    )
     if (interpretation.description) lines.push(`  ${interpretation.description.replace(/\n/g, '\n  ')}`)
     if (interpretation.timeRange) lines.push(`  time range: ${interpretation.timeRange.from} to ${interpretation.timeRange.to}`)
     if (interpretation.nativeQuery && interpretation.nativeQuery !== answer.question) {
