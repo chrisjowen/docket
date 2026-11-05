@@ -24,6 +24,7 @@ import {
 import type { Neo4jConfig } from './config.js'
 import type { GraphSchema } from './cypher-prompt.js'
 import { cypherAnswer, cypherSearch, type CypherPort } from './cypher-search.js'
+import { templateAnswer, templateSearch } from './cypher-templates.js'
 import { fulltextQuery, labelFor, NODE_PROPERTIES, nodeProperties, relationshipRows } from './graph-model.js'
 import {
   DEFAULT_TRAVERSAL,
@@ -173,32 +174,48 @@ class Neo4jProjection implements EntityProjection {
 
   /**
    * With `cypher` configured, or a `cypher` model docket offers, the model
-   * writes a query from the question and its rows are the answer, with the
-   * query in the note. When it fails or finds nothing - or without a model -
-   * the answer is full-text matches, each with its paths as the detail, and
-   * the note says why.
+   * chooses a hand-written query template and fills in its parameters, and
+   * the documents its rows mention are the answer, with the template in the
+   * note. When no template fits, the model writes the query itself, and the
+   * note calls it unverified. When that fails or finds nothing too - or
+   * without a model - the answer is full-text matches, each with its paths
+   * as the detail, and the note says why.
    */
   async search(query: string, limit: number): Promise<SearchAnswer> {
     if (!this.chat) return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS) }
 
-    let reason: string
+    const port = this.cypherPort()
+    const notes: string[] = []
     try {
-      const answer = await cypherSearch(this.cypherPort(), this.chat, query)
-      if (answer.hits.length > 0) return { hits: answer.hits.slice(0, limit), note: `cypher: ${answer.cypher}` }
-      reason = `cypher found nothing: ${answer.cypher}`
+      const templated = await templateSearch(port, this.chat, query)
+      if ('reason' in templated) notes.push(templated.reason)
+      else if (templated.hits.length > 0) return { hits: templated.hits.slice(0, limit), note: `template ${templated.query}` }
+      else notes.push(`template found nothing: ${templated.query}`)
     } catch (cause) {
-      reason = `cypher failed: ${cause instanceof Error ? cause.message : String(cause)}`
+      notes.push(`template failed: ${cause instanceof Error ? cause.message : String(cause)}`)
     }
-    return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS), note: `${reason}\nfell back to full-text` }
+
+    try {
+      const answer = await cypherSearch(port, this.chat, query)
+      if (answer.hits.length > 0) {
+        return { hits: answer.hits.slice(0, limit), note: [...notes, `unverified model-written cypher: ${answer.cypher}`].join('\n') }
+      }
+      notes.push(`unverified model-written cypher found nothing: ${answer.cypher}`)
+    } catch (cause) {
+      notes.push(`model-written cypher failed: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
+    return { hits: await this.subgraphHits(query, limit, CYPHER_TIMEOUT_MS), note: [...notes, 'fell back to full-text'].join('\n') }
   }
 
   /**
    * With `cypher` configured, or a `cypher` model docket offers, the model
-   * writes a query from the question and the rows are the answer, kept as the
-   * values they are: a count is a metric, a list a typed table, relationships
-   * a graph (docs/adapter-spec.md §9, §15 step 5). When it fails or finds
-   * nothing - or without a model - the answer is the full-text matches and the
-   * paths from them, saying why.
+   * chooses a hand-written query template and fills in its parameters, and
+   * the rows are the answer, kept as the values they are: a count is a
+   * metric, a list a typed table, relationships a graph (docs/adapter-spec.md
+   * §9, §15 step 5). When no template fits, the model writes the query
+   * itself and the answer is labelled an unverified model-written query.
+   * When that fails or finds nothing - or without a model - the answer is the
+   * full-text matches and the paths from them, saying why.
    */
   async answer(request: AskRequest): Promise<AdapterAnswer> {
     const deadline = Date.parse(request.budget.deadline)
@@ -207,19 +224,29 @@ class Neo4jProjection implements EntityProjection {
       if (!(remaining > 0)) throw new Error('neo4j adapter: the question\'s deadline has already passed')
       return Math.min(remaining, CYPHER_TIMEOUT_MS)
     }
-    const timeoutMs = timeLeft()
+    timeLeft()
     const diagnostics: Diagnostic[] = []
     if (this.chat) {
+      const port = this.cypherPort()
+      try {
+        const templated = await templateAnswer(port, this.chat, request, { timeoutMs: timeLeft() })
+        if (!('reason' in templated)) return templated.answer
+        diagnostics.push({ severity: 'info', code: 'template-unfitted', message: `${templated.reason}, so a model wrote the query.` })
+      } catch (cause) {
+        const reason = cause instanceof Error ? cause.message : String(cause)
+        diagnostics.push({ severity: 'info', code: 'template-failed', message: `The query template failed: ${reason}\nA model wrote the query instead.` })
+      }
+
       let reason: string
       try {
-        const { run, answer } = await cypherAnswer(this.cypherPort(), this.chat, request, {
+        const { run, answer } = await cypherAnswer(port, this.chat, request, {
           writtenBy: this.config.cypher ? `Ollama ${this.config.cypher.model}` : 'a model',
-          timeoutMs
+          timeoutMs: timeLeft()
         })
-        if (run.records.length > 0) return answer
-        reason = `The Cypher query found nothing: ${run.cypher}`
+        if (run.records.length > 0) return { ...answer, diagnostics: [...diagnostics, ...answer.diagnostics] }
+        reason = `The model-written Cypher query found nothing: ${run.cypher}`
       } catch (cause) {
-        reason = `The Cypher query failed: ${cause instanceof Error ? cause.message : String(cause)}`
+        reason = `The model-written Cypher query failed: ${cause instanceof Error ? cause.message : String(cause)}`
       }
       diagnostics.push({ severity: 'info', code: 'cypher-fallback', message: `${reason}\nAnswered with full-text matches and the paths from them instead.` })
     }
@@ -280,7 +307,7 @@ class Neo4jProjection implements EntityProjection {
     return {
       scope: this.scope,
       schema: () => this.schema(),
-      read: (cypher, timeoutMs = CYPHER_TIMEOUT_MS) => this.read(cypher, { scope: this.scope }, timeoutMs),
+      read: (cypher, timeoutMs = CYPHER_TIMEOUT_MS, parameters = {}) => this.read(cypher, { ...parameters, scope: this.scope }, timeoutMs),
       documents: async (ids) => {
         if (ids.length === 0) return new Map()
         const rows = await this.run(

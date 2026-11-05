@@ -30,12 +30,13 @@ const { default: neo4j } = await import('./index.js')
 
 const WRITTEN = 'MATCH (s:Memory:Service {scope: $scope}) RETURN s.id AS id'
 
+/** Chooses no template, so it is asked to write the query, and writes `WRITTEN`. */
 const fakeModel = () => {
   const asked: ChatMessage[][] = []
   const model: ModelClient = {
     chat: async (messages) => {
       asked.push(messages)
-      return WRITTEN
+      return messages[0]?.content.includes('hand-written queries') ? '{"intent": "none"}' : WRITTEN
     }
   }
   return { model, asked }
@@ -69,12 +70,17 @@ describe('neo4j models', () => {
 
     const answer = await adapter.query!.ask(request())
 
-    expect(asked).toHaveLength(1)
-    expect(asked[0]?.map((message) => message.role)).toEqual(['system', 'user'])
-    expect(asked[0]?.[1]?.content).toContain('Which services are there?')
+    // First to choose a template, then, as it chose none, to write the query.
+    expect(asked).toHaveLength(2)
+    for (const messages of asked) {
+      expect(messages.map((message) => message.role)).toEqual(['system', 'user'])
+      expect(messages[1]?.content).toContain('Which services are there?')
+    }
     // The model's query ran as the guard left it: read-only, scoped, and limited to one more row than asked for.
     expect(reads).toEqual([`${WRITTEN}\nLIMIT 11`])
     expect(answer.interpretation.nativeQuery).toBe(`${WRITTEN}\nLIMIT 11`)
+    expect(answer.coverage.unverifiedQuery).toEqual({ text: `${WRITTEN}\nLIMIT 11`, writtenBy: 'a model', undirectedRetry: false })
+    expect(answer.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'template-unfitted' })]))
     expect(answer.diagnostics ?? []).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'cypher-fallback' })]))
     await adapter.close()
   })
