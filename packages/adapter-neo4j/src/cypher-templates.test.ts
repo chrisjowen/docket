@@ -463,18 +463,35 @@ describe('names', () => {
     expect(answer.coverage.mode).toBe('exhaustive')
   })
 
-  it('prefers an entity of the type the name names over a better-scoring one of another type', async () => {
+  it('breaks a full-text near-tie by the type the name names, keeping the other as an alternative', async () => {
     const graph = finding(
       [
         record({ id: 'service.payments', title: 'Payments', labels: ['Memory', 'Service'], score: 3 }),
-        record({ id: 'team.payments', title: 'Payments', labels: ['Memory', 'Team'], score: 1 })
+        record({ id: 'team.payments', title: 'Payments', labels: ['Memory', 'Team'], score: 2.7 })
       ],
       owned('service.orders')
     )
     const run = (await runTemplate(graph, model({ intent: 'path', params: { from: 'payments team', to: 'orders' } }).chat, 'q')) as TemplateRun
 
     expect(graph.reads.find((read) => isResolve(read.cypher))?.parameters).toEqual({ lucene: '+payments team' })
-    expect(run.entities[0]).toEqual({ name: 'payments team', id: 'team.payments', title: 'Payments', how: 'full-text', alternatives: [] })
+    expect(run.entities[0]).toEqual({ name: 'payments team', id: 'team.payments', title: 'Payments', how: 'full-text', alternatives: ['service.payments'] })
+  })
+
+  it('never passes over a far better full-text match for one of the type the template needs', async () => {
+    const graph = finding(
+      [
+        record({ id: 'service.orders', title: 'Orders', labels: ['Memory', 'Service'], score: 4 }),
+        record({ id: 'team.checkout', title: 'Checkout', labels: ['Memory', 'Team'], score: 0.6 })
+      ],
+      owned('service.orders')
+    )
+    const run = (await runTemplate(
+      graph,
+      model({ intent: 'list_related', params: { entity: 'orders team', rel: 'owned_by', direction: 'incoming', type: 'Service' } }).chat,
+      'q'
+    )) as TemplateRun
+
+    expect(run.entities).toEqual([{ name: 'orders team', id: 'service.orders', title: 'Orders', how: 'full-text', alternatives: [] }])
   })
 
   it.each(['inventory service', 'inventory-service'])('runs no template for "%s" when nothing has every word of it, so the next path answers', async (entity) => {

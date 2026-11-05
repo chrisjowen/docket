@@ -178,26 +178,31 @@ const candidateOf = (record, score) => {
     };
 };
 /**
- * The candidate a name reads as, in the order given: of each set of types in
- * `prefer` that any candidate has, only those that have it. The others that
- * score nearly as well are its alternatives.
+ * The candidate a name reads as: of those scoring nearly as well as the top
+ * one, the first, after keeping of each set of types in `prefer` that any of
+ * them has only those that have it. The others that score nearly as well are
+ * its alternatives: on a title, those of the preferred types, since one the
+ * template cannot use is not a rival; on a full-text match, every one, since
+ * relevance and not type decides what a name says.
  */
 const choose = (name, how, candidates, prefer) => {
-    let pool = candidates;
+    const [top] = candidates;
+    if (!top)
+        return undefined;
+    const close = candidates.filter((candidate) => candidate.score >= top.score * CLOSE_MATCH);
+    let pool = close;
     for (const types of prefer) {
         const fitting = pool.filter((candidate) => candidate.labels.some((label) => types.has(label)));
         if (fitting.length > 0)
             pool = fitting;
     }
-    const [best, ...rest] = pool;
-    if (!best)
-        return undefined;
+    const best = pool[0];
     return {
         name,
         id: best.id,
         ...(best.title !== undefined ? { title: best.title } : {}),
         how,
-        alternatives: rest.filter((candidate) => candidate.score >= best.score * CLOSE_MATCH).map((candidate) => candidate.id)
+        alternatives: (how === 'full-text' ? close : pool).filter((candidate) => candidate !== best).map((candidate) => candidate.id)
     };
 };
 /**
