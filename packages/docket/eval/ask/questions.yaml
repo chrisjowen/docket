@@ -1,0 +1,336 @@
+# The ask evaluation set: questions over examples/acme-platform, each with the
+# answers the docket records. See README.md for how they are scored.
+#
+#   category  lookup: one record answers it. multi-hop: following a link or a
+#             mention to a second record does. count: a number the files fix.
+#             not-recorded: plausible, but nothing in the docket says - the
+#             right answer is to say so.
+#   answers   The ground truth, as an unordered list the judge matches the
+#             answer against: every item for full marks. Empty for
+#             not-recorded questions.
+#   basis     The records that hold the answer, so a reviewer can check it.
+#             Empty for not-recorded questions.
+
+questions:
+  # --- lookup -----------------------------------------------------------------
+  - id: L01
+    category: lookup
+    question: Who owns the Orders service?
+    answers: [Platform Engineering]
+    basis: [service.orders]
+
+  - id: L02
+    category: lookup
+    question: What language is the Checkout service written in?
+    answers: [TypeScript]
+    basis: [service.checkout]
+
+  - id: L03
+    category: lookup
+    question: Which team owns the Research Assistant?
+    answers: [Research Platform]
+    basis: [agent.research-assistant]
+
+  - id: L04
+    category: lookup
+    question: What database does the Orders service keep its order state in?
+    answers: ['Orders Postgres (datasource.orders-db), a single Postgres instance']
+    basis: [service.orders, datasource.orders-db, decision.orders-on-postgres]
+
+  - id: L05
+    category: lookup
+    question: Which region is the Orders Postgres database in?
+    answers: [eu-west-1]
+    basis: [datasource.orders-db]
+
+  - id: L06
+    category: lookup
+    question: What payment processor does Orders use?
+    answers: [Stripe]
+    basis: [service.orders, system.stripe]
+
+  - id: L07
+    category: lookup
+    question: What share of production traffic does the checkout rewrite flag currently send to the new flow?
+    answers: [10%]
+    basis: [feature_flag.checkout-rewrite]
+
+  - id: L08
+    category: lookup
+    question: What is the key of the checkout rewrite feature flag?
+    answers: [checkout.rewrite]
+    basis: [feature_flag.checkout-rewrite]
+
+  - id: L09
+    category: lookup
+    question: What is the default branch of the acme-platform repository?
+    answers: [main]
+    basis: [repository.acme-platform]
+
+  - id: L10
+    category: lookup
+    question: Which decision superseded storing order state in DynamoDB?
+    answers: [Keep order state in Postgres (decision.orders-on-postgres)]
+    basis: [decision.orders-on-postgres, decision.orders-on-dynamodb]
+
+  - id: L11
+    category: lookup
+    question: What package name is the Research Assistant published as?
+    answers: ['@acme/research-assistant']
+    basis: [agent.research-assistant]
+
+  - id: L12
+    category: lookup
+    question: What modes does the Research Assistant have?
+    answers: [fast, slow]
+    basis: [agent.research-assistant]
+
+  - id: L13
+    category: lookup
+    question: Which PCI scope does keeping card data out of Acme systems keep Acme in?
+    answers: [PCI SAQ-A]
+    basis: [constraint.pci-scope]
+
+  - id: L14
+    category: lookup
+    question: What zone is the Support Session Store in?
+    answers: [private]
+    basis: [datasource.sessions]
+
+  - id: L15
+    category: lookup
+    question: What platform does the Research Assistant run on?
+    answers: [Databricks]
+    basis: [agent.research-assistant, decision.research-assistant-on-databricks]
+
+  - id: L16
+    category: lookup
+    question: How quickly are rollbacks of the Orders service expected to complete?
+    answers: [within five minutes]
+    basis: [service.orders]
+
+  # --- multi-hop --------------------------------------------------------------
+  - id: M01
+    category: multi-hop
+    question: Who owns the datasource the Orders service depends on?
+    answers: [Platform Engineering]
+    basis: [service.orders, datasource.orders-db]
+
+  - id: M02
+    category: multi-hop
+    question: Which team operates the system the Research Assistant depends on?
+    answers: [Research Platform]
+    basis: [agent.research-assistant, system.databricks]
+
+  - id: M03
+    category: multi-hop
+    question: Which services depend on a datasource that the EU data residency constraint applies to?
+    answers: [Orders, Conversation API]
+    basis: [constraint.eu-data-residency, service.orders, service.conversation-api]
+
+  - id: M04
+    category: multi-hop
+    question: Checkout depends on another service. What payment processor does that service depend on?
+    answers: [Stripe]
+    basis: [service.checkout, service.orders]
+
+  - id: M05
+    category: multi-hop
+    question: Which datasources does the Research Assistant use, and which team owns each?
+    answers: ['Market Data Tables, owned by Research Platform', 'Support Session Store, owned by Platform Engineering']
+    basis: [agent.research-assistant, datasource.market-data, datasource.sessions]
+
+  - id: M06
+    category: multi-hop
+    question: Which decision applies to the datasource that the Orders service writes to?
+    answers: [Keep order state in Postgres (decision.orders-on-postgres)]
+    basis: [service.orders, datasource.orders-db, decision.orders-on-postgres]
+
+  - id: M07
+    category: multi-hop
+    question: Which constraint applies to the service that Checkout depends on?
+    answers: [Card data never touches Acme systems (constraint.pci-scope)]
+    basis: [service.checkout, service.orders, constraint.pci-scope]
+
+  - id: M08
+    category: multi-hop
+    question: Which team carries the pager for the service that writes support transcripts?
+    answers: [Platform Engineering]
+    basis: [datasource.sessions, service.conversation-api, team.platform-engineering]
+
+  - id: M09
+    category: multi-hop
+    question: Apart from Orders, which components use the shared library Orders publishes its events through?
+    answers: [Checkout, Research Assistant]
+    basis: [service.orders, library.order-events, service.checkout, agent.research-assistant]
+
+  - id: M10
+    category: multi-hop
+    question: Which team owns the repository that holds the Checkout service?
+    answers: [Platform Engineering]
+    basis: [repository.acme-platform]
+
+  - id: M11
+    category: multi-hop
+    question: Why does the Research Assistant read the market data in place rather than copying it out?
+    answers: ['The market-data licence forbids redistribution, so extracts may not be held outside the lakehouse']
+    basis: [datasource.market-data, decision.research-assistant-on-databricks]
+
+  - id: M12
+    category: multi-hop
+    question: Which of the services Platform Engineering owns are deployed to production?
+    answers: [Orders, Checkout, Conversation API]
+    basis: [team.platform-engineering, service.orders, service.checkout, service.conversation-api]
+
+  - id: M13
+    category: multi-hop
+    question: Why is staging run on synthetic orders?
+    answers: [The EU data residency constraint forbids copying production data into staging]
+    basis: [environment.staging, constraint.eu-data-residency]
+
+  # --- count ------------------------------------------------------------------
+  - id: C01
+    category: count
+    question: How many services does the docket record?
+    answers: ['3']
+    basis: [service.orders, service.checkout, service.conversation-api]
+
+  - id: C02
+    category: count
+    question: How many decisions are recorded?
+    answers: ['3']
+    basis: [decision.orders-on-dynamodb, decision.orders-on-postgres, decision.research-assistant-on-databricks]
+
+  - id: C03
+    category: count
+    question: How many constraints are recorded?
+    answers: ['2']
+    basis: [constraint.eu-data-residency, constraint.pci-scope]
+
+  - id: C04
+    category: count
+    question: How many teams are recorded?
+    answers: ['2']
+    basis: [team.platform-engineering, team.research-platform]
+
+  - id: C05
+    category: count
+    question: How many datasources does Platform Engineering own?
+    answers: ['2']
+    basis: [datasource.orders-db, datasource.sessions]
+
+  - id: C06
+    category: count
+    question: How many resources does the PCI scope constraint apply to?
+    answers: ['3']
+    basis: [constraint.pci-scope]
+
+  - id: C07
+    category: count
+    question: How many things does the Research Assistant use?
+    answers: ['3']
+    basis: [agent.research-assistant]
+
+  - id: C08
+    category: count
+    question: How many datasources are recorded?
+    answers: ['3']
+    basis: [datasource.orders-db, datasource.sessions, datasource.market-data]
+
+  - id: C09
+    category: count
+    question: How many dependencies does the Orders service have?
+    answers: ['2']
+    basis: [service.orders]
+
+  - id: C10
+    category: count
+    question: How many resources is Platform Engineering recorded as owning?
+    answers: ['7']
+    basis:
+      - service.orders
+      - service.checkout
+      - service.conversation-api
+      - datasource.orders-db
+      - datasource.sessions
+      - repository.acme-platform
+      - library.order-events
+
+  # --- not recorded -----------------------------------------------------------
+  - id: N01
+    category: not-recorded
+    question: Who is the on-call engineer for Orders this week?
+    answers: []
+    basis: []
+
+  - id: N02
+    category: not-recorded
+    question: What is the Orders service's p99 latency target?
+    answers: []
+    basis: []
+
+  - id: N03
+    category: not-recorded
+    question: Which version of Postgres does the Orders database run?
+    answers: []
+    basis: []
+
+  - id: N04
+    category: not-recorded
+    question: Who owns the Billing service?
+    answers: []
+    basis: []
+
+  - id: N05
+    category: not-recorded
+    question: How much does Acme pay Stripe each month?
+    answers: []
+    basis: []
+
+  - id: N06
+    category: not-recorded
+    question: When was the checkout rewrite flag first turned on?
+    answers: []
+    basis: []
+
+  - id: N07
+    category: not-recorded
+    question: Which Kubernetes namespace does Checkout run in?
+    answers: []
+    basis: []
+
+  - id: N08
+    category: not-recorded
+    question: Which message broker carries the order events?
+    answers: []
+    basis: []
+
+  - id: N09
+    category: not-recorded
+    question: How many engineers are on the Research Platform team?
+    answers: []
+    basis: []
+
+  - id: N10
+    category: not-recorded
+    question: When does the Databricks enterprise agreement renew?
+    answers: []
+    basis: []
+
+  - id: N11
+    category: not-recorded
+    question: What is the URL of the staging environment?
+    answers: []
+    basis: []
+
+  - id: N12
+    category: not-recorded
+    question: Which CI system builds the acme-platform repository?
+    answers: []
+    basis: []
+
+  - id: N13
+    category: not-recorded
+    question: How long are support transcripts retained in the session store?
+    answers: []
+    basis: []

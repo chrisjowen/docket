@@ -1119,7 +1119,14 @@ pnpm build       # the adapter contracts, kit and adapters and the web UI
                  # first, then docket, which ships copies of them; the
                  # end-to-end tests run the built CLI, so build first
 pnpm test        # the contracts', adapters', CLI's and plugin's suites
+pnpm -C packages/docket eval:ask   # how well docket ask answers: calls models,
+                                   # so never part of pnpm test
 ```
+
+The ask evaluation scores `docket ask` over the example docket. It counts
+correct answers, refusals and hallucinations, and penalises a wrong answer
+more than a refusal. See
+[`packages/docket/eval/ask/README.md`](packages/docket/eval/ask/README.md).
 
 To work on the web UI with hot reload, run `docket open --no-open` in a
 repository with a `.docket/`, then `pnpm -C packages/docket-ui dev`; the dev
