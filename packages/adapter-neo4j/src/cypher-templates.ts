@@ -167,14 +167,22 @@ export interface Resolved {
   name: string
   id: string
   title?: string
-  /** `fuzzy`: a full-text match another nearly equalled, so maybe not what was meant. */
-  how: 'id' | 'title' | 'full-text' | 'fuzzy'
-  /** Other entities the name could have meant, nearly as well. */
+  how: 'id' | 'title' | 'full-text'
+  /** Other entities the name matched as well or nearly: any makes the reading unsure. */
   alternatives: string[]
 }
 
+/** A name to look up, and the types the template needs what it names to be: any, when empty. */
+interface Name {
+  name: string
+  fits: ReadonlySet<string>
+}
+
+/** The one rule for every way a name resolves: a reading is sure only when no other entity matched as well or nearly. */
+const unsure = (entity: Resolved): boolean => entity.alternatives.length > 0
+
 const EXACT_QUERY = `MATCH (n:Memory {scope: $scope}) WHERE n.id = $name OR toLower(n.title) = toLower($name)
-RETURN n.id AS id, n.title AS title, n.id = $name AS byId
+RETURN n.id AS id, n.title AS title, labels(n) AS labels, n.id = $name AS byId
 ORDER BY byId DESC, n.stub, id
 LIMIT 5`
 
@@ -183,11 +191,6 @@ WHERE node.scope = $scope
 RETURN node.id AS id, node.title AS title, labels(node) AS labels, score
 ORDER BY score DESC, id
 LIMIT 5`
-
-const titleOf = (record: Neo4jRecord): string | undefined => {
-  const title = record.get('title') as unknown
-  return typeof title === 'string' && title !== '' ? title : undefined
-}
 
 /** Words naming one of the graph's types, singular or plural, and the type each names: they say what kind of thing a name is, not which one. */
 const typeWords = (schema: GraphSchema): Map<string, string> =>
@@ -211,65 +214,77 @@ const requiredQuery = (words: readonly string[], types: ReadonlyMap<string, stri
   return [...required.map((word) => `+${word}`), ...words.filter((word) => types.has(word))].join(' ')
 }
 
+interface Candidate {
+  id: string
+  title?: string
+  labels: string[]
+  score: number
+}
+
+const candidateOf = (record: Neo4jRecord, score: number): Candidate => {
+  const title = record.get('title') as unknown
+  return {
+    id: String(record.get('id')),
+    ...(typeof title === 'string' && title !== '' ? { title } : {}),
+    labels: ((record.get('labels') as unknown[] | null) ?? []).map(String),
+    score
+  }
+}
+
 /**
- * The entity `name` means: the one with that id, else the one with that
- * title, else the best full-text match that has every word of it but those
- * naming one of `types`, when it scores at least `MIN_SCORE`; one of a type
- * the name names first. A match another nearly equals is `fuzzy`. Undefined
- * when none is that sure.
+ * The candidate a name reads as, in the order given: of each set of types in
+ * `prefer` that any candidate has, only those that have it. The others that
+ * score nearly as well are its alternatives.
+ */
+const choose = (name: string, how: Resolved['how'], candidates: readonly Candidate[], prefer: readonly ReadonlySet<string>[]): Resolved | undefined => {
+  let pool = candidates
+  for (const types of prefer) {
+    const fitting = pool.filter((candidate) => candidate.labels.some((label) => types.has(label)))
+    if (fitting.length > 0) pool = fitting
+  }
+  const [best, ...rest] = pool
+  if (!best) return undefined
+  return {
+    name,
+    id: best.id,
+    ...(best.title !== undefined ? { title: best.title } : {}),
+    how,
+    alternatives: rest.filter((candidate) => candidate.score >= best.score * CLOSE_MATCH).map((candidate) => candidate.id)
+  }
+}
+
+/**
+ * The entity a name means: the one with that id, else one with that title,
+ * else the best full-text match that has every word of it but those naming
+ * one of `types`, when it scores at least `MIN_SCORE`. Among several, one of
+ * a type the template needs comes first, then one of a type the name names.
+ * Undefined when nothing matches that surely.
  */
 export const resolveEntity = async (
   port: CypherPort,
-  name: string,
+  { name, fits }: Name,
   types: ReadonlyMap<string, string>,
   timeoutMs?: number
 ): Promise<Resolved | undefined> => {
-  const exact = await port.read(EXACT_QUERY, timeoutMs, { name })
-  const [first, ...others] = exact
-  if (first) {
-    const title = titleOf(first)
-    const byId = first.get('byId') === true
-    return {
-      name,
-      id: String(first.get('id')),
-      ...(title !== undefined ? { title } : {}),
-      how: byId ? 'id' : 'title',
-      alternatives: byId ? [] : others.map((record) => String(record.get('id')))
-    }
-  }
-
   const words = wordsOf(name)
+  const prefer = [fits, new Set(words.flatMap((word) => types.get(word) ?? []))]
+  const exact = await port.read(EXACT_QUERY, timeoutMs, { name })
+  const byId = exact.filter((record) => record.get('byId') === true)
+  if (byId.length > 0) return choose(name, 'id', byId.map((record) => candidateOf(record, 1)), [])
+  if (exact.length > 0) return choose(name, 'title', exact.map((record) => candidateOf(record, 1)), prefer)
+
   const lucene = requiredQuery(words, types)
   if (!lucene) return undefined
-  const named = new Set(words.flatMap((word) => types.get(word) ?? []))
-  const matches = (await port.read(RESOLVE_QUERY, timeoutMs, { lucene })).map((record) => ({
-    record,
-    score: Number(record.get('score')),
-    typed: ((record.get('labels') as unknown[] | null) ?? []).some((label) => named.has(String(label)))
-  }))
-  const typed = matches.some((match) => match.typed)
-  const [best, ...rest] = typed ? matches.filter((match) => match.typed) : matches
-  if (!best || !(best.score >= MIN_SCORE)) return undefined
-  const title = titleOf(best.record)
-  const alternatives = rest.filter((match) => match.score >= best.score * CLOSE_MATCH).map((match) => String(match.record.get('id')))
-  return {
-    name,
-    id: String(best.record.get('id')),
-    ...(title !== undefined ? { title } : {}),
-    how: alternatives.length > 0 ? 'fuzzy' : 'full-text',
-    alternatives
-  }
+  const matches = (await port.read(RESOLVE_QUERY, timeoutMs, { lucene })).map((record) => candidateOf(record, Number(record.get('score'))))
+  const resolved = choose(name, 'full-text', matches, prefer)
+  const best = matches.find((match) => match.id === resolved?.id)
+  return best && best.score >= MIN_SCORE ? resolved : undefined
 }
 
 const reading = (resolved: Resolved): string => {
   const what = `${resolved.id}${resolved.title !== undefined && resolved.title !== resolved.id ? ` (${resolved.title})` : ''}`
-  const how = {
-    id: 'its id',
-    title: 'its title',
-    'full-text': 'the best full-text match of every word of it naming no type',
-    fuzzy: 'a fuzzy full-text match, not a sure one'
-  }[resolved.how]
-  const others = resolved.alternatives.length > 0 ? `; ${resolved.alternatives.join(', ')} matched nearly as well` : ''
+  const how = { id: 'its id', title: 'its title', 'full-text': 'the best full-text match of every word of it naming no type' }[resolved.how]
+  const others = unsure(resolved) ? `; not a sure reading, since ${resolved.alternatives.join(', ')} matched as well or nearly` : ''
   return `"${resolved.name}" was read as ${what}, ${how}${others}.`
 }
 
@@ -287,11 +302,13 @@ export interface TemplateQuery {
   assumptions: string[]
   /** What its rows cover when its row cap did not cut them short. */
   uncut: (records: readonly Neo4jRecord[]) => AdapterAnswer['coverage']['mode']
+  /** Whether its rows found anything: any row, unless it counts. */
+  found?: (records: readonly Neo4jRecord[]) => boolean
 }
 
 /** What a selection needs before it can run: the names to look up, and how to build its query from them. */
 interface Prepared {
-  names: Record<string, string>
+  names: Record<string, Name>
   build: (entities: Record<string, Resolved>, maxRows: number) => TemplateQuery
 }
 
@@ -333,6 +350,16 @@ const needs = (schema: GraphSchema, type: string, intent: Intent): void => {
     throw new Unfitted(`${intent} follows ${relName(type)}, which this graph has none of`)
   }
 }
+
+/** The types at `end` of a `type` relationship, with one of `other` at its other end when given. */
+const ends = (schema: GraphSchema, type: string, end: 'from' | 'to', other?: string): Set<string> =>
+  new Set(
+    schema.patterns
+      .filter((pattern) => pattern.type === type && (other === undefined || pattern[end === 'from' ? 'to' : 'from'] === other))
+      .map((pattern) => pattern[end])
+  )
+
+const anything: ReadonlySet<string> = new Set()
 
 const labelled = (label: string | undefined): string => (label === undefined ? '' : ' AND $label IN labels(n)')
 
@@ -390,7 +417,8 @@ ${limit(maxRows)}`,
       parameters: { id: entity.id, relType, ...(label !== undefined ? { label } : {}) },
       asks: `${intent === 'count_related' ? 'how many' : 'the'} ${linked}`,
       assumptions: [reading(entity), `Only direct ${relName(relType)} relationships ${params.direction === 'outgoing' ? 'from' : 'to'} ${entity.id} count.`],
-      uncut: ALL
+      uncut: ALL,
+      ...(intent === 'count_related' ? { found: (records: readonly Neo4jRecord[]) => whole(records[0]?.get('count')) > 0 } : {})
     }
   }
 
@@ -400,11 +428,14 @@ const prepare = (selection: Exclude<Selection, { intent: 'none' }>, schema: Grap
     case 'dependencies':
     case 'dependents':
       needs(schema, 'DEPENDS_ON', selection.intent)
-      return { names: { entity: selection.params.entity }, build: along(selection.intent, selection.params.transitive) }
+      return {
+        names: { entity: { name: selection.params.entity, fits: ends(schema, 'DEPENDS_ON', selection.intent === 'dependencies' ? 'from' : 'to') } },
+        build: along(selection.intent, selection.params.transitive)
+      }
     case 'owner':
       needs(schema, 'OWNED_BY', selection.intent)
       return {
-        names: { entity: selection.params.entity },
+        names: { entity: { name: selection.params.entity, fits: ends(schema, 'OWNED_BY', 'from') } },
         build: (entities, maxRows) => {
           const entity = entities.entity as Resolved
           return {
@@ -422,7 +453,7 @@ ${limit(maxRows)}`,
       }
     case 'path':
       return {
-        names: { from: selection.params.from, to: selection.params.to },
+        names: { from: { name: selection.params.from, fits: anything }, to: { name: selection.params.to, fits: anything } },
         build: (entities, maxRows) => {
           const [from, to] = [entities.from as Resolved, entities.to as Resolved]
           if (from.id === to.id) throw new Unfitted(`"${from.name}" and "${to.name}" are both ${from.id}`)
@@ -448,7 +479,8 @@ ${limit(maxRows)}`,
     case 'list_related': {
       const relType = relIn(schema, selection.params.rel)
       const label = selection.params.type === undefined ? undefined : labelIn(schema, selection.params.type)
-      return { names: { entity: selection.params.entity }, build: relatedBuild(selection.intent, selection.params, relType, label) }
+      const fits = ends(schema, relType, selection.params.direction === 'outgoing' ? 'from' : 'to', label)
+      return { names: { entity: { name: selection.params.entity, fits } }, build: relatedBuild(selection.intent, selection.params, relType, label) }
     }
     case 'count_of_type':
     case 'list_of_type': {
@@ -531,7 +563,7 @@ export interface NoTemplate {
  * Has the model choose a template for `question` and fill in its
  * parameters, looks up the names it gave, and runs the template. A choice
  * of none, one that does not parse or fit the schema, or a name nothing
- * matches surely enough, or nothing found for a name only fuzzily matched, is
+ * matches surely enough, or nothing found for a name not surely read, is
  * `NoTemplate`; anything else that goes wrong throws.
  */
 export const runTemplate = async (
@@ -552,17 +584,17 @@ export const runTemplate = async (
       const resolved = await resolveEntity(port, value, types, options.timeoutMs)
       if (!resolved) {
         throw new Unfitted(
-          `"${value}" is unresolved: no id or title is it, and no full-text match has every word of it naming no type with a score of at least ${MIN_SCORE}`
+          `"${value.name}" is unresolved: no id or title is it, and no full-text match has every word of it naming no type with a score of at least ${MIN_SCORE}`
         )
       }
       entities[key] = resolved
     }
     const query = prepared.build(entities, maxRows)
     const records = await port.read(query.cypher, options.timeoutMs, query.parameters)
-    const fuzzy = Object.values(entities).find((entity) => entity.how === 'fuzzy')
-    if (records.length === 0 && fuzzy) {
+    const doubt = Object.values(entities).find(unsure)
+    if (doubt && !(query.found ?? ((rows) => rows.length > 0))(records)) {
       throw new Unfitted(
-        `"${fuzzy.name}" only fuzzily matched ${fuzzy.id}, with ${fuzzy.alternatives.join(', ')} nearly as close, and the template found nothing for it`
+        `"${doubt.name}" is not a sure reading of ${doubt.id}, since ${doubt.alternatives.join(', ')} matched as well or nearly, and the template found nothing for it`
       )
     }
     return { selection, query, entities: Object.values(entities), records, limit: maxRows }
@@ -603,10 +635,9 @@ export const templateRowsAnswer = (
   const { capped, dropped, ...result } = rowsResult(port, { request, run, hits })
   const uncut = run.query.uncut(run.records)
   // A template asks what was meant, so only a cut, a row from another scope or a name it may have misread changes what its rows cover.
-  const fuzzy = run.entities.some((entity) => entity.how === 'fuzzy')
-  const mode = dropped > 0 || fuzzy ? 'unknown' : capped && uncut === 'exhaustive' ? 'top-k' : uncut
+  const mode = dropped > 0 || run.entities.some(unsure) ? 'unknown' : capped && uncut === 'exhaustive' ? 'top-k' : uncut
   const ambiguous: Diagnostic[] = run.entities
-    .filter((entity) => entity.alternatives.length > 0)
+    .filter(unsure)
     .map((entity) => ({
       severity: 'warning',
       code: 'template-ambiguous-name',

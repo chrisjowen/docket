@@ -44,7 +44,8 @@ const ENTITIES: Record<string, string> = {
   'service.orders-worker': 'Orders Worker',
   'service.ledger': 'Ledger',
   'datasource.ledger-db': 'Ledger DB',
-  'team.payments': 'Payments'
+  'team.payments': 'Payments',
+  'service.payments': 'Payments'
 }
 
 let element = 0
@@ -83,7 +84,8 @@ const resolveRows = (cypher: string, parameters: Record<string, unknown>): Neo4j
     const name = String(parameters.name)
     return Object.entries(ENTITIES)
       .filter(([id, title]) => id === name || title.toLowerCase() === name.toLowerCase())
-      .map(([id, title]) => record({ id, title, byId: id === name }))
+      .sort(([a], [b]) => Number(b === name) - Number(a === name) || a.localeCompare(b))
+      .map(([id, title]) => record({ id, title, labels: ['Memory', labelOf(id)], byId: id === name }))
   }
   if (isResolve(cypher)) {
     const words = String(parameters.lucene).split(' ')
@@ -395,14 +397,15 @@ describe('names', () => {
     expect(answer.diagnostics).toEqual([])
   })
 
-  it('calls a full-text match another nearly equals fuzzy, naming both, and never exhaustive', async () => {
+  it('calls a full-text match another nearly equals unsure, naming both, and never exhaustive', async () => {
     const { answer, run } = await answered({ intent: 'owner', params: { entity: 'orders service' } }, owned('service.orders'))
 
     expect(run.entities).toEqual([
-      { name: 'orders service', id: 'service.orders', title: 'Orders', how: 'fuzzy', alternatives: ['service.orders-worker'] }
+      { name: 'orders service', id: 'service.orders', title: 'Orders', how: 'full-text', alternatives: ['service.orders-worker'] }
     ])
     expect(answer.interpretation.assumptions[0]).toBe(
-      '"orders service" was read as service.orders (Orders), a fuzzy full-text match, not a sure one; service.orders-worker matched nearly as well.'
+      '"orders service" was read as service.orders (Orders), the best full-text match of every word of it naming no type; ' +
+        'not a sure reading, since service.orders-worker matched as well or nearly.'
     )
     expect(answer.coverage.mode).toBe('unknown')
     expect(answer.diagnostics).toEqual([
@@ -414,13 +417,50 @@ describe('names', () => {
     ])
   })
 
-  it('answers nothing found for a fuzzily matched name by falling through, not as an empty answer', async () => {
+  it('answers nothing found for a name not surely read by falling through, not as an empty answer', async () => {
     const result = await templateAnswer(port(), model({ intent: 'owner', params: { entity: 'orders service' } }).chat, request())
 
     expect(result).toEqual({
       reason:
-        'No query template ran: "orders service" only fuzzily matched service.orders, with service.orders-worker nearly as close, and the template found nothing for it'
+        'No query template ran: "orders service" is not a sure reading of service.orders, since service.orders-worker matched as well or nearly, and the template found nothing for it'
     })
+  })
+
+  it('answers a count of 0 for a name not surely read by falling through, as nothing found', async () => {
+    const graph = port([record({ count: neo4j.int(0) })])
+    const result = await templateAnswer(
+      graph,
+      model({ intent: 'count_related', params: { entity: 'orders service', rel: 'uses', direction: 'outgoing' } }).chat,
+      request()
+    )
+
+    expect(result).toEqual({ reason: expect.stringMatching(/^No query template ran: "orders service" is not a sure reading of service\.orders/) })
+  })
+
+  it('calls a title several entities share unsure, naming the one used and the others', async () => {
+    const orders = node('service.orders')
+    const rows = [record({ path: path(node('service.payments'), ['depends_on', orders]), hops: neo4j.int(1) })]
+    const { answer, run } = await answered({ intent: 'path', params: { from: 'payments', to: 'orders' } }, rows)
+
+    expect(run.entities[0]).toEqual({ name: 'payments', id: 'service.payments', title: 'Payments', how: 'title', alternatives: ['team.payments'] })
+    expect(answer.interpretation.assumptions[0]).toBe(
+      '"payments" was read as service.payments (Payments), its title; not a sure reading, since team.payments matched as well or nearly.'
+    )
+    expect(answer.coverage.mode).toBe('unknown')
+  })
+
+  it('settles a shared title by the type the template needs, surely', async () => {
+    const team = node('team.payments')
+    const orders = node('service.orders')
+    const rows = [record({ entity: team, link: relationship(orders, 'owned_by', team), related: orders })]
+    const { answer, run, read } = await answered(
+      { intent: 'list_related', params: { entity: 'payments', rel: 'owned_by', direction: 'incoming', type: 'Service' } },
+      rows
+    )
+
+    expect(run.entities).toEqual([{ name: 'payments', id: 'team.payments', title: 'Payments', how: 'title', alternatives: [] }])
+    expect(read.parameters).toEqual({ id: 'team.payments', relType: 'OWNED_BY', label: 'Service' })
+    expect(answer.coverage.mode).toBe('exhaustive')
   })
 
   it('prefers an entity of the type the name names over a better-scoring one of another type', async () => {
@@ -431,10 +471,10 @@ describe('names', () => {
       ],
       owned('service.orders')
     )
-    const run = (await runTemplate(graph, model({ intent: 'owner', params: { entity: 'payments team' } }).chat, 'q')) as TemplateRun
+    const run = (await runTemplate(graph, model({ intent: 'path', params: { from: 'payments team', to: 'orders' } }).chat, 'q')) as TemplateRun
 
     expect(graph.reads.find((read) => isResolve(read.cypher))?.parameters).toEqual({ lucene: '+payments team' })
-    expect(run.entities).toEqual([{ name: 'payments team', id: 'team.payments', title: 'Payments', how: 'full-text', alternatives: [] }])
+    expect(run.entities[0]).toEqual({ name: 'payments team', id: 'team.payments', title: 'Payments', how: 'full-text', alternatives: [] })
   })
 
   it.each(['inventory service', 'inventory-service'])('runs no template for "%s" when nothing has every word of it, so the next path answers', async (entity) => {

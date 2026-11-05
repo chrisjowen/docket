@@ -62,12 +62,15 @@ A result its row cap cut short is a top-k, and one holding rows from another
 scope unknown. A name the model gives - `entity`, `from`, `to` - is the entity
 with that id, else with that title, else the best match in the full-text index
 that has every word of the name (split as the index splits it) but those
-naming a type, scoring at least 0.5. Type words only rank, and an entity of
-the type the name names comes first. With no such match the name is
-unresolved and no template runs. When another entity matched nearly as well,
-the reading is fuzzy: the answer names both, warns, and is never exhaustive,
-and a template that finds nothing for a fuzzy name does not answer. The answer
-says how each name was read. A type or relationship must be one the graph has. Nothing the
+naming a type, scoring at least 0.5. Type words only rank. With no such match
+the name is unresolved and no template runs. Where several entities match,
+one of a type the template needs comes first (the owner in `owned_by`, say,
+must be a type something is owned by), then one of a type the name names. A
+reading is sure only when no other entity is left that matched as well or
+nearly (within 0.8 of the best score): otherwise the answer names the entity
+used and the others, warns, and is never exhaustive, and a template that finds
+nothing for it - a count of 0 included - does not answer. The answer says how
+each name was read. A type or relationship must be one the graph has. Nothing the
 model gives is written into a query: every value is a parameter, every query
 binds every pattern to the scope (a unit test holds each to the same scope
 check a model-written query must pass), and a template that finds nothing
