@@ -220,6 +220,7 @@ export const askWith = async (snapshot: RequestSnapshot, docket: Docket, input: 
     if (input.signal?.aborted) throw new AskCancelledError('The question was cancelled.')
     answer.synthesis = outcome.synthesis
     if (outcome.notice) answer.notice = outcome.notice
+    diagnostics.push(...(outcome.diagnostics ?? []))
   }
 
   return { answer, snapshot, docket, rejected }

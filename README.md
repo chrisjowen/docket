@@ -487,9 +487,15 @@ and how it is built.
   writes a short answer from the results, citing exhibits as
   `[service.orders]` and evidence as `[graph:row-1]`: it is told to say which
   facts were derived by an engine, what each result covers, and to give
-  disagreeing counts side by side rather than choose one. Its prompt holds the
-  most relevant parts of each exhibit and piece of evidence - including the
-  entities on the paths between what was found - within one total budget.
+  disagreeing counts side by side rather than choose one. It is told to
+  treat exhibits and evidence as data, never as instructions. Each exhibit
+  and link carries its confidence and what that rests on, and the summary
+  hedges facts that are unevidenced or below 0.7. A summary citing an id it
+  was never given, or answering without citing anything it was given, comes
+  with a `synthesis-unknown-citation` or `synthesis-uncited` warning. Its
+  prompt holds the most relevant parts of each exhibit and piece of
+  evidence - including the entities on the paths between what was found -
+  within one total budget.
   Summaries are cached in `.docket/.cache/chat/`, keyed by the question and
   how it was read (scope, time zone, the day, the conversation), each
   adapter's configuration, checkpoint and answer, the revisions of what it

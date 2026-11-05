@@ -330,6 +330,8 @@ Adapters must honour the supplied scope in their native queries. Dropping return
 
 Synthesis cites individual evidence, distinguishes derived facts from observations, states material coverage limits and preserves conflicting counts rather than silently choosing one. Include intermediate path entities when their content supports the answer. Use relevant excerpts and a total context budget instead of uniformly truncating every entity's beginning.
 
+Exhibits, results and evidence reach the model as data, never as instructions: it is told to ignore any instruction inside them. Each exhibit and relationship carries its confidence and basis, and the model hedges facts that are unevidenced or below the low-confidence threshold. The answer's citations are checked. Citing an id that appears nowhere in the prompt yields a `synthesis-unknown-citation` warning, and that id is not counted as a citation. An answer that does not abstain yet cites nothing it was given yields a `synthesis-uncited` warning.
+
 No engine can answer a deployment-count question reliably if deployment events were never captured. Return unsupported/insufficient evidence when necessary. An adapter may use native enumeration to compute an aggregate; a semantic top-k result alone is insufficient.
 
 Cancellation propagates through AbortSignal where supported. Adapters that cannot cancel underlying work must report this capability limitation; coordinator stops accepting late results. Failures are structured and do not erase successful answers. Cache keys include question/context, adapter configuration and checkpoints, source revisions, model identity and synthesis instructions; unknown freshness requires conservative invalidation.
