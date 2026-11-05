@@ -60,15 +60,20 @@ its parameters, as one JSON object; it never writes Cypher for them.
 
 A result its row cap cut short is a top-k, and one holding rows from another
 scope unknown. A name the model gives - `entity`, `from`, `to` - is the entity
-with that id, else with that title, else the best match in the full-text index;
-the answer says how each was read, and warns when another entity matched
-nearly as well. A type or relationship must be one the graph has. Nothing the
+with that id, else with that title, else the best match in the full-text index
+that has every word of the name (split as the index splits it) but those
+naming a type, scoring at least 0.5. Type words only rank, and an entity of
+the type the name names comes first. With no such match the name is
+unresolved and no template runs. When another entity matched nearly as well,
+the reading is fuzzy: the answer names both, warns, and is never exhaustive,
+and a template that finds nothing for a fuzzy name does not answer. The answer
+says how each name was read. A type or relationship must be one the graph has. Nothing the
 model gives is written into a query: every value is a parameter, every query
 binds every pattern to the scope (a unit test holds each to the same scope
 check a model-written query must pass), and a template that finds nothing
 still answers, since it asked exactly what was meant. When the model chooses
 no template, or one that does not parse, fit the graph's schema or name
-anything in it, the model writes the query instead, and the answer's
+anything in it surely, the model writes the query instead, and the answer's
 diagnostics say why.
 
 ## Model-written Cypher

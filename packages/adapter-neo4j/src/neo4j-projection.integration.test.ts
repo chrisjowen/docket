@@ -694,6 +694,23 @@ describe.skipIf(!URL)('neo4j projection', () => {
       expect(new Set(column(answer, 's'))).toEqual(new Set(['service.checkout', 'service.orders', 'service.ledger']))
     })
 
+    it.each(['inventory service', 'inventory-service'])('runs no template for "%s", which only a type word of matches', async (entity) => {
+      const { answer, prompts } = await answerWith({ intent: 'dependents', params: { entity } })
+
+      expect(prompts).toHaveLength(2)
+      expect(answer.coverage.mode).not.toBe('exhaustive')
+      expect(answer.diagnostics).toEqual([
+        expect.objectContaining({ code: 'template-unfitted', message: expect.stringContaining(`"${entity}" is unresolved`) })
+      ])
+    })
+
+    it('reads a name with a stop word through the full-text index', async () => {
+      const { answer } = await answerWith({ intent: 'owner', params: { entity: 'the ledger service' } })
+
+      expect(column(answer, 'owner')).toEqual(['team.payments'])
+      expect(answer.coverage.mode).toBe('exhaustive')
+    })
+
     it('searches with a template, noting it', async () => {
       const { projection: graph } = await answerWith({ intent: 'owner', params: { entity: 'ledger' } })
 

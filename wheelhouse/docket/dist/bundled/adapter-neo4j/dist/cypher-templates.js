@@ -1,6 +1,6 @@
 import { z } from '../../../vendor/zod.js';
 import { hitsOf, MAX_CYPHER_ROWS, RECORDED_ONLY, rowsResult } from './cypher-search.js';
-import { fulltextQuery, labelFor, relationshipTypeFor } from './graph-model.js';
+import { labelFor, relationshipTypeFor } from './graph-model.js';
 import { FULLTEXT_INDEX } from './subgraph-search.js';
 /*
  * Hand-written Cypher for the questions asked most: what depends on what, who
@@ -18,6 +18,8 @@ export const PATH_HOPS = 4;
 export const LOW_CONFIDENCE = 0.5;
 /** A full-text match scoring at least this share of the best is named as another reading of the name. */
 const CLOSE_MATCH = 0.8;
+/** A full-text match scoring less is too weak to stand for a name: a word met once in a long body, say. */
+export const MIN_SCORE = 0.5;
 // ---------------------------------------------------------------------------
 // What the model may choose
 const name = z.string().trim().min(1).max(200);
@@ -145,18 +147,37 @@ ORDER BY byId DESC, n.stub, id
 LIMIT 5`;
 export const RESOLVE_QUERY = `CALL db.index.fulltext.queryNodes('${FULLTEXT_INDEX}', $lucene) YIELD node, score
 WHERE node.scope = $scope
-RETURN node.id AS id, node.title AS title, score
+RETURN node.id AS id, node.title AS title, labels(node) AS labels, score
 ORDER BY score DESC, id
 LIMIT 5`;
 const titleOf = (record) => {
     const title = record.get('title');
     return typeof title === 'string' && title !== '' ? title : undefined;
 };
+/** Words naming one of the graph's types, singular or plural, and the type each names: they say what kind of thing a name is, not which one. */
+const typeWords = (schema) => new Map(schema.labels.flatMap(({ label }) => [[label.toLowerCase(), label], [`${label.toLowerCase()}s`, label]]));
+/** The words the index's English analyzer drops, so requiring one requires nothing. */
+const STOP_WORDS = new Set('a an and are as at be but by for if in into is it no not of on or such that the their then there these they this to was will with'.split(' '));
+/** A name's words as the index splits them: at anything but a letter or digit. */
+const wordsOf = (name) => name.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word !== '');
+/**
+ * A Lucene query whose every match has each word of a name but those naming
+ * a type, which only rank. Undefined when no word is left to require.
+ */
+const requiredQuery = (words, types) => {
+    const required = words.filter((word) => !types.has(word) && !STOP_WORDS.has(word));
+    if (required.length === 0)
+        return undefined;
+    return [...required.map((word) => `+${word}`), ...words.filter((word) => types.has(word))].join(' ');
+};
 /**
  * The entity `name` means: the one with that id, else the one with that
- * title, else the best full-text match. Undefined when nothing matches.
+ * title, else the best full-text match that has every word of it but those
+ * naming one of `types`, when it scores at least `MIN_SCORE`; one of a type
+ * the name names first. A match another nearly equals is `fuzzy`. Undefined
+ * when none is that sure.
  */
-export const resolveEntity = async (port, name, timeoutMs) => {
+export const resolveEntity = async (port, name, types, timeoutMs) => {
     const exact = await port.read(EXACT_QUERY, timeoutMs, { name });
     const [first, ...others] = exact;
     if (first) {
@@ -170,25 +191,38 @@ export const resolveEntity = async (port, name, timeoutMs) => {
             alternatives: byId ? [] : others.map((record) => String(record.get('id')))
         };
     }
-    const lucene = fulltextQuery(name);
+    const words = wordsOf(name);
+    const lucene = requiredQuery(words, types);
     if (!lucene)
         return undefined;
-    const [best, ...rest] = await port.read(RESOLVE_QUERY, timeoutMs, { lucene });
-    if (!best)
+    const named = new Set(words.flatMap((word) => types.get(word) ?? []));
+    const matches = (await port.read(RESOLVE_QUERY, timeoutMs, { lucene })).map((record) => ({
+        record,
+        score: Number(record.get('score')),
+        typed: (record.get('labels') ?? []).some((label) => named.has(String(label)))
+    }));
+    const typed = matches.some((match) => match.typed);
+    const [best, ...rest] = typed ? matches.filter((match) => match.typed) : matches;
+    if (!best || !(best.score >= MIN_SCORE))
         return undefined;
-    const score = Number(best.get('score'));
-    const title = titleOf(best);
+    const title = titleOf(best.record);
+    const alternatives = rest.filter((match) => match.score >= best.score * CLOSE_MATCH).map((match) => String(match.record.get('id')));
     return {
         name,
-        id: String(best.get('id')),
+        id: String(best.record.get('id')),
         ...(title !== undefined ? { title } : {}),
-        how: 'full-text',
-        alternatives: rest.filter((record) => Number(record.get('score')) >= score * CLOSE_MATCH).map((record) => String(record.get('id')))
+        how: alternatives.length > 0 ? 'fuzzy' : 'full-text',
+        alternatives
     };
 };
 const reading = (resolved) => {
     const what = `${resolved.id}${resolved.title !== undefined && resolved.title !== resolved.id ? ` (${resolved.title})` : ''}`;
-    const how = { id: 'its id', title: 'its title', 'full-text': 'the best full-text match' }[resolved.how];
+    const how = {
+        id: 'its id',
+        title: 'its title',
+        'full-text': 'the best full-text match of every word of it naming no type',
+        fuzzy: 'a fuzzy full-text match, not a sure one'
+    }[resolved.how];
     const others = resolved.alternatives.length > 0 ? `; ${resolved.alternatives.join(', ')} matched nearly as well` : '';
     return `"${resolved.name}" was read as ${what}, ${how}${others}.`;
 };
@@ -402,7 +436,8 @@ ${limit(maxRows)}`,
  * Has the model choose a template for `question` and fill in its
  * parameters, looks up the names it gave, and runs the template. A choice
  * of none, one that does not parse or fit the schema, or a name nothing
- * matches is `NoTemplate`; anything else that goes wrong throws.
+ * matches surely enough, or nothing found for a name only fuzzily matched, is
+ * `NoTemplate`; anything else that goes wrong throws.
  */
 export const runTemplate = async (port, chat, question, options = {}) => {
     const maxRows = options.maxRows ?? MAX_CYPHER_ROWS;
@@ -413,14 +448,20 @@ export const runTemplate = async (port, chat, question, options = {}) => {
             return { reason: 'No query template fits the question' };
         const prepared = prepare(selection, schema);
         const entities = {};
+        const types = typeWords(schema);
         for (const [key, value] of Object.entries(prepared.names)) {
-            const resolved = await resolveEntity(port, value, options.timeoutMs);
-            if (!resolved)
-                throw new Unfitted(`Nothing in the graph matches "${value}"`);
+            const resolved = await resolveEntity(port, value, types, options.timeoutMs);
+            if (!resolved) {
+                throw new Unfitted(`"${value}" is unresolved: no id or title is it, and no full-text match has every word of it naming no type with a score of at least ${MIN_SCORE}`);
+            }
             entities[key] = resolved;
         }
         const query = prepared.build(entities, maxRows);
         const records = await port.read(query.cypher, options.timeoutMs, query.parameters);
+        const fuzzy = Object.values(entities).find((entity) => entity.how === 'fuzzy');
+        if (records.length === 0 && fuzzy) {
+            throw new Unfitted(`"${fuzzy.name}" only fuzzily matched ${fuzzy.id}, with ${fuzzy.alternatives.join(', ')} nearly as close, and the template found nothing for it`);
+        }
         return { selection, query, entities: Object.values(entities), records, limit: maxRows };
     }
     catch (cause) {
@@ -453,8 +494,9 @@ const templateHits = async (port, run) => {
 export const templateRowsAnswer = (port, request, run, hits) => {
     const { capped, dropped, ...result } = rowsResult(port, { request, run, hits });
     const uncut = run.query.uncut(run.records);
-    // A template asks what was meant, so only a cut or a row from another scope changes what its rows cover.
-    const mode = dropped > 0 ? 'unknown' : capped && uncut === 'exhaustive' ? 'top-k' : uncut;
+    // A template asks what was meant, so only a cut, a row from another scope or a name it may have misread changes what its rows cover.
+    const fuzzy = run.entities.some((entity) => entity.how === 'fuzzy');
+    const mode = dropped > 0 || fuzzy ? 'unknown' : capped && uncut === 'exhaustive' ? 'top-k' : uncut;
     const ambiguous = run.entities
         .filter((entity) => entity.alternatives.length > 0)
         .map((entity) => ({
@@ -477,7 +519,8 @@ export const templateRowsAnswer = (port, request, run, hits) => {
 /**
  * The question answered by a template, or why none could: the rows kept as
  * the values they are, coverage exhaustive only where the template
- * enumerates every match. A template that finds nothing still answers: it
+ * enumerates every match and every name was surely read. A template that
+ * finds nothing for names it read surely still answers: it
  * asked exactly what was meant, so nothing recorded is the answer.
  */
 export const templateAnswer = async (port, chat, request, options = {}) => {

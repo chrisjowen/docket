@@ -70,9 +70,13 @@ const record = (values: Record<string, unknown>): Neo4jRecord => new neo4j.types
 const isResolve = (cypher: string): boolean => cypher === RESOLVE_QUERY
 const isExact = (cypher: string): boolean => cypher.includes('toLower(n.title) = toLower($name)')
 
+/** An entity's type label, from its id: `service.orders` → `Service`. */
+const labelOf = (id: string): string => `${id.charAt(0).toUpperCase()}${id.slice(1, id.indexOf('.'))}`
+
 /**
  * Names resolve as the graph would: an exact id or title first, then
- * full-text, where an entity matches when it has every required (`+`) word.
+ * full-text, where an entity matches when it has every required (`+`) word,
+ * the more of all the words the better.
  */
 const resolveRows = (cypher: string, parameters: Record<string, unknown>): Neo4jRecord[] | undefined => {
   if (isExact(cypher)) {
@@ -82,10 +86,14 @@ const resolveRows = (cypher: string, parameters: Record<string, unknown>): Neo4j
       .map(([id, title]) => record({ id, title, byId: id === name }))
   }
   if (isResolve(cypher)) {
-    const required = String(parameters.lucene).toLowerCase().split(' ').map((word) => word.replace(/^\+/, ''))
+    const words = String(parameters.lucene).split(' ')
+    const required = words.filter((word) => word.startsWith('+')).map((word) => word.slice(1))
+    const has = (id: string, title: string, word: string): boolean => `${id} ${title}`.toLowerCase().includes(word.replace(/^\+/, ''))
     return Object.entries(ENTITIES)
-      .filter(([id, title]) => required.every((word) => `${id} ${title}`.toLowerCase().includes(word)))
-      .map(([id, title]) => record({ id, title, score: 1 }))
+      .filter(([id, title]) => required.every((word) => has(id, title, word)))
+      .map(([id, title]) => ({ id, title, labels: ['Memory', labelOf(id)], score: words.filter((word) => has(id, title, word)).length }))
+      .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+      .map((match) => record(match))
   }
   return undefined
 }
@@ -359,15 +367,44 @@ describe('low_confidence and single_source', () => {
 })
 
 describe('names', () => {
-  it('reads a name through the full-text index when no id or title is exactly it, naming close readings', async () => {
-    const { answer, run } = await answered({ intent: 'owner', params: { entity: 'orders service' } })
+  const owned = (entity: string) => {
+    const orders = node(entity)
+    const team = node('team.payments')
+    return [record({ resource: orders, link: relationship(orders, 'owned_by', team), owner: team })]
+  }
+
+  /** A port whose full-text lookups find `matches`. */
+  const finding = (matches: Neo4jRecord[], rows: Neo4jRecord[] = []) => {
+    const graph = port(rows)
+    const read = graph.read
+    graph.read = async (cypher, timeoutMs, parameters) => {
+      if (!isResolve(cypher)) return read(cypher, timeoutMs, parameters)
+      graph.reads.push({ cypher, parameters: parameters ?? {} })
+      return matches
+    }
+    return graph
+  }
+
+  it('reads a name through the full-text index, every word but its type words required, exhaustively when no other entity comes close', async () => {
+    const { answer, run, graph } = await answered({ intent: 'owner', params: { entity: 'ledger service' } }, owned('service.ledger'))
+
+    expect(graph.reads.find((read) => isResolve(read.cypher))?.parameters).toEqual({ lucene: '+ledger service' })
+    expect(run.entities).toEqual([{ name: 'ledger service', id: 'service.ledger', title: 'Ledger', how: 'full-text', alternatives: [] }])
+    expect(answer.interpretation.assumptions[0]).toBe('"ledger service" was read as service.ledger (Ledger), the best full-text match of every word of it naming no type.')
+    expect(answer.coverage.mode).toBe('exhaustive')
+    expect(answer.diagnostics).toEqual([])
+  })
+
+  it('calls a full-text match another nearly equals fuzzy, naming both, and never exhaustive', async () => {
+    const { answer, run } = await answered({ intent: 'owner', params: { entity: 'orders service' } }, owned('service.orders'))
 
     expect(run.entities).toEqual([
-      { name: 'orders service', id: 'service.orders', title: 'Orders', how: 'full-text', alternatives: ['service.orders-worker'] }
+      { name: 'orders service', id: 'service.orders', title: 'Orders', how: 'fuzzy', alternatives: ['service.orders-worker'] }
     ])
     expect(answer.interpretation.assumptions[0]).toBe(
-      '"orders service" was read as service.orders (Orders), the best full-text match of every word of it naming no type; service.orders-worker matched nearly as well.'
+      '"orders service" was read as service.orders (Orders), a fuzzy full-text match, not a sure one; service.orders-worker matched nearly as well.'
     )
+    expect(answer.coverage.mode).toBe('unknown')
     expect(answer.diagnostics).toEqual([
       {
         severity: 'warning',
@@ -377,33 +414,53 @@ describe('names', () => {
     ])
   })
 
-  it('runs no template for a name only a type word of matches, so the next path answers', async () => {
-    const graph = port()
-    const result = await templateAnswer(graph, model({ intent: 'dependents', params: { entity: 'inventory service' } }).chat, request('what depends on the inventory service?'))
+  it('answers nothing found for a fuzzily matched name by falling through, not as an empty answer', async () => {
+    const result = await templateAnswer(port(), model({ intent: 'owner', params: { entity: 'orders service' } }).chat, request())
 
     expect(result).toEqual({
       reason:
-        'No query template ran: "inventory service" is unresolved: no id or title is it, and no full-text match has every word of it naming no type with a score of at least 0.5'
+        'No query template ran: "orders service" only fuzzily matched service.orders, with service.orders-worker nearly as close, and the template found nothing for it'
     })
+  })
+
+  it('prefers an entity of the type the name names over a better-scoring one of another type', async () => {
+    const graph = finding(
+      [
+        record({ id: 'service.payments', title: 'Payments', labels: ['Memory', 'Service'], score: 3 }),
+        record({ id: 'team.payments', title: 'Payments', labels: ['Memory', 'Team'], score: 1 })
+      ],
+      owned('service.orders')
+    )
+    const run = (await runTemplate(graph, model({ intent: 'owner', params: { entity: 'payments team' } }).chat, 'q')) as TemplateRun
+
+    expect(graph.reads.find((read) => isResolve(read.cypher))?.parameters).toEqual({ lucene: '+payments team' })
+    expect(run.entities).toEqual([{ name: 'payments team', id: 'team.payments', title: 'Payments', how: 'full-text', alternatives: [] }])
+  })
+
+  it.each(['inventory service', 'inventory-service'])('runs no template for "%s" when nothing has every word of it, so the next path answers', async (entity) => {
+    const graph = port()
+    const result = await templateAnswer(graph, model({ intent: 'dependents', params: { entity } }).chat, request('what depends on the inventory service?'))
+
+    expect(result).toEqual({
+      reason: `No query template ran: "${entity}" is unresolved: no id or title is it, and no full-text match has every word of it naming no type with a score of at least 0.5`
+    })
+    expect(graph.reads.find((read) => isResolve(read.cypher))?.parameters).toEqual({ lucene: '+inventory service' })
     expect(graph.reads.every((read) => isExact(read.cypher) || isResolve(read.cypher))).toBe(true)
   })
 
   it('runs no template for a full-text match scoring below the minimum', async () => {
-    const graph = port()
-    const read = graph.read
-    graph.read = async (cypher, timeoutMs, parameters) =>
-      isResolve(cypher) ? [record({ id: 'service.ledger', title: 'Ledger', score: MIN_SCORE / 2 })] : read(cypher, timeoutMs, parameters)
+    const graph = finding([record({ id: 'service.ledger', title: 'Ledger', labels: ['Memory', 'Service'], score: MIN_SCORE / 2 })])
     const result = await runTemplate(graph, model({ intent: 'owner', params: { entity: 'ledgers' } }).chat, 'q')
 
     expect(result).toEqual({ reason: expect.stringMatching(/^No query template ran: "ledgers" is unresolved/) })
   })
 
-  it('requires every word of the name but its type words', async () => {
+  it('does not look up a name of only type words and words the index drops', async () => {
     const graph = port()
     const result = await runTemplate(graph, model({ intent: 'owner', params: { entity: 'the service' } }).chat, 'q')
 
     expect(result).toEqual({ reason: expect.stringMatching(/^No query template ran: "the service" is unresolved/) })
-    expect(graph.reads.filter((read) => isResolve(read.cypher))).toEqual([{ cypher: RESOLVE_QUERY, parameters: { lucene: '+the' } }])
+    expect(graph.reads.filter((read) => isResolve(read.cypher))).toEqual([])
   })
 })
 
