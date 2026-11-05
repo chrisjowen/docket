@@ -137,6 +137,31 @@ describe('synthesisPrompt', () => {
     expect(prompt.user).toContain('metric: deployments = 4 [graph:row-1]')
   })
 
+  it('marks a result from a model-written query as unverified, with the query and whether it was retried undirected', () => {
+    const unverified: AdapterAnswer = {
+      ...graphAnswer,
+      coverage: {
+        mode: 'unknown',
+        truncated: false,
+        scope: 'default',
+        unverifiedQuery: { text: 'MATCH (d {scope: $scope})-[:OF]-(s)\nRETURN count(d) AS deployments', writtenBy: 'Ollama qwen', undirectedRetry: true }
+      }
+    }
+    const { prompt: written } = synthesisPrompt(
+      input({ results: [{ adapter: 'graph', state: 'answered', answer: unverified }, results[1] as AdapterResult] })
+    )
+
+    expect(written.system).toMatch(/"unverified query"[^\n]*never as the total or the complete list/)
+    expect(written.user).toContain('graph: Read-only Cypher (coverage unknown, from an unverified query)')
+    expect(written.user).toContain(
+      '  unverified query, written by Ollama qwen and not checked against the question - its counts and lists are what it found, not confirmed totals:\n' +
+        '    MATCH (d {scope: $scope})-[:OF]-(s)\n    RETURN count(d) AS deployments\n' +
+        '  retried undirected:'
+    )
+    expect(written.user).toContain('deployments: graph says 4 (coverage unknown, from an unverified query); mem0 says 2')
+    expect(prompt.user).not.toContain('unverified query')
+  })
+
   it('sets conflicting counts side by side rather than choosing one', () => {
     expect(prompt.user).toContain(
       'Adapters disagree:\n- deployments: graph says 4 (every match in scope); mem0 says 2 (top matches only - a sample, not a count)'

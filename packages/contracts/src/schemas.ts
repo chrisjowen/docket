@@ -359,7 +359,8 @@ export const adapterAnswerSchema: z.ZodType<AdapterAnswer> = z
       mode: z.enum(['exhaustive', 'top-k', 'unknown']),
       truncated: z.boolean(),
       scope: nonEmpty,
-      checkpoint: z.string().optional()
+      checkpoint: z.string().optional(),
+      unverifiedQuery: z.looseObject({ text: nonEmpty, writtenBy: nonEmpty, undirectedRetry: z.boolean() }).optional()
     }),
     diagnostics: z.array(
       z.looseObject({ severity: z.enum(['info', 'warning', 'error']), code: nonEmpty, message: z.string() })
@@ -375,6 +376,13 @@ export const adapterAnswerSchema: z.ZodType<AdapterAnswer> = z
     }
     for (const id of duplicates(answer.blocks.map((block) => block.id))) {
       context.addIssue({ code: 'custom', path: ['blocks'], message: `block id "${id}" is used more than once` })
+    }
+    if (answer.coverage.unverifiedQuery && answer.coverage.mode === 'exhaustive') {
+      context.addIssue({
+        code: 'custom',
+        path: ['coverage', 'mode'],
+        message: 'a result from an unverified model-written query is never exhaustive'
+      })
     }
 
     const known = new Set(evidenceIds)

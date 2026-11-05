@@ -11,6 +11,7 @@ Rules:
   Cite evidence the same way by its id, e.g. [graph:row-1].
 - Evidence marked "derived" was computed or extracted by an engine, not recorded in the files. Say so when you rely on it, and prefer recorded evidence where they differ.
 - Say what each result covers. A result of "top matches only" is a sample: never present how many it found as a count or a total. Only a result covering "every match" can be counted, and only within what the files record.
+- A result from an "unverified query" came from a query a model wrote, which nobody checked asks what was meant. When you rely on it, say so, and give its counts and lists as what that query found (e.g. "an unverified query counts 3"), never as the total or the complete list. When it was "retried undirected", say its relationships may be read the wrong way round.
 - When results disagree - adapters give different counts or facts - give each figure with the adapter that gave it. Never pick one silently or average them.
 - Exhibits listed as on the paths between others connect them: mention one when it explains how the others relate.
 - Be brief: a short paragraph, or a few bullet points when listing things.
@@ -125,13 +126,24 @@ const blockLines = (block) => {
             return [];
     }
 };
+/** How much a result covered, and whether a model wrote the query it came from. */
+const coverageOf = (coverage, cutShort = false) => `${COVERAGE[coverage.mode]}${cutShort && coverage.truncated ? ', cut short' : ''}${coverage.unverifiedQuery ? ', from an unverified query' : ''}`;
+/** The model-written query a result came from, as it ran. */
+const unverifiedLines = (query) => [
+    `  unverified query, written by ${query.writtenBy} and not checked against the question - its counts and lists are what it found, not confirmed totals:`,
+    ...query.text.split('\n').map((line) => `    ${line}`),
+    ...(query.undirectedRetry
+        ? ['  retried undirected: it found nothing as written, so it ran again ignoring every relationship\'s direction - it may read relationships the wrong way round']
+        : [])
+];
 /** One adapter's part: how it read the question, how much it covered, and what it returned - or why it returned nothing. */
 const resultLines = (result) => {
     if (result.state === 'failed')
         return [`${result.adapter}: no answer (${result.error.code}) - ${result.error.message}`];
     const { interpretation, coverage, blocks } = result.answer;
     return [
-        `${result.adapter}: ${interpretation.description || 'no description of how it searched'} (${COVERAGE[coverage.mode]}${coverage.truncated ? ', cut short' : ''})`,
+        `${result.adapter}: ${interpretation.description || 'no description of how it searched'} (${coverageOf(coverage, true)})`,
+        ...(coverage.unverifiedQuery ? unverifiedLines(coverage.unverifiedQuery) : []),
         ...interpretation.assumptions.map((assumption) => `  assumes: ${assumption}`),
         ...(interpretation.timeRange ? [`  time range: ${interpretation.timeRange.from} to ${interpretation.timeRange.to}`] : []),
         ...(blocks.length === 0 ? ['  found nothing'] : blocks.flatMap(blockLines))
@@ -151,7 +163,7 @@ const disagreements = (results) => {
             entry.values.push({
                 adapter: result.adapter,
                 value: `${block.value}${block.unit ? ` ${block.unit}` : ''}`,
-                coverage: COVERAGE[result.answer.coverage.mode]
+                coverage: coverageOf(result.answer.coverage)
             });
             readings.set(key, entry);
         }

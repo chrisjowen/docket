@@ -38,6 +38,18 @@ a derived fact citing the entities on it, the "why" its relationships hold:
 a path reaches are context, never matches. The query is the adapter's own, so
 a unit test holds it to the same scope check a model-written query must pass.
 
+## Model-written Cypher
+
+A model writes the query from the question and the graph's schema; the adapter
+checks it reads only and only in scope, caps its rows, and runs it. A query
+that finds nothing runs once more with every relationship undirected, which
+can change what it means. Nothing checks that the query asks what was meant,
+so its result is never `exhaustive`: it is a `top-k` when its row cap cut it
+short and `unknown` otherwise, and `coverage.unverifiedQuery` carries the
+query as it ran, who wrote it and whether it was retried undirected. Synthesis
+then says the answer relies on an unverified query, and hedges its counts and
+lists.
+
 ## Integration tests against a local Neo4j
 
 `src/neo4j-projection.integration.test.ts` runs against a real server when

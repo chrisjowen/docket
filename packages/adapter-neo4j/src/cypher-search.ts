@@ -312,9 +312,13 @@ export interface RowsAnswerOptions {
  * mention as entities. Each row is a derived fact of its own, citing the
  * entities it holds at the revisions the graph has them.
  *
- * Coverage is exhaustive only when the query ran to completion in scope: no
- * cap or `LIMIT` of its own cut it short, and no `SKIP` or inner `LIMIT` fed an
- * aggregate a sample. A capped result is a top-k.
+ * Coverage is never exhaustive: a model wrote the query, and nothing checks
+ * that it asks what was meant - an undirected retry may even read every
+ * relationship the other way round - so a count or list from it is never
+ * confirmed. The coverage carries the query as unverified, with whether it was
+ * retried undirected. A result its row cap or its own `LIMIT` cut short is a
+ * top-k; any other - one that ran to completion, held rows from another scope,
+ * or fed an aggregate a sample through `SKIP` or an inner `LIMIT` - is unknown.
  */
 export const rowsAnswer = (port: CypherPort, options: RowsAnswerOptions): AdapterAnswer => {
   const { request, run } = options
@@ -341,7 +345,7 @@ export const rowsAnswer = (port: CypherPort, options: RowsAnswerOptions): Adapte
   const code = run.cypher.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''")
   const sampled = /\bSKIP\b/i.test(code) || (code.match(/\bLIMIT\b/gi)?.length ?? 0) > 1
   const capped = all.length >= run.limit || inScope.length > shown.length
-  const mode = dropped > 0 || sampled ? 'unknown' : capped ? 'top-k' : 'exhaustive'
+  const mode = capped && dropped === 0 && !sampled ? 'top-k' : 'unknown'
 
   const rows = shown.map((row) => {
     const names = new Map<string, string>()
@@ -413,7 +417,8 @@ export const rowsAnswer = (port: CypherPort, options: RowsAnswerOptions): Adapte
     diagnostics.push({
       severity: 'info',
       code: 'cypher-undirected',
-      message: 'The query found nothing as written, so it was run again with every relationship undirected.'
+      message:
+        'The query found nothing as written, so it was run again with every relationship undirected: its rows may read relationships the other way round from what was asked.'
     })
   }
 
@@ -428,7 +433,12 @@ export const rowsAnswer = (port: CypherPort, options: RowsAnswerOptions): Adapte
     },
     blocks,
     evidence,
-    coverage: { mode, truncated: capped, scope: request.context.scope },
+    coverage: {
+      mode,
+      truncated: capped,
+      scope: request.context.scope,
+      unverifiedQuery: { text: run.cypher, writtenBy: options.writtenBy, undirectedRetry: run.retried }
+    },
     diagnostics
   }
 }

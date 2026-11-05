@@ -287,6 +287,7 @@ interface AdapterAnswer {
     truncated: boolean;
     scope: string;
     checkpoint?: string;
+    unverifiedQuery?: { text: string; writtenBy: string; undirectedRetry: boolean };
   };
   diagnostics: Diagnostic[];
 }
@@ -314,6 +315,8 @@ Canonical references identify kind, ID, revision and optional source span. Line 
 JSON responses must not contain SDK objects, Date objects, BigInt or functions. Counts preserve numeric precision; values outside safe JavaScript integer range use a typed decimal-string table cell. Runtime schemas validate the union and every evidence reference.
 
 `exhaustive` means all matching records in the stated engine scope/filter, not all real-world events. Top-k matches must never be presented as an exhaustive event count. Scores are comparable only within their native adapter; retain them without averaging unrelated scales.
+
+A result from a query a model wrote carries `coverage.unverifiedQuery`: the query as it ran, the model that wrote it, and whether it was retried after a first run found nothing - with every relationship undirected, say - which can change what it means. Nothing checks that such a query asks what was meant, so its result is never `exhaustive`, and synthesis says the answer relies on it and gives its counts and lists as what that query found, not as confirmed totals.
 
 ## 10. Query coordination and synthesis
 
