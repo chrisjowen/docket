@@ -26,7 +26,10 @@ reported as skipped, not failed.
 3. Asks each question in [`questions.yaml`](questions.yaml) through
    `askProject` with synthesis on, as `docket ask` does.
 4. Gives each summary to the judge. The judge uses the paper's fine-grained
-   prompt (Appendix C.2.2) word for word: [`judge.ts`](judge.ts).
+   prompt (Appendix C.2.2) word for word: [`judge.ts`](judge.ts). A reply
+   with no score in it is asked for once more. When the adapters found
+   nothing, docket writes no summary, and that abstention scores 0 without
+   the judge.
 5. Scores the replies and prints the table: [`score.ts`](score.ts).
 
 The example's only adapter is JSONL: lexical search, covering top matches
@@ -98,9 +101,15 @@ share a family stops with an error. Name each model as `claude`,
 | `DOCKET_EVAL_CONCURRENCY` | `4` | Questions asked of a `claude` model at once. An Ollama model is asked one at a time. |
 | `DOCKET_EVAL_OUT` | | A directory to write `report.md` and `outcomes.json` to: every answer, judge reply and score. |
 
-A small local judge is noisy. `llama3.1` (8B) sometimes marks a fully
-correct answer +0.5. For a steadier score, judge with Claude and answer with
-a local model:
+A small local judge is noisy, and `llama3.1` (8B) is biased:
+
+- it sometimes marks a fully correct answer +0.5;
+- it scores most correct refusals −1 when the refusal adds what *is*
+  recorded ("no on-call engineer is recorded; Platform Engineering owns
+  Orders").
+
+With it, the not-recorded row mostly measures the judge. For a score you can
+trust, judge with Claude and answer with a local model:
 
 ```sh
 DOCKET_EVAL_ANSWERER=ollama:qwen2.5:7b DOCKET_EVAL_JUDGE=claude:sonnet pnpm -C packages/docket eval:ask

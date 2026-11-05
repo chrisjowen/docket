@@ -11,7 +11,7 @@ import { sync } from '../../src/commands/sync.js'
 import type { SummarizeConfig } from '../../src/config/config.js'
 import { claudeChat } from '../../src/llm/claude-chat.js'
 import { askProject } from '../../src/query/ask.js'
-import { familyOf, judgePrompt, parseJudgment, scoreFor } from './judge.js'
+import { familyOf, judgePrompt, parseJudgment, scoreFor, type Judgment } from './judge.js'
 import { loadQuestions, type Question } from './questions.js'
 import { citationSummary, scoreTable, type Outcome } from './score.js'
 
@@ -135,6 +135,8 @@ describe.skipIf(skipped !== undefined)('ask evaluation', () => {
       console.log(`answered ${question.id}`)
       return {
         text: answer.synthesis?.text ?? `(no summary) ${answer.notice?.message ?? ''}`.trim(),
+        // Docket gave no answer because the adapters found nothing: an abstention, not something to judge.
+        abstained: answer.synthesis === null && answer.notice?.reason === 'empty',
         cited: (answer.synthesis?.citedEntities.length ?? 0) + (answer.synthesis?.citedEvidence.length ?? 0),
         diagnostics: answer.diagnostics.map((diagnostic) => diagnostic.code)
       }
@@ -142,8 +144,15 @@ describe.skipIf(skipped !== undefined)('ask evaluation', () => {
 
     const outcomes = await pooled([...questions.entries()], judging.concurrency, async ([index, question]): Promise<Outcome> => {
       const answer = answers[index] as (typeof answers)[number]
-      const reply = (await judge(judgePrompt(question, answer.text))).trim()
-      const judgment = parseJudgment(reply)
+      let reply = '(not judged: the adapters found nothing, so docket gave no answer)'
+      let judgment: Judgment | undefined = 0
+      if (!answer.abstained) {
+        // A reply with no score in it is asked for once more before it is left unscored.
+        for (let attempt = 0; attempt < 2 && (attempt === 0 || judgment === undefined); attempt += 1) {
+          reply = (await judge(judgePrompt(question, answer.text))).trim()
+          judgment = parseJudgment(reply)
+        }
+      }
       return {
         id: question.id,
         category: question.category,
