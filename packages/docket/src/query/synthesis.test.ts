@@ -277,7 +277,10 @@ describe('synthesize', () => {
         'No evidence is recorded for Payments owning Orders.',
         'Orders is owned by Payments; its SLA is not recorded.',
         'Orders is owned by Payments. Its SLA is not recorded.',
-        '- Nothing records the SLA of Orders.\n- Orders is owned by Payments.'
+        '- Nothing records the SLA of Orders.\n- Orders is owned by Payments.',
+        'Orders is owned by Payments and its SLA is not recorded.',
+        'Payments owns Orders, its SLA is not documented.',
+        'Orders is owned by Payments, and nothing records its SLA.'
       ]) {
         reply = answer
         expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])

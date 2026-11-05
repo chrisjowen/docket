@@ -352,20 +352,19 @@ const describeEvidence = (adapter: string, item: RetrievedEvidence, statuses: re
   ].join('\n')
 }
 
-/** How a sentence of a summary says the casebook does not answer the question, as the instructions ask it to. */
+/** How a clause of a summary says the casebook does not answer the question, as the instructions ask it to. */
 const ABSTAINS =
-  /\b(?:not|never|isn't|aren't|wasn't|weren't) (?:been )?(?:recorded|documented|mentioned|stated|given|found|captured)\b|\bno (?:record|mention|exhibit|information|result)s?\b|\bno\b[^.]*?\b(?:is|are|was|were) (?:recorded|documented|mentioned|stated|given|found|captured)\b|\bnothing\b[^.]*?\b(?:found|record(?:s|ed)?|says?|shows?|mentions?|answers?)\b|\bnone of (?:the|these)\b|\b(?:don't|doesn't|do not|does not|cannot|can't) (?:say|record|answer|tell|determine|mention|show|give)\b/i
+  /\b(?:not|never|isn't|aren't|wasn't|weren't) (?:been )?(?:recorded|documented|mentioned|stated|given|found|captured)\b|\bno (?:record|mention|exhibit|information|result)s?\b|\bno\b(?! evidence)[^.]*?\b(?:is|are|was|were) (?:recorded|documented|mentioned|stated|given|found|captured)\b|\bnothing\b[^.]*?\b(?:found|record(?:s|ed)?|says?|shows?|mentions?|answers?)\b|\bnone of (?:the|these)\b|\b(?:don't|doesn't|do not|does not|cannot|can't) (?:say|record|answer|tell|determine|mention|show|give)\b/i
 
-/** What makes a sentence more than an abstention: a clause that goes on to answer, or a hedge on a fact it gives. */
-const ANSWERS_TOO = /\b(?:but|however|though|although|while|whereas|yet|except)\b|\b(?:no|without) evidence\b|\bstated in the file\b/i
-
-/** Whether a summary only says the casebook does not answer the question: every sentence and bullet an abstention, none answering too. */
+/** Whether a summary only says the casebook does not answer the question: every clause of every sentence and bullet an abstention. */
 const abstains = (text: string): boolean => {
-  const sentences = text
-    .split(/(?<=[.!?;])\s+|\n+/)
-    .map((sentence) => sentence.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, '').trim())
-    .filter((sentence) => sentence !== '')
-  return sentences.length > 0 && sentences.every((sentence) => ABSTAINS.test(sentence) && !ANSWERS_TOO.test(sentence))
+  const clauses = text
+    .split(/\n+/)
+    .map((line) => line.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s+/, ''))
+    .flatMap((line) => line.split(/[.!?;,]+(?=\s|$)|\b(?:and|but|however|though|although|while|whereas|yet|except)\b/i))
+    .map((clause) => clause.trim())
+    .filter((clause) => clause !== '')
+  return clauses.length > 0 && clauses.every((clause) => ABSTAINS.test(clause))
 }
 
 /** Tokens shaped like an entity id (`service.orders`) or an evidence id (`graph:row-1`). */
