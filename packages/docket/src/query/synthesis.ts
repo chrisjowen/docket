@@ -356,7 +356,7 @@ const describeEvidence = (adapter: string, item: RetrievedEvidence, statuses: re
 }
 
 /** Whether a summary is the refusal the instructions ask for, whatever its case and trailing punctuation. */
-const abstains = (text: string): boolean => {
+export const abstains = (text: string): boolean => {
   const bare = (sentence: string) => sentence.trim().replace(/[.!\s]+$/, '').toLowerCase()
   return bare(text) === bare(NOT_RECORDED)
 }

@@ -97,3 +97,17 @@ export const citationSummary = (outcomes: readonly Outcome[]): string => {
     `Answer diagnostics: ${listed.length > 0 ? listed.join(', ') : 'none'}.`
   ].join('\n')
 }
+
+/** The questions left unscored, each with the judge's raw reply: errors to look into, not results. */
+export const unscoredReplies = (outcomes: readonly Outcome[]): { id: string; judgeReply: string }[] =>
+  outcomes.filter((outcome) => outcome.score === undefined).map(({ id, judgeReply }) => ({ id, judgeReply }))
+
+/** The unscored questions with the judge's raw replies, for the report; empty when every reply held a score. */
+export const unscoredReport = (outcomes: readonly Outcome[]): string => {
+  const unscored = unscoredReplies(outcomes)
+  if (unscored.length === 0) return ''
+  return [
+    `Unscored, because the judge failed or gave no score when asked twice (left out of every sum): ${unscored.length} of ${outcomes.length}.`,
+    ...unscored.map(({ id, judgeReply }) => `- ${id}: ${judgeReply.replace(/\s+/g, ' ')}`)
+  ].join('\n')
+}

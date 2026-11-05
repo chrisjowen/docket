@@ -306,7 +306,7 @@ const describeEvidence = (adapter, item, statuses, text) => {
     ].join('\n');
 };
 /** Whether a summary is the refusal the instructions ask for, whatever its case and trailing punctuation. */
-const abstains = (text) => {
+export const abstains = (text) => {
     const bare = (sentence) => sentence.trim().replace(/[.!\s]+$/, '').toLowerCase();
     return bare(text) === bare(NOT_RECORDED);
 };

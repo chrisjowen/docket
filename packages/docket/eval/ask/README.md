@@ -26,10 +26,13 @@ reported as skipped, not failed.
 3. Asks each question in [`questions.yaml`](questions.yaml) through
    `askProject` with synthesis on, as `docket ask` does.
 4. Gives each summary to the judge. The judge uses the paper's fine-grained
-   prompt (Appendix C.2.2) word for word: [`judge.ts`](judge.ts). A reply
-   with no score in it is asked for once more. When the adapters found
-   nothing, docket writes no summary, and that abstention scores 0 without
-   the judge.
+   prompt (Appendix C.2.2) word for word: [`judge.ts`](judge.ts). Two
+   refusals score 0 without the judge: no summary, because the adapters found
+   nothing, and a summary that is exactly the refusal sentence "Not recorded
+   in Docket." (any case or trailing punctuation, as `docket ask` recognises
+   it). A judge reply with no score in it, or a judge that fails, is asked
+   once more. If it still gives no score, the question is an error: it is
+   left unscored and listed with the judge's raw reply.
 5. Scores the replies and prints the table: [`score.ts`](score.ts).
 
 The example's only adapter is JSONL: lexical search, covering top matches
@@ -72,7 +75,7 @@ to 0. Saying so is right, but it is not an answer.
 The table gives each category and the whole set:
 
 - the count at each score;
-- replies with no score in them (`unscored`), which are left out of every sum;
+- questions the judge left unscored (`unscored`), which are left out of every sum;
 - **fine truthfulness:** the sum of the scores, with the mean per scored
   question in brackets;
 - **coarse truthfulness:** the paper's coarse metric (Appendix C.2.1)
@@ -83,7 +86,9 @@ Below the table:
 
 - how many answers the judge took as answers (not 0) yet cite nothing they
   were given;
-- the codes of any diagnostics the answers carried.
+- the codes of any diagnostics the answers carried;
+- each unscored question, with the judge's raw reply. `outcomes.json` lists
+  them too, under `unscored`.
 
 ## Models
 
@@ -94,26 +99,30 @@ share a family stops with an error. Name each model as `claude`,
 
 | Variable | Default | |
 | --- | --- | --- |
-| `DOCKET_EVAL_ANSWERER` | `claude` | The summarizer, as `docket ask` would use it. |
-| `DOCKET_EVAL_JUDGE` | `ollama:llama3.1` | The paper's judge was also a Llama model (Llama-4-Maverick). |
+| `DOCKET_EVAL_ANSWERER` | `ollama:qwen2.5:7b` | The summarizer, as `docket ask` would use it. |
+| `DOCKET_EVAL_JUDGE` | `claude:sonnet` | |
 | `DOCKET_EVAL_OLLAMA_URL` | `http://localhost:11434` | |
 | `DOCKET_EVAL_ONLY` | | Comma-separated question ids, e.g. `L01,N01`. |
 | `DOCKET_EVAL_CONCURRENCY` | `4` | Questions asked of a `claude` model at once. An Ollama model is asked one at a time. |
 | `DOCKET_EVAL_OUT` | | A directory to write `report.md` and `outcomes.json` to: every answer, judge reply and score. |
 
-A small local judge is noisy, and `llama3.1` (8B) is biased:
-
-- it sometimes marks a fully correct answer +0.5;
-- it scores most correct refusals −1 when the refusal adds what *is*
-  recorded ("no on-call engineer is recorded; Platform Engineering owns
-  Orders").
-
-With it, the not-recorded row mostly measures the judge. For a score you can
-trust, judge with Claude and answer with a local model:
+`ollama:llama3.1` can judge instead, with a Claude answerer (the paper's
+judge was also a Llama model, Llama-4-Maverick):
 
 ```sh
-DOCKET_EVAL_ANSWERER=ollama:qwen2.5:7b DOCKET_EVAL_JUDGE=claude:sonnet pnpm -C packages/docket eval:ask
+DOCKET_EVAL_ANSWERER=claude DOCKET_EVAL_JUDGE=ollama:llama3.1 pnpm -C packages/docket eval:ask
 ```
+
+That small local judge is noisy and biased, so its scores are not to be
+trusted:
+
+- it sometimes marks a fully correct answer +0.5;
+- it misjudges refusals. It scored the bare refusal "Not recorded in Docket."
+  −1 on not-recorded questions and +1 on a count question, and scores most
+  refusals −1 when they add what *is* recorded ("no on-call engineer is
+  recorded; Platform Engineering owns Orders"). The evaluation scores the
+  bare refusal sentence itself, but a refusal in other words still goes to
+  the judge.
 
 The judges are not deterministic, as the paper notes (§4.3), and nor are the
 answers. Compare runs of the same pair of models, and treat a difference of

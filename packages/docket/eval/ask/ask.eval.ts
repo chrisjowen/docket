@@ -11,9 +11,10 @@ import { sync } from '../../src/commands/sync.js'
 import type { SummarizeConfig } from '../../src/config/config.js'
 import { claudeChat } from '../../src/llm/claude-chat.js'
 import { askProject } from '../../src/query/ask.js'
+import { abstains } from '../../src/query/synthesis.js'
 import { familyOf, judgePrompt, parseJudgment, scoreFor, type Judgment } from './judge.js'
 import { loadQuestions, type Question } from './questions.js'
-import { citationSummary, scoreTable, type Outcome } from './score.js'
+import { citationSummary, scoreTable, unscoredReplies, unscoredReport, type Outcome } from './score.js'
 
 /*
  * The ask evaluation (README.md): every question in questions.yaml put to a
@@ -26,8 +27,8 @@ import { citationSummary, scoreTable, type Outcome } from './score.js'
 const EXAMPLE = fileURLToPath(new URL('../../../../examples/acme-platform', import.meta.url))
 
 const env = process.env
-const ANSWERER = env.DOCKET_EVAL_ANSWERER ?? 'claude'
-const JUDGE = env.DOCKET_EVAL_JUDGE ?? 'ollama:llama3.1'
+const ANSWERER = env.DOCKET_EVAL_ANSWERER ?? 'ollama:qwen2.5:7b'
+const JUDGE = env.DOCKET_EVAL_JUDGE ?? 'claude:sonnet'
 const OLLAMA_URL = env.DOCKET_EVAL_OLLAMA_URL ?? 'http://localhost:11434'
 const ONLY = env.DOCKET_EVAL_ONLY?.split(',').map((id) => id.trim()).filter(Boolean)
 const OUT = env.DOCKET_EVAL_OUT
@@ -137,6 +138,8 @@ describe.skipIf(skipped !== undefined)('ask evaluation', () => {
         text: answer.synthesis?.text ?? `(no summary) ${answer.notice?.message ?? ''}`.trim(),
         // Docket gave no answer because the adapters found nothing: an abstention, not something to judge.
         abstained: answer.synthesis === null && answer.notice?.reason === 'empty',
+        // The summary is the instructions' refusal sentence: scored 0, the rubric's score for a refusal, without the judge.
+        refused: answer.synthesis ? abstains(answer.synthesis.text) : false,
         cited: (answer.synthesis?.citedEntities.length ?? 0) + (answer.synthesis?.citedEvidence.length ?? 0),
         diagnostics: answer.diagnostics.map((diagnostic) => diagnostic.code)
       }
@@ -144,9 +147,11 @@ describe.skipIf(skipped !== undefined)('ask evaluation', () => {
 
     const outcomes = await pooled([...questions.entries()], judging.concurrency, async ([index, question]): Promise<Outcome> => {
       const answer = answers[index] as (typeof answers)[number]
-      let reply = '(not judged: the adapters found nothing, so docket gave no answer)'
+      let reply = answer.abstained
+        ? '(not judged: the adapters found nothing, so docket gave no answer)'
+        : '(not judged: docket answered with the refusal sentence)'
       let judgment: Judgment | undefined = 0
-      if (!answer.abstained) {
+      if (!answer.abstained && !answer.refused) {
         // A reply with no score in it, or a judge that fails, is asked once more before the question is left unscored.
         for (let attempt = 0; attempt < 2 && (attempt === 0 || judgment === undefined); attempt += 1) {
           try {
@@ -170,6 +175,7 @@ describe.skipIf(skipped !== undefined)('ask evaluation', () => {
       }
     })
 
+    const unscored = unscoredReport(outcomes)
     const report = [
       `Ask evaluation: ${outcomes.length} questions over examples/acme-platform, answered by ${ANSWERER}, judged by ${JUDGE}.`,
       '',
@@ -177,6 +183,7 @@ describe.skipIf(skipped !== undefined)('ask evaluation', () => {
       '',
       citationSummary(outcomes),
       '',
+      ...(unscored ? [unscored, ''] : []),
       ...outcomes.map(
         (outcome) =>
           `${outcome.id} ${outcome.score === undefined ? 'unscored' : outcome.score > 0 ? `+${outcome.score}` : outcome.score}  ${outcome.answer.replace(/\s+/g, ' ').slice(0, 160)}`
@@ -186,7 +193,7 @@ describe.skipIf(skipped !== undefined)('ask evaluation', () => {
     if (OUT) {
       await mkdir(OUT, { recursive: true })
       await writeFile(join(OUT, 'report.md'), `${report}\n`, 'utf8')
-      await writeFile(join(OUT, 'outcomes.json'), `${JSON.stringify({ answerer: ANSWERER, judge: JUDGE, outcomes }, null, 2)}\n`, 'utf8')
+      await writeFile(join(OUT, 'outcomes.json'), `${JSON.stringify({ answerer: ANSWERER, judge: JUDGE, unscored: unscoredReplies(outcomes), outcomes }, null, 2)}\n`, 'utf8')
     }
     expect(outcomes).toHaveLength(questions.length)
   })

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { takeSnapshot } from '../../src/query/snapshot.js'
 import { coarseOf, familyOf, FINE_GRAINED_JUDGE, judgePrompt, NOT_RECORDED_REFERENCE, parseJudgment, scoreFor } from './judge.js'
 import { CATEGORIES, loadQuestions, type Question } from './questions.js'
-import { citationSummary, scoreTable, tallies, type Outcome } from './score.js'
+import { citationSummary, scoreTable, tallies, unscoredReplies, unscoredReport, type Outcome } from './score.js'
 
 /*
  * What the ask evaluation is made of, checked without a model: the question
@@ -85,7 +85,7 @@ describe('the score table', () => {
     question: id,
     answer: '',
     score,
-    judgeReply: '',
+    judgeReply: score === undefined ? "I'm ready to help!\nWhat should I grade?" : String(score),
     cited,
     diagnostics: []
   })
@@ -110,5 +110,13 @@ describe('the score table', () => {
     expect(table).toContain('| lookup | 3 | 1 | 1 | 0 | 0 | 1 | 0 | +0.5 (+0.17) | -1 (-0.33) |')
     expect(table).toContain('| all | 5 | 1 | 1 | 1 | 0 | 1 | 1 | +0.5 (+0.13) | -1 (-0.25) |')
     expect(citationSummary(outcomes)).toContain('cite nothing they were given: 1 of 5.')
+  })
+
+  it('lists each unscored question with the judge\'s raw reply, and nothing when every reply held a score', () => {
+    expect(unscoredReplies(outcomes)).toEqual([{ id: 'N02', judgeReply: "I'm ready to help!\nWhat should I grade?" }])
+    expect(unscoredReport(outcomes)).toBe(
+      "Unscored, because the judge failed or gave no score when asked twice (left out of every sum): 1 of 5.\n- N02: I'm ready to help! What should I grade?"
+    )
+    expect(unscoredReport(outcomes.filter((each) => each.score !== undefined))).toBe('')
   })
 })
