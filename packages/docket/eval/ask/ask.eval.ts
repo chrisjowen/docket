@@ -147,10 +147,15 @@ describe.skipIf(skipped !== undefined)('ask evaluation', () => {
       let reply = '(not judged: the adapters found nothing, so docket gave no answer)'
       let judgment: Judgment | undefined = 0
       if (!answer.abstained) {
-        // A reply with no score in it is asked for once more before it is left unscored.
+        // A reply with no score in it, or a judge that fails, is asked once more before the question is left unscored.
         for (let attempt = 0; attempt < 2 && (attempt === 0 || judgment === undefined); attempt += 1) {
-          reply = (await judge(judgePrompt(question, answer.text))).trim()
-          judgment = parseJudgment(reply)
+          try {
+            reply = (await judge(judgePrompt(question, answer.text))).trim()
+            judgment = parseJudgment(reply)
+          } catch (cause) {
+            reply = `(the judge failed: ${cause instanceof Error ? cause.message : String(cause)})`
+            judgment = undefined
+          }
         }
       }
       return {
