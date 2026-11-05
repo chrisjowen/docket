@@ -352,9 +352,9 @@ const describeEvidence = (adapter: string, item: RetrievedEvidence, statuses: re
   ].join('\n')
 }
 
-/** How a summary says the casebook does not answer the question, as the instructions ask it to. */
+/** How a summary's leading sentence says the casebook does not answer the question, as the instructions ask it to. */
 const ABSTAINS =
-  /\b(?:not|never|isn't|aren't|wasn't|weren't) (?:been )?(?:recorded|documented|mentioned|stated|given|found|captured)\b|\bno (?:record|mention|exhibit|evidence|information|result)s?\b|\bnothing\b[^.]*?\b(?:found|record(?:s|ed)?|says?|shows?|mentions?|answers?)\b|\bnone of (?:the|these)\b|\b(?:don't|doesn't|do not|does not|cannot|can't) (?:say|record|answer|tell|determine|mention|show|give)\b/i
+  /\b(?:not|never|isn't|aren't|wasn't|weren't) (?:been )?(?:recorded|documented|mentioned|stated|given|found|captured)\b|\bno (?:record|mention|exhibit|information|result)s?\b|\bno\b[^.]*?\b(?:is|are|was|were) (?:recorded|documented|mentioned|stated|given|found|captured)\b|\bnothing\b[^.]*?\b(?:found|record(?:s|ed)?|says?|shows?|mentions?|answers?)\b|\bnone of (?:the|these)\b|\b(?:don't|doesn't|do not|does not|cannot|can't) (?:say|record|answer|tell|determine|mention|show|give)\b/i
 
 /** Tokens shaped like an entity id (`service.orders`) or an evidence id (`graph:row-1`). */
 const ID_TOKENS = /[A-Za-z0-9][A-Za-z0-9._#:-]*[A-Za-z0-9]/g
@@ -396,7 +396,7 @@ export const synthesisDiagnostics = (text: string, input: SynthesisInput, built:
         `${one ? 'it is' : 'they are'} not counted as citations, and what ${one ? 'it backs' : 'they back'} may be made up.`
     })
   }
-  if (citationsIn(text, given).length === 0 && !ABSTAINS.test(text)) {
+  if (citationsIn(text, given).length === 0 && !ABSTAINS.test(text.trim().split(/(?<=[.!?;])\s+/)[0] ?? '')) {
     diagnostics.push({
       severity: 'warning',
       code: 'synthesis-uncited',

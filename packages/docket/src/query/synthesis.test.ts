@@ -270,6 +270,21 @@ describe('synthesize', () => {
       const uncited = await synthesize(input(), options(undefined))
       expect(uncited.diagnostics).toEqual([expect.objectContaining({ severity: 'warning', code: 'synthesis-uncited' })])
 
+      reply = 'Orders depends on the Ledger, owned by Payments, though this is stated with no evidence.'
+      expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])
+
+      reply = 'Orders is owned by Payments; its SLA is not recorded.'
+      expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])
+
+      reply = 'Orders is owned by Payments. Its SLA is not recorded.'
+      expect((await synthesize(input(), options(undefined))).diagnostics).toEqual([expect.objectContaining({ code: 'synthesis-uncited' })])
+
+      reply = 'No deployment of Orders is recorded. The exhibits cover only its owner.'
+      expect((await synthesize(input(), options(undefined))).diagnostics).toBeUndefined()
+
+      reply = 'None of the exhibits says how often Orders was deployed.'
+      expect((await synthesize(input(), options(undefined))).diagnostics).toBeUndefined()
+
       reply = 'Nothing in these exhibits records how often Orders was deployed.'
       expect((await synthesize(input(), options(undefined))).diagnostics).toBeUndefined()
     } finally {
