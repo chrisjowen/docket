@@ -37,6 +37,8 @@ export { validateDocuments } from './ontology/validator.js';
 export { aggregate } from './evidence/aggregate.js';
 export { confidenceModel } from './evidence/confidence.js';
 export { memoryConfigSchema } from './config/config.js';
+/** The starting ontologies `docket init --template` offers, by name: absolute paths to the bundled yaml. */
+export { ONTOLOGY_TEMPLATES } from './config/defaults.js';
 export { ATTRIBUTE_TYPES, EVIDENCE_LOCATION_FIELDS, error, ontologySchema, warning } from './model/index.js';
 export { FALLBACK_ICON, ICON_NAMES, iconFor, isIconName } from './ontology/icons.js';
 /** The graph `docket open` browses, read from any canonical source. */

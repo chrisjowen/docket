@@ -1,0 +1,198 @@
+# A small people-and-organisations docket, committed so the search
+# evaluation always has one corpus to run on and `pnpm test` can check the
+# pipeline end to end without downloading anything. Written under the
+# people-org ontology template. See ../README.md.
+
+entities:
+  - id: organisation.kestrel-labs
+    type: organisation
+    title: Kestrel Labs
+    body: A 400-person fintech building payment risk models, headquartered in Lisbon with an engineering hub in Nairobi.
+    attributes: { industry: fintech, size: medium, website: https://kestrel.example }
+    links:
+      - { rel: located_in, target: location.lisbon }
+    evidence: [{ source: directory, key: org/kestrel }]
+
+  - id: organisation.kestrel-research
+    type: organisation
+    title: Kestrel Research
+    body: Kestrel Labs' research division, publishing on fraud detection and graph learning.
+    links:
+      - { rel: part_of, target: organisation.kestrel-labs }
+    evidence: [{ source: profile, urls: [https://kestrel.example/research] }]
+
+  - id: organisation.harbour-bank
+    type: organisation
+    title: Harbour Bank
+    body: A retail bank and Kestrel Labs' largest design partner for the transaction monitoring product.
+    attributes: { industry: banking, size: enterprise }
+    evidence: [{ source: docs, path: partners/harbour-bank.md }]
+
+  - id: team.data-platform
+    type: team
+    title: Data Platform
+    body: Runs the feature store, the streaming pipelines and the warehouse that the risk models train on.
+    attributes: { channel: "#data-platform" }
+    links:
+      - { rel: part_of, target: organisation.kestrel-labs }
+      - { rel: located_in, target: location.nairobi }
+    evidence: [{ source: directory, key: team/data-platform }]
+
+  - id: team.risk-modelling
+    type: team
+    title: Risk Modelling
+    body: Builds and validates the payment fraud and credit risk models.
+    links:
+      - { rel: part_of, target: organisation.kestrel-labs }
+      - { rel: located_in, target: location.lisbon }
+    evidence: [{ source: conversation, note: Described in the planning session. }]
+
+  - id: team.partner-success
+    type: team
+    title: Partner Success
+    body: Looks after design partners such as Harbour Bank - onboarding, quarterly reviews and escalations.
+    links:
+      - { rel: part_of, target: organisation.kestrel-labs }
+    evidence: [{ source: human, observedBy: ops }]
+
+  - id: person.hannah-okoro
+    type: person
+    title: Hannah Okoro
+    body: Head of Data Platform. Joined from a streaming start-up in 2023 and owns the migration from nightly batch to streaming features.
+    attributes: { title: Head of Data Platform, status: active }
+    links:
+      - { rel: works_at, target: organisation.kestrel-labs }
+      - { rel: member_of, target: team.data-platform }
+      - { rel: has_role, target: role.data-protection-officer }
+      - { rel: has_skill, target: skill.kafka }
+      - { rel: located_in, target: location.nairobi }
+    evidence: [{ source: directory, key: people/hokoro }]
+
+  - id: person.ravi-menon
+    type: person
+    title: Ravi Menon
+    body: Senior data engineer on the feature store. The person to ask about backfills and point-in-time joins.
+    attributes: { title: Senior Data Engineer, status: active }
+    links:
+      - { rel: works_at, target: organisation.kestrel-labs }
+      - { rel: member_of, target: team.data-platform }
+      - { rel: reports_to, target: person.hannah-okoro }
+      - { rel: has_skill, target: skill.kafka }
+      - { rel: has_skill, target: skill.kubernetes }
+    evidence: [{ source: conversation, note: Introduced himself in the session. }]
+
+  - id: person.ines-carvalho
+    type: person
+    title: Inês Carvalho
+    body: Lead of Risk Modelling. Wrote the graph-based fraud model now in production and reviews every model change.
+    attributes: { title: Principal Data Scientist, status: active }
+    links:
+      - { rel: works_at, target: organisation.kestrel-labs }
+      - { rel: member_of, target: team.risk-modelling }
+      - { rel: has_role, target: role.model-risk-owner }
+      - { rel: has_skill, target: skill.graph-learning }
+      - { rel: located_in, target: location.lisbon }
+    evidence: [{ source: profile, urls: [https://kestrel.example/team/ines] }]
+
+  - id: person.tomas-silva
+    type: person
+    title: Tomás Silva
+    body: Data scientist on Risk Modelling, working on credit risk. Runs the Kubernetes training cluster on the side.
+    attributes: { title: Data Scientist, status: active }
+    links:
+      - { rel: works_at, target: organisation.kestrel-labs }
+      - { rel: member_of, target: team.risk-modelling }
+      - { rel: reports_to, target: person.ines-carvalho }
+      - { rel: has_skill, target: skill.kubernetes }
+      - { rel: located_in, target: location.lisbon }
+    evidence: [{ source: docs, path: wiki/risk-team.md }]
+
+  - id: person.grace-wanjiru
+    type: person
+    title: Grace Wanjiru
+    body: Partner success manager for Harbour Bank. Runs the quarterly business review and owns the escalation path.
+    attributes: { title: Partner Success Manager, status: active }
+    links:
+      - { rel: works_at, target: organisation.kestrel-labs }
+      - { rel: member_of, target: team.partner-success }
+      - { rel: knows, target: person.oliver-hart }
+    evidence: [{ source: human, observedBy: ops }]
+
+  - id: person.oliver-hart
+    type: person
+    title: Oliver Hart
+    body: Head of Financial Crime at Harbour Bank and the sponsor of the transaction monitoring pilot.
+    attributes: { title: Head of Financial Crime, status: active }
+    links:
+      - { rel: works_at, target: organisation.harbour-bank }
+    evidence: [{ source: docs, path: partners/harbour-bank.md }]
+
+  - id: person.mei-lin-zhou
+    type: person
+    title: Mei-Lin Zhou
+    body: Former research scientist at Kestrel Research who published the temporal graph fraud paper. Left in 2025.
+    attributes: { title: Research Scientist, status: left }
+    links:
+      - { rel: member_of, target: organisation.kestrel-research }
+      - { rel: has_skill, target: skill.graph-learning }
+    evidence: [{ source: profile, urls: [https://kestrel.example/research/mei-lin] }]
+
+  - id: role.data-protection-officer
+    type: role
+    title: Data Protection Officer
+    body: Accountable for personal data handling and the answer to any regulator or customer data request.
+    evidence: [{ source: human, observedBy: legal }]
+
+  - id: role.model-risk-owner
+    type: role
+    title: Model Risk Owner
+    body: Signs off every production model change and keeps the model inventory for the regulator.
+    evidence: [{ source: docs, path: policies/model-risk.md }]
+
+  - id: location.lisbon
+    type: location
+    title: Lisbon
+    body: Headquarters. Risk Modelling and most of leadership sit here.
+    attributes: { country: Portugal, timezone: Europe/Lisbon }
+    evidence: [{ source: directory, key: office/lisbon }]
+
+  - id: location.nairobi
+    type: location
+    title: Nairobi
+    body: Engineering hub, home of the Data Platform team.
+    attributes: { country: Kenya, timezone: Africa/Nairobi }
+    evidence: [{ source: directory, key: office/nairobi }]
+
+  - id: skill.kafka
+    type: skill
+    title: Kafka
+    body: Event streaming with Apache Kafka - topics, consumers, exactly-once pipelines.
+    evidence: [{ source: conversation, note: Listed in the skills survey. }]
+
+  - id: skill.kubernetes
+    type: skill
+    title: Kubernetes
+    body: Running workloads and training jobs on Kubernetes.
+    evidence: [{ source: conversation, note: Listed in the skills survey. }]
+
+  - id: skill.graph-learning
+    type: skill
+    title: Graph learning
+    body: Graph neural networks and graph-based features for fraud detection.
+    evidence: [{ source: conversation, note: Listed in the skills survey. }]
+
+queries:
+  - { id: who-hannah, text: Who is Hannah Okoro?, kind: answerable, category: who-is, relevant: { person.hannah-okoro: 2 } }
+  - { id: lead-data, text: Who leads the Data Platform team?, kind: answerable, category: lookup, relevant: { person.hannah-okoro: 2, team.data-platform: 1 } }
+  - { id: ravi-manager, text: Who does Ravi Menon report to?, kind: answerable, category: multi-hop, relevant: { person.ravi-menon: 2, person.hannah-okoro: 2 } }
+  - { id: kubernetes, text: Who knows Kubernetes?, kind: answerable, category: multi-hop, relevant: { skill.kubernetes: 1, person.ravi-menon: 2, person.tomas-silva: 2 } }
+  - { id: harbour-contact, text: Who is our contact at Harbour Bank?, kind: answerable, category: multi-hop, relevant: { person.oliver-hart: 2, person.grace-wanjiru: 2, organisation.harbour-bank: 1 } }
+  - { id: dpo, text: Who is the data protection officer?, kind: answerable, category: lookup, relevant: { role.data-protection-officer: 2, person.hannah-okoro: 2 } }
+  - { id: lisbon, text: Which teams are based in Lisbon?, kind: answerable, category: multi-hop, relevant: { location.lisbon: 1, team.risk-modelling: 2 } }
+  - { id: fraud-paper, text: Who published the temporal graph fraud paper?, kind: answerable, category: lookup, relevant: { person.mei-lin-zhou: 2 } }
+  - { id: model-signoff, text: Who signs off production model changes?, kind: answerable, category: lookup, relevant: { role.model-risk-owner: 2, person.ines-carvalho: 2 } }
+  - { id: who-is-sophia, text: who is sophia, kind: no-answer, category: absent-name, relevant: {} }
+  - { id: who-is-priya, text: Who is Priya Okoro?, kind: no-answer, category: near-miss, relevant: {} }
+  - { id: rust, text: Who knows Rust?, kind: no-answer, category: absent, relevant: {} }
+  - { id: berlin, text: Which teams are based in Berlin?, kind: no-answer, category: absent, relevant: {} }
+  - { id: cto-quillfeather, text: Who is the CTO of Quillfeather Insurance?, kind: no-answer, category: absent, relevant: {} }

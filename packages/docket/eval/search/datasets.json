@@ -1,0 +1,40 @@
+{
+  "comment": "Upstream files the search evaluation reads, pinned by commit or release and checked by sha256. Fetch them with `pnpm -C packages/docket eval:search:download`. DOCKET_EVAL_MIRROR replaces each url with <mirror>/<file>.",
+  "files": [
+    {
+      "file": "locomo10.json",
+      "dataset": "locomo",
+      "url": "https://raw.githubusercontent.com/snap-research/locomo/3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376/data/locomo10.json",
+      "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+      "license": "CC BY-NC 4.0"
+    },
+    {
+      "file": "scifact.zip",
+      "dataset": "scifact",
+      "url": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip",
+      "sha256": "536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165",
+      "license": "CC BY-NC 2.0"
+    },
+    {
+      "file": "wands-product.csv",
+      "dataset": "wands",
+      "url": "https://raw.githubusercontent.com/wayfair/WANDS/3b74dcf4ba29ab8ff3e6a50b5b09fc627cb882b5/dataset/product.csv",
+      "sha256": "d993926254572e6eba96c8fd87cc549a17fb91ad3748308036eee4cf92b10ac6",
+      "license": "MIT"
+    },
+    {
+      "file": "wands-query.csv",
+      "dataset": "wands",
+      "url": "https://raw.githubusercontent.com/wayfair/WANDS/3b74dcf4ba29ab8ff3e6a50b5b09fc627cb882b5/dataset/query.csv",
+      "sha256": "63b61660560fecc33ec490804c7e2b81402ee3e7c31a9cbb5e03736639f68e95",
+      "license": "MIT"
+    },
+    {
+      "file": "wands-label.csv",
+      "dataset": "wands",
+      "url": "https://raw.githubusercontent.com/wayfair/WANDS/3b74dcf4ba29ab8ff3e6a50b5b09fc627cb882b5/dataset/label.csv",
+      "sha256": "c11fe81ad62f17f56f316b0ec9630ebe8fbe1393578cb0ca4f05c17253a180ef",
+      "license": "MIT"
+    }
+  ]
+}

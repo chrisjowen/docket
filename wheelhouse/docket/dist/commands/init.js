@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { CONFIG_FILENAME } from '../config/config.js';
-import { DEFAULT_CONFIG_YAML, DEFAULT_DIRECTORIES, DEFAULT_ONTOLOGY_PATH, GITIGNORE_ENTRIES } from '../config/defaults.js';
+import { DEFAULT_CONFIG_YAML, DEFAULT_DIRECTORIES, GITIGNORE_ENTRIES, ONTOLOGY_TEMPLATES } from '../config/defaults.js';
 import { defaultConfig } from '../config/loader.js';
 /**
  * Create `.docket.yaml`, the `.docket/` layout and the starting ontology
@@ -10,6 +10,10 @@ import { defaultConfig } from '../config/loader.js';
  * reported as skipped unless `force` is set.
  */
 export const init = async (options = {}) => {
+    const template = ONTOLOGY_TEMPLATES[options.template ?? 'sdlc'];
+    if (!template) {
+        throw new Error(`Unknown ontology template "${options.template}". Choose one of: ${Object.keys(ONTOLOGY_TEMPLATES).join(', ')}.`);
+    }
     const { memoryRoot, ontologyPath, projectRoot } = defaultConfig(options.cwd ?? process.cwd());
     const force = options.force ?? false;
     const result = {
@@ -36,7 +40,7 @@ export const init = async (options = {}) => {
         result.created.push(rel(path));
     };
     await write(join(projectRoot, CONFIG_FILENAME), DEFAULT_CONFIG_YAML);
-    await write(ontologyPath, await readFile(DEFAULT_ONTOLOGY_PATH, 'utf8'));
+    await write(ontologyPath, await readFile(template, 'utf8'));
     // Projections and cached answers are disposable, so keep them out of version
     // control. Only amend a `.gitignore` that already exists - never create one.
     const gitignore = join(projectRoot, '.gitignore');

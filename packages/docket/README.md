@@ -32,6 +32,7 @@ Or use the CLI on its own:
 ```bash
 npm install --save-dev @chrisjowen/docket
 npx docket init                 # scaffold .docket.yaml, .docket/ and the default ontology
+                                # (--template people-org|crm|research|personal-knowledge|product-catalogue for another)
 npx docket validate --strict    # check files against the ontology
 npx docket sync                 # project changed files into .docket/.index
 npx docket watch                # reconcile continuously as files change

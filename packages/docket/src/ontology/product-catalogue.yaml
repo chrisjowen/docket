@@ -1,0 +1,301 @@
+# Product catalogue ontology.
+#
+# What a business sells: products and their variants, the category tree they
+# sit in, the brands and suppliers behind them and the collections they are
+# merchandised in. Remove what you never use, or extend it: adding a type
+# here is all that is required, no CLI change. A type's `icon` names the
+# Lucide icon (https://lucide.dev/icons) that `docket open` draws it with;
+# see docs/SPEC.md for the icons docket bundles.
+#
+# Read this file before performing structured memory extraction.
+
+version: 1
+
+# --- Evidence and confidence ---------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming a source kind below and the exact location. Confidence is
+# computed from that evidence, never written by hand, and says how far the
+# record is supported - not how well it matches any question asked of it.
+
+evidence:
+  unevidenced: 0.5
+
+  sources:
+    human:
+      description: >
+        Stated or confirmed by a person - a merchandiser, a buyer. Record who
+        in observedBy.
+      confidence: 0.9
+
+    conversation:
+      description: >
+        Established in an agent session - the user said so. Record the session
+        and, in note, what was said.
+      confidence: 0.7
+
+    catalogue_feed:
+      description: >
+        The product information system or a catalogue feed - PIM, ERP, a
+        Shopify or Merchant Center export. Record the feed URL or the record's
+        key, such as the SKU.
+      confidence: 0.85
+      requiresAny:
+        - urls
+        - key
+
+    supplier_sheet:
+      description: >
+        A supplier's spec sheet or price list. Record the file or URL.
+      confidence: 0.7
+      requiresAny:
+        - path
+        - urls
+
+    storefront:
+      description: >
+        The live product page. Record its URL.
+      confidence: 0.75
+      requires:
+        - urls
+
+    reviews:
+      description: >
+        Customer reviews or questions. Record the URL. A review says how a
+        product is used, not what it is - weigh it accordingly.
+      confidence: 0.4
+      requires:
+        - urls
+
+resourceTypes:
+
+  product:
+    description: >
+      Something sold, as customers see it on a product page.
+
+    icon: package
+
+    attributes:
+      sku:
+        type: string
+
+      price:
+        type: number
+
+      rating:
+        type: number
+        description: Average customer rating, out of 5.
+
+      reviewCount:
+        type: number
+
+      status:
+        type: string
+        enum:
+          - active
+          - discontinued
+          - coming-soon
+
+    extraction:
+      instructions: >
+        Capture a product when an item for sale is named with what it is, its
+        materials, dimensions or what it is for. Put its description and
+        features in the body.
+
+      clues:
+        - product
+        - item
+        - SKU
+        - listing
+
+      doNotConfuseWith:
+        - variant
+        - category
+
+  variant:
+    description: >
+      One purchasable version of a product - a size, a colour, a finish.
+
+    icon: boxes
+
+    attributes:
+      sku:
+        type: string
+
+      options:
+        type: string[]
+
+    extraction:
+      instructions: >
+        Capture a variant when versions of a product differ in something
+        customers choose between, and the difference matters.
+
+      clues:
+        - size
+        - colour
+        - finish
+        - variant
+
+  category:
+    description: >
+      A node in the category tree products are browsed by.
+
+    icon: folder
+
+    extraction:
+      instructions: >
+        Capture a category for each level of the browse tree, linked to its
+        parent with subcategory_of.
+
+      clues:
+        - category
+        - department
+        - aisle
+        - collection of
+
+      doNotConfuseWith:
+        - collection
+
+  brand:
+    description: >
+      The brand or maker a product is sold under.
+
+    icon: tag
+
+    extraction:
+      instructions: >
+        Capture a brand when who makes a product matters to customers.
+
+      clues:
+        - brand
+        - by
+        - maker
+        - manufacturer
+
+      doNotConfuseWith:
+        - supplier
+
+  collection:
+    description: >
+      A merchandised set of products - a seasonal edit, a room set, a sale.
+
+    icon: layers
+
+    extraction:
+      instructions: >
+        Capture a collection when products are grouped for selling rather than
+        by what they are.
+
+      clues:
+        - collection
+        - edit
+        - range
+        - bundle
+
+      doNotConfuseWith:
+        - category
+
+  supplier:
+    description: >
+      Who you buy stock from.
+
+    icon: handshake
+
+    attributes:
+      leadTimeDays:
+        type: number
+
+    extraction:
+      instructions: >
+        Capture a supplier when where stock comes from matters - lead times,
+        terms, quality.
+
+      clues:
+        - supplier
+        - vendor
+        - wholesaler
+        - lead time
+
+relationships:
+
+  in_category:
+    description: >
+      The category a product is browsed under.
+
+    from:
+      - product
+
+    to:
+      - category
+
+  subcategory_of:
+    description: >
+      A category's parent in the browse tree.
+
+    from:
+      - category
+
+    to:
+      - category
+
+  variant_of:
+    description: >
+      The product a variant is a version of.
+
+    from:
+      - variant
+
+    to:
+      - product
+
+  made_by:
+    description: >
+      The brand a product is sold under.
+
+    from:
+      - product
+
+    to:
+      - brand
+
+  in_collection:
+    description: >
+      A collection a product is merchandised in.
+
+    from:
+      - product
+
+    to:
+      - collection
+
+  supplied_by:
+    description: >
+      Who supplies a product or a brand.
+
+    from:
+      - product
+      - brand
+
+    to:
+      - supplier
+
+  compatible_with:
+    description: >
+      A product works with another - a mattress for a bed frame, a cushion for
+      a chair.
+
+    from:
+      - product
+
+    to:
+      - product
+
+  related_to:
+    description: >
+      A product customers often consider alongside another.
+
+    from:
+      - product
+
+    to:
+      - product

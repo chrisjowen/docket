@@ -1,0 +1,491 @@
+# CRM ontology.
+#
+# Customer relationships: the accounts you sell to and support, the people at
+# them, the deals in flight, the cases they raise, the products involved and
+# the reps who own each one. Remove what you never use, or extend it: adding a
+# type here is all that is required, no CLI change. A type's `icon` names the
+# Lucide icon (https://lucide.dev/icons) that `docket open` draws it with; see
+# docs/SPEC.md for the icons docket bundles.
+#
+# Read this file before performing structured memory extraction.
+
+version: 1
+
+# --- Evidence and confidence ---------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming a source kind below and the exact location. Confidence is
+# computed from that evidence, never written by hand, and says how far the
+# record is supported - not how well it matches any question asked of it.
+
+evidence:
+  unevidenced: 0.5
+
+  sources:
+    human:
+      description: >
+        Stated or confirmed by a person - written by hand, or confirmed when
+        asked. Record who in observedBy.
+      confidence: 0.9
+
+    conversation:
+      description: >
+        Established in an agent session - the user said so. Record the session
+        and, in note, what was said.
+      confidence: 0.7
+
+    crm_record:
+      description: >
+        A record in the system of record - Salesforce, HubSpot, Dynamics.
+        Record its URL or its object key, such as `Account/0015g00000XyZ`.
+      confidence: 0.85
+      requiresAny:
+        - urls
+        - key
+
+    email:
+      description: >
+        An email or a message thread with the customer. Record a link to the
+        thread or its message id, as key.
+      confidence: 0.65
+      requiresAny:
+        - urls
+        - key
+
+    call_notes:
+      description: >
+        Notes from a call or meeting - a transcript, a call recording summary,
+        a rep's write-up. Record the file or URL.
+      confidence: 0.6
+      requiresAny:
+        - path
+        - urls
+
+    docs:
+      description: >
+        A contract, proposal, wiki page or support article. Record the file or
+        the URL.
+      confidence: 0.6
+      requiresAny:
+        - path
+        - urls
+
+resourceTypes:
+
+  account:
+    description: >
+      An organisation you sell to, support or partner with.
+
+    icon: building
+
+    attributes:
+      industry:
+        type: string
+
+      tier:
+        type: string
+        enum:
+          - strategic
+          - enterprise
+          - mid-market
+          - smb
+
+      region:
+        type: string
+
+      status:
+        type: string
+        enum:
+          - prospect
+          - customer
+          - churned
+          - partner
+
+    extraction:
+      instructions: >
+        Capture an account when a customer, prospect or partner organisation is
+        named with something worth recalling - its tier, who owns it, what it
+        bought or raised.
+
+      clues:
+        - customer
+        - account
+        - client
+        - prospect
+        - partner
+
+      doNotConfuseWith:
+        - contact
+
+  contact:
+    description: >
+      A person at an account - a buyer, a champion, an end user.
+
+    icon: user
+
+    attributes:
+      email:
+        type: string
+
+      title:
+        type: string
+
+      role:
+        type: string
+        enum:
+          - decision-maker
+          - champion
+          - influencer
+          - user
+          - billing
+
+    extraction:
+      instructions: >
+        Capture a contact when a person at an account is named with their role
+        in a deal, a case or the relationship.
+
+      clues:
+        - contact
+        - buyer
+        - champion
+        - stakeholder
+
+      doNotConfuseWith:
+        - sales_rep
+        - lead
+
+  lead:
+    description: >
+      Someone who showed interest but is not yet qualified into a contact and
+      an opportunity.
+
+    icon: target
+
+    attributes:
+      source:
+        type: string
+
+      status:
+        type: string
+        enum:
+          - new
+          - working
+          - qualified
+          - disqualified
+
+    extraction:
+      instructions: >
+        Capture a lead for unqualified interest. Once qualified it is converted
+        to a contact and an opportunity, linked with converted_to.
+
+      clues:
+        - lead
+        - inbound
+        - signed up
+        - interest
+
+  opportunity:
+    description: >
+      A potential deal with an account - a new sale, an expansion or a renewal.
+
+    icon: handshake
+
+    attributes:
+      stage:
+        type: string
+        enum:
+          - prospecting
+          - qualification
+          - proposal
+          - negotiation
+          - closed-won
+          - closed-lost
+
+      amount:
+        type: number
+
+      closeDate:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture an opportunity when a deal is discussed - its stage, its value,
+        what it is for and what blocks it.
+
+      clues:
+        - deal
+        - opportunity
+        - renewal
+        - pipeline
+        - proposal
+
+  case:
+    description: >
+      A support case or complaint an account raised.
+
+    icon: inbox
+
+    attributes:
+      priority:
+        type: string
+        enum:
+          - low
+          - medium
+          - high
+          - urgent
+
+      status:
+        type: string
+        enum:
+          - open
+          - pending
+          - escalated
+          - closed
+
+    extraction:
+      instructions: >
+        Capture a case when a customer reports a problem or asks for help, with
+        what went wrong and how it was resolved.
+
+      clues:
+        - ticket
+        - case
+        - complaint
+        - issue
+        - escalation
+
+  product:
+    description: >
+      Something you sell - a product, a plan, a service package.
+
+    icon: package
+
+    attributes:
+      sku:
+        type: string
+
+      family:
+        type: string
+
+      price:
+        type: number
+
+    extraction:
+      instructions: >
+        Capture a product when what is sold or supported is named.
+
+      clues:
+        - product
+        - plan
+        - SKU
+        - licence
+
+  activity:
+    description: >
+      A call, meeting, email or demo with an account, with what came of it.
+
+    icon: calendar
+
+    attributes:
+      kind:
+        type: string
+        enum:
+          - call
+          - meeting
+          - email
+          - demo
+
+      date:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture an activity when an interaction with a customer produced
+        something worth recalling - a commitment, an objection, a next step.
+
+      clues:
+        - call
+        - meeting
+        - demo
+        - follow-up
+
+  sales_rep:
+    description: >
+      A person on your side who owns accounts, deals or cases - an account
+      executive, customer success manager or support engineer.
+
+    icon: briefcase
+
+    attributes:
+      team:
+        type: string
+
+      region:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a rep when someone on your side owns a customer relationship.
+
+      clues:
+        - account executive
+        - owner
+        - CSM
+        - rep
+
+      doNotConfuseWith:
+        - contact
+
+  contract:
+    description: >
+      An agreement with an account - its term, value and renewal date.
+
+    icon: scroll-text
+
+    attributes:
+      startDate:
+        type: string
+
+      endDate:
+        type: string
+
+      value:
+        type: number
+
+    extraction:
+      instructions: >
+        Capture a contract when its terms or renewal matter.
+
+      clues:
+        - contract
+        - agreement
+        - MSA
+        - renewal
+
+  campaign:
+    description: >
+      A marketing campaign that leads and opportunities come from.
+
+    icon: megaphone
+
+    extraction:
+      instructions: >
+        Capture a campaign when where interest came from matters.
+
+      clues:
+        - campaign
+        - webinar
+        - event
+        - promotion
+
+relationships:
+
+  works_at:
+    description: >
+      A contact works at an account.
+
+    from:
+      - contact
+
+    to:
+      - account
+
+  for_account:
+    description: >
+      An opportunity, case, contract or activity belongs to an account.
+
+    from:
+      - opportunity
+      - case
+      - contract
+      - activity
+
+    to:
+      - account
+
+  managed_by:
+    description: >
+      The rep who owns an account, lead, opportunity or case.
+
+    from:
+      - account
+      - lead
+      - opportunity
+      - case
+
+    to:
+      - sales_rep
+
+  raised_by:
+    description: >
+      The contact who raised a case.
+
+    from:
+      - case
+
+    to:
+      - contact
+
+  involves_product:
+    description: >
+      The product an opportunity, case or contract is about.
+
+    from:
+      - opportunity
+      - case
+      - contract
+
+    to:
+      - product
+
+  with_contact:
+    description: >
+      Who an activity was with.
+
+    from:
+      - activity
+
+    to:
+      - contact
+
+  about_opportunity:
+    description: >
+      The deal an activity moved forward.
+
+    from:
+      - activity
+
+    to:
+      - opportunity
+
+  sourced_from:
+    description: >
+      The campaign a lead or opportunity came from.
+
+    from:
+      - lead
+      - opportunity
+
+    to:
+      - campaign
+
+  converted_to:
+    description: >
+      A qualified lead became a contact or an opportunity.
+
+    from:
+      - lead
+
+    to:
+      - contact
+      - opportunity
+
+  subsidiary_of:
+    description: >
+      An account is part of a parent account.
+
+    from:
+      - account
+
+    to:
+      - account

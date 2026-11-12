@@ -56,7 +56,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "eval:ask": "vitest run --config eval/vitest.config.ts"
+    "eval:ask": "vitest run --config eval/vitest.config.ts eval/ask",
+    "eval:search": "vitest run --config eval/vitest.config.ts eval/search",
+    "eval:search:download": "node eval/search/download.mjs"
   },
   "dependencies": {
     "chokidar": "^4.0.3",

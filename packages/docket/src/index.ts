@@ -70,6 +70,8 @@ export {
 export { aggregate, type AggregateResult } from './evidence/aggregate.js'
 export { confidenceModel, type ConfidenceModel } from './evidence/confidence.js'
 export { memoryConfigSchema, type MemoryConfig, type ResolvedConfig } from './config/config.js'
+/** The starting ontologies `docket init --template` offers, by name: absolute paths to the bundled yaml. */
+export { ONTOLOGY_TEMPLATES } from './config/defaults.js'
 export {
   ATTRIBUTE_TYPES,
   EVIDENCE_LOCATION_FIELDS,

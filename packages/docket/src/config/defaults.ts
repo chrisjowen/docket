@@ -105,5 +105,18 @@ export const DEFAULT_ONTOLOGY_PATH = fileURLToPath(
   new URL('../ontology/default-sdlc.yaml', import.meta.url)
 )
 
+/**
+ * The starting ontologies `docket init --template` offers, by name, each an
+ * absolute path to a bundled yaml beside the default. `sdlc` is the default.
+ */
+export const ONTOLOGY_TEMPLATES: Readonly<Record<string, string>> = {
+  sdlc: DEFAULT_ONTOLOGY_PATH,
+  'people-org': fileURLToPath(new URL('../ontology/people-org.yaml', import.meta.url)),
+  crm: fileURLToPath(new URL('../ontology/crm.yaml', import.meta.url)),
+  research: fileURLToPath(new URL('../ontology/research.yaml', import.meta.url)),
+  'personal-knowledge': fileURLToPath(new URL('../ontology/personal-knowledge.yaml', import.meta.url)),
+  'product-catalogue': fileURLToPath(new URL('../ontology/product-catalogue.yaml', import.meta.url))
+}
+
 /** Appended to an existing `.gitignore`. Projections and cached answers are disposable. */
 export const GITIGNORE_ENTRIES = ['.docket/.index/', '.docket/.cache/']

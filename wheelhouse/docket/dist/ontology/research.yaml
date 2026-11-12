@@ -1,0 +1,371 @@
+# Research and academic ontology.
+#
+# The literature around a research project: papers, the people and
+# institutions behind them, where they were published, the datasets and
+# methods they use, the claims they make and what supports or contradicts
+# them. Remove what you never use, or extend it: adding a type here is all
+# that is required, no CLI change. A type's `icon` names the Lucide icon
+# (https://lucide.dev/icons) that `docket open` draws it with; see
+# docs/SPEC.md for the icons docket bundles.
+#
+# Read this file before performing structured memory extraction.
+
+version: 1
+
+# --- Evidence and confidence ---------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming a source kind below and the exact location. Confidence is
+# computed from that evidence, never written by hand, and says how far the
+# record is supported - not how well it matches any question asked of it.
+
+evidence:
+  unevidenced: 0.5
+
+  sources:
+    human:
+      description: >
+        Stated or confirmed by a person - written by hand, or confirmed when
+        asked. Record who in observedBy.
+      confidence: 0.9
+
+    conversation:
+      description: >
+        Established in an agent session - the user said so. Record the session
+        and, in note, what was said.
+      confidence: 0.7
+
+    publication:
+      description: >
+        The published work itself - its full text or abstract. Record the DOI
+        or URL, and the section or sentence as symbol.
+      confidence: 0.85
+      requiresAny:
+        - urls
+        - key
+
+    bibliographic:
+      description: >
+        A bibliographic database - Crossref, OpenAlex, Semantic Scholar,
+        PubMed, DBLP. Record the record's URL or identifier as key.
+      confidence: 0.8
+      requiresAny:
+        - urls
+        - key
+
+    preprint:
+      description: >
+        A preprint or working paper not yet peer reviewed - arXiv, bioRxiv,
+        SSRN. Record the URL.
+      confidence: 0.6
+      requires:
+        - urls
+
+    docs:
+      description: >
+        Reading notes, a lab notebook, a wiki page or a review. Record the file
+        or the URL.
+      confidence: 0.6
+      requiresAny:
+        - path
+        - urls
+
+resourceTypes:
+
+  paper:
+    description: >
+      A published or preprinted piece of research - an article, a conference
+      paper, a thesis, a report.
+
+    icon: file-text
+
+    attributes:
+      doi:
+        type: string
+
+      year:
+        type: number
+
+      status:
+        type: string
+        enum:
+          - preprint
+          - published
+          - retracted
+
+    extraction:
+      instructions: >
+        Capture a paper when a piece of research is cited, read or relied on.
+        Use the paper's title as the title, and summarise its findings in the
+        body.
+
+      clues:
+        - paper
+        - article
+        - study
+        - et al.
+        - DOI
+
+      doNotConfuseWith:
+        - claim
+        - dataset
+
+  author:
+    description: >
+      A researcher who wrote or contributed to papers.
+
+    icon: user
+
+    attributes:
+      orcid:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture an author when who did the research matters - to find their
+        other work, or to ask them.
+
+      clues:
+        - author
+        - researcher
+        - professor
+        - PI
+
+  institution:
+    description: >
+      A university, lab, institute or company research group.
+
+    icon: landmark
+
+    attributes:
+      country:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture an institution when where research was done matters.
+
+      clues:
+        - university
+        - institute
+        - lab
+        - department
+
+  venue:
+    description: >
+      A journal, conference or workshop where research is published.
+
+    icon: book-open
+
+    attributes:
+      kind:
+        type: string
+        enum:
+          - journal
+          - conference
+          - workshop
+          - preprint-server
+
+    extraction:
+      instructions: >
+        Capture a venue when where a paper appeared matters.
+
+      clues:
+        - journal
+        - conference
+        - proceedings
+        - workshop
+
+  dataset:
+    description: >
+      A body of data research was done on, or that was released with it.
+
+    icon: database
+
+    attributes:
+      license:
+        type: string
+
+      url:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a dataset when research uses or releases data that others could
+        reuse or need to cite.
+
+      clues:
+        - dataset
+        - corpus
+        - cohort
+        - benchmark
+
+      doNotConfuseWith:
+        - paper
+
+  method:
+    description: >
+      A technique, model, protocol or instrument a paper proposes or uses.
+
+    icon: flask-conical
+
+    extraction:
+      instructions: >
+        Capture a method when a technique is named and compared, reused or
+        proposed.
+
+      clues:
+        - method
+        - technique
+        - model
+        - protocol
+        - assay
+
+  topic:
+    description: >
+      A research area or subject papers are about.
+
+    icon: tag
+
+    extraction:
+      instructions: >
+        Capture a topic to group papers by subject, when a subject recurs.
+
+      clues:
+        - field
+        - area
+        - topic
+        - subject
+
+  claim:
+    description: >
+      A finding or hypothesis stated in a sentence, that papers support or
+      contradict.
+
+    icon: lightbulb
+
+    attributes:
+      status:
+        type: string
+        enum:
+          - supported
+          - contested
+          - refuted
+          - open
+
+    extraction:
+      instructions: >
+        Capture a claim when a specific statement is relied on or disputed, so
+        the evidence for and against it is kept together.
+
+      clues:
+        - finding
+        - hypothesis
+        - shows that
+        - evidence suggests
+
+      doNotConfuseWith:
+        - paper
+
+relationships:
+
+  authored_by:
+    description: >
+      A paper's authors.
+
+    from:
+      - paper
+
+    to:
+      - author
+
+    attributes:
+      position:
+        type: number
+        description: The author's place in the author list, from 1.
+
+  affiliated_with:
+    description: >
+      An author's institution.
+
+    from:
+      - author
+
+    to:
+      - institution
+
+  published_in:
+    description: >
+      Where a paper appeared.
+
+    from:
+      - paper
+
+    to:
+      - venue
+
+  cites:
+    description: >
+      A paper cites another.
+
+    from:
+      - paper
+
+    to:
+      - paper
+
+  uses_dataset:
+    description: >
+      A paper or method uses a dataset.
+
+    from:
+      - paper
+      - method
+
+    to:
+      - dataset
+
+  proposes:
+    description: >
+      A paper introduces a method, dataset or claim.
+
+    from:
+      - paper
+
+    to:
+      - method
+      - dataset
+      - claim
+
+  about:
+    description: >
+      What a paper, dataset, method or claim is about.
+
+    from:
+      - paper
+      - dataset
+      - method
+      - claim
+
+    to:
+      - topic
+
+  supports:
+    description: >
+      A paper's findings support a claim.
+
+    from:
+      - paper
+
+    to:
+      - claim
+
+  contradicts:
+    description: >
+      A paper's findings contradict a claim.
+
+    from:
+      - paper
+
+    to:
+      - claim
