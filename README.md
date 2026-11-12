@@ -862,8 +862,8 @@ bodies, answering with each matching entity and the paragraphs of it that
 matched, at the revision it was projected.
 
 **`mem0`** (`@docket/adapter-mem0`) stores each resource as one verbatim memory
-(`infer: false`): the title, type, id, confidence, body, links, evidence and
-tags as text; the id, type, paths, hash, tags, confidence and evidence count as
+(`infer: false`): the title, type, body and tags as text (after the document
+prefix, when `prefixes` is set); the id, type, paths, hash, tags, confidence and evidence count as
 metadata. Rebuilds reproduce it exactly and cost no LLM calls. Documents with
 `index.vector: false` are left out. It needs the optional `mem0ai` package
 (`pnpm add mem0ai`).
