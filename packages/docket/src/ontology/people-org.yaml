@@ -1,0 +1,316 @@
+# People and organisations ontology.
+#
+# Who people are, where they work, the teams and organisations they belong to,
+# the roles they hold and who they report to - a directory, an org chart or the
+# people side of any project. Remove what you never use, or extend it: adding a
+# type here is all that is required, no CLI change. A type's `icon` names the
+# Lucide icon (https://lucide.dev/icons) that `docket open` draws it with; see
+# docs/SPEC.md for the icons docket bundles.
+#
+# Read this file before performing structured memory extraction.
+
+version: 1
+
+# --- Evidence and confidence ---------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming a source kind below and the exact location. Confidence is
+# computed from that evidence, never written by hand, and says how far the
+# record is supported - not how well it matches any question asked of it.
+
+evidence:
+  unevidenced: 0.5
+
+  sources:
+    human:
+      description: >
+        Stated or confirmed by a person - written by hand, or confirmed when
+        asked. Record who in observedBy.
+      confidence: 0.9
+
+    conversation:
+      description: >
+        Established in an agent session - the user said so. Record the session
+        and, in note, what was said.
+      confidence: 0.7
+
+    directory:
+      description: >
+        An HR system, staff directory, identity provider or org chart. Record
+        the record's URL or its key.
+      confidence: 0.85
+      requiresAny:
+        - urls
+        - key
+
+    profile:
+      description: >
+        A public profile or web page - a company site, a professional profile,
+        a conference speaker page. Record the URL.
+      confidence: 0.6
+      requires:
+        - urls
+
+    docs:
+      description: >
+        A document, wiki page, email or meeting note. Record the file or the URL.
+      confidence: 0.6
+      requiresAny:
+        - path
+        - urls
+
+resourceTypes:
+
+  person:
+    description: >
+      An individual: a colleague, a customer contact, a partner, an expert.
+
+    icon: user
+
+    attributes:
+      email:
+        type: string
+
+      title:
+        type: string
+        description: Job title as the person or their organisation states it.
+
+      status:
+        type: string
+        enum:
+          - active
+          - left
+          - unknown
+
+    extraction:
+      instructions: >
+        Capture a person when someone is named with something worth recalling
+        about them - their role, their team, what they know or decided. Use
+        their full name as the title.
+
+      clues:
+        - who is
+        - colleague
+        - manager
+        - engineer
+        - contact
+
+      doNotConfuseWith:
+        - role
+        - team
+
+  organisation:
+    description: >
+      A company, institution, public body or community - anything people work
+      for or belong to.
+
+    icon: building
+
+    attributes:
+      website:
+        type: string
+
+      industry:
+        type: string
+
+      size:
+        type: string
+        enum:
+          - micro
+          - small
+          - medium
+          - large
+          - enterprise
+
+    extraction:
+      instructions: >
+        Capture an organisation when people are said to work for it or it is a
+        party to something recorded. A division with its own identity is an
+        organisation `part_of` its parent; a working group inside one is a team.
+
+      clues:
+        - company
+        - organisation
+        - employer
+        - agency
+        - university
+
+      doNotConfuseWith:
+        - team
+
+  team:
+    description: >
+      A group of people who work together inside an organisation.
+
+    icon: users
+
+    attributes:
+      channel:
+        type: string
+        description: Where the team is reached - a chat channel or mailing list.
+
+    extraction:
+      instructions: >
+        Capture a team when a named group of people shares work or
+        responsibility.
+
+      clues:
+        - team
+        - squad
+        - group
+        - department
+
+      doNotConfuseWith:
+        - organisation
+
+  role:
+    description: >
+      A position or responsibility a person holds - on-call lead, data
+      protection officer, head of sales.
+
+    icon: briefcase
+
+    extraction:
+      instructions: >
+        Capture a role when a responsibility matters independently of who holds
+        it today, so the holder can change while the role stays.
+
+      clues:
+        - role
+        - responsible for
+        - position
+        - lead
+
+      doNotConfuseWith:
+        - person
+
+  location:
+    description: >
+      A place people or organisations are based - an office, a city, a region.
+
+    icon: map
+
+    attributes:
+      country:
+        type: string
+
+      timezone:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a location when where someone or something is based matters -
+        for time zones, data residency, or meeting in person.
+
+      clues:
+        - office
+        - based in
+        - located
+        - city
+
+  skill:
+    description: >
+      An area of expertise someone can be asked about.
+
+    icon: star
+
+    extraction:
+      instructions: >
+        Capture a skill when knowing who has it would route a question to the
+        right person.
+
+      clues:
+        - expert in
+        - knows
+        - specialises
+        - experience with
+
+relationships:
+
+  works_at:
+    description: >
+      A person is employed by or contracted to an organisation.
+
+    from:
+      - person
+
+    to:
+      - organisation
+
+    attributes:
+      since:
+        type: string
+
+  member_of:
+    description: >
+      A person belongs to a team or an organisation's membership.
+
+    from:
+      - person
+
+    to:
+      - team
+      - organisation
+
+  reports_to:
+    description: >
+      A person's line manager.
+
+    from:
+      - person
+
+    to:
+      - person
+
+  has_role:
+    description: >
+      A person currently holds a role.
+
+    from:
+      - person
+
+    to:
+      - role
+
+  part_of:
+    description: >
+      A team belongs to an organisation, or an organisation to a parent one.
+
+    from:
+      - team
+      - organisation
+
+    to:
+      - organisation
+
+  located_in:
+    description: >
+      Where a person, team or organisation is based.
+
+    from:
+      - person
+      - team
+      - organisation
+
+    to:
+      - location
+
+  has_skill:
+    description: >
+      A person has expertise in a skill.
+
+    from:
+      - person
+
+    to:
+      - skill
+
+  knows:
+    description: >
+      Two people know each other - an introduction, a working relationship.
+
+    from:
+      - person
+
+    to:
+      - person

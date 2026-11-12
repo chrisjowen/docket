@@ -1,0 +1,319 @@
+# Personal knowledge ontology.
+#
+# What an assistant should remember about a person's life and the people in
+# it: who they know, the conversations they had, what happened, where, what
+# they care about and what they are working towards. Remove what you never
+# use, or extend it: adding a type here is all that is required, no CLI
+# change. A type's `icon` names the Lucide icon (https://lucide.dev/icons)
+# that `docket open` draws it with; see docs/SPEC.md for the icons docket
+# bundles.
+#
+# Read this file before performing structured memory extraction.
+
+version: 1
+
+# --- Evidence and confidence ---------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming a source kind below and the exact location. Confidence is
+# computed from that evidence, never written by hand, and says how far the
+# record is supported - not how well it matches any question asked of it.
+
+evidence:
+  unevidenced: 0.5
+
+  sources:
+    human:
+      description: >
+        Stated or confirmed by the person themselves, in writing or when asked.
+        Record who in observedBy.
+      confidence: 0.9
+
+    conversation:
+      description: >
+        Said in a conversation - with the assistant or between people. Record
+        the session and, in note, what was said.
+      confidence: 0.7
+
+    message:
+      description: >
+        A message, email or chat thread. Record a link to it, or its id as key.
+      confidence: 0.65
+      requiresAny:
+        - urls
+        - key
+
+    journal:
+      description: >
+        A journal entry, diary or note the person wrote. Record the file or URL.
+      confidence: 0.75
+      requiresAny:
+        - path
+        - urls
+
+    calendar:
+      description: >
+        A calendar entry. Record its URL or id as key.
+      confidence: 0.8
+      requiresAny:
+        - urls
+        - key
+
+    inferred:
+      description: >
+        Inferred by an assistant from other records rather than stated. Record
+        in note what it was inferred from.
+      confidence: 0.4
+
+resourceTypes:
+
+  person:
+    description: >
+      Someone in the person's life - family, a friend, a colleague,
+      themselves.
+
+    icon: user
+
+    attributes:
+      relationship:
+        type: string
+        description: How they relate to the person whose knowledge this is.
+
+      birthday:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a person when someone is named with something worth
+        remembering about them. Use their name as the title.
+
+      clues:
+        - friend
+        - family
+        - my
+        - met
+
+  conversation:
+    description: >
+      One conversation or chat session, with when it happened and what was
+      covered.
+
+    icon: message-square
+
+    attributes:
+      date:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a conversation when it is the source of what is remembered, so
+        each memory can point back to when it was said.
+
+      clues:
+        - talked
+        - chatted
+        - said
+        - told me
+
+      doNotConfuseWith:
+        - event
+
+  event:
+    description: >
+      Something that happened or will happen - a trip, a party, a move, a
+      milestone.
+
+    icon: calendar
+
+    attributes:
+      date:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture an event when something happened to or is planned by someone,
+        with when it was.
+
+      clues:
+        - went to
+        - attended
+        - trip
+        - birthday
+        - moved
+
+      doNotConfuseWith:
+        - conversation
+
+  note:
+    description: >
+      One remembered fact or observation about a person, a place or a
+      preference.
+
+    icon: file-text
+
+    attributes:
+      date:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a note for a single fact worth remembering, in one or two
+        sentences, linked to who and what it is about.
+
+      clues:
+        - likes
+        - prefers
+        - remembers
+        - mentioned
+
+  place:
+    description: >
+      A place that matters - a home town, a favourite restaurant, a
+      destination.
+
+    icon: map
+
+    extraction:
+      instructions: >
+        Capture a place when where something happened or someone lives matters.
+
+      clues:
+        - lives in
+        - visited
+        - from
+        - near
+
+  interest:
+    description: >
+      A hobby, passion or subject someone cares about.
+
+    icon: star
+
+    extraction:
+      instructions: >
+        Capture an interest when it recurs and would shape a recommendation or a
+        conversation.
+
+      clues:
+        - hobby
+        - loves
+        - into
+        - passionate about
+
+  goal:
+    description: >
+      Something someone is working towards.
+
+    icon: target
+
+    attributes:
+      status:
+        type: string
+        enum:
+          - planned
+          - active
+          - achieved
+          - dropped
+
+    extraction:
+      instructions: >
+        Capture a goal when someone states an aim they are pursuing.
+
+      clues:
+        - wants to
+        - plans to
+        - goal
+        - working towards
+
+relationships:
+
+  knows:
+    description: >
+      Two people know each other.
+
+    from:
+      - person
+
+    to:
+      - person
+
+    attributes:
+      as:
+        type: string
+        description: How - friend, sibling, colleague.
+
+  participant_in:
+    description: >
+      Someone took part in a conversation or an event.
+
+    from:
+      - person
+
+    to:
+      - conversation
+      - event
+
+  about:
+    description: >
+      Who or what a note is about.
+
+    from:
+      - note
+
+    to:
+      - person
+      - event
+      - place
+      - interest
+      - goal
+
+  recorded_in:
+    description: >
+      The conversation a note or event was learned in.
+
+    from:
+      - note
+      - event
+
+    to:
+      - conversation
+
+  happened_at:
+    description: >
+      Where an event happened.
+
+    from:
+      - event
+
+    to:
+      - place
+
+  interested_in:
+    description: >
+      Someone cares about an interest.
+
+    from:
+      - person
+
+    to:
+      - interest
+
+  pursues:
+    description: >
+      Someone is working towards a goal.
+
+    from:
+      - person
+
+    to:
+      - goal
+
+  lives_in:
+    description: >
+      Where someone lives.
+
+    from:
+      - person
+
+    to:
+      - place

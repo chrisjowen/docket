@@ -3,6 +3,31 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## Unreleased
+
+### Ontology templates beyond software delivery
+
+`docket init --template <name>` starts a docket from another bundled ontology
+than the default SDLC one: `people-org` (people, teams, organisations, roles,
+locations, skills), `crm` (accounts, contacts, leads, deals, cases, products,
+activities, reps, contracts, campaigns), `research` (papers, authors,
+institutions, venues, datasets, methods, topics, claims),
+`personal-knowledge` (people, conversations, events, notes, places,
+interests, goals) or `product-catalogue` (products, variants, categories,
+brands, collections, suppliers). Each has its own evidence sources, and is
+exported as `ONTOLOGY_TEMPLATES`. `docket init` without `--template` is
+unchanged.
+
+### A search evaluation
+
+`pnpm -C packages/docket eval:search` loads corpora from six ontologies into
+local dockets - including LoCoMo, SciFact and WANDS, fetched by
+`eval:search:download` rather than committed - and compares single-pass,
+relevance-floored, precached and agentic search on relevance, on
+no-answer queries such as "who is sophia", and on latency
+([eval/search](eval/search/README.md)). Nothing in docket's own search
+changed.
+
 ## 0.7.0
 
 Includes everything in 0.6.1, which was staged but never published.

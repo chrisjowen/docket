@@ -85,4 +85,16 @@ describe('init', () => {
     expect((await init({ cwd: root })).updated).toEqual(['.gitignore'])
     expect(await readFile(join(root, '.gitignore'), 'utf8')).toBe('.docket/.index/\n.docket/.cache/\n')
   })
+
+  it('starts from the named ontology template', async () => {
+    const root = await freshRoot()
+    await init({ cwd: root, template: 'crm' })
+
+    const ontology = parse(await readFile(join(root, '.docket', 'entities.yaml'), 'utf8')) as { resourceTypes: Record<string, unknown> }
+    expect(Object.keys(ontology.resourceTypes)).toContain('opportunity')
+  })
+
+  it('refuses a template it does not have, naming the ones it does', async () => {
+    await expect(init({ cwd: await freshRoot(), template: 'astrology' })).rejects.toThrow(/Choose one of: sdlc, people-org, crm/)
+  })
 })

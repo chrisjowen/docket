@@ -22,6 +22,7 @@ import { setup } from './commands/setup.js';
 import { failureOf, sync, SyncError } from './commands/sync.js';
 import { validate } from './commands/validate.js';
 import { watch } from './commands/watch.js';
+import { ONTOLOGY_TEMPLATES } from './config/defaults.js';
 import { DEFAULT_ASK_RESULTS } from './query/ask.js';
 import { describePath } from './query/legacy.js';
 import { adaptersStatus } from './query/status.js';
@@ -95,8 +96,9 @@ program
     .command('init')
     .description('Create .docket.yaml, the .docket/ tree and a starting ontology')
     .option('--force', 'overwrite an existing config or ontology')
+    .option('--template <name>', `starting ontology: ${Object.keys(ONTOLOGY_TEMPLATES).join(', ')}`, 'sdlc')
     .action(async (options) => {
-    const result = await init({ force: options.force });
+    const result = await init({ force: options.force, template: options.template });
     console.log(`Initialized docket in ${result.projectRoot}`);
     for (const path of result.created)
         console.log(`  created ${path}`);

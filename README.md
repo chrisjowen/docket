@@ -70,7 +70,11 @@ frontmatter, never its path, so files can move freely. The ontology in
 `entities.yaml` is per-repository. It starts as the default SDLC ontology
 (services, APIs, pipelines, clusters, incidents, runbooks, policies, teams,
 decisions, constraints and more) and you extend it when your case needs a type
-it does not have. [`examples/acme-platform`](examples/acme-platform) is a
+it does not have. `docket init --template <name>` starts from another domain
+instead: `people-org` (people, teams, organisations, roles), `crm` (accounts,
+contacts, deals, cases), `research` (papers, authors, datasets, claims),
+`personal-knowledge` (people, conversations, events, notes) or
+`product-catalogue` (products, categories, brands, suppliers). [`examples/acme-platform`](examples/acme-platform) is a
 complete worked case file: 21 resources and 37 links.
 
 ## An exhibit
@@ -231,6 +235,8 @@ it is installed as a dev dependency. The plugin uses this copy first.
 ```bash
 docket setup                # install the Claude Code plugin and set up this repository
 docket init                 # scaffold .docket.yaml, .docket/ and the default ontology
+docket init --template crm  # ... starting from another ontology: sdlc, people-org, crm,
+                            # research, personal-knowledge, product-catalogue
 docket validate             # check files against the ontology
 docket validate --strict    # unresolved links become errors
 docket sync                 # project changed files into .docket/.index
@@ -1136,12 +1142,21 @@ pnpm build       # the adapter contracts, kit and adapters and the web UI
 pnpm test        # the contracts', adapters', CLI's and plugin's suites
 pnpm -C packages/docket eval:ask   # how well docket ask answers: calls models,
                                    # so never part of pnpm test
+pnpm -C packages/docket eval:search:download  # fetch the search evaluation's datasets
+pnpm -C packages/docket eval:search           # speed, accuracy and relevance of search
 ```
 
 The ask evaluation scores `docket ask` over the example docket. It counts
 correct answers, refusals and hallucinations, and penalises a wrong answer
 more than a refusal. See
 [`packages/docket/eval/ask/README.md`](packages/docket/eval/ask/README.md).
+
+The search evaluation loads corpora from six ontologies - SDLC, people and
+organisations, CRM, personal knowledge, research and a product catalogue -
+into local dockets, and compares search strategies on relevance, on what
+they return when nothing answers ("who is sophia"), and on latency. See
+[`packages/docket/eval/search/README.md`](packages/docket/eval/search/README.md)
+and its [results](packages/docket/eval/search/RESULTS.md).
 
 To work on the web UI with hot reload, run `docket open --no-open` in a
 repository with a `.docket/`, then `pnpm -C packages/docket-ui dev`; the dev
