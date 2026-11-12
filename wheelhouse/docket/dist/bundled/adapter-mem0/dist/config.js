@@ -13,6 +13,12 @@ const mem0ScopeSchema = z
  * Model-dependent, so there is no default.
  */
 const mem0MinScoreSchema = z.number().min(0).max(1).optional();
+/**
+ * Text the embedding model expects before what it embeds: nomic-embed-text's
+ * card says `search_document: ` before each stored text and `search_query: `
+ * before each query must be included. Model-dependent, so there is no default.
+ */
+const mem0PrefixesSchema = z.strictObject({ document: z.string(), query: z.string() }).optional();
 const mem0Type = z.literal('mem0').default('mem0');
 /** Hosted mem0 (app.mem0.ai). The key is read from the environment, never from the file. */
 const mem0PlatformSchema = z.strictObject({
@@ -21,6 +27,7 @@ const mem0PlatformSchema = z.strictObject({
     apiKeyEnv: z.string().default('MEM0_API_KEY'),
     host: z.string().url().optional(),
     minScore: mem0MinScoreSchema,
+    prefixes: mem0PrefixesSchema,
     scope: mem0ScopeSchema.optional()
 });
 /**
@@ -33,6 +40,7 @@ const mem0OssSchema = z.strictObject({
     mode: z.literal('oss'),
     config: z.record(z.string(), z.unknown()).default({}),
     minScore: mem0MinScoreSchema,
+    prefixes: mem0PrefixesSchema,
     scope: mem0ScopeSchema.optional()
 });
 /**
@@ -46,6 +54,7 @@ const mem0ServerSchema = z.strictObject({
     url: z.string().url(),
     apiKeyEnv: z.string().default('MEM0_API_KEY'),
     minScore: mem0MinScoreSchema,
+    prefixes: mem0PrefixesSchema,
     scope: mem0ScopeSchema.optional()
 });
 export const mem0ConfigSchema = z.discriminatedUnion('mode', [mem0PlatformSchema, mem0ServerSchema, mem0OssSchema]);
