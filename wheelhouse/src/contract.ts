@@ -65,7 +65,7 @@ export interface Provider {
 }
 
 export interface Contribution {
-  slot: 'project.tab'
+  slot: 'project.tab' | 'nav.page'
   id: string
   title: string
   provider: string

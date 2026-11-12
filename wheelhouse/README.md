@@ -4,7 +4,8 @@ This folder makes the docket repository a
 [Wheelhouse](https://github.com/chrisjowen/wheelhouse) plugin. Its **Docket**
 project tab is the casebook `docket open` serves, the same UI code drawn
 inside Wheelhouse's page: Browse, Ask, Adapters, the inspector, chat, quick
-search and sync.
+search and sync. Its **Docket** page in Wheelhouse's menu lists every project,
+and adds docket to one that has none in one click.
 
 ![Wheelhouse's Docket project tab: docket's own casebook drawn inside Wheelhouse - the Browse graph, the index of exhibit types and relationships, and a decision selected in the inspector with its confidence and evidence](../docs/assets/wheelhouse-docket-tab.png)
 
@@ -13,7 +14,7 @@ wheelhouse plugin install chrisjowen/docket
 ```
 
 Wheelhouse fetches the repository at a commit, shows what the plugin adds (its
-tab, its `viewer` service and its MCP app server, `docket`) and asks before it
+tab, its menu page, its `viewer` service and its MCP app server, `docket`) and asks before it
 keeps it. Restart Wheelhouse to load it. Installing needs no
 build: the built files are committed, the docket the plugin runs among them
 (see [The docket it runs](#the-docket-it-runs)).
@@ -24,11 +25,33 @@ built-in one is removed.
 
 ## What it shows
 
-It is on for every project whose clone has `.docket.yaml`.
+It is on for every project, so its page can list them all; turn it off for a
+project in Wheelhouse's **Settings → Plugins**. The tab shows only on projects
+whose clone has `.docket.yaml` (or whose docket `roots` sets).
 
-| Slot          | Element             | What it is                                                             |
-| ------------- | ------------------- | ---------------------------------------------------------------------- |
-| `project.tab` | `<docket-casebook>` | **Docket**, at `/projects/<id>/docket/casebook`: the project's casebook |
+| Slot          | Element             | What it is                                                                                       |
+| ------------- | ------------------- | ------------------------------------------------------------------------------------------------ |
+| `project.tab` | `<docket-casebook>` | **Docket**, at `/projects/<id>/docket/casebook`: the project's casebook                           |
+| `nav.page`    | `<docket-projects>` | **Docket**, at `/plugins/docket/projects`, in the menu with `wheelhouse/icon.svg`: every project |
+
+### The Docket page
+
+The page lists every project the plugin is on for, those with a docket first,
+each linking to its Docket tab, then those without, each with **Add Docket**.
+A project Firstmate recorded no clone for has nothing to add docket to, and
+says so.
+
+**Add Docket** starts the project's viewer, as the tab's **Launch** does. For
+a project with no docket the plugin starts it as `docket open --init`, which
+first adds docket to the clone as `docket init` does (`.docket.yaml`, the
+`.docket/` tree and the starting ontology, with `.docket/.index/` and
+`.docket/.cache/` added to a `.gitignore` that is there), then serves it.
+Wheelhouse opens docket's own page in a new tab once the viewer answers, and
+the project moves to the list with a docket, with its tab. If it cannot start,
+the page says why, with the launch log and the command that does it by hand.
+A docket CLI that `bin` names and whose `docket open` has no `--init` (docket
+0.7.0 and older) cannot add docket, and the page says so; it still opens a
+docket that is there.
 
 The casebook reads everything from, and asks everything of, the project's
 docket viewer: `docket open`, declared as the plugin's `viewer` service.
@@ -182,22 +205,25 @@ In Wheelhouse's `plugins.json`, all optional:
 
 ## How it reads docket
 
-The server entry never runs anything that writes. Its provider reads whether
-the clone has `.docket.yaml` and which docket the viewer runs: the one the
+The server entry never runs anything that writes. Its providers read whether
+each clone has `.docket.yaml` and which docket the viewer runs: the one the
 plugin ships, whose version its `package.json` says, or the `bin` the settings
 name, which it asks `docket --version` and `docket open --help` (whether it can
-allow Wheelhouse's page). Its service works out the viewer's command, port
-and health check; its MCP server is the viewer's `/mcp`. Wheelhouse checks the viewer by `GET /api/health`, whose
+allow Wheelhouse's page and start a docket). Its service works out the viewer's
+command, port and health check, with `--init` for a project with no docket;
+its MCP server is the viewer's `/mcp`. Wheelhouse checks the viewer by `GET /api/health`, whose
 `root` must be the project's docket. Everything else the casebook does goes to
 the viewer, as on docket open's own page: its writes are chat's answer cache
-and, when you sync, the projections.
+and, when you sync, the projections; and, for **Add Docket**, `docket init`'s
+files.
 
 ## Layout
 
 ```
-.wheelhouse-plugin/plugin.json   the manifest: id, version, contract, entries, enable rule, slot, service, MCP server
+.wheelhouse-plugin/plugin.json   the manifest: id, version, contract, entries, enable rule, slots, icon, service, MCP server
 wheelhouse/server/index.js       the server entry Wheelhouse imports (built from src/server.ts)
-wheelhouse/ui/index.js           <docket-casebook> (built from packages/docket-ui/src/embed)
+wheelhouse/ui/index.js           <docket-casebook> and <docket-projects> (built from packages/docket-ui/src/embed)
+wheelhouse/icon.svg              the Docket page's icon in Wheelhouse's menu
 wheelhouse/docket/               the docket the plugin runs (copied from packages/docket/dist)
 wheelhouse/src/                  the server entry's source and the plugin's tests
 wheelhouse/build.mjs             bundles the first two with esbuild and Vite, and copies the third

@@ -276,4 +276,23 @@ describe('docket open', () => {
   it('fails on an explicit port that is taken', async () => {
     await expect(open({ cwd: root, uiDir, port: server?.port })).rejects.toThrow(/EADDRINUSE/)
   })
+
+  it('starts a docket first with init where there is none, and leaves one that is there alone', async () => {
+    const fresh = await mkdtemp(join(tmpdir(), 'docket-open-init-'))
+    try {
+      const started = await open({ cwd: fresh, uiDir, port: 0, init: true })
+      try {
+        expect(started.initialized?.created).toContain('.docket.yaml')
+        expect(started.resolved.projectRoot).toBe(started.initialized?.projectRoot)
+        expect((await fetch(new URL('/api/graph', started.url))).status).toBe(200)
+      } finally {
+        await started.close()
+      }
+      const again = await open({ cwd: fresh, uiDir, port: 0, init: true })
+      await again.close()
+      expect(again.initialized).toBeNull()
+    } finally {
+      await rm(fresh, { recursive: true, force: true })
+    }
+  })
 })

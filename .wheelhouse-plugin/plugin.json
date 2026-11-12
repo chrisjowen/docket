@@ -3,7 +3,7 @@
   "name": "docket",
   "displayName": "Docket",
   "version": "0.7.0",
-  "description": "A project's docket casebook in Wheelhouse: everything docket open shows and does - Browse, Ask, Adapters, the inspector, chat and sync - drawn from the project's docket viewer, which is also docket's MCP server, whose docket_search app draws what a search finds on the casebook's board.",
+  "description": "A project's docket casebook in Wheelhouse: everything docket open shows and does - Browse, Ask, Adapters, the inspector, chat and sync - drawn from the project's docket viewer, which is also docket's MCP server, whose docket_search app draws what a search finds on the casebook's board; and a Docket page listing every project, with Add Docket for those without one.",
   "author": { "name": "Chris Owen", "url": "https://github.com/chrisjowen" },
   "repository": "https://github.com/chrisjowen/docket",
   "keywords": ["knowledge", "docket", "firstmate"],
@@ -11,8 +11,11 @@
     "apiVersion": 1,
     "server": "wheelhouse/server/index.js",
     "ui": "wheelhouse/ui/index.js",
-    "enabledWhenFile": ".docket.yaml",
-    "contributions": [{ "id": "casebook", "slot": "project.tab" }],
+    "enabledByDefault": true,
+    "contributions": [
+      { "id": "casebook", "slot": "project.tab" },
+      { "id": "projects", "slot": "nav.page", "icon": "wheelhouse/icon.svg" }
+    ],
     "services": [{ "id": "viewer", "scope": "project" }],
     "mcpServers": [{ "id": "docket", "service": "viewer" }]
   }

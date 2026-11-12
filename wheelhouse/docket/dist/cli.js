@@ -345,6 +345,7 @@ program
     .option('--host <address>', 'interface to listen on; 0.0.0.0 serves every network interface', '127.0.0.1')
     .option('--no-open', 'print the address without opening a browser')
     .option('--allow-origin <origin>', 'another page on this machine that may use the UI\'s API, such as Wheelhouse at http://127.0.0.1:4310 (repeatable)', (value, previous) => [...previous, value], [])
+    .option('--init', 'start a docket here first, as docket init does, when this directory has no .docket.yaml')
     .action(async (options) => {
     let port;
     if (options.port !== undefined) {
@@ -361,7 +362,14 @@ program
         if (!checked.ok)
             throw new Error(`--allow-origin: ${checked.reason}`);
     }
-    const handle = await open({ port, host, allowOrigins: options.allowOrigin });
+    const handle = await open({ port, host, allowOrigins: options.allowOrigin, init: options.init });
+    if (handle.initialized) {
+        console.log(`Initialized docket in ${handle.initialized.projectRoot}`);
+        for (const path of handle.initialized.created)
+            console.log(`  created ${path}`);
+        for (const path of handle.initialized.updated)
+            console.log(`  updated ${path}`);
+    }
     const reach = handle.host === '127.0.0.1' || handle.host === '::1' || handle.host === 'localhost'
         ? 'this machine only'
         : handle.host === '0.0.0.0' || handle.host === '::'

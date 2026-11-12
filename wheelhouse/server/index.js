@@ -8,6 +8,7 @@ var DOCKET_FILE = ".docket.yaml";
 var DEFAULT_ORIGINS = ["http://127.0.0.1:4310", "http://localhost:4310"];
 var MCP_SERVER = { id: "docket", title: "Docket", service: "viewer", path: "/mcp" };
 var CASEBOOK_SCHEMA = "wheelhouse-docket-casebook.v1";
+var PROJECTS_SCHEMA = "wheelhouse-docket-projects.v1";
 var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var LOOPBACK = /* @__PURE__ */ new Set(["127.0.0.1", "localhost", "[::1]"]);
 function pageOrigin(raw) {
@@ -50,17 +51,19 @@ function preferredPort(projectId) {
   return 4381 + h % 400;
 }
 var shellWord = (s) => /^[\w./:@-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`;
-var viewerArgs = (port, origins) => [
+var viewerArgs = (port, origins, init = false) => [
   "open",
   "--host",
   "127.0.0.1",
   "--port",
   String(port),
   "--no-open",
-  ...origins.flatMap((origin) => ["--allow-origin", origin])
+  ...origins.flatMap((origin) => ["--allow-origin", origin]),
+  ...init ? ["--init"] : []
 ];
-var openCommand = (docket, root, port, origins) => `cd ${shellWord(root)} && ${[...docket, ...viewerArgs(port, origins).filter((arg) => arg !== "--no-open")].map(shellWord).join(" ")}`;
+var openCommand = (docket, root, port, origins, init = false) => `cd ${shellWord(root)} && ${[...docket, ...viewerArgs(port, origins, init).filter((arg) => arg !== "--no-open")].map(shellWord).join(" ")}`;
 var allowsOrigins = (help) => /(^|\s)--allow-origin\b/m.test(help);
+var startsDockets = (help) => /(^|\s)--init\b/m.test(help);
 var versionOf = (stdout) => {
   const version = stdout.trim();
   return /^\d+\.\d+\.\d+[\w.+-]*$/.test(version) ? version : null;
@@ -80,13 +83,10 @@ function shippedCli(dir = SHIPPED_DOCKET, node = process.execPath) {
   const version = shippedVersion(dir);
   const info = { source: "plugin", version, command: argv.map(shellWord).join(" ") };
   if (version === null || !existsSync(cli)) {
-    return {
-      argv,
-      info,
-      problem: `The docket this plugin ships is missing from ${dir}. Update or reinstall the docket plugin, or set "bin" in its settings to a docket CLI.`
-    };
+    const problem = `The docket this plugin ships is missing from ${dir}. Update or reinstall the docket plugin, or set "bin" in its settings to a docket CLI.`;
+    return { argv, info, problem, initProblem: problem };
   }
-  return { argv, info, problem: null };
+  return { argv, info, problem: null, initProblem: null };
 }
 var asked = /* @__PURE__ */ new Map();
 var ASK_TTL_MS = 6e4;
@@ -99,13 +99,19 @@ function configuredCli(ctx, bin, project) {
   const run = (args) => ctx.exec({ argv: [bin, ...args], cwd: "project", project, timeoutMs: 5e3, maxBytes: 64 * 1024 });
   const value = Promise.all([run(["open", "--help"]), run(["--version"])]).then(([help, said]) => {
     const version = said.ok ? versionOf(said.stdout) : null;
-    const cli = (problem) => ({ argv: [bin], info: { source: "settings", version, command: shellWord(bin) }, problem });
+    const cli = (problem, initProblem = problem) => ({
+      argv: [bin],
+      info: { source: "settings", version, command: shellWord(bin) },
+      problem,
+      initProblem
+    });
     const named = `The docket CLI the docket plugin\u2019s settings name (${bin}${version ? `, docket ${version}` : ""})`;
     const shipped = shippedVersion(SHIPPED_DOCKET);
     const instead = `remove "bin" to run the docket this plugin ships${shipped ? ` (${shipped})` : ""}`;
     if (help.ok) {
       return cli(
-        allowsOrigins(help.stdout) ? null : `${named} is too old to be shown in Wheelhouse: its docket open cannot allow Wheelhouse\u2019s page (--allow-origin). Update it, or ${instead}.`
+        allowsOrigins(help.stdout) ? null : `${named} is too old to be shown in Wheelhouse: its docket open cannot allow Wheelhouse\u2019s page (--allow-origin). Update it, or ${instead}.`,
+        startsDockets(help.stdout) ? null : `${named} is too old to add docket to a project: its docket open cannot start a docket (--init). Update it, or ${instead}.`
       );
     }
     if (/ENOENT/.test(help.reason)) return cli(`Wheelhouse could not find the docket CLI (${bin}) the docket plugin\u2019s settings name. Fix "bin", or ${instead}.`);
@@ -132,61 +138,108 @@ var rootOf = (project, settings) => {
   if (configured) return { root: configured, configured: true };
   return project.path && path.isAbsolute(project.path) ? { root: project.path, configured: false } : null;
 };
+async function docketOf(ctx, project, settings) {
+  const where = rootOf(project, settings);
+  if (!where) return null;
+  if (where.configured) return { ...where, docket: true };
+  const marker = await ctx.readFile(DOCKET_FILE, { root: "project", maxBytes: 1, project: project.id });
+  return { ...where, docket: marker !== null };
+}
+var NO_CLONE = "Firstmate has not recorded a clone for this project.";
 async function casebook(ctx) {
   const project = ctx.project;
   if (!project) return { available: false, reason: "The casebook is about one project." };
   const settings = readSettings(ctx.settings);
-  const where = rootOf(project, settings);
-  if (!where) return { available: false, reason: "Firstmate has not recorded a clone for this project." };
-  const base = { schema: CASEBOOK_SCHEMA, root: where.root, configuredRoot: where.configured, origins: settings.origins };
-  const observedAt = (/* @__PURE__ */ new Date()).toISOString();
-  const source = where.configured ? `the docket at ${where.root}, set in Wheelhouse\u2019s plugins file` : "the project\u2019s docket";
-  if (!where.configured) {
-    const marker = await ctx.readFile(DOCKET_FILE, { root: "project", maxBytes: 1, project: project.id });
-    if (marker === null) return { available: true, value: { ...base, state: "none", problem: null, docket: null }, source: "the project clone", observedAt };
-  }
+  const found = await docketOf(ctx, project, settings);
+  if (!found) return { available: false, reason: NO_CLONE };
+  if (!found.docket) return { available: false, reason: "This project has no docket. Add it from the Docket page in Wheelhouse\u2019s menu." };
   const cli = await docketCli(ctx, settings, project.id);
   return {
     available: true,
-    value: { ...base, state: "docket", problem: cli.problem, docket: cli.info },
-    source,
-    observedAt
+    value: {
+      schema: CASEBOOK_SCHEMA,
+      state: "docket",
+      root: found.root,
+      configuredRoot: found.configured,
+      origins: settings.origins,
+      problem: cli.problem,
+      docket: cli.info
+    },
+    source: found.configured ? `the docket at ${found.root}, set in Wheelhouse\u2019s plugins file` : "the project\u2019s docket",
+    observedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function projects(ctx) {
+  const settings = readSettings(ctx.settings);
+  const rows = await Promise.all(
+    ctx.projects.map(async (project) => {
+      const found = await docketOf(ctx, project, settings);
+      return {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        state: !found ? "no-clone" : found.docket ? "docket" : "none",
+        root: found?.root ?? null,
+        configuredRoot: found?.configured ?? false
+      };
+    })
+  );
+  const asker = ctx.projects.find((project) => project.path && path.isAbsolute(project.path));
+  const cli = asker ? await docketCli(ctx, settings, asker.id) : null;
+  return {
+    available: true,
+    value: { schema: PROJECTS_SCHEMA, projects: rows, problem: cli ? cli.problem ?? cli.initProblem : null, docket: cli?.info ?? null },
+    source: "Wheelhouse\u2019s projects and their clones",
+    observedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
 }
 async function viewer(ctx) {
   const project = ctx.project;
   if (!project) return { available: false, reason: "docket\u2019s viewer is about one project." };
   const settings = readSettings(ctx.settings);
-  const where = rootOf(project, settings);
-  if (!where) return { available: false, reason: "Firstmate has not recorded a clone for this project." };
+  const found = await docketOf(ctx, project, settings);
+  if (!found) return { available: false, reason: NO_CLONE };
+  const init = !found.docket;
   const port = settings.ports[project.id] ?? await ctx.servicePort(preferredPort(project.id), Object.values(settings.ports));
   const url = `http://127.0.0.1:${port}`;
   const cli = await docketCli(ctx, settings, project.id);
-  const hint = openCommand(cli.argv, where.root, port, settings.origins);
+  const hint = openCommand(cli.argv, found.root, port, settings.origins, init);
   if (cli.problem) return { available: false, reason: cli.problem, hint };
+  if (init && cli.initProblem) return { available: false, reason: cli.initProblem, hint };
   return {
     available: true,
     hint,
     spec: {
       url,
       health: `${url}/api/health`,
-      identity: { url: `${url}/api/health`, path: ["root"], value: realRoot(where.root) },
-      argv: [...cli.argv, ...viewerArgs(port, settings.origins)],
-      cwd: where.root,
+      identity: { url: `${url}/api/health`, path: ["root"], value: realRoot(found.root) },
+      argv: [...cli.argv, ...viewerArgs(port, settings.origins, init)],
+      cwd: found.root,
       binds: "loopback"
     }
   };
 }
 var plugin = {
   services: [{ id: "viewer", title: "docket\u2019s viewer", scope: "project", resolve: viewer }],
-  providers: [{ id: "casebook", scope: "project", ttlMs: 3e4, timeoutMs: 8e3, fetch: casebook }],
+  providers: [
+    { id: "casebook", scope: "project", ttlMs: 3e4, timeoutMs: 8e3, fetch: casebook },
+    { id: "projects", scope: "fleet", ttlMs: 15e3, timeoutMs: 8e3, fetch: projects }
+  ],
   contributions: [
     {
       slot: "project.tab",
       id: "casebook",
       title: "Docket",
       provider: "casebook",
+      when: "provider-available",
       render: { element: "docket-casebook" }
+    },
+    {
+      slot: "nav.page",
+      id: "projects",
+      title: "Docket",
+      provider: "projects",
+      render: { element: "docket-projects" }
     }
   ],
   mcpServers: [{ ...MCP_SERVER }]
@@ -196,6 +249,7 @@ export {
   CASEBOOK_SCHEMA,
   DEFAULT_ORIGINS,
   MCP_SERVER,
+  PROJECTS_SCHEMA,
   SHIPPED_DOCKET,
   allowsOrigins,
   clearCliCache,
@@ -205,6 +259,7 @@ export {
   preferredPort,
   readSettings,
   shippedCli,
+  startsDockets,
   versionOf,
   viewerArgs
 };

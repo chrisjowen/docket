@@ -253,6 +253,7 @@ docket adapters status      # each instance's health and how far its index lags 
 docket graph --json         # every exhibit and link, read from the files, as versioned JSON (--root <dir>; docs/graph-json.md)
 docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen)
 docket open --allow-origin http://127.0.0.1:4310  # also let another page on this machine use it, such as Wheelhouse
+docket open --init          # start a docket here first, as docket init does, when this directory has none
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
 docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid or mempalace: asks, shows the plan, applies it once confirmed
@@ -301,6 +302,11 @@ and, with the launch's token, sync. That is how
 http(s) origins on `127.0.0.1`, `localhost` or `[::1]` are accepted; the
 server sends CORS headers to those pages alone, and refuses any other page's
 preflight.
+
+`--init` starts a docket in the working directory first, as `docket init`
+does, when it has no `.docket.yaml` of its own (one in a parent directory does
+not count), then serves it; a directory that has one is left alone. It is how
+Wheelhouse's **Add Docket** adds docket to a project.
 
 The API never changes the canonical files; its writes are chat's answer cache and,
 when the page asks from this machine, a sync of the projections.
@@ -443,6 +449,11 @@ wheelhouse plugin install chrisjowen/docket
 ```
 
 ![Wheelhouse's Docket project tab: the casebook's Browse graph inside Wheelhouse, with a decision selected and its evidence and confidence in the inspector](docs/assets/wheelhouse-docket-tab.png)
+
+Its **Docket** page, in Wheelhouse's left-hand menu, lists every project:
+those with a docket link to their Docket tab, and the rest have **Add
+Docket**, which starts the project's viewer with `docket open --init`, so
+docket is added to the project's clone and opened in one click.
 
 The plugin also declares the viewer's `/mcp` as its MCP server, `docket`, so
 Wheelhouse can call `docket_search` for a project, naming it in the call's

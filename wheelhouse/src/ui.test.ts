@@ -211,3 +211,78 @@ describe('<docket-casebook>', () => {
     await shows(none, 'No docket here')
   })
 })
+
+const projects = (over: Record<string, unknown> = {}) => ({
+  schema: 'wheelhouse-docket-projects.v1',
+  projects: [
+    { id: 'shop', name: 'Shop', description: null, state: 'docket', root: '/work/shop', configuredRoot: false },
+    { id: 'web', name: 'Web', description: null, state: 'none', root: '/work/web', configuredRoot: false },
+    { id: 'notes', name: 'Notes', description: null, state: 'no-clone', root: null, configuredRoot: false }
+  ],
+  problem: null,
+  docket: { source: 'plugin', version: '0.7.0', command: '/usr/bin/node /p/docket/dist/cli.js' },
+  ...over
+})
+
+const page = (host: { service: (s: string) => Promise<View | null>; launch: (s: string, o?: unknown) => Promise<View | null> }, value: unknown): Element => {
+  const element = document.createElement('docket-projects') as Element
+  element.host = Object.freeze({ pluginId: 'docket', ...host })
+  element.entry = { key: 'docket/projects', slot: 'nav.page', pluginId: 'docket', contributionId: 'projects', title: 'Docket', projectId: null }
+  element.data = value
+  document.body.append(element)
+  return element
+}
+
+/** The row the page draws for a project. */
+const row = (element: Element, id: string): HTMLElement => {
+  const found = element.shadowRoot?.querySelector<HTMLElement>(`[data-project="${id}"]`)
+  if (!found) throw new Error(`no row for ${id}`)
+  return found
+}
+
+const section = (element: Element, label: string): string =>
+  element.shadowRoot?.querySelector(`section[aria-label="${label}"]`)?.textContent?.replace(/\s+/g, ' ') ?? ''
+
+describe('<docket-projects>', () => {
+  it('lists every project: those with a docket linked to their Docket tab, Add Docket for the rest', async () => {
+    expect(customElements.get('docket-projects')).toBeDefined()
+    const element = page({ service: async () => null, launch: async () => null }, projects())
+    const text = await shows(element, '1 of 3 projects keep a docket')
+    expect(text).toContain('Runs docket 0.7.0, shipped with this plugin.')
+    expect(section(element, 'Projects with a docket')).toContain('Shop')
+    expect(section(element, 'Projects without a docket')).toContain('Web')
+    expect(row(element, 'shop').querySelector('a')?.getAttribute('href')).toBe('/projects/shop/docket/casebook')
+    expect(row(element, 'web').querySelector('button')?.textContent?.trim()).toBe('Add Docket')
+    // Nothing to add docket to.
+    expect(row(element, 'notes').querySelector('button')).toBeNull()
+    expect(row(element, 'notes').textContent).toContain('Firstmate has not recorded a clone')
+  })
+
+  it('adds docket with one click: starts the project’s viewer through the host, then links its tab', async () => {
+    const launch = vi.fn(async () => ({ ...running, hint: 'cd /work/web && docket open --init' }))
+    const element = page({ service: async () => null, launch }, projects())
+    await shows(element, '1 of 3 projects keep a docket')
+    button(element, 'Add Docket').click()
+    await shows(element, '2 of 3 projects keep a docket')
+    expect(launch).toHaveBeenCalledWith('viewer', { project: 'web' })
+    expect(section(element, 'Projects with a docket')).toContain('Web')
+    expect(row(element, 'web').querySelector('a')?.getAttribute('href')).toBe('/projects/web/docket/casebook')
+  })
+
+  it('says why docket could not be added, with the command to add it by hand', async () => {
+    const failed: View = { state: 'failed', url: null, reason: 'docket’s viewer exited before it answered.', launchable: true, hint: 'cd /work/web && docket open --init' }
+    const element = page({ service: async () => null, launch: async () => failed }, projects())
+    await shows(element, '1 of 3 projects keep a docket')
+    button(element, 'Add Docket').click()
+    const text = await shows(element, 'docket’s viewer exited before it answered.')
+    expect(text).toContain('cd /work/web && docket open --init')
+    expect(text).toContain('1 of 3 projects keep a docket')
+  })
+
+  it('says what stops Add Docket, and does not offer it', async () => {
+    const problem = 'The docket CLI the docket plugin’s settings name (/opt/docket) is too old to add docket to a project.'
+    const element = page({ service: async () => null, launch: async () => null }, projects({ problem }))
+    await shows(element, 'too old to add docket to a project')
+    expect(button(element, 'Add Docket').disabled).toBe(true)
+  })
+})
