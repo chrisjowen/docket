@@ -21,7 +21,17 @@ export interface RunInfo {
     lexicalMs: { jsonl: number; indexed: number }
   }[]
   strategies: { name: string; description: string }[]
-  calibration: { strategy: string; semantic: number; coverage: number; devBalanced: number }[]
+  /** Each tuned floor, the objective it was tuned for, and how it scored on the dev queries. */
+  calibration: {
+    strategy: string
+    objective: 'balanced' | 'precision'
+    semantic: number
+    coverage: number
+    devNdcg: number
+    devFpr: number
+    devReplyPrecision: number
+    devBalanced: number
+  }[]
   /** Precached answers to the same queries asked again. */
   warmMs: number
   /** Each corpus's "who is <absent name>" query, answered by every strategy. */
@@ -191,8 +201,17 @@ export const report = (info: RunInfo, outcomes: readonly QueryOutcome[]): string
     '## Calibrated floors',
     '',
     table(
-      ['strategy', 'cosine floor', 'coverage floor', 'dev balanced'],
-      info.calibration.map((row) => [row.strategy, f(row.semantic, 2), f(row.coverage, 2), f(row.devBalanced)])
+      ['strategy', 'objective', 'cosine floor', 'coverage floor', 'dev nDCG@10', 'dev FPR', 'dev reply precision', 'dev balanced'],
+      info.calibration.map((row) => [
+        row.strategy,
+        row.objective,
+        f(row.semantic, 2),
+        f(row.coverage, 2),
+        f(row.devNdcg),
+        f(row.devFpr, 2),
+        f(row.devReplyPrecision, 2),
+        f(row.devBalanced)
+      ])
     ),
     '',
     '## Strategies',

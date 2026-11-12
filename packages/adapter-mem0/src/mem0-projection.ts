@@ -1,7 +1,6 @@
 import type { EntityInput } from '@docket/contracts'
 import {
   checkoutScope,
-  stableStringify,
   type EntityProjection,
   type ProjectionContext,
   type SearchAnswer,
@@ -9,7 +8,6 @@ import {
 } from '@docket/adapter-kit'
 
 import type { Mem0Config } from './config.js'
-import { describeAssessment, describeEvidence } from './describe.js'
 import { connectMem0, type Mem0Backend, type Mem0Scope } from './backend.js'
 
 /** Metadata key tying a mem0 memory back to the canonical document id. */
@@ -29,39 +27,26 @@ export const defaultScope = (projectRoot: string): Mem0Scope => ({
 })
 
 /**
- * The text mem0 embeds and returns on search: what an agent should read. One
- * memory per entity, carrying how far to trust it and exactly where it was
- * seen, so a hit can be checked without opening the file.
+ * The text mem0 embeds and returns on search: what the entity is about - its
+ * title, type, body, links and tags. Its id, confidence and evidence say
+ * nothing about that, so they would only blur what the text matches; they are
+ * in the metadata and the canonical file, and every hit carries the id.
  */
 export const renderDocument = (entity: EntityInput): string => {
-  const lines = [
-    `# ${entity.title}`,
-    `${entity.type} ${entity.id}`,
-    `Confidence: ${describeAssessment(entity)}`
-  ]
+  const lines = [`# ${entity.title}`, entity.type]
   const body = entity.content.trim()
   if (body) lines.push('', body)
-
-  const listed = new Set(entity.evidence.map(stableStringify))
   if (entity.links.length > 0) {
     lines.push('', 'Links:')
-    for (const link of entity.links) {
-      lines.push(`- ${link.rel} ${link.target} (confidence ${link.confidence})`)
-      // Evidence the link shares with the resource is listed once, below.
-      for (const evidence of link.evidence) {
-        if (!listed.has(stableStringify(evidence))) lines.push(`  - ${describeEvidence(evidence)}`)
-      }
-    }
+    for (const link of entity.links) lines.push(`- ${link.rel} ${link.target}`)
   }
-
-  if (entity.evidence.length > 0) {
-    lines.push('', 'Evidence:')
-    for (const evidence of entity.evidence) lines.push(`- ${describeEvidence(evidence)}`)
-  }
-
   if (entity.tags.length > 0) lines.push('', `Tags: ${entity.tags.join(', ')}`)
   return `${lines.join('\n')}\n`
 }
+
+/** A stored memory as the canonical text, without the prefix only the embedder needed. */
+const withoutPrefix = (text: string, prefix: string | undefined): string =>
+  prefix && text.startsWith(prefix) ? text.slice(prefix.length) : text
 
 /** Scalar metadata only, so it filters the same way on the hosted and self-hosted stores. */
 export const documentMetadata = (entity: EntityInput): Record<string, unknown> => ({
@@ -122,7 +107,7 @@ class Mem0Projection implements EntityProjection {
     if (!entity.index.vector) return
 
     const ids = await this.requireBackend().add(
-      renderDocument(entity),
+      `${this.config.prefixes?.document ?? ''}${renderDocument(entity)}`,
       documentMetadata(entity)
     )
     const owned = await this.ownership()
@@ -155,7 +140,8 @@ class Mem0Projection implements EntityProjection {
   async search(query: string, limit: number): Promise<SearchAnswer> {
     const hits: SearchHit[] = []
     const seen = new Set<string>()
-    for (const memory of await this.requireBackend().search(query, limit)) {
+    const prefixes = this.config.prefixes
+    for (const memory of await this.requireBackend().search(`${prefixes?.query ?? ''}${query}`, limit)) {
       const id = memory.metadata?.[DOCUMENT_ID_KEY]
       if (typeof id !== 'string' || seen.has(id)) continue
       seen.add(id)
@@ -165,7 +151,7 @@ class Mem0Projection implements EntityProjection {
         ...(memory.score !== undefined ? { score: memory.score } : {}),
         ...(typeof revision === 'string' ? { revision } : {}),
         ...(typeof memory.memory === 'string' && memory.memory.trim() !== ''
-          ? { passage: { text: memory.memory, nativeId: memory.id } }
+          ? { passage: { text: withoutPrefix(memory.memory, prefixes?.document), nativeId: memory.id } }
           : {})
       })
     }

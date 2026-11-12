@@ -898,7 +898,10 @@ adapters:
         llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
 ```
 
-Every mode also takes `minScore` (drop hits below that similarity) and `scope`.
+Every mode also takes `minScore` (drop hits below that similarity), `scope`, and
+`prefixes` (`{ document, query }`: text the embedding model expects before each
+stored memory and each query, such as nomic-embed-text's `search_document: ` and
+`search_query: `).
 All modes file memories under one scope, by default
 `agentId: docket-<checkout directory>-<hash>`, where the hash is taken over the
 checkout's absolute path (symlinks and letter case resolved). Two clones or

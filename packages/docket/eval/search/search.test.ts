@@ -94,6 +94,16 @@ describe('strategies', () => {
     expect(unknownNames(engine, 'Who is Hannah Okoro?')).toEqual([])
     expect(unknownNames(engine, 'Who knows Kubernetes?')).toEqual([])
   })
+
+  it('does not take a sentence start, a determiner or a code for a name', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'docket-search-eval-'))
+    await writeDocket(await loadPeople(), dir)
+    const engine = await Engine.open(dir, [])
+    expect(unknownNames(engine, 'Does Hannah know Kubernetes? Answer yes or no.')).toEqual([])
+    expect(unknownNames(engine, 'Who is our contact at Hannah?')).toEqual([])
+    expect(unknownNames(engine, 'Does Hannah use IL-6 or the NFKB pathway?')).toEqual([])
+    expect(unknownNames(engine, 'Does Hannah know Sophia?')).toEqual(['sophia'])
+  })
 })
 
 const checkCorpus = async (corpus: Corpus): Promise<void> => {

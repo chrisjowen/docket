@@ -17,7 +17,7 @@ import { loadPeople } from './datasets/people.js'
 import { loadScifact } from './datasets/scifact.js'
 import { loadWands } from './datasets/wands.js'
 import { contextualText, embedAll, Engine, mem0Text, ollamaEmbedder, type Embedder, type VectorIndex } from './engine.js'
-import { percentile, summarise, macroAverage, type QueryOutcome } from './metrics.js'
+import { percentile, summarise, macroAverage, type QueryOutcome, type Summary } from './metrics.js'
 import { report, type RunInfo } from './report.js'
 import {
   agenticStrategy,
@@ -183,11 +183,7 @@ const prepare = async (corpus: Corpus, embedder: Embedder): Promise<Prepared> =>
 const SEMANTIC_GRID = Array.from({ length: 61 }, (_, index) => Math.round((0.3 + index * 0.01) * 100) / 100)
 const COVERAGE_GRID = Array.from({ length: 11 }, (_, index) => index / 10)
 
-/**
- * The floor that maximises balanced score - nDCG@10 on answerable queries
- * plus the share of no-answer queries answered with nothing, halved - on the
- * dev queries, each corpus counting the same.
- */
+/** One dev query, retrieved once for every floor the calibration tries. */
 interface DevRow {
   corpus: string
   engine: Engine
@@ -199,19 +195,37 @@ interface DevRow {
   precached: Retrieval
 }
 
-const calibrate = (dev: readonly DevRow[], answer: (row: DevRow, floor: FloorParams) => string[]): { floor: FloorParams; balanced: number } => {
-  let best = { floor: { semantic: 1, coverage: 1 }, balanced: -1 }
+/** A floor and how it scored on the dev queries, each corpus counting the same. */
+interface Calibrated {
+  floor: FloorParams
+  dev: Summary
+}
+
+/** Every floor on the grid, scored on the dev queries. */
+const grid = (dev: readonly DevRow[], answer: (row: DevRow, floor: FloorParams) => string[]): Calibrated[] => {
   const corpora = [...new Set(dev.map((row) => row.corpus))]
-  for (const semantic of SEMANTIC_GRID) {
-    for (const coverage of COVERAGE_GRID) {
+  return SEMANTIC_GRID.flatMap((semantic) =>
+    COVERAGE_GRID.map((coverage) => {
       const floor = { semantic, coverage }
       const outcomes: QueryOutcome[] = dev.map((row) => ({ corpus: row.corpus, strategy: 'x', query: row.query, ids: answer(row, floor), ms: 0, llmCalls: 0, confidences: [] }))
-      const balanced = macroAverage(corpora.map((corpus) => summarise(outcomes.filter((outcome) => outcome.corpus === corpus)))).balanced
-      if (balanced > best.balanced) best = { floor, balanced }
-    }
-  }
-  return best
+      return { floor, dev: macroAverage(corpora.map((corpus) => summarise(outcomes.filter((outcome) => outcome.corpus === corpus)))) }
+    })
+  )
 }
+
+/** The floor with the best balanced score - nDCG@10 on answerable queries plus the share of no-answer queries answered with nothing, halved. */
+const mostBalanced = (scored: readonly Calibrated[]): Calibrated =>
+  scored.reduce((best, item) => (item.dev.balanced > best.dev.balanced ? item : best))
+
+/**
+ * The floor with the most reply precision that gives up at most 0.02 nDCG@10
+ * and no FPR against `base`: balanced alone never looks at how much of a reply
+ * is noise.
+ */
+const mostPrecise = (scored: readonly Calibrated[], base: Calibrated): Calibrated =>
+  scored
+    .filter((item) => item.dev.ndcg >= base.dev.ndcg - 0.02 && item.dev.falsePositiveRate <= base.dev.falsePositiveRate)
+    .reduce((best, item) => (item.dev.replyPrecision > best.dev.replyPrecision || (item.dev.replyPrecision === best.dev.replyPrecision && item.dev.balanced > best.dev.balanced) ? item : best), base)
 
 describe('search evaluation', () => {
   it('compares search strategies across corpora', { timeout: 6 * 60 * 60 * 1000 }, async (context) => {
@@ -253,13 +267,32 @@ describe('search evaluation', () => {
         })
       }
     }
-    const floor = calibrate(dev, (row, params) => concatenated(floored(row.single, params)))
-    const floorRrf = calibrate(dev, (row, params) => {
-      const kept = floored(row.wide, params)
-      return fused([kept.semantic, kept.lexical])
+    const floor = mostBalanced(grid(dev, (row, params) => concatenated(floored(row.single, params))))
+    const floorRrf = mostBalanced(
+      grid(dev, (row, params) => {
+        const kept = floored(row.wide, params)
+        return fused([kept.semantic, kept.lexical])
+      })
+    )
+    const precachedGrid = grid(dev, (row, params) => precachedAnswer(row.engine, row.precached, row.query.text, params))
+    const precached = mostBalanced(precachedGrid)
+    const precachedPrecise = mostPrecise(precachedGrid, precached)
+    const calibrated = (strategy: string, objective: RunInfo['calibration'][number]['objective'], { floor: params, dev: scores }: Calibrated): RunInfo['calibration'][number] => ({
+      strategy,
+      objective,
+      ...params,
+      devNdcg: scores.ndcg,
+      devFpr: scores.falsePositiveRate,
+      devReplyPrecision: scores.replyPrecision,
+      devBalanced: scores.balanced
     })
-    const precached = calibrate(dev, (row, params) => precachedAnswer(row.engine, row.precached, row.query.text, params))
-    log(`  floor ${JSON.stringify(floor)}\n  floor+rrf ${JSON.stringify(floorRrf)}\n  precached ${JSON.stringify(precached)}`)
+    const calibration = [
+      calibrated('floor', 'balanced', floor),
+      calibrated('floor+rrf', 'balanced', floorRrf),
+      calibrated('precached', 'balanced', precached),
+      calibrated('precached+precision', 'precision', precachedPrecise)
+    ]
+    for (const row of calibration) log(`  ${JSON.stringify(row)}`)
 
     const chat = agentChat()
     const strategiesFor = (item: Prepared): Strategy[] =>
@@ -269,6 +302,7 @@ describe('search evaluation', () => {
         floorStrategy(item.engine, item.mem0, embedder, floor.floor),
         floorRrfStrategy(item.engine, item.mem0, embedder, floorRrf.floor),
         precachedStrategy(item.engine, item.contextual, embedder, precached.floor),
+        precachedStrategy(item.engine, item.contextual, embedder, precachedPrecise.floor, 'precached+precision'),
         agenticStrategy(item.engine, item.mem0, embedder, chat, AGENT)
       ].filter((strategy) => !ONLY_STRATEGIES || ONLY_STRATEGIES.includes(strategy.name))
 
@@ -330,11 +364,7 @@ describe('search evaluation', () => {
       agent: AGENT,
       corpora: prepared.map((item) => item.info),
       strategies: described.map((strategy) => ({ name: strategy.name, description: strategy.description })),
-      calibration: [
-        { strategy: 'floor', ...floor.floor, devBalanced: floor.balanced },
-        { strategy: 'floor+rrf', ...floorRrf.floor, devBalanced: floorRrf.balanced },
-        { strategy: 'precached', ...precached.floor, devBalanced: precached.balanced }
-      ],
+      calibration,
       warmMs: percentile(warm, 50),
       spotlight
     }

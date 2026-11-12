@@ -61,9 +61,9 @@ export const fused = (lists: readonly (readonly { id: string }[])[], limit = ANS
     .map(([id]) => id)
 }
 
-/** The two sources, as docket_search asks them: semantic over mem0's text, and full-text. */
+/** The two sources, as docket_search asks them: semantic over mem0's text, with nomic-embed-text's query prefix, and full-text. */
 export const retrieve = async (engine: Engine, vectors: VectorIndex, embedder: Embedder, query: string, limit = SOURCE_LIMIT): Promise<Retrieval> => {
-  const [vector] = await embedder.embed([query])
+  const [vector] = await embedder.embed([`search_query: ${query}`])
   return { semantic: vectors.search(vector as Float32Array, limit), lexical: engine.bm25.search(query, limit) }
 }
 
@@ -101,20 +101,31 @@ export const floorRrfStrategy = (engine: Engine, vectors: VectorIndex, embedder:
   }
 })
 
+/** Words after "who is" that say which one, not who: "who is our contact". */
+const DETERMINERS = new Set(['a', 'an', 'the', 'our', 'my', 'your', 'their', 'his', 'her', 'its', 'this', 'that', 'these', 'those'])
+
+/** A code or an acronym (`IL-6`, `DNA`), which an entity may spell differently, rather than a name. */
+const codeLike = (word: string): boolean => /\p{N}/u.test(word) || (/\p{L}.*\p{L}/u.test(word) && word === word.toUpperCase())
+
 /**
  * Words in the query that name something - a capitalised word that does not
- * start the question, or whatever follows "who is" - which no entity holds:
+ * start a sentence, or whatever follows "who is" - which no entity holds:
  * a question about something the docket has never recorded.
  */
 export const unknownNames = (engine: Engine, query: string): string[] => {
-  const words = query.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []
   const named = new Set<string>()
-  words.forEach((word, index) => {
-    if (index > 0 && /^\p{Lu}/u.test(word)) named.add(word)
-  })
+  for (const match of query.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)) {
+    const before = query.slice(0, match.index).trimEnd()
+    if (before !== '' && !/[.?!:]$/.test(before) && /^\p{Lu}/u.test(match[0])) named.add(match[0])
+  }
   const whoIs = /\bwho(?:'s|’s| is| was)\s+([\p{L}\p{N}'’-]+(?:\s+\p{Lu}[\p{L}\p{N}'’-]*)*)/iu.exec(query)
-  for (const word of whoIs?.[1]?.split(/\s+/) ?? []) named.add(word)
-  return [...named].flatMap((word) => tokenize(word)).filter((token) => queryTerms(token).length > 0 && !engine.bm25.has(token))
+  const whoWords = whoIs?.[1]?.split(/\s+/) ?? []
+  // "who is our contact at X" describes someone rather than naming them; X is caught as a capitalised word.
+  if (!DETERMINERS.has(whoWords[0]?.toLowerCase() ?? '')) for (const word of whoWords) named.add(word)
+  return [...named]
+    .filter((word) => !codeLike(word))
+    .flatMap((word) => tokenize(word))
+    .filter((token) => queryTerms(token).length > 0 && !engine.bm25.has(token))
 }
 
 /** The query-time half of the precached strategy: the name gate, then floored fusion over the contextual index. */
@@ -130,10 +141,10 @@ export const precachedAnswer = (engine: Engine, retrieval: Retrieval, query: str
  * full-text index and its vocabulary, and a cache of answers already given.
  * A query is then one embedding, a vocabulary check and one fusion.
  */
-export const precachedStrategy = (engine: Engine, contextual: VectorIndex, embedder: Embedder, floor: FloorParams): Strategy => {
+export const precachedStrategy = (engine: Engine, contextual: VectorIndex, embedder: Embedder, floor: FloorParams, name = 'precached'): Strategy => {
   const cache = new Map<string, string[]>()
   return {
-    name: 'precached',
+    name,
     description:
       `Sync-time link-aware embeddings and vocabulary; a query naming a word no entity holds returns nothing; ` +
       `otherwise floor (cosine >= ${floor.semantic}, coverage >= ${floor.coverage}) and RRF, top 10. Repeated queries come from a cache.`,
@@ -167,8 +178,9 @@ const jsonIn = (text: string): Record<string, unknown> | null => {
 
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [])
 
-const excerpt = (text: string, max = 220): string => {
-  const flat = text.replace(/^#.*\n/, '').replace(/\s+/g, ' ').trim()
+/** A record's body for the judge, without its heading, which the listing already shows as the title. */
+const excerpt = (text: string, max = 600): string => {
+  const flat = text.trimStart().replace(/^#.*\n/, '').replace(/\s+/g, ' ').trim()
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat
 }
 
