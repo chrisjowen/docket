@@ -27,9 +27,10 @@ describe('the Docket page’s value', () => {
 })
 
 describe('Add Docket', () => {
-  it('has added docket once the viewer runs, or is starting', () => {
+  it('has added docket only once the viewer runs', () => {
     expect(added(view())).toEqual({ ok: true })
-    expect(added(view({ state: 'starting' }))).toEqual({ ok: true })
+    expect(added(view({ state: 'starting' }))).toMatchObject({ ok: false, reason: 'docket’s viewer has not answered yet.' })
+    expect(added(view({ state: 'stopped' }))).toMatchObject({ ok: false })
   })
 
   it('says why not, with the launch log and the command to do it by hand', () => {

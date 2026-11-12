@@ -46,13 +46,17 @@ export type Added =
   | { ok: false; reason: string; log: string | null; hint: string | null }
 
 export const added = (view: ServiceView | null): Added => {
-  if (view?.state === 'running' || view?.state === 'starting') return { ok: true }
+  if (view?.state === 'running') return { ok: true }
   if (!view) return { ok: false, reason: 'This Wheelhouse has no docket viewer for this project.', log: null, hint: null }
   return {
     ok: false,
     reason:
       view.reason ??
-      (view.state === 'occupied' ? 'Something else answers at the viewer’s address.' : 'Wheelhouse could not start docket’s viewer.'),
+      (view.state === 'occupied'
+        ? 'Something else answers at the viewer’s address.'
+        : view.state === 'starting'
+          ? 'docket’s viewer has not answered yet.'
+          : 'Wheelhouse could not start docket’s viewer.'),
     log: view.log ?? null,
     hint: view.hint
   }

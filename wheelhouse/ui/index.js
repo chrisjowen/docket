@@ -29972,9 +29972,9 @@ function lR(e, t) {
     }
   }));
 }
-const cR = "wheelhouse-docket-projects.v1", uR = (e) => typeof e == "object" && e !== null && e.schema === cR && Array.isArray(e.projects), dR = (e, t) => `/projects/${encodeURIComponent(t)}/${encodeURIComponent(e)}/casebook`, fR = (e) => e?.state === "running" || e?.state === "starting" ? { ok: !0 } : e ? {
+const cR = "wheelhouse-docket-projects.v1", uR = (e) => typeof e == "object" && e !== null && e.schema === cR && Array.isArray(e.projects), dR = (e, t) => `/projects/${encodeURIComponent(t)}/${encodeURIComponent(e)}/casebook`, fR = (e) => e?.state === "running" ? { ok: !0 } : e ? {
   ok: !1,
-  reason: e.reason ?? (e.state === "occupied" ? "Something else answers at the viewer’s address." : "Wheelhouse could not start docket’s viewer."),
+  reason: e.reason ?? (e.state === "occupied" ? "Something else answers at the viewer’s address." : e.state === "starting" ? "docket’s viewer has not answered yet." : "Wheelhouse could not start docket’s viewer."),
   log: e.log ?? null,
   hint: e.hint
 } : { ok: !1, reason: "This Wheelhouse has no docket viewer for this project.", log: null, hint: null };

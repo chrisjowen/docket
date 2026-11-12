@@ -279,6 +279,17 @@ describe('<docket-projects>', () => {
     expect(text).toContain('1 of 3 projects keep a docket')
   })
 
+  it('does not call docket added while its viewer is only starting', async () => {
+    const starting: View = { state: 'starting', url: null, reason: null, launchable: false, hint: 'cd /work/web && docket open --init' }
+    const element = page({ service: async () => null, launch: async () => starting }, projects())
+    await shows(element, '1 of 3 projects keep a docket')
+    button(element, 'Add Docket').click()
+    const text = await shows(element, 'docket’s viewer has not answered yet.')
+    expect(text).toContain('cd /work/web && docket open --init')
+    expect(text).toContain('1 of 3 projects keep a docket')
+    expect(section(element, 'Projects without a docket')).toContain('Web')
+  })
+
   it('says what stops Add Docket, and does not offer it', async () => {
     const problem = 'The docket CLI the docket plugin’s settings name (/opt/docket) is too old to add docket to a project.'
     const element = page({ service: async () => null, launch: async () => null }, projects({ problem }))

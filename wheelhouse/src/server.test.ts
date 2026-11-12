@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { Window } from 'happy-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { isCasebookData } from '../../packages/docket-ui/src/embed/host.js'
@@ -127,8 +128,10 @@ describe('the manifest', () => {
     expect(page).toEqual({ id: 'projects', slot: 'nav.page', icon: 'wheelhouse/icon.svg' })
     expect(plugin.contributions.find((c) => c.slot === 'nav.page')).toMatchObject({ title: 'Docket', render: { element: 'docket-projects' } })
     // Drawn as a stencil in the menu's ink: a 24-pixel line icon.
-    const icon = await readFile(path.join(repo, page!.icon!), 'utf8')
-    expect(icon).toMatch(/^<svg [^>]*viewBox="0 0 24 24"[^>]*fill="none"/)
+    const svg = new new Window().DOMParser().parseFromString(await readFile(path.join(repo, page!.icon!), 'utf8'), 'image/svg+xml').documentElement
+    expect(svg.localName).toBe('svg')
+    expect(svg.getAttribute('viewBox')).toBe('0 0 24 24')
+    expect(svg.getAttribute('fill')).toBe('none')
   })
 
   it('names entries that exist, and the built server entry is this one', async () => {
