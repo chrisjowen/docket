@@ -141,10 +141,10 @@ export const precachedAnswer = (engine: Engine, retrieval: Retrieval, query: str
  * full-text index and its vocabulary, and a cache of answers already given.
  * A query is then one embedding, a vocabulary check and one fusion.
  */
-export const precachedStrategy = (engine: Engine, contextual: VectorIndex, embedder: Embedder, floor: FloorParams, name = 'precached'): Strategy => {
+export const precachedStrategy = (engine: Engine, contextual: VectorIndex, embedder: Embedder, floor: FloorParams): Strategy => {
   const cache = new Map<string, string[]>()
   return {
-    name,
+    name: 'precached',
     description:
       `Sync-time link-aware embeddings and vocabulary; a query naming a word no entity holds returns nothing; ` +
       `otherwise floor (cosine >= ${floor.semantic}, coverage >= ${floor.coverage}) and RRF, top 10. Repeated queries come from a cache.`,

@@ -138,7 +138,7 @@ const prepare = async (corpus: Corpus, embedder: Embedder): Promise<Prepared> =>
   const progress = (label: string) => (done: number, total: number) => {
     if (done === total || done % 640 === 0) log(`  ${corpus.name}: embedded ${done}/${total} ${label}`)
   }
-  const mem0 = await embedAll(embedder, new Map(engine.entities.map((entity) => [entity.id, mem0Text(engine, entity)])), cacheDir, progress('mem0 texts'))
+  const mem0 = await embedAll(embedder, new Map(engine.entities.map((entity) => [entity.id, mem0Text(entity)])), cacheDir, progress('mem0 texts'))
   const contextual = await embedAll(embedder, new Map(engine.entities.map((entity) => [entity.id, contextualText(engine, entity)])), cacheDir, progress('contextual texts'))
   const embedMs = performance.now() - started
 
@@ -217,16 +217,6 @@ const grid = (dev: readonly DevRow[], answer: (row: DevRow, floor: FloorParams) 
 const mostBalanced = (scored: readonly Calibrated[]): Calibrated =>
   scored.reduce((best, item) => (item.dev.balanced > best.dev.balanced ? item : best))
 
-/**
- * The floor with the most reply precision that gives up at most 0.02 nDCG@10
- * and no FPR against `base`: balanced alone never looks at how much of a reply
- * is noise.
- */
-const mostPrecise = (scored: readonly Calibrated[], base: Calibrated): Calibrated =>
-  scored
-    .filter((item) => item.dev.ndcg >= base.dev.ndcg - 0.02 && item.dev.falsePositiveRate <= base.dev.falsePositiveRate)
-    .reduce((best, item) => (item.dev.replyPrecision > best.dev.replyPrecision || (item.dev.replyPrecision === best.dev.replyPrecision && item.dev.balanced > best.dev.balanced) ? item : best), base)
-
 describe('search evaluation', () => {
   it('compares search strategies across corpora', { timeout: 6 * 60 * 60 * 1000 }, async (context) => {
     const why = await unavailable()
@@ -274,12 +264,9 @@ describe('search evaluation', () => {
         return fused([kept.semantic, kept.lexical])
       })
     )
-    const precachedGrid = grid(dev, (row, params) => precachedAnswer(row.engine, row.precached, row.query.text, params))
-    const precached = mostBalanced(precachedGrid)
-    const precachedPrecise = mostPrecise(precachedGrid, precached)
-    const calibrated = (strategy: string, objective: RunInfo['calibration'][number]['objective'], { floor: params, dev: scores }: Calibrated): RunInfo['calibration'][number] => ({
+    const precached = mostBalanced(grid(dev, (row, params) => precachedAnswer(row.engine, row.precached, row.query.text, params)))
+    const calibrated = (strategy: string, { floor: params, dev: scores }: Calibrated): RunInfo['calibration'][number] => ({
       strategy,
-      objective,
       ...params,
       devNdcg: scores.ndcg,
       devFpr: scores.falsePositiveRate,
@@ -287,10 +274,9 @@ describe('search evaluation', () => {
       devBalanced: scores.balanced
     })
     const calibration = [
-      calibrated('floor', 'balanced', floor),
-      calibrated('floor+rrf', 'balanced', floorRrf),
-      calibrated('precached', 'balanced', precached),
-      calibrated('precached+precision', 'precision', precachedPrecise)
+      calibrated('floor', floor),
+      calibrated('floor+rrf', floorRrf),
+      calibrated('precached', precached)
     ]
     for (const row of calibration) log(`  ${JSON.stringify(row)}`)
 
@@ -302,7 +288,6 @@ describe('search evaluation', () => {
         floorStrategy(item.engine, item.mem0, embedder, floor.floor),
         floorRrfStrategy(item.engine, item.mem0, embedder, floorRrf.floor),
         precachedStrategy(item.engine, item.contextual, embedder, precached.floor),
-        precachedStrategy(item.engine, item.contextual, embedder, precachedPrecise.floor, 'precached+precision'),
         agenticStrategy(item.engine, item.mem0, embedder, chat, AGENT)
       ].filter((strategy) => !ONLY_STRATEGIES || ONLY_STRATEGIES.includes(strategy.name))
 

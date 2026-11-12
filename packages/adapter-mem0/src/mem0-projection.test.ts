@@ -81,7 +81,7 @@ describe('mem0 projection', () => {
     await projection.upsert(makeDocument())
 
     const [memory] = [...backend.memories.values()]
-    expect(memory?.text).toBe('# Orders\nservice\n\nHandles orders.\n\nLinks:\n- owned_by team.payments\n\nTags: core\n')
+    expect(memory?.text).toBe('# Orders\nservice\n\nHandles orders.\n\nTags: core\n')
     expect(memory?.metadata).toMatchObject({
       [DOCUMENT_ID_KEY]: 'service.orders',
       memory_type: 'service',
@@ -232,7 +232,7 @@ describe('mem0 projection', () => {
     expect(hits?.[0]?.passage?.text).toBe('# Orders\nservice\n\nHandles orders.\n')
   })
 
-  it('leaves confidence and evidence out of the text, which says only what the entity is about', () => {
+  it('leaves confidence, evidence and links out of the text, which says only what the entity is about', () => {
     const text = renderDocument(
       makeDocument({
         tags: [],
@@ -247,7 +247,7 @@ describe('mem0 projection', () => {
       })
     )
 
-    expect(text).toBe('# Orders\nservice\n\nHandles orders.\n\nLinks:\n- depends_on datasource.orders-db\n')
+    expect(text).toBe('# Orders\nservice\n\nHandles orders.\n')
   })
 
   it('stores files that share an id as one memory with their combined confidence', async () => {

@@ -21,10 +21,9 @@ export interface RunInfo {
     lexicalMs: { jsonl: number; indexed: number }
   }[]
   strategies: { name: string; description: string }[]
-  /** Each tuned floor, the objective it was tuned for, and how it scored on the dev queries. */
+  /** Each tuned floor and how it scored on the dev queries. */
   calibration: {
     strategy: string
-    objective: 'balanced' | 'precision'
     semantic: number
     coverage: number
     devNdcg: number
@@ -201,10 +200,9 @@ export const report = (info: RunInfo, outcomes: readonly QueryOutcome[]): string
     '## Calibrated floors',
     '',
     table(
-      ['strategy', 'objective', 'cosine floor', 'coverage floor', 'dev nDCG@10', 'dev FPR', 'dev reply precision', 'dev balanced'],
+      ['strategy', 'cosine floor', 'coverage floor', 'dev nDCG@10', 'dev FPR', 'dev reply precision', 'dev balanced'],
       info.calibration.map((row) => [
         row.strategy,
-        row.objective,
         f(row.semantic, 2),
         f(row.coverage, 2),
         f(row.devNdcg),

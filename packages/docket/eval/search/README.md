@@ -166,7 +166,7 @@ combines in Docket Cloud:
 
 - **semantic**, standing in for mem0: cosine similarity between the query and
   each entity, embedded as adapter-mem0's `renderDocument` writes it (title,
-  type, body, links, tags), with nomic-embed-text's `search_document: ` and
+  type, body, tags), with nomic-embed-text's `search_document: ` and
   `search_query: ` prefixes;
 - **full-text**, standing in for Neo4j's full-text index: BM25 over title,
   id and tags, and body, scored exactly as the JSONL adapter's
@@ -179,17 +179,14 @@ combines in Docket Cloud:
 | `floor` | `current` with a relevance floor on each source: semantic hits need a minimum cosine similarity, full-text hits must cover a minimum share of the query's terms, weighted by idf. |
 | `floor+rrf` | The floor on each source's top 20, then reciprocal rank fusion and a cut to 10. |
 | `precached` | Work moved to sync time. Each entity is embedded with the titles of what it links to and without its confidence, and the full-text vocabulary is kept. A query naming a word no entity holds - a capitalised word that does not start a sentence, or whatever follows "who is" unless it starts "our", "the" or another determiner; acronyms and words with digits never count - returns nothing without searching. Otherwise floor and fusion as above, over the link-aware embeddings. Answers are cached by query terms. |
-| `precached+precision` | `precached` with its floors tuned for reply precision instead (below). |
 | `agentic` | A model (`DOCKET_EVAL_AGENT`) plans 1-3 searches, the record types to expect, and whether to follow links. The single-pass sources run each search, adding neighbours when asked. The model then judges which candidates are about exactly what was asked, and an empty judgement is the answer. Two model calls per query. |
 
 The floors are tuned on the dev queries, pooled over corpora, by grid
 search: cosine 0.30-0.90 in steps of 0.01, coverage 0-1 in steps of 0.1. The
 objective is **balanced** = (nDCG@10 on answerable queries + share of
 no-answer queries answered with nothing) / 2. Balanced never looks at how much
-of a reply is noise, so `precached`'s floors are also tuned for the most dev
-reply precision whose dev nDCG@10 is within 0.02 of the balanced pick's and
-whose dev FPR is no worse (`precached+precision`). The report lists each
-floor's objective and its dev nDCG@10, FPR and reply precision. A cosine floor belongs to its
+of a reply is noise, so the report lists each floor's dev nDCG@10, FPR and
+reply precision. A cosine floor belongs to its
 embedding model. The floors here are for `nomic-embed-text`; the hosted mem0
 platform embeds with its own model, so its scores sit on a different scale
 and its floor must be tuned the same way on its own scores.

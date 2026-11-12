@@ -28,7 +28,7 @@ export const defaultScope = (projectRoot: string): Mem0Scope => ({
 
 /**
  * The text mem0 embeds and returns on search: what the entity is about - its
- * title, type, body, links and tags. Its id, confidence and evidence say
+ * title, type, body and tags. Its id, confidence, link ids and evidence say
  * nothing about that, so they would only blur what the text matches; they are
  * in the metadata and the canonical file, and every hit carries the id.
  */
@@ -36,10 +36,6 @@ export const renderDocument = (entity: EntityInput): string => {
   const lines = [`# ${entity.title}`, entity.type]
   const body = entity.content.trim()
   if (body) lines.push('', body)
-  if (entity.links.length > 0) {
-    lines.push('', 'Links:')
-    for (const link of entity.links) lines.push(`- ${link.rel} ${link.target}`)
-  }
   if (entity.tags.length > 0) lines.push('', `Tags: ${entity.tags.join(', ')}`)
   return `${lines.join('\n')}\n`
 }
