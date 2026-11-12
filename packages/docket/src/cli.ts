@@ -395,7 +395,8 @@ program
     (value: string, previous: string[]) => [...previous, value],
     [] as string[]
   )
-  .action(async (options: { port?: string; host: string; open: boolean; allowOrigin: string[] }) => {
+  .option('--init', 'start a docket here first, as docket init does, when this directory has no .docket.yaml')
+  .action(async (options: { port?: string; host: string; open: boolean; allowOrigin: string[]; init?: boolean }) => {
     let port: number | undefined
     if (options.port !== undefined) {
       port = Number(options.port)
@@ -409,7 +410,12 @@ program
       const checked = allowedOrigin(origin)
       if (!checked.ok) throw new Error(`--allow-origin: ${checked.reason}`)
     }
-    const handle = await open({ port, host, allowOrigins: options.allowOrigin })
+    const handle = await open({ port, host, allowOrigins: options.allowOrigin, init: options.init })
+    if (handle.initialized) {
+      console.log(`Initialized docket in ${handle.initialized.projectRoot}`)
+      for (const path of handle.initialized.created) console.log(`  created ${path}`)
+      for (const path of handle.initialized.updated) console.log(`  updated ${path}`)
+    }
     const reach =
       handle.host === '127.0.0.1' || handle.host === '::1' || handle.host === 'localhost'
         ? 'this machine only'

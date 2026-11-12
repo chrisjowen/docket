@@ -51,7 +51,7 @@ export interface DocketCli {
 /** The provider's value: the project's docket, and the pages its viewer is started to allow. */
 export interface CasebookData {
   schema: typeof CASEBOOK_SCHEMA
-  /** `none`: the project has no `.docket.yaml`. */
+  /** `none`: the project has no `.docket.yaml`; the plugin now hides the tab instead, but an older one sends it. */
   state: 'docket' | 'none'
   /** The docket's directory. */
   root: string | null
@@ -122,7 +122,7 @@ export const connect = async (
     return {
       state: 'blocked',
       title: 'No docket here',
-      detail: 'This project’s clone has no .docket.yaml. Run docket init in it to start one.',
+      detail: 'This project’s clone has no .docket.yaml. Add Docket from the Docket page in Wheelhouse’s menu, or run docket init in it.',
       hint: null
     }
   }

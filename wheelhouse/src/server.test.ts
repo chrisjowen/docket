@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { Window } from 'happy-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { isCasebookData } from '../../packages/docket-ui/src/embed/host.js'
@@ -17,9 +18,11 @@ import plugin, {
   openCommand,
   pageOrigin,
   preferredPort,
+  PROJECTS_SCHEMA,
   readSettings,
   SHIPPED_DOCKET,
   shippedCli,
+  startsDockets,
   versionOf
 } from './server.js'
 
@@ -32,8 +35,8 @@ const manifest = JSON.parse(await readFile(path.join(repo, '.wheelhouse-plugin',
     apiVersion: number
     server: string
     ui: string
-    enabledWhenFile: string
-    contributions: { id: string; slot: string }[]
+    enabledByDefault: boolean
+    contributions: { id: string; slot: string; icon?: string }[]
     services: { id: string; scope: string }[]
     mcpServers: { id: string; service: string }[]
   }
@@ -43,7 +46,10 @@ const manifest = JSON.parse(await readFile(path.join(repo, '.wheelhouse-plugin',
 const SHIPPED = [process.execPath, path.join(SHIPPED_DOCKET, 'dist', 'cli.js')]
 const docketVersion = (JSON.parse(await readFile(path.join(repo, 'packages', 'docket', 'package.json'), 'utf8')) as { version: string }).version
 
-const HELP_NOW = 'Usage: docket open [options]\n  --host <address>\n  --no-open\n  --allow-origin <origin>  another page on this machine\n'
+const HELP_NOW =
+  'Usage: docket open [options]\n  --host <address>\n  --no-open\n  --allow-origin <origin>  another page on this machine\n  --init  start a docket here first\n'
+/** docket 0.7.0: it allows Wheelhouse's page, but cannot start a docket. */
+const HELP_NO_INIT = 'Usage: docket open [options]\n  --host <address>\n  --no-open\n  --allow-origin <origin>  another page on this machine\n'
 const HELP_OLD = 'Usage: docket open [options]\n  --host <address>\n  --no-open\n'
 
 const project = (over: Partial<Project> = {}): Project => ({
@@ -59,17 +65,30 @@ interface Fake {
   calls: ExecRequest[]
 }
 
-/** A context like Wheelhouse's, with `exec` answering `docket open --help` and `docket --version`, and the clone holding `files`. */
+/**
+ * A context like Wheelhouse's, with `exec` answering `docket open --help` and
+ * `docket --version`, and the clone holding `files` (each other project's
+ * clone, `clones[id]`). A fleet context (`fleet`) has no project of its own.
+ */
 const fake = (
-  o: { project?: Project | null; help?: ExecResult; version?: ExecResult; files?: string[]; settings?: Record<string, unknown> } = {}
+  o: {
+    project?: Project | null
+    projects?: Project[]
+    fleet?: boolean
+    help?: ExecResult
+    version?: ExecResult
+    files?: string[]
+    clones?: Record<string, string[]>
+    settings?: Record<string, unknown>
+  } = {}
 ): Fake => {
   const calls: ExecRequest[] = []
   const p = o.project === undefined ? project() : o.project
   return {
     calls,
     ctx: {
-      project: p,
-      projects: p ? [p] : [],
+      project: o.fleet ? null : p,
+      projects: o.projects ?? (p ? [p] : []),
       settings: o.settings ?? {},
       signal: new AbortController().signal,
       exec: async (request) => {
@@ -77,13 +96,17 @@ const fake = (
         if (request.argv[1] === '--version') return o.version ?? { ok: true, stdout: '0.6.0\n' }
         return o.help ?? { ok: true, stdout: HELP_NOW }
       },
-      readFile: async (rel) => ((o.files ?? ['.docket.yaml']).includes(rel) ? '' : null),
+      readFile: async (rel, { project: id }) => {
+        const files = (id !== undefined && o.clones?.[id]) || o.files || ['.docket.yaml']
+        return files.includes(rel) ? '' : null
+      },
       servicePort: async (preferred) => preferred
     }
   }
 }
 
-const provider = plugin.providers[0]!
+const provider = plugin.providers.find((p) => p.id === 'casebook')!
+const projectsProvider = plugin.providers.find((p) => p.id === 'projects')!
 const service = plugin.services[0]!
 
 beforeEach(() => clearCliCache())
@@ -91,11 +114,24 @@ beforeEach(() => clearCliCache())
 describe('the manifest', () => {
   it('lists exactly the contributions and services the server entry has', () => {
     expect(manifest.name).toBe('docket')
-    expect(manifest.wheelhouse.contributions).toEqual(plugin.contributions.map(({ id, slot }) => ({ id, slot })))
+    expect(manifest.wheelhouse.contributions.map(({ id, slot }) => ({ id, slot }))).toEqual(plugin.contributions.map(({ id, slot }) => ({ id, slot })))
     expect(manifest.wheelhouse.services).toEqual(plugin.services.map(({ id, scope }) => ({ id, scope })))
     expect(manifest.wheelhouse.mcpServers).toEqual(plugin.mcpServers.map(({ id, service }) => ({ id, service })))
     expect(manifest.wheelhouse.apiVersion).toBe(1)
-    expect(manifest.wheelhouse.enabledWhenFile).toBe('.docket.yaml')
+    // On for every project, so the Docket page sees them all; the tab shows only where there is a docket.
+    expect(manifest.wheelhouse.enabledByDefault).toBe(true)
+    expect(plugin.contributions.find((c) => c.slot === 'project.tab')?.when).toBe('provider-available')
+  })
+
+  it('puts the Docket page in Wheelhouse’s menu with its own line icon', async () => {
+    const page = manifest.wheelhouse.contributions.find((c) => c.slot === 'nav.page')
+    expect(page).toEqual({ id: 'projects', slot: 'nav.page', icon: 'wheelhouse/icon.svg' })
+    expect(plugin.contributions.find((c) => c.slot === 'nav.page')).toMatchObject({ title: 'Docket', render: { element: 'docket-projects' } })
+    // Drawn as a stencil in the menu's ink: a 24-pixel line icon.
+    const svg = new new Window().DOMParser().parseFromString(await readFile(path.join(repo, page!.icon!), 'utf8'), 'image/svg+xml').documentElement
+    expect(svg.localName).toBe('svg')
+    expect(svg.getAttribute('viewBox')).toBe('0 0 24 24')
+    expect(svg.getAttribute('fill')).toBe('none')
   })
 
   it('names entries that exist, and the built server entry is this one', async () => {
@@ -140,7 +176,8 @@ describe('the docket the plugin ships', () => {
     expect(shippedCli()).toEqual({
       argv: SHIPPED,
       info: { source: 'plugin', version: docketVersion, command: SHIPPED.join(' ') },
-      problem: null
+      problem: null,
+      initProblem: null
     })
   })
 
@@ -148,7 +185,9 @@ describe('the docket the plugin ships', () => {
     const run = (...args: string[]) =>
       new Promise<string>((done, fail) => execFile(SHIPPED[0]!, [SHIPPED[1]!, ...args], (error, stdout) => (error ? fail(error) : done(stdout))))
     expect(versionOf(await run('--version'))).toBe(docketVersion)
-    expect(allowsOrigins(await run('open', '--help'))).toBe(true)
+    const help = await run('open', '--help')
+    expect(allowsOrigins(help)).toBe(true)
+    expect(startsDockets(help)).toBe(true)
   })
 
   it('says so when the plugin’s copy is missing', () => {
@@ -156,6 +195,7 @@ describe('the docket the plugin ships', () => {
     expect(cli.argv).toEqual(['/usr/bin/node', '/nowhere/docket/dist/cli.js'])
     expect(cli.info).toEqual({ source: 'plugin', version: null, command: '/usr/bin/node /nowhere/docket/dist/cli.js' })
     expect(cli.problem).toContain('The docket this plugin ships is missing from /nowhere/docket/')
+    expect(cli.initProblem).toBe(cli.problem)
   })
 })
 
@@ -197,9 +237,11 @@ describe('settings', () => {
     }
   })
 
-  it('knows a docket open that can allow Wheelhouse’s page', () => {
+  it('knows a docket open that can allow Wheelhouse’s page, and one that can start a docket', () => {
     expect(allowsOrigins(HELP_NOW)).toBe(true)
     expect(allowsOrigins(HELP_OLD)).toBe(false)
+    expect(startsDockets(HELP_NOW)).toBe(true)
+    expect(startsDockets(HELP_NO_INIT)).toBe(false)
   })
 
   it('reads the version docket --version prints', () => {
@@ -240,9 +282,9 @@ describe('the casebook tab’s provider', () => {
     ])
   })
 
-  it('says when the project keeps no docket', async () => {
+  it('is not available, so the tab does not show, for a project that keeps no docket', async () => {
     const result = await provider.fetch(fake({ files: [] }).ctx)
-    expect(result).toMatchObject({ available: true, value: { state: 'none', problem: null, docket: null } })
+    expect(result).toEqual({ available: false, reason: 'This project has no docket. Add it from the Docket page in Wheelhouse’s menu.' })
   })
 
   it('shows a docket set in the plugins file instead of the clone’s', async () => {
@@ -340,6 +382,108 @@ describe('the viewer service', () => {
     const resolution = await service.resolve(fake({ help: { ok: false, reason: 'spawn /opt/docket ENOENT', stdout: '', stderr: '' }, settings: { bin: '/opt/docket' } }).ctx)
     expect(resolution).toMatchObject({ available: false, reason: expect.stringContaining('could not find the docket CLI (/opt/docket)') })
   })
+
+  it('starts a docket first for a project that has none: Add Docket', async () => {
+    const resolution = await service.resolve(fake({ files: [] }).ctx)
+    const port = preferredPort('shop')
+    expect(resolution).toMatchObject({
+      available: true,
+      hint: openCommand(SHIPPED, '/work/shop', port, DEFAULT_ORIGINS, true),
+      spec: { cwd: '/work/shop', argv: [...SHIPPED, ...viewerArgsFor(port), '--init'] }
+    })
+    expect(openCommand(['docket'], '/work/shop', 4400, ['http://127.0.0.1:4310'], true)).toBe(
+      'cd /work/shop && docket open --host 127.0.0.1 --port 4400 --allow-origin http://127.0.0.1:4310 --init'
+    )
+    // A project with a docket is only opened.
+    const opened = await service.resolve(fake().ctx)
+    expect(opened.available && opened.spec.argv).not.toContain('--init')
+  })
+
+  it('does not add docket with a docket CLI too old to start one, but still opens an existing docket with it', async () => {
+    const settings = { bin: '/opt/docket' }
+    const old = await service.resolve(fake({ files: [], help: { ok: true, stdout: HELP_NO_INIT }, settings }).ctx)
+    expect(old).toMatchObject({
+      available: false,
+      reason: expect.stringContaining('(/opt/docket, docket 0.6.0) is too old to add docket to a project'),
+      hint: expect.stringContaining('--init')
+    })
+    expect(await service.resolve(fake({ help: { ok: true, stdout: HELP_NO_INIT }, settings }).ctx)).toMatchObject({ available: true })
+  })
+
+  it('is not available for a project with no clone', async () => {
+    expect(await service.resolve(fake({ project: project({ path: null }) }).ctx)).toEqual({
+      available: false,
+      reason: 'Firstmate has not recorded a clone for this project.'
+    })
+  })
+})
+
+/** The viewer's arguments after the CLI, as the plugin starts it for the project's port and Wheelhouse's own pages. */
+const viewerArgsFor = (port: number): string[] => [
+  'open',
+  '--host',
+  '127.0.0.1',
+  '--port',
+  String(port),
+  '--no-open',
+  '--allow-origin',
+  'http://127.0.0.1:4310',
+  '--allow-origin',
+  'http://localhost:4310'
+]
+
+describe('the Docket page’s provider', () => {
+  const shop = project()
+  const web = project({ id: 'web', name: 'Web', path: '/work/web' })
+  const notes = project({ id: 'notes', name: 'Notes', description: 'Loose notes', path: null })
+
+  it('lists every project, in Wheelhouse’s order, with whether it keeps a docket', async () => {
+    const { ctx, calls } = fake({ fleet: true, projects: [shop, web, notes], clones: { shop: ['.docket.yaml'], web: [] } })
+    const result = await projectsProvider.fetch(ctx)
+    expect(result).toMatchObject({ available: true, source: 'Wheelhouse’s projects and their clones' })
+    expect(result.available && result.value).toEqual({
+      schema: PROJECTS_SCHEMA,
+      projects: [
+        { id: 'shop', name: 'Shop', description: null, state: 'docket', root: '/work/shop', configuredRoot: false },
+        { id: 'web', name: 'Web', description: null, state: 'none', root: '/work/web', configuredRoot: false },
+        { id: 'notes', name: 'Notes', description: 'Loose notes', state: 'no-clone', root: null, configuredRoot: false }
+      ],
+      problem: null,
+      docket: { source: 'plugin', version: docketVersion, command: SHIPPED.join(' ') }
+    })
+    expect(calls).toEqual([])
+  })
+
+  it('counts a docket set in the plugins file as the project’s', async () => {
+    const result = await projectsProvider.fetch(
+      fake({ fleet: true, projects: [notes], settings: { roots: { notes: '/examples/acme' } } }).ctx
+    )
+    expect(result.available && result.value).toMatchObject({
+      projects: [{ id: 'notes', state: 'docket', root: '/examples/acme', configuredRoot: true }],
+      docket: null
+    })
+  })
+
+  it('says when the docket CLI the settings name cannot add docket, asking it in a clone', async () => {
+    const { ctx, calls } = fake({
+      fleet: true,
+      projects: [notes, web],
+      clones: { web: [] },
+      help: { ok: true, stdout: HELP_NO_INIT },
+      settings: { bin: '/opt/docket' }
+    })
+    const result = await projectsProvider.fetch(ctx)
+    expect(result.available && result.value).toMatchObject({
+      problem: expect.stringContaining('(/opt/docket, docket 0.6.0) is too old to add docket to a project: its docket open cannot start a docket (--init)'),
+      docket: { source: 'settings', version: '0.6.0', command: '/opt/docket' }
+    })
+    expect(calls.map((call) => call.project)).toEqual(['web', 'web'])
+  })
+
+  it('lists no projects when the plugin is on for none', async () => {
+    const result = await projectsProvider.fetch(fake({ fleet: true, projects: [] }).ctx)
+    expect(result.available && result.value).toEqual({ schema: PROJECTS_SCHEMA, projects: [], problem: null, docket: null })
+  })
 })
 
 /** A port nothing listens on. */
@@ -436,6 +580,29 @@ describe('the viewer, started as Wheelhouse starts it', () => {
     const page = await fetch(`${spec.url}/`)
     expect(page.status).toBe(200)
     expect(await page.text()).toMatch(/<html/i)
+  }, 30_000)
+
+  it('adds docket to a project that has none, then serves it: Add Docket', async () => {
+    const root = path.join(dir, 'web')
+    await mkdir(root)
+    await writeFile(path.join(root, '.gitignore'), 'node_modules\n')
+    const port = await freePort()
+    const resolution = await service.resolve(fake({ project: project({ id: 'web', path: root }), files: [], settings: { ports: { web: port } } }).ctx)
+    if (!resolution.available) throw new Error(resolution.reason)
+    const { spec } = resolution
+    expect(spec.argv.at(-1)).toBe('--init')
+    child = spawn(spec.argv[0]!, spec.argv.slice(1), { cwd: spec.cwd, stdio: 'ignore' })
+
+    let health: Response | undefined
+    for (let attempt = 0; attempt < 100 && !health; attempt++) {
+      health = await fetch(spec.health).catch(() => undefined)
+      if (!health) await new Promise((done) => setTimeout(done, 100))
+    }
+    if (!health) throw new Error('the viewer never answered')
+    expect(((await health.json()) as { root: string }).root).toBe(spec.identity!.value)
+    // What docket init writes, the clone's .gitignore amended.
+    for (const file of ['.docket.yaml', '.docket/entities.yaml']) expect(existsSync(path.join(root, file))).toBe(true)
+    expect(await readFile(path.join(root, '.gitignore'), 'utf8')).toContain('.docket/.index/')
   }, 30_000)
 
   it('asks a docket CLI the settings name for its version, for real', async () => {

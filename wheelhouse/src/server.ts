@@ -18,9 +18,14 @@ import type {
  * element (`wheelhouse/ui/index.js`, built from docket-ui), which draws the
  * casebook from the project's docket viewer: `docket open`, started as the
  * plugin's `viewer` service on 127.0.0.1 with `--allow-origin` for
- * Wheelhouse's page, so the page may use its API. The server entry only
- * works out where the docket is and how to start its viewer; it never runs
- * anything that writes, and Wheelhouse starts the viewer only on the
+ * Wheelhouse's page, so the page may use its API. The plugin is on for every
+ * project, and the tab shows on those whose clone has `.docket.yaml`. Its
+ * **Docket** page in Wheelhouse's menu (`<docket-projects>`) lists every
+ * project, with Add Docket for those without one: it starts the project's
+ * viewer, which for a project with no docket is `docket open --init`, so
+ * docket is added to the clone as `docket init` adds it. The server entry
+ * only works out where each docket is and how to start its viewer; it never
+ * runs anything that writes, and Wheelhouse starts the viewer only on the
  * captain's click. The viewer is the docket this plugin ships
  * (`wheelhouse/docket/`, built from the same commit by build.mjs), run with
  * Wheelhouse's own node, so installing or updating the plugin brings the
@@ -65,12 +70,38 @@ export interface DocketCli {
 
 export interface CasebookData {
   schema: typeof CASEBOOK_SCHEMA
-  state: 'docket' | 'none'
+  /** Always `docket`: a project with no docket has no tab. */
+  state: 'docket'
   root: string | null
   configuredRoot: boolean
   origins: string[]
   problem: string | null
-  /** The docket the viewer runs; null when the project keeps no docket. */
+  /** The docket the viewer runs. */
+  docket: DocketCli
+}
+
+/** The Docket page's schema: `wheelhouse-docket-projects.v1`, which docket-ui's src/embed/projects.ts reads. */
+export const PROJECTS_SCHEMA = 'wheelhouse-docket-projects.v1'
+
+/** One of Wheelhouse's projects as the Docket page lists it. */
+export interface DocketProject {
+  id: string
+  name: string
+  description: string | null
+  /** `docket`: it has one; `none`: its clone has no `.docket.yaml`; `no-clone`: Firstmate recorded no clone to add one to. */
+  state: 'docket' | 'none' | 'no-clone'
+  /** The docket's directory, or the clone docket would be added to. */
+  root: string | null
+  configuredRoot: boolean
+}
+
+export interface ProjectsData {
+  schema: typeof PROJECTS_SCHEMA
+  /** Every project the plugin is on for, in Wheelhouse's order. */
+  projects: DocketProject[]
+  /** What stops Add Docket working, such as a docket CLI too old to start a docket. */
+  problem: string | null
+  /** The docket the viewers run; null when no project has a clone to ask it in. */
   docket: DocketCli | null
 }
 
@@ -135,23 +166,30 @@ export function preferredPort(projectId: string): number {
 /** A path or argument as one shell word, for a command the captain copies. */
 const shellWord = (s: string): string => (/^[\w./:@-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`)
 
-/** `docket open`'s arguments for the viewer of a docket: loopback, this port, these pages allowed, no browser. */
-export const viewerArgs = (port: number, origins: string[]): string[] => [
+/**
+ * `docket open`'s arguments for the viewer of a docket: loopback, this port,
+ * these pages allowed, no browser; with `init`, starting the docket first.
+ */
+export const viewerArgs = (port: number, origins: string[], init = false): string[] => [
   'open',
   '--host',
   '127.0.0.1',
   '--port',
   String(port),
   '--no-open',
-  ...origins.flatMap((origin) => ['--allow-origin', origin])
+  ...origins.flatMap((origin) => ['--allow-origin', origin]),
+  ...(init ? ['--init'] : [])
 ]
 
 /** The command that starts a docket's viewer by hand, with `docket` the words that run the docket CLI. */
-export const openCommand = (docket: string[], root: string, port: number, origins: string[]): string =>
-  `cd ${shellWord(root)} && ${[...docket, ...viewerArgs(port, origins).filter((arg) => arg !== '--no-open')].map(shellWord).join(' ')}`
+export const openCommand = (docket: string[], root: string, port: number, origins: string[], init = false): string =>
+  `cd ${shellWord(root)} && ${[...docket, ...viewerArgs(port, origins, init).filter((arg) => arg !== '--no-open')].map(shellWord).join(' ')}`
 
 /** Whether a docket CLI's `docket open --help` offers `--allow-origin`, which Wheelhouse needs. */
 export const allowsOrigins = (help: string): boolean => /(^|\s)--allow-origin\b/m.test(help)
+
+/** Whether a docket CLI's `docket open --help` offers `--init`, which Add Docket needs. */
+export const startsDockets = (help: string): boolean => /(^|\s)--init\b/m.test(help)
 
 /** The version `docket --version` prints, or null for a docket too old to say. */
 export const versionOf = (stdout: string): string | null => {
@@ -167,6 +205,8 @@ interface Cli {
   argv: string[]
   info: DocketCli
   problem: string | null
+  /** What stops it starting a docket where there is none (`docket open --init`). */
+  initProblem: string | null
 }
 
 const shippedVersion = (dir: string): string | null => {
@@ -189,13 +229,10 @@ export function shippedCli(dir: string = SHIPPED_DOCKET, node: string = process.
   const version = shippedVersion(dir)
   const info: DocketCli = { source: 'plugin', version, command: argv.map(shellWord).join(' ') }
   if (version === null || !existsSync(cli)) {
-    return {
-      argv,
-      info,
-      problem: `The docket this plugin ships is missing from ${dir}. Update or reinstall the docket plugin, or set "bin" in its settings to a docket CLI.`
-    }
+    const problem = `The docket this plugin ships is missing from ${dir}. Update or reinstall the docket plugin, or set "bin" in its settings to a docket CLI.`
+    return { argv, info, problem, initProblem: problem }
   }
-  return { argv, info, problem: null }
+  return { argv, info, problem: null, initProblem: null }
 }
 
 /** What a configured docket CLI says about itself, asked at most once a minute per CLI. */
@@ -218,7 +255,12 @@ function configuredCli(ctx: ProviderContext, bin: string, project: string): Prom
   const run = (args: string[]) => ctx.exec({ argv: [bin, ...args], cwd: 'project', project, timeoutMs: 5_000, maxBytes: 64 * 1024 })
   const value = Promise.all([run(['open', '--help']), run(['--version'])]).then(([help, said]): Cli => {
     const version = said.ok ? versionOf(said.stdout) : null
-    const cli = (problem: string | null): Cli => ({ argv: [bin], info: { source: 'settings', version, command: shellWord(bin) }, problem })
+    const cli = (problem: string | null, initProblem: string | null = problem): Cli => ({
+      argv: [bin],
+      info: { source: 'settings', version, command: shellWord(bin) },
+      problem,
+      initProblem
+    })
     const named = `The docket CLI the docket plugin’s settings name (${bin}${version ? `, docket ${version}` : ''})`
     const shipped = shippedVersion(SHIPPED_DOCKET)
     const instead = `remove "bin" to run the docket this plugin ships${shipped ? ` (${shipped})` : ''}`
@@ -226,7 +268,10 @@ function configuredCli(ctx: ProviderContext, bin: string, project: string): Prom
       return cli(
         allowsOrigins(help.stdout)
           ? null
-          : `${named} is too old to be shown in Wheelhouse: its docket open cannot allow Wheelhouse’s page (--allow-origin). Update it, or ${instead}.`
+          : `${named} is too old to be shown in Wheelhouse: its docket open cannot allow Wheelhouse’s page (--allow-origin). Update it, or ${instead}.`,
+        startsDockets(help.stdout)
+          ? null
+          : `${named} is too old to add docket to a project: its docket open cannot start a docket (--init). Update it, or ${instead}.`
       )
     }
     if (/ENOENT/.test(help.reason)) return cli(`Wheelhouse could not find the docket CLI (${bin}) the docket plugin’s settings name. Fix "bin", or ${instead}.`)
@@ -261,26 +306,77 @@ const rootOf = (project: Project, settings: DocketSettings): { root: string; con
   return project.path && path.isAbsolute(project.path) ? { root: project.path, configured: false } : null
 }
 
-/** The casebook tab's value: where the docket is, the pages its viewer allows, and anything in the way. */
+/** A project's docket: where it is, or would be added, and whether it has one; null when Firstmate recorded no clone. */
+async function docketOf(
+  ctx: ProviderContext,
+  project: Project,
+  settings: DocketSettings
+): Promise<{ root: string; configured: boolean; docket: boolean } | null> {
+  const where = rootOf(project, settings)
+  if (!where) return null
+  if (where.configured) return { ...where, docket: true }
+  const marker = await ctx.readFile(DOCKET_FILE, { root: 'project', maxBytes: 1, project: project.id })
+  return { ...where, docket: marker !== null }
+}
+
+const NO_CLONE = 'Firstmate has not recorded a clone for this project.'
+
+/**
+ * The casebook tab's value: where the docket is, the pages its viewer allows,
+ * and anything in the way. Not available, so the tab does not show, for a
+ * project with no docket: the Docket page adds one.
+ */
 async function casebook(ctx: ProviderContext): Promise<Available<CasebookData>> {
   const project = ctx.project
   if (!project) return { available: false, reason: 'The casebook is about one project.' }
   const settings = readSettings(ctx.settings)
-  const where = rootOf(project, settings)
-  if (!where) return { available: false, reason: 'Firstmate has not recorded a clone for this project.' }
-  const base = { schema: CASEBOOK_SCHEMA, root: where.root, configuredRoot: where.configured, origins: settings.origins } as const
-  const observedAt = new Date().toISOString()
-  const source = where.configured ? `the docket at ${where.root}, set in Wheelhouse’s plugins file` : 'the project’s docket'
-  if (!where.configured) {
-    const marker = await ctx.readFile(DOCKET_FILE, { root: 'project', maxBytes: 1, project: project.id })
-    if (marker === null) return { available: true, value: { ...base, state: 'none', problem: null, docket: null }, source: 'the project clone', observedAt }
-  }
+  const found = await docketOf(ctx, project, settings)
+  if (!found) return { available: false, reason: NO_CLONE }
+  if (!found.docket) return { available: false, reason: 'This project has no docket. Add it from the Docket page in Wheelhouse’s menu.' }
   const cli = await docketCli(ctx, settings, project.id)
   return {
     available: true,
-    value: { ...base, state: 'docket', problem: cli.problem, docket: cli.info },
-    source,
-    observedAt
+    value: {
+      schema: CASEBOOK_SCHEMA,
+      state: 'docket',
+      root: found.root,
+      configuredRoot: found.configured,
+      origins: settings.origins,
+      problem: cli.problem,
+      docket: cli.info
+    },
+    source: found.configured ? `the docket at ${found.root}, set in Wheelhouse’s plugins file` : 'the project’s docket',
+    observedAt: new Date().toISOString()
+  }
+}
+
+/**
+ * The Docket page's value: every project the plugin is on for, whether it
+ * has a docket, and what, if anything, stops Add Docket starting one.
+ */
+async function projects(ctx: ProviderContext): Promise<Available<ProjectsData>> {
+  const settings = readSettings(ctx.settings)
+  const rows = await Promise.all(
+    ctx.projects.map(async (project): Promise<DocketProject> => {
+      const found = await docketOf(ctx, project, settings)
+      return {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        state: !found ? 'no-clone' : found.docket ? 'docket' : 'none',
+        root: found?.root ?? null,
+        configuredRoot: found?.configured ?? false
+      }
+    })
+  )
+  // A configured docket CLI is asked in a clone; with none, there is nothing to add docket to either.
+  const asker = ctx.projects.find((project) => project.path && path.isAbsolute(project.path))
+  const cli = asker ? await docketCli(ctx, settings, asker.id) : null
+  return {
+    available: true,
+    value: { schema: PROJECTS_SCHEMA, projects: rows, problem: cli ? (cli.problem ?? cli.initProblem) : null, docket: cli?.info ?? null },
+    source: 'Wheelhouse’s projects and their clones',
+    observedAt: new Date().toISOString()
   }
 }
 
@@ -288,30 +384,34 @@ async function casebook(ctx: ProviderContext): Promise<Available<CasebookData>> 
  * The project's docket viewer (`docket open`) as a companion service, on a
  * port of its own - its `ports` setting, else the one Wheelhouse keeps for
  * it - on 127.0.0.1, allowing Wheelhouse's page. Wheelhouse checks that the
- * viewer answering there serves this project's docket. A docket too old to
- * allow Wheelhouse's page, or missing, is not started: the casebook could not
- * use it.
+ * viewer answering there serves this project's docket. For a project with no
+ * docket it is `docket open --init`, which starts one first: that is Add
+ * Docket. A docket too old to allow Wheelhouse's page (or, for a project with
+ * no docket, to start one), or missing, is not started: the casebook could
+ * not use it.
  */
 async function viewer(ctx: ServiceContext): Promise<ServiceResolution> {
   const project = ctx.project
   if (!project) return { available: false, reason: 'docket’s viewer is about one project.' }
   const settings = readSettings(ctx.settings)
-  const where = rootOf(project, settings)
-  if (!where) return { available: false, reason: 'Firstmate has not recorded a clone for this project.' }
+  const found = await docketOf(ctx, project, settings)
+  if (!found) return { available: false, reason: NO_CLONE }
+  const init = !found.docket
   const port = settings.ports[project.id] ?? (await ctx.servicePort(preferredPort(project.id), Object.values(settings.ports)))
   const url = `http://127.0.0.1:${port}`
   const cli = await docketCli(ctx, settings, project.id)
-  const hint = openCommand(cli.argv, where.root, port, settings.origins)
+  const hint = openCommand(cli.argv, found.root, port, settings.origins, init)
   if (cli.problem) return { available: false, reason: cli.problem, hint }
+  if (init && cli.initProblem) return { available: false, reason: cli.initProblem, hint }
   return {
     available: true,
     hint,
     spec: {
       url,
       health: `${url}/api/health`,
-      identity: { url: `${url}/api/health`, path: ['root'], value: realRoot(where.root) },
-      argv: [...cli.argv, ...viewerArgs(port, settings.origins)],
-      cwd: where.root,
+      identity: { url: `${url}/api/health`, path: ['root'], value: realRoot(found.root) },
+      argv: [...cli.argv, ...viewerArgs(port, settings.origins, init)],
+      cwd: found.root,
       binds: 'loopback'
     }
   }
@@ -319,14 +419,25 @@ async function viewer(ctx: ServiceContext): Promise<ServiceResolution> {
 
 const plugin: WheelhousePlugin = {
   services: [{ id: 'viewer', title: 'docket’s viewer', scope: 'project', resolve: viewer }],
-  providers: [{ id: 'casebook', scope: 'project', ttlMs: 30_000, timeoutMs: 8_000, fetch: casebook }],
+  providers: [
+    { id: 'casebook', scope: 'project', ttlMs: 30_000, timeoutMs: 8_000, fetch: casebook },
+    { id: 'projects', scope: 'fleet', ttlMs: 15_000, timeoutMs: 8_000, fetch: projects }
+  ],
   contributions: [
     {
       slot: 'project.tab',
       id: 'casebook',
       title: 'Docket',
       provider: 'casebook',
+      when: 'provider-available',
       render: { element: 'docket-casebook' }
+    },
+    {
+      slot: 'nav.page',
+      id: 'projects',
+      title: 'Docket',
+      provider: 'projects',
+      render: { element: 'docket-projects' }
     }
   ],
   mcpServers: [{ ...MCP_SERVER }]
