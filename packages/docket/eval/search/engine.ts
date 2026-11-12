@@ -249,14 +249,12 @@ export class Engine {
 
 /**
  * The text mem0 embeds for an entity, as adapter-mem0's renderDocument writes
- * it: title, type and id, its confidence, the body, its links and its tags.
- * Confidence is part of the text there, so it is here.
+ * it - title, type, body and tags - after nomic-embed-text's document
+ * prefix, as its `prefixes` config adds it.
  */
-export const mem0Text = (engine: Engine, entity: IndexedEntity): string => {
-  const lines = [`# ${entity.title}`, `${entity.type} ${entity.id}`, `Confidence: ${entity.confidence}`]
+export const mem0Text = (entity: IndexedEntity): string => {
+  const lines = [`search_document: # ${entity.title}`, entity.type]
   if (entity.content.trim()) lines.push('', entity.content.trim())
-  const links = (engine.neighbours.get(entity.id) ?? []).filter((link) => link.direction === 'out')
-  if (links.length > 0) lines.push('', 'Links:', ...links.map((link) => `- ${link.rel} ${link.id}`))
   if (entity.tags.length > 0) lines.push('', `Tags: ${entity.tags.join(', ')}`)
   return lines.join('\n')
 }

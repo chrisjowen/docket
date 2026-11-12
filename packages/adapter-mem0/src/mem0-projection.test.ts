@@ -76,15 +76,12 @@ const setup = async (config: Mem0Config = OSS, backend = new FakeMem0()) => {
 }
 
 describe('mem0 projection', () => {
-  it('stores each document verbatim with its id in the metadata', async () => {
+  it('stores what each document is about, with its id in the metadata', async () => {
     const { projection, backend } = await setup()
     await projection.upsert(makeDocument())
 
     const [memory] = [...backend.memories.values()]
-    expect(memory?.text).toBe(
-      '# Orders\nservice service.orders\nConfidence: 0.5, no evidence recorded\n\nHandles orders.\n\n' +
-        'Links:\n- owned_by team.payments (confidence 0.5)\n\nTags: core\n'
-    )
+    expect(memory?.text).toBe('# Orders\nservice\n\nHandles orders.\n\nTags: core\n')
     expect(memory?.metadata).toMatchObject({
       [DOCUMENT_ID_KEY]: 'service.orders',
       memory_type: 'service',
@@ -221,64 +218,36 @@ describe('mem0 projection', () => {
   })
 
   it('renders a document without body, links or tags', () => {
-    expect(renderDocument(makeDocument({ content: '', links: [], tags: [] }))).toBe(
-      '# Orders\nservice service.orders\nConfidence: 0.5, no evidence recorded\n'
-    )
+    expect(renderDocument(makeDocument({ content: '', links: [], tags: [] }))).toBe('# Orders\nservice\n')
   })
 
-  it('says exactly where each thing was seen, listing evidence a link shares with its resource once', () => {
-    const seenInCode = {
-      source: 'code',
-      path: 'src/orders/server.ts',
-      lines: '10-42',
-      symbol: 'createServer',
-      observedAt: '2026-10-05',
-      observedBy: 'claude'
-    }
+  it('embeds with the model\'s prefixes and quotes the memory without them', async () => {
+    const { projection, backend } = await setup({ ...OSS, prefixes: { document: 'search_document: ', query: 'search_query: ' } })
+    await projection.upsert(makeDocument({ links: [], tags: [] }))
+    expect(backend.texts()).toEqual(['search_document: # Orders\nservice\n\nHandles orders.\n'])
+
+    backend.searchResults = [{ id: 'mem-1', score: 0.9, memory: backend.texts()[0], metadata: { [DOCUMENT_ID_KEY]: 'service.orders' } }]
+    const hits = (await projection.search?.('orders', 5))?.hits
+    expect(backend.lastSearch).toEqual({ query: 'search_query: orders', limit: 5 })
+    expect(hits?.[0]?.passage?.text).toBe('# Orders\nservice\n\nHandles orders.\n')
+  })
+
+  it('leaves confidence, evidence and links out of the text, which says only what the entity is about', () => {
     const text = renderDocument(
       makeDocument({
         tags: [],
-        evidence: [seenInCode],
+        evidence: [{ source: 'code', path: 'src/orders/server.ts', lines: '10-42' }],
         confidence: 0.6,
         basis: 'evidence',
         evidenceCount: 1,
         sources: ['code'],
         links: [
-          entityLink({ rel: 'owned_by', target: 'team.payments' }),
-          entityLink({
-            rel: 'depends_on',
-            target: 'datasource.orders-db',
-            evidence: [
-              { source: 'manifest', path: 'package.json', key: 'dependencies.pg', urls: ['https://example.com/pg'] },
-              seenInCode
-            ],
-            confidence: 0.9,
-            basis: 'evidence',
-            evidenceCount: 2,
-            sources: ['code', 'manifest']
-          })
+          entityLink({ rel: 'depends_on', target: 'datasource.orders-db', evidence: [{ source: 'manifest', path: 'package.json' }], confidence: 0.9 })
         ]
       })
     )
 
-    expect(text).toBe(
-      [
-        '# Orders',
-        'service service.orders',
-        'Confidence: 0.6 from code (1 observation)',
-        '',
-        'Handles orders.',
-        '',
-        'Links:',
-        '- owned_by team.payments (confidence 0.5)',
-        '- depends_on datasource.orders-db (confidence 0.9)',
-        '  - manifest: package.json key dependencies.pg https://example.com/pg',
-        '',
-        'Evidence:',
-        '- code: src/orders/server.ts:10-42 createServer (2026-10-05, claude)',
-        ''
-      ].join('\n')
-    )
+    expect(text).toBe('# Orders\nservice\n\nHandles orders.\n')
   })
 
   it('stores files that share an id as one memory with their combined confidence', async () => {

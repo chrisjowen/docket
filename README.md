@@ -862,8 +862,8 @@ bodies, answering with each matching entity and the paragraphs of it that
 matched, at the revision it was projected.
 
 **`mem0`** (`@docket/adapter-mem0`) stores each resource as one verbatim memory
-(`infer: false`): the title, type, id, confidence, body, links, evidence and
-tags as text; the id, type, paths, hash, tags, confidence and evidence count as
+(`infer: false`): the title, type, body and tags as text (after the document
+prefix, when `prefixes` is set); the id, type, paths, hash, tags, confidence and evidence count as
 metadata. Rebuilds reproduce it exactly and cost no LLM calls. Documents with
 `index.vector: false` are left out. It needs the optional `mem0ai` package
 (`pnpm add mem0ai`).
@@ -898,7 +898,12 @@ adapters:
         llm: { provider: ollama, config: { model: "qwen2.5:7b" } }
 ```
 
-Every mode also takes `minScore` (drop hits below that similarity) and `scope`.
+Every mode also takes `minScore` (drop hits below that similarity), `scope`, and
+`prefixes` (`{ document, query }`: text the embedding model expects before each
+stored memory and each query, such as nomic-embed-text's `search_document: ` and
+`search_query: `). Memories already stored keep the text they were stored with, so
+run `docket rebuild` after setting or changing `prefixes` (or after upgrading to
+a release that changes the stored text).
 All modes file memories under one scope, by default
 `agentId: docket-<checkout directory>-<hash>`, where the hash is taken over the
 checkout's absolute path (symlinks and letter case resolved). Two clones or
