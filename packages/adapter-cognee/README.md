@@ -110,7 +110,9 @@ Unknown options are refused, not dropped.
   entity, every filed entity that links to it is rendered again, and one
   whose text no longer matches - its link now names the new title, or the
   id of a removed entity - is re-filed under the same revision, then
-  cognified with the batch. A replay is checked the same way.
+  cognified with the batch. If that re-filing or cognify fails, the changed
+  entity is reported failed and retryable too, so its retry cognifies again.
+  A replay is checked the same way.
 - **Replay** of a revision already added, whose text has not changed, changes
   nothing.
 - **Updates.** A new revision is added first; every other item of that input
