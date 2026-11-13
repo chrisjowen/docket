@@ -56,4 +56,4 @@ provenance:
 
 # cognee adapter
 
-Adds canonical inputs to one cognee dataset, with each input's identity in the data item's external metadata, cognifies them into cognee's knowledge graph, and answers with cognee's chunk search - and, when configured, its cited completion - through the cognee REST API. Not in the CLI's default bundle, like memvid and MemPalace.
+Adds canonical inputs to one cognee dataset, with each input's identity in the data item's external metadata, cognifies them into cognee's knowledge graph, and answers with cognee's chunk search - and, when configured, its cited completion - through the cognee REST API. The CLI bundles it, and exports it as `@chrisjowen/docket/adapters/cognee`.

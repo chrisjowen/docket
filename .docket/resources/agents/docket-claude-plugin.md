@@ -108,4 +108,4 @@ workers set `DOCKET_REVIEW=1` deliberately to keep automatic reviews off and
 capture knowledge in pull requests instead.
 
 The plugin's marketplace version (0.5.0) moves independently of the CLI's
-(0.7.0).
+(0.8.0).
