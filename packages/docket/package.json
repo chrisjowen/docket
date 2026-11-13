@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
   "keywords": [
     "knowledge",
@@ -8,7 +8,8 @@
     "markdown",
     "claude-code",
     "mem0",
-    "neo4j"
+    "neo4j",
+    "cognee"
   ],
   "homepage": "https://github.com/chrisjowen/docket#readme",
   "bugs": {
@@ -34,6 +35,10 @@
     "./adapters/mem0": {
       "types": "./dist/bundled/adapter-mem0/dist/index.d.ts",
       "import": "./dist/bundled/adapter-mem0/dist/index.js"
+    },
+    "./adapters/cognee": {
+      "types": "./dist/bundled/adapter-cognee/dist/index.d.ts",
+      "import": "./dist/bundled/adapter-cognee/dist/index.js"
     },
     "./package.json": "./package.json"
   },

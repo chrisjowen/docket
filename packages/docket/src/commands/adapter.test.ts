@@ -484,7 +484,7 @@ describe('a version 1 .docket.yaml', () => {
 
 /** docket's workspace copies of the adapter packages it does not bundle, as a project would install them. */
 const workspacePackages: AdapterDistribution = {
-  packages: ['@docket/adapter-memvid', '@docket/adapter-mempalace', '@docket/adapter-cognee'],
+  packages: ['@docket/adapter-memvid', '@docket/adapter-mempalace'],
   find: (name) => fileURLToPath(new URL(`../../../${name.replace('@docket/', '')}`, import.meta.url))
 }
 
@@ -537,7 +537,7 @@ describe('docket adapter add mempalace', () => {
 })
 
 describe('docket adapter add cognee', () => {
-  it('adds an instance for a server it does not start, naming the key variable and never its value', async () => {
+  it('adds an instance of the bundled adapter for a server it does not start, naming the key variable and never its value', async () => {
     const result = await add('cognee', { '--url': 'http://localhost:8000', '--api-key-env': 'DOCKET_COGNEE_KEY', '--dataset': 'payments' })
     const { resolved, entry } = await instance('cognee')
     expect(entry).toEqual({
@@ -548,10 +548,11 @@ describe('docket adapter add cognee', () => {
     })
     expect(resolved.config.runtimes).toEqual({})
     expect(result.plan.env).toEqual([expect.objectContaining({ name: 'DOCKET_COGNEE_KEY', secret: true, required: false })])
-    expect(result.plan.next[0]).toMatch(/^Add @docket\/adapter-cognee to the project: it is not published/)
+    expect(result.plan.module).toBeUndefined()
+    expect(result.plan.next.join('\n')).not.toMatch(/not published/)
     expect(result.plan.prerequisites[0]).toMatch(/cognee 1\.6\.8 server/)
     expect(calls).toEqual([])
-    await expect(openDocket(resolved, { distribution: workspacePackages })).resolves.toBeDefined()
+    await expect(openDocket(resolved)).resolves.toBeDefined()
   })
 
   it('keeps only what differs from the adapter\'s defaults', async () => {
@@ -575,6 +576,7 @@ describe('docket adapters list', () => {
   it('lists each instance with where its module loads from, and the providers', async () => {
     await add('neo4j', { '--mode': 'local', '--image': 'neo4j:5' })
     await add('memvid')
+    await add('cognee', { '--url': 'http://localhost:8000' })
     await writeFile(join(root, 'custom.mjs'), 'export default {}\n')
     const text = await configText()
     await writeFile(
@@ -590,10 +592,12 @@ describe('docket adapters list', () => {
       { id: 'missing', source: undefined, runtime: undefined },
       { id: 'local', source: expect.any(String), runtime: undefined },
       { id: 'graph', source: expect.any(String), runtime: 'graph-dev' },
-      { id: 'memvid', source: undefined, runtime: undefined }
+      { id: 'memvid', source: undefined, runtime: undefined },
+      { id: 'cognee', source: expect.any(String), runtime: undefined }
     ])
     expect(result.adapters.find((adapter) => adapter.id === 'missing')?.problem).toMatch(/is not installed/)
     expect(result.adapters.find((adapter) => adapter.id === 'memvid')?.problem).toMatch(/not published to npm/)
+    expect(result.adapters.find((adapter) => adapter.id === 'cognee')?.problem).toBeUndefined()
     expect(result.providers.map((provider) => provider.name)).toEqual(['jsonl', 'neo4j', 'mem0', 'memvid', 'mempalace', 'cognee'])
   })
 })

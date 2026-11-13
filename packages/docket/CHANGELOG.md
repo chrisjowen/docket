@@ -3,7 +3,7 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
-## Unreleased
+## 0.8.0
 
 ### A cognee adapter
 
@@ -12,8 +12,10 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 entities into a cognee 1.6.8 dataset over its REST API, cognifies them into
 cognee's knowledge graph, and answers with cognee's chunk search - each hit
 mapped back to its entity - and, when configured, cognee's cited completion
-as a derived fact. Like memvid and MemPalace, the package is not bundled or
-published, and docket never starts the cognee server. The search evaluation
+as a derived fact. The package ships bundled in `dist/bundled/adapter-cognee`,
+like the jsonl, neo4j, mem0 and cloud adapters, and is exported as
+`@chrisjowen/docket/adapters/cognee`, so a project needs nothing but docket
+and a cognee server it runs: docket never starts one. The search evaluation
 compares it with the other strategies when `DOCKET_EVAL_COGNEE_URL` names a
 server.
 

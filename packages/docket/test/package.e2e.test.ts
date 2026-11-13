@@ -62,7 +62,7 @@ describe('the published package', () => {
     }
   })
 
-  it('exports the bundled Neo4j and mem0 adapters at their own entry points', async () => {
+  it('exports the bundled Neo4j, mem0 and cognee adapters at their own entry points', async () => {
     const neo4j = await load('./adapters/neo4j')
     expect(neo4j.createNeo4jProjection).toBeTypeOf('function')
     expect(neo4j.neo4jConfigSchema).toBeDefined()
@@ -70,5 +70,9 @@ describe('the published package', () => {
     const mem0 = await load('./adapters/mem0')
     expect(mem0.createMem0Projection).toBeTypeOf('function')
     expect(mem0.mem0ConfigSchema).toBeDefined()
+
+    const cognee = await load('./adapters/cognee')
+    expect(cognee.createCogneeAdapter).toBeTypeOf('function')
+    expect((cognee.default as { name?: unknown }).name).toBe('cognee')
   })
 })

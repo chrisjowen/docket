@@ -39,7 +39,7 @@ export const resolveAdapterModule = (specifier, context) => {
             // docket's own adapter packages are not published: only a docket build ships them.
             const adapter = name.replace(/^@docket\/adapter-/, '');
             throw new Error(`${label} is not included in this build of docket. The standard @chrisjowen/docket CLI bundles the ` +
-                `jsonl, neo4j, mem0 and cloud adapters; a docket build includes ${adapter} when DOCKET_BUNDLED_ADAPTERS is unset or lists it.`);
+                `jsonl, neo4j, mem0, cognee and cloud adapters; a docket build includes ${adapter} when DOCKET_BUNDLED_ADAPTERS is unset or lists it.`);
         }
         throw new Error(`${label} is not installed in ${context.projectRoot}. Install it in the project ` +
             `(e.g. \`npm install ${name}\`); docket never installs packages itself.`);

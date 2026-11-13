@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import { Document } from '../vendor/yaml.js';
+import { COGNEE_ADAPTER_MODULE } from '../adapters/distribution.js';
 import { V1_PROJECTION_MODULES } from '../config/config.js';
 import { checkEnvName, checkNonBlank, checkPort, checkUrl, uniqueId } from './answers.js';
 const RUNTIME_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -380,7 +381,7 @@ const mempalace = {
 const COGNEE_DATASET = /^[^.\s]+$/;
 const cognee = {
     name: 'cognee',
-    module: '@docket/adapter-cognee',
+    module: COGNEE_ADAPTER_MODULE,
     summary: 'a cognee dataset, cognified into a knowledge graph and searched through its REST API',
     defaultId: 'cognee',
     async configure({ answers }) {
@@ -407,7 +408,7 @@ const cognee = {
             files: [],
             env: [{ name: apiKeyEnv, purpose: `a cognee API key for ${url}, when it requires one`, secret: true, required: false }],
             prerequisites: [
-                'A cognee 1.6.8 server at that URL - the one it was tested with; docket never starts one (packages/adapter-cognee/README.md has a Docker recipe)'
+                'A cognee 1.6.8 server at that URL - the one it was tested with; docket never starts one (https://github.com/chrisjowen/docket/tree/main/packages/adapter-cognee has a Docker recipe)'
             ],
             notes: [
                 'Each sync cognifies what it added: the cognee server runs its own LLM over every new entity, so the first sync of a large docket takes a while and costs model calls.'

@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/chrisjowen/wheelhouse/main/packages/plugin-sdk/plugin.schema.json",
   "name": "docket",
   "displayName": "Docket",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A project's docket casebook in Wheelhouse: everything docket open shows and does - Browse, Ask, Adapters, the inspector, chat and sync - drawn from the project's docket viewer, which is also docket's MCP server, whose docket_search app draws what a search finds on the casebook's board; and a Docket page listing every project, with Add Docket for those without one.",
   "author": { "name": "Chris Owen", "url": "https://github.com/chrisjowen" },
   "repository": "https://github.com/chrisjowen/docket",
