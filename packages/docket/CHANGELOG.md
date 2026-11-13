@@ -5,6 +5,18 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
 ## Unreleased
 
+### A cognee adapter
+
+`docket adapter add cognee --url <server>` configures
+[`@docket/adapter-cognee`](../adapter-cognee/README.md), which projects
+entities into a cognee 1.6.8 dataset over its REST API, cognifies them into
+cognee's knowledge graph, and answers with cognee's chunk search - each hit
+mapped back to its entity - and, when configured, cognee's cited completion
+as a derived fact. Like memvid and MemPalace, the package is not bundled or
+published, and docket never starts the cognee server. The search evaluation
+compares it with the other strategies when `DOCKET_EVAL_COGNEE_URL` names a
+server.
+
 ### Ontology templates beyond software delivery
 
 `docket init --template <name>` starts a docket from another bundled ontology

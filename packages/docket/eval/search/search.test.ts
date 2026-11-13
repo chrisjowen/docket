@@ -6,6 +6,7 @@ import { lexicalSearch, type DocumentRecord } from '@docket/adapter-jsonl'
 import { describe, expect, it } from 'vitest'
 
 import { validate } from '../../src/commands/validate.js'
+import { cogneeFloored, cogneeFloorStrategy, cogneeStrategy, type CogneeIndex } from './cognee.js'
 import { readIndex, writeDocket, type Corpus, type EvalQuery } from './corpus.js'
 import { loadCrm } from './datasets/crm.js'
 import { loadPeople } from './datasets/people.js'
@@ -83,6 +84,16 @@ describe('strategies', () => {
 
   it('fuses by rank, so an entity both sources found comes first', () => {
     expect(fused([retrieval.semantic, retrieval.lexical])[0]).toBe('a')
+  })
+
+  it('floors cognee\'s answer by cosine similarity, its distance turned round', async () => {
+    const hits = Array.from({ length: 14 }, (_, at) => ({ id: `e${at}`, score: 0.9 - at * 0.05 }))
+    expect(cogneeFloored(hits, { semantic: 0.75 })).toEqual(['e0', 'e1', 'e2', 'e3'])
+    const index: CogneeIndex = { syncMs: 0, search: async () => hits, close: async () => undefined }
+    expect((await cogneeStrategy(index).search('q')).ids).toHaveLength(10)
+    const floor = cogneeFloorStrategy(index, { semantic: 0.75 })
+    expect(floor.description).toMatch(/maxDistance: 0\.25/)
+    expect((await floor.search('q')).ids).toEqual(['e0', 'e1', 'e2', 'e3'])
   })
 
   it('names the words of a question no entity holds', async () => {

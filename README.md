@@ -256,7 +256,7 @@ docket open --allow-origin http://127.0.0.1:4310  # also let another page on thi
 docket open --init          # start a docket here first, as docket init does, when this directory has none
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
-docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid or mempalace: asks, shows the plan, applies it once confirmed
+docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid, mempalace or cognee: asks, shows the plan, applies it once confirmed
 docket adapters list        # configured adapter instances and whether each can load
 docket config migrate --dry-run  # show a version 1 .docket.yaml rewritten as version 2
 docket config migrate       # rewrite it, once confirmed (--write: without asking); the original is kept
@@ -777,6 +777,7 @@ docket adapter add mem0     # hosted mem0 (app.mem0.ai) or a self-hosted mem0 se
 docket adapter add jsonl    # another JSONL index
 docket adapter add memvid   # a memvid .mv2 file, searched through the memvid CLI
 docket adapter add mempalace  # drawers in a MemPalace wing, through its MCP server
+docket adapter add cognee   # a cognee dataset, cognified and searched through its REST API
 docket adapters list        # what is configured, and whether each module and driver loads
 ```
 
@@ -798,6 +799,13 @@ published to npm, so the plan reminds you to add the package to the project
 (a workspace or `file:` dependency), along with the engine each drives and
 docket never installs: `npm install -g memvid-cli@2.0.160`, or `pip install
 mempalace==3.10.0` and its embedding model, downloaded beforehand.
+
+**cognee** is a server you run: give its URL (`--url`), the name of the
+variable holding its API key (`COGNEE_API_KEY` by default) and, optionally, a
+dataset (`--dataset`; one unique to the checkout otherwise). Its package is
+not bundled or published either, and docket never starts cognee:
+[its README](packages/adapter-cognee/README.md) has a Docker recipe for a
+local cognee 1.6.8 on Ollama models.
 
 What it will and will not do:
 
@@ -1064,11 +1072,14 @@ const docket = await createDocket({
 docket never installs an adapter package, and runs a `.ts` adapter only with a
 TypeScript runner passed as `typescript`.
 
-Two recall engines are adapter packages loaded this way, not bundled with the
-CLI: [`@docket/adapter-memvid`](packages/adapter-memvid) (a memvid `.mv2`
-file, searched lexically through the memvid CLI) and
+Three recall engines are adapter packages loaded this way, not bundled with
+the CLI: [`@docket/adapter-memvid`](packages/adapter-memvid) (a memvid `.mv2`
+file, searched lexically through the memvid CLI),
 [`@docket/adapter-mempalace`](packages/adapter-mempalace) (drawers in a
-MemPalace wing, recalled through its MCP server). Each answers with source
+MemPalace wing, recalled through its MCP server) and
+[`@docket/adapter-cognee`](packages/adapter-cognee) (a cognee dataset,
+cognified into a knowledge graph and searched through cognee's REST API, with
+its cited answer as a derived fact when asked). Each answers with source
 passages and the canonical records they came from; their READMEs list the
 engine versions they were tested against, what each needs installed, and what
 each does not do.

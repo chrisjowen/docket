@@ -72,6 +72,8 @@ only re-embeds what changed.
 | `DOCKET_EVAL_AGENT` | `ollama:qwen2.5:7b` | The agentic strategy's model: `ollama:<model>`, `claude` or `claude:<model>`. |
 | `DOCKET_EVAL_AGENTIC_MAX` | all | At most this many test queries per corpus for the agentic strategy. |
 | `DOCKET_EVAL_OLLAMA_URL` | `http://localhost:11434` | |
+| `DOCKET_EVAL_COGNEE_URL` | | A cognee server to project every corpus into as well, adding the `cognee` strategies ([cognee](#cognee)). |
+| `DOCKET_EVAL_COGNEE_API_KEY` | | That server's API key, when it needs one. |
 
 To update [RESULTS.md](RESULTS.md), run with `DOCKET_EVAL_OUT` set and copy
 its `report.md` over it.
@@ -179,6 +181,8 @@ combines in Docket Cloud:
 | `floor` | `current` with a relevance floor on each source: semantic hits need a minimum cosine similarity, full-text hits must cover a minimum share of the query's terms, weighted by idf. |
 | `floor+rrf` | The floor on each source's top 20, then reciprocal rank fusion and a cut to 10. |
 | `precached` | Work moved to sync time. Each entity is embedded with the titles of what it links to and without its confidence, and the full-text vocabulary is kept. A query naming a word no entity holds - a capitalised word that does not start a sentence, or whatever follows "who is" unless it starts "our", "the" or another determiner; acronyms and words with digits never count - returns nothing without searching. Otherwise floor and fusion as above, over the link-aware embeddings. Answers are cached by query terms. |
+| `cognee` | Only with `DOCKET_EVAL_COGNEE_URL`: the corpus synced into cognee through [`@docket/adapter-cognee`](../../../adapter-cognee/README.md), and each query answered by the adapter - cognee's `CHUNKS` search, top 10, no floor. |
+| `cognee+floor` | `cognee` keeping only chunks with cosine similarity (1 - cognee's distance) at or above a floor tuned on the dev queries like the others: the adapter's `maxDistance`. |
 | `agentic` | A model (`DOCKET_EVAL_AGENT`) plans 1-3 searches, the record types to expect, and whether to follow links. The single-pass sources run each search, adding neighbours when asked. The model then judges which candidates are about exactly what was asked, and an empty judgement is the answer. Two model calls per query. |
 
 The floors are tuned on the dev queries, pooled over corpora, by grid
@@ -190,6 +194,30 @@ reply precision. A cosine floor belongs to its
 embedding model. The floors here are for `nomic-embed-text`; the hosted mem0
 platform embeds with its own model, so its scores sit on a different scale
 and its floor must be tuned the same way on its own scores.
+
+## cognee
+
+With `DOCKET_EVAL_COGNEE_URL` set, each corpus's docket also gets a cognee
+adapter instance (dataset `docket-eval-<corpus>`) and is synced into it with
+`docket sync`, so the numbers are the adapter's own: what it adds, what
+cognify makes of it, and what its `ask` returns. Only the entities it names
+count, as for every strategy.
+
+Syncing cognifies every entity, and cognify runs the cognee server's LLM over
+each chunk: about 10 seconds an entity with `qwen2.5:7b` on an M-series
+laptop, so a few minutes for `people` and `acme` and hours for the larger
+corpora. Answering runs no model. Run it on a server from the adapter's
+[local recipe](../../../adapter-cognee/README.md#running-a-cognee-server-locally),
+which uses the same Ollama models as this evaluation:
+
+```sh
+DOCKET_EVAL_COGNEE_URL=http://localhost:8000 DOCKET_EVAL_COGNEE_API_KEY=$COGNEE_API_KEY \
+DOCKET_EVAL_CORPORA=people,acme DOCKET_EVAL_STRATEGIES=current,floor,floor+rrf,precached,cognee,cognee+floor \
+  pnpm -C packages/docket eval:search
+```
+
+The floors are tuned on the dev queries of the corpora in the run, so a run
+on fewer corpora tunes them differently from [RESULTS.md](RESULTS.md).
 
 ## Metrics
 
@@ -222,4 +250,5 @@ JSONL `lexicalSearch` against a prebuilt index.
 - [datasets/](datasets): one loader per corpus.
 - [engine.ts](engine.ts): the full-text index, embeddings and links every strategy searches.
 - [strategies.ts](strategies.ts), [metrics.ts](metrics.ts), [report.ts](report.ts).
+- [cognee.ts](cognee.ts): the corpus synced into cognee, and the `cognee` strategies.
 - [download.mjs](download.mjs), [datasets.json](datasets.json): fetching the datasets.
