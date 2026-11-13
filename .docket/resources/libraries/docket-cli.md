@@ -195,7 +195,7 @@ web server (`src/open`, port 4380 on 0.0.0.0) and the explicit docker-compose
 runtime manager (`src/runtime`).
 
 Its private workspace dependencies are not published: `scripts/bundle-packages.mjs`
-copies contracts, adapter-kit and the jsonl, neo4j and mem0 adapters into
+copies contracts, adapter-kit and the jsonl, neo4j, mem0, cognee and cloud adapters into
 `dist/bundled` at build time. `mem0ai` and `neo4j-driver` are optional peer
 dependencies, needed only by projects that configure those adapters.
 

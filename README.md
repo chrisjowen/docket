@@ -803,9 +803,9 @@ mempalace==3.10.0` and its embedding model, downloaded beforehand.
 **cognee** is a server you run: give its URL (`--url`), the name of the
 variable holding its API key (`COGNEE_API_KEY` by default) and, optionally, a
 dataset (`--dataset`; one unique to the checkout otherwise). Its package is
-not bundled or published either, and docket never starts cognee:
-[its README](packages/adapter-cognee/README.md) has a Docker recipe for a
-local cognee 1.6.8 on Ollama models.
+bundled with the CLI, like jsonl, neo4j and mem0, and needs no driver; docket
+never starts cognee: [its README](packages/adapter-cognee/README.md) has a
+Docker recipe for a local cognee 1.6.8 on Ollama models.
 
 What it will and will not do:
 
@@ -1038,8 +1038,10 @@ own configuration and driver dependency, sharing
 [`@docket/adapter-kit`](packages/adapter-kit). docket's core imports none of
 them: an instance's `module` is loaded only when it is configured.
 
-The standard `@chrisjowen/docket` package ships all three, bundled in
-`dist/bundled`. The drivers stay optional: install `neo4j-driver` or `mem0ai`
+The standard `@chrisjowen/docket` package ships all three, and the cognee and
+cloud adapters, bundled in `dist/bundled`; the cognee adapter is also exported
+as `@chrisjowen/docket/adapters/cognee`, beside `/adapters/neo4j` and
+`/adapters/mem0`. The drivers stay optional: install `neo4j-driver` or `mem0ai`
 next to docket only for the adapter you configure. A jsonl-only project needs
 neither, nor Docker, Python or network access. A project's own install of an
 adapter package (from a private registry or a workspace) is used in preference

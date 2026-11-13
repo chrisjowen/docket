@@ -7,7 +7,8 @@ references - and, when asked, with cognee's cited completion as a derived
 fact ([`docs/adapter-spec.md`](../../docs/adapter-spec.md) §8, §9, §11).
 
 Its default export is the `AdapterDefinition`. A private workspace package: it
-is not published, and `@chrisjowen/docket` does not bundle it.
+is not published on its own, but `@chrisjowen/docket` bundles it, and exports
+it as `@chrisjowen/docket/adapters/cognee`.
 
 ## Integrated against
 
