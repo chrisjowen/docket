@@ -129,23 +129,48 @@ export const createCogneeAdapter = (config: CogneeConfig, services: AdapterServi
   }
 
   /**
-   * Adds and deletes change by change, then cognifies the dataset once, which
-   * is what makes the new items searchable. If cognify fails, every upsert in
-   * the batch is reported failed, so the next sync retries it: the items are
-   * found already added, and cognify runs again over what it has not done.
+   * Re-files every entity outside the batch that links to one of `targets`
+   * and no longer holds the text it renders to: its text names each link by
+   * the target's title, which may have changed though its own revision did
+   * not. Resolves to whether any entity links to one of them.
+   */
+  const refreshLinking = async (targets: ReadonlySet<string>, batched: ReadonlySet<string>, signal?: AbortSignal): Promise<boolean> => {
+    let linking = false
+    for (const native of await ownership.records(signal)) {
+      if (native.identity.kind !== 'entity' || batched.has(native.identity.id)) continue
+      const record = await services.canonical.get('entity', native.identity.id)
+      if (record?.kind !== 'entity' || record.revision !== native.identity.revision || !record.links.some((link) => targets.has(link.target))) continue
+      linking = true
+      if (!(await store.holds(native, record))) await ownership.upsert(record, signal)
+    }
+    return linking
+  }
+
+  /**
+   * Adds and deletes change by change, re-files the entities whose links
+   * name a changed entity, then cognifies the dataset once, which is what
+   * makes the new items searchable. If either fails, every upsert in the
+   * batch, and every entity change others link to, is reported failed, so
+   * the next sync retries it: the items are found already added, and cognify
+   * runs again over what it has not done.
    */
   const apply = async (batch: ProjectionBatch, signal?: AbortSignal): Promise<ApplyReceipt> => {
     const receipt = await applyChanges(batch, ownership, { scope: services.scope, inputs, retryable: retryableCogneeError }, signal)
+    const refs = batch.changes.map((change) => (change.operation === 'upsert' ? change.record : change))
+    const batched = new Set(refs.map((ref) => ref.id))
     const upserted = new Set(batch.changes.flatMap((change) => (change.operation === 'upsert' ? [change.record.id] : [])))
-    if (receipt.applied.some((id) => upserted.has(id))) {
-      try {
-        await store.cognify({ signal, timeoutMs: config.cognifyTimeoutMs })
-      } catch (error) {
-        const message = `added, but cognify failed: ${messageOf(error)}`
-        const retryable = retryableCogneeError(error)
-        receipt.failed.push(...receipt.applied.filter((id) => upserted.has(id)).map((id) => ({ id, retryable, message })))
-        receipt.applied = receipt.applied.filter((id) => !upserted.has(id))
-      }
+    const targets = new Set(refs.flatMap((ref) => (ref.kind === 'entity' && receipt.applied.includes(ref.id) ? [ref.id] : [])))
+    let step = 're-filing the entities that link to it'
+    try {
+      if (targets.size > 0 && (await refreshLinking(targets, batched, signal))) for (const id of targets) upserted.add(id)
+      step = 'cognify'
+      if (receipt.applied.some((id) => upserted.has(id))) await store.cognify({ signal, timeoutMs: config.cognifyTimeoutMs })
+    } catch (error) {
+      const message = `added, but ${step} failed: ${messageOf(error)}`
+      const retryable = retryableCogneeError(error)
+      const failing = step === 'cognify' ? upserted : new Set([...upserted, ...targets])
+      receipt.failed.push(...receipt.applied.filter((id) => failing.has(id)).map((id) => ({ id, retryable, message })))
+      receipt.applied = receipt.applied.filter((id) => !failing.has(id))
     }
     // A failed call may have left the cached mapping behind cognee: read it again next time.
     if (receipt.failed.length > 0) ownership.invalidate()

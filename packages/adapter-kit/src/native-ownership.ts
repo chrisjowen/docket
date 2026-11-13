@@ -25,6 +25,11 @@ export interface NativeStore {
   /** Stores `record` with its identity; resolves to what was stored. Writing an identical record again must not duplicate it. */
   write(record: CanonicalInput, signal?: AbortSignal): Promise<NativeRecord>
   delete(record: NativeRecord, signal?: AbortSignal): Promise<void>
+  /**
+   * Whether a record already at the input's revision still holds what `write`
+   * would store now. Optional: without it, the revision alone decides.
+   */
+  holds?(native: NativeRecord, record: CanonicalInput, signal?: AbortSignal): Promise<boolean>
 }
 
 const keyOf = (kind: InputKind, id: string): string => `${kind}\u0000${id}`
@@ -37,7 +42,8 @@ const keyOf = (kind: InputKind, id: string): string => `${kind}\u0000${id}`
  * An upsert writes the new revision first, then deletes every other record of
  * that input - an earlier revision, or a duplicate a crash left behind - so
  * the input is never missing, and once the upsert returns no stale record of
- * it is current. Replaying a revision already stored writes nothing.
+ * it is current. Replaying a revision already stored writes nothing, unless
+ * the store says that record no longer holds what it would write now.
  */
 export class NativeOwnership implements PassageSink {
   private owned: Map<string, NativeRecord[]> | null = null
@@ -53,7 +59,7 @@ export class NativeOwnership implements PassageSink {
     const owned = await this.ownership(signal)
     const key = keyOf(record.kind, record.id)
     const existing = owned.get(key) ?? []
-    const kept = existing.find((native) => native.identity.revision === record.revision) ?? (await this.store.write(record, signal))
+    const kept = (await this.current(existing, record, signal)) ?? (await this.store.write(record, signal))
     owned.set(key, [kept, ...existing.filter((native) => native.nativeId !== kept.nativeId)])
     await this.prune(key, kept, signal)
   }
@@ -79,6 +85,15 @@ export class NativeOwnership implements PassageSink {
   /** Forgets the cached mapping, so the next operation reads it from the engine again. */
   invalidate(): void {
     this.owned = null
+  }
+
+  /** The record already holding the input at its revision, if any still does. */
+  private async current(existing: readonly NativeRecord[], record: CanonicalInput, signal?: AbortSignal): Promise<NativeRecord | undefined> {
+    for (const native of existing) {
+      if (native.identity.revision !== record.revision) continue
+      if (!this.store.holds || (await this.store.holds(native, record, signal))) return native
+    }
+    return undefined
   }
 
   /** Deletes the input's records other than `kept`, one at a time, forgetting each as it goes. */

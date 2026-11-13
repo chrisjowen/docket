@@ -46,6 +46,30 @@ describe('NativeOwnership', () => {
     expect(store.writes).toBe(1)
   })
 
+  it('rewrites a record at the same revision that the store says no longer holds what it would write', async () => {
+    const store = new FakeStore()
+    let rendered = 'old'
+    const holds = async (native: NativeRecord): Promise<boolean> => store.records.get(native.nativeId)?.text === rendered
+    const write = store.write.bind(store)
+    Object.assign(store, {
+      holds,
+      write: async (record: CanonicalInput) => {
+        const native = await write(record)
+        store.records.get(native.nativeId)!.text = rendered
+        return native
+      }
+    })
+    const ownership = new NativeOwnership(store)
+    await ownership.upsert(entityInput({ id: 'service.a', revision: 'r1' }))
+    await ownership.upsert(entityInput({ id: 'service.a', revision: 'r1' }))
+    expect(store.writes).toBe(1)
+
+    rendered = 'new'
+    await ownership.upsert(entityInput({ id: 'service.a', revision: 'r1' }))
+    expect(store.writes).toBe(2)
+    expect([...store.records.values()].map((record) => record.text)).toEqual(['new'])
+  })
+
   it('replaces an earlier revision, leaving only the new one current', async () => {
     const store = new FakeStore()
     const ownership = new NativeOwnership(store)

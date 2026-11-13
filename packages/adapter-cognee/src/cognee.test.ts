@@ -99,13 +99,13 @@ describe('cognee adapter definition', () => {
 describe('identity in external metadata', () => {
   it('round-trips, also as the JSON string a search returns', () => {
     const identity = { kind: 'entity' as const, id: 'service.orders', revision: 'sha256:abc' }
-    const metadata = identityMetadata(DATASET, 'default', identity)
+    const metadata = identityMetadata(DATASET, 'default', identity, '# Orders service\n')
     expect(parseIdentity(DATASET, 'default', metadata)).toEqual(identity)
     expect(parseIdentity(DATASET, 'default', JSON.stringify(metadata))).toEqual(identity)
   })
 
   it('does not claim items of another dataset, scope or writer', () => {
-    const metadata = identityMetadata(DATASET, 'default', { kind: 'entity', id: 'a', revision: 'r' })
+    const metadata = identityMetadata(DATASET, 'default', { kind: 'entity', id: 'a', revision: 'r' }, 'A\n')
     expect(parseIdentity('docket-other', 'default', metadata)).toBeUndefined()
     expect(parseIdentity(DATASET, 'staging', metadata)).toBeUndefined()
     expect(parseIdentity(DATASET, 'default', { ...metadata, docket_kind: 'task' })).toBeUndefined()
@@ -224,6 +224,31 @@ describe('cognee adapter against a mocked cognee API', () => {
     const items = [...h.fake.datasets.get(DATASET)!.items.values()]
     expect(items.map((item) => item.externalMetadata?.docket_revision)).toEqual(['r2'])
     expect((await h.ask('customer orders')).diagnostics).toEqual([])
+  })
+
+  it('re-files an entity whose linked entity is retitled, though its own revision did not change', async () => {
+    const h = await harness()
+    const orders = entity('service.orders', { title: 'Orders service', links: [entityLink({ rel: 'owned_by', target: 'team.payments' })] })
+    await h.apply(upsert(orders), upsert(entity('team.payments', { revision: 'r1', title: 'Payments team' })))
+    expect(h.held()).toContainEqual(['service.orders', expect.stringContaining('owned by: Payments team')])
+
+    const cognified = () => h.fake.requests.filter((request) => request === 'POST /api/v1/cognify').length
+    const before = cognified()
+    expect(await h.apply(upsert(entity('team.payments', { revision: 'r2', title: 'Billing team' })))).toMatchObject({ applied: ['team.payments'], failed: [] })
+    const filed = h.held().filter(([id]) => id === 'service.orders')
+    expect(filed).toEqual([['service.orders', expect.stringContaining('owned by: Billing team')]])
+    expect(cognified()).toBe(before + 1)
+    expect((await h.ask('which service does the billing team own')).evidence.map((item) => item.canonicalRefs[0]?.id)).toContain('service.orders')
+
+    // Removing the target names it by id instead.
+    await h.apply(remove(entity('team.payments', { revision: 'r2' })))
+    expect(h.held()).toEqual([['service.orders', expect.stringContaining('owned by: team.payments')]])
+
+    // A replay with nothing to re-file adds nothing.
+    const adds = () => h.fake.requests.filter((request) => request === 'POST /api/v1/add').length
+    const added = adds()
+    await h.apply(upsert(orders))
+    expect(adds()).toBe(added)
   })
 
   it('keeps two inputs with the same text apart', async () => {

@@ -105,7 +105,14 @@ Unknown options are refused, not dropped.
   cognee skips items it has already cognified, so this only costs model calls
   for what is new. If cognify fails, every upsert in the batch is reported
   failed and retryable; the next sync finds them added and cognifies again.
-- **Replay** of a revision already added changes nothing.
+- **Linked titles.** Each item's metadata also holds `docket_text`, the
+  hash of the text it was filed with. When a batch changes or removes an
+  entity, every filed entity that links to it is rendered again, and one
+  whose text no longer matches - its link now names the new title, or the
+  id of a removed entity - is re-filed under the same revision, then
+  cognified with the batch. A replay is checked the same way.
+- **Replay** of a revision already added, whose text has not changed, changes
+  nothing.
 - **Updates.** A new revision is added first; every other item of that input
   is deleted after it.
 - **Deletes** remove the item and everything cognify derived from it: its

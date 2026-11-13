@@ -15,25 +15,22 @@ export const defaultDataset = (projectRoot: string, scope: string): string => {
 
 /**
  * The identity docket files with each data item, as its external metadata:
- * the dataset and scope it belongs to, and the canonical input and revision
- * it holds. cognee returns it on every chunk a search finds, so a hit maps
- * back to its canonical record without a lookup.
+ * the dataset and scope it belongs to, the canonical input and revision it
+ * holds, and the hash of the text it was filed with. cognee returns it on
+ * every chunk a search finds, so a hit maps back to its canonical record
+ * without a lookup.
  */
-export const identityMetadata = (dataset: string, scope: string, identity: NativeIdentity): Record<string, string> => ({
+export const identityMetadata = (dataset: string, scope: string, identity: NativeIdentity, text: string): Record<string, string> => ({
   docket_dataset: dataset,
   docket_scope: scope,
   docket_kind: identity.kind,
   docket_id: identity.id,
-  docket_revision: identity.revision
+  docket_revision: identity.revision,
+  docket_text: contentHash(text)
 })
 
-/**
- * The identity a data item's or chunk's metadata holds, or undefined for one
- * docket did not file in this dataset and scope. A search can return chunks
- * of other datasets when cognee runs without access control, so every hit is
- * checked here.
- */
-export const parseIdentity = (dataset: string, scope: string, value: unknown): NativeIdentity | undefined => {
+/** A data item's or chunk's metadata as an object: search returns it as a JSON string. */
+const metadataOf = (value: unknown): Record<string, unknown> | undefined => {
   let metadata = value
   if (typeof value === 'string') {
     try {
@@ -42,8 +39,19 @@ export const parseIdentity = (dataset: string, scope: string, value: unknown): N
       return undefined
     }
   }
-  if (metadata === null || typeof metadata !== 'object') return undefined
-  const { docket_dataset, docket_scope, docket_kind, docket_id, docket_revision } = metadata as Record<string, unknown>
+  return metadata !== null && typeof metadata === 'object' ? (metadata as Record<string, unknown>) : undefined
+}
+
+/**
+ * The identity a data item's or chunk's metadata holds, or undefined for one
+ * docket did not file in this dataset and scope. A search can return chunks
+ * of other datasets when cognee runs without access control, so every hit is
+ * checked here.
+ */
+export const parseIdentity = (dataset: string, scope: string, value: unknown): NativeIdentity | undefined => {
+  const metadata = metadataOf(value)
+  if (metadata === undefined) return undefined
+  const { docket_dataset, docket_scope, docket_kind, docket_id, docket_revision } = metadata
   if (docket_dataset !== dataset || docket_scope !== scope) return undefined
   if (typeof docket_kind !== 'string' || !(KINDS as readonly string[]).includes(docket_kind)) return undefined
   if (typeof docket_id !== 'string' || docket_id === '' || typeof docket_revision !== 'string' || docket_revision === '') return undefined
@@ -125,6 +133,8 @@ export interface CogneeSearch {
 export class CogneeStore implements NativeStore {
   /** The dataset's id, once known; cognee creates the dataset on the first add. */
   private datasetId: string | undefined
+  /** The hash of the text each item was filed with, by item id, from its metadata. */
+  private readonly texts = new Map<string, unknown>()
 
   constructor(
     private readonly client: CogneeClient,
@@ -145,26 +155,44 @@ export class CogneeStore implements NativeStore {
     return this.records(await this.client.listData(datasetId, { signal }))
   }
 
+  /** The text an input is filed with, without any disambiguation. */
+  private async render(record: CanonicalInput): Promise<string> {
+    return record.kind === 'entity' ? renderEntity(record, this.canonical) : canonicalPassage(record).text
+  }
+
+  /**
+   * Whether an item still holds the text its input renders to now. An
+   * entity's text names its links by their targets' titles, which can change
+   * while its own revision does not.
+   */
+  async holds(native: NativeRecord, record: CanonicalInput): Promise<boolean> {
+    return this.texts.get(native.nativeId) === contentHash(await this.render(record))
+  }
+
   async write(record: CanonicalInput, signal?: AbortSignal): Promise<NativeRecord> {
     const identity = { kind: record.kind, id: record.id, revision: record.revision }
-    const text = record.kind === 'entity' ? await renderEntity(record, this.canonical) : canonicalPassage(record).text
+    const text = await this.render(record)
     // The plain text first; with the disambiguation line if another input already holds that text.
     for (const candidate of [text, `${text}${disambiguation(identity)}`]) {
       const datasetId = await this.resolveDataset({ signal })
       const existing = datasetId === undefined ? [] : await this.client.listData(datasetId, { signal, hash: contentHash(candidate) })
       const holders = existing.map((item) => ({ item, held: parseIdentity(this.dataset, this.scope, item.externalMetadata) }))
       const current = holders.find(({ held }) => held !== undefined && sameIdentity(held, identity))
-      if (current !== undefined) return { nativeId: current.item.id, identity }
+      if (current !== undefined) {
+        this.texts.set(current.item.id, contentHash(text))
+        return { nativeId: current.item.id, identity }
+      }
       // An earlier revision of this input with the same text: cognee would keep its metadata, so it goes first.
       const earlier = holders.filter(({ held }) => held !== undefined && held.kind === identity.kind && held.id === identity.id)
       if (earlier.length < holders.length) continue
       for (const { item } of earlier) await this.client.deleteData(datasetId as string, item.id, { signal })
       const added = await this.client.add(
         { name: this.dataset, id: datasetId },
-        { name: fileName(identity), text: candidate, metadata: identityMetadata(this.dataset, this.scope, identity) },
+        { name: fileName(identity), text: candidate, metadata: identityMetadata(this.dataset, this.scope, identity, text) },
         { signal }
       )
       this.datasetId = added.datasetId
+      this.texts.set(added.dataId, contentHash(text))
       return { nativeId: added.dataId, identity }
     }
     throw new CogneeHttpError(`cognee already holds the text of ${record.kind} ${record.id} under another identity`, 409, false)
@@ -173,6 +201,7 @@ export class CogneeStore implements NativeStore {
   async delete(record: NativeRecord, signal?: AbortSignal): Promise<void> {
     const datasetId = await this.resolveDataset({ signal })
     if (datasetId !== undefined) await this.client.deleteData(datasetId, record.nativeId, { signal })
+    this.texts.delete(record.nativeId)
   }
 
   /** Cognifies whatever was added and not yet cognified. Nothing to do while the dataset does not exist. */
@@ -217,7 +246,9 @@ export class CogneeStore implements NativeStore {
     const records: NativeRecord[] = []
     for (const item of items) {
       const identity = parseIdentity(this.dataset, this.scope, item.externalMetadata)
-      if (identity !== undefined) records.push({ nativeId: item.id, identity })
+      if (identity === undefined) continue
+      records.push({ nativeId: item.id, identity })
+      this.texts.set(item.id, metadataOf(item.externalMetadata)?.docket_text)
     }
     return records
   }
