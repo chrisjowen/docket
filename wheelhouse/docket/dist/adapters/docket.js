@@ -124,9 +124,9 @@ const stderrLogger = (id) => {
 /**
  * The project's canonical inputs - entities, the observations their evidence
  * records and their files' bodies as documents - read on first use, exactly
- * as sync derives them.
+ * as sync derives them, and read again on the first use after `refresh`.
  */
-const projectCanonicalReader = (resolved) => {
+export const projectCanonicalReader = (resolved) => {
     let inputs;
     const load = () => {
         inputs ??= validate({ cwd: resolved.projectRoot }).then(({ entities, documents }) => canonicalState(entities, documents, DEFAULT_SCOPE).inputs.map(({ input }) => input));
@@ -134,7 +134,10 @@ const projectCanonicalReader = (resolved) => {
     };
     return {
         get: async (kind, id) => (await load()).find((record) => record.kind === kind && record.id === id),
-        list: async (kind) => (await load()).filter((record) => record.kind === kind)
+        list: async (kind) => (await load()).filter((record) => record.kind === kind),
+        refresh: () => {
+            inputs = undefined;
+        }
     };
 };
 /** Rethrows a broken contract as this instance's, so the error says which adapter broke it. */

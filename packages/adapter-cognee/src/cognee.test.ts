@@ -244,11 +244,14 @@ describe('cognee adapter against a mocked cognee API', () => {
     await h.apply(remove(entity('team.payments', { revision: 'r2' })))
     expect(h.held()).toEqual([['service.orders', expect.stringContaining('owned by: team.payments')]])
 
-    // A replay with nothing to re-file adds nothing.
+    // A replay with nothing to re-file adds nothing, and a removal re-filing nothing does not cognify.
     const adds = () => h.fake.requests.filter((request) => request === 'POST /api/v1/add').length
     const added = adds()
     await h.apply(upsert(orders))
     expect(adds()).toBe(added)
+    const settled = cognified()
+    await h.apply(remove(entity('team.payments', { revision: 'r2' })))
+    expect(cognified()).toBe(settled)
   })
 
   it('keeps two inputs with the same text apart', async () => {

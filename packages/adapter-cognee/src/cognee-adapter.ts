@@ -132,18 +132,20 @@ export const createCogneeAdapter = (config: CogneeConfig, services: AdapterServi
    * Re-files every entity outside the batch that links to one of `targets`
    * and no longer holds the text it renders to: its text names each link by
    * the target's title, which may have changed though its own revision did
-   * not. Resolves to whether any entity links to one of them.
+   * not. Resolves to the targets whose linking entities were re-filed.
    */
-  const refreshLinking = async (targets: ReadonlySet<string>, batched: ReadonlySet<string>, signal?: AbortSignal): Promise<boolean> => {
-    let linking = false
+  const refreshLinking = async (targets: ReadonlySet<string>, batched: ReadonlySet<string>, signal?: AbortSignal): Promise<Set<string>> => {
+    const refiled = new Set<string>()
     for (const native of await ownership.records(signal)) {
       if (native.identity.kind !== 'entity' || batched.has(native.identity.id)) continue
       const record = await services.canonical.get('entity', native.identity.id)
-      if (record?.kind !== 'entity' || record.revision !== native.identity.revision || !record.links.some((link) => targets.has(link.target))) continue
-      linking = true
-      if (!(await store.holds(native, record))) await ownership.upsert(record, signal)
+      if (record?.kind !== 'entity' || record.revision !== native.identity.revision) continue
+      const linked = record.links.filter((link) => targets.has(link.target)).map((link) => link.target)
+      if (linked.length === 0 || (await store.holds(native, record))) continue
+      await ownership.upsert(record, signal)
+      for (const target of linked) refiled.add(target)
     }
-    return linking
+    return refiled
   }
 
   /**
@@ -162,7 +164,7 @@ export const createCogneeAdapter = (config: CogneeConfig, services: AdapterServi
     const targets = new Set(refs.flatMap((ref) => (ref.kind === 'entity' && receipt.applied.includes(ref.id) ? [ref.id] : [])))
     let step = 're-filing the entities that link to it'
     try {
-      if (targets.size > 0 && (await refreshLinking(targets, batched, signal))) for (const id of targets) upserted.add(id)
+      if (targets.size > 0) for (const id of await refreshLinking(targets, batched, signal)) upserted.add(id)
       step = 'cognify'
       if (receipt.applied.some((id) => upserted.has(id))) await store.cognify({ signal, timeoutMs: config.cognifyTimeoutMs })
     } catch (error) {
