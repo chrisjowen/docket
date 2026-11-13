@@ -244,14 +244,27 @@ describe('cognee adapter against a mocked cognee API', () => {
     await h.apply(remove(entity('team.payments', { revision: 'r2' })))
     expect(h.held()).toEqual([['service.orders', expect.stringContaining('owned by: team.payments')]])
 
-    // A replay with nothing to re-file adds nothing, and a removal re-filing nothing does not cognify.
+    // A replay with nothing to re-file adds nothing.
     const adds = () => h.fake.requests.filter((request) => request === 'POST /api/v1/add').length
     const added = adds()
     await h.apply(upsert(orders))
     expect(adds()).toBe(added)
-    const settled = cognified()
-    await h.apply(remove(entity('team.payments', { revision: 'r2' })))
-    expect(cognified()).toBe(settled)
+  })
+
+  it('cognifies an entity re-filed for a removed link target when the removal is retried after cognify failed', async () => {
+    const h = await harness()
+    const payments = entity('team.payments', { title: 'Payments team' })
+    await h.apply(upsert(entity('service.orders', { title: 'Orders service', links: [entityLink({ rel: 'owned_by', target: 'team.payments' })] })), upsert(payments))
+
+    h.fake.failNextCognify = true
+    const failed = await h.apply(remove(payments))
+    expect(failed.failed).toEqual([{ id: 'team.payments', retryable: true, message: expect.stringMatching(/cognify failed/) }])
+    expect(h.held()).toEqual([['service.orders', expect.stringContaining('owned by: team.payments')]])
+    expect(h.fake.datasets.get(DATASET)!.items.values().next().value?.cognified).toBe(false)
+
+    expect(await h.apply(remove(payments))).toMatchObject({ applied: ['team.payments'], failed: [] })
+    expect([...h.fake.datasets.get(DATASET)!.items.values()].map((item) => item.cognified)).toEqual([true])
+    expect(entityIds(await h.ask('orders service owned by team payments'))).toEqual(['service.orders'])
   })
 
   it('keeps two inputs with the same text apart', async () => {
