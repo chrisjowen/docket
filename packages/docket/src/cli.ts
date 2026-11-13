@@ -580,17 +580,18 @@ adapterCommand
   .option('--id <id>', 'adapter instance id')
   .option('--roles <roles>', 'projection,query (default), query or projection')
   .option('--mode <mode>', 'neo4j: external (default) or local; mem0: platform (default) or server')
-  .option('--url <url>', 'the endpoint to connect to (neo4j external, mem0 server)')
+  .option('--url <url>', 'the endpoint to connect to (neo4j external, mem0 server, cognee)')
   .option('--username <name>', 'neo4j: username (default neo4j)')
   .option('--database <name>', 'neo4j: database (default: the server\'s)')
   .option('--password-env <name>', 'neo4j: environment variable holding the password ("none": no auth)')
-  .option('--api-key-env <name>', 'mem0: environment variable holding the API key (default MEM0_API_KEY)')
+  .option('--api-key-env <name>', 'mem0, cognee: environment variable holding the API key (default MEM0_API_KEY, COGNEE_API_KEY)')
   .option('--scope <scope>', 'neo4j scope, or mem0 agent id (default: one unique to the checkout)')
   .option('--output <dir>', 'jsonl: directory to write to')
   .option('--file <path>', 'memvid: the .mv2 file (default: in the adapter\'s state directory)')
   .option('--namespace <name>', 'memvid: namespace for this project\'s frames')
   .option('--palace <dir>', 'mempalace: palace directory (default: in the adapter\'s state directory)')
   .option('--wing <name>', 'mempalace: wing to file drawers under')
+  .option('--dataset <name>', 'cognee: dataset to file into (default: one unique to the checkout)')
   .addOption(new Option('--embedding-model <model>', 'mempalace: embedding model').choices(['minilm', 'embeddinggemma']))
   .option('--command <command>', 'memvid: the CLI (default memvid); mempalace: the MCP server (default mempalace-mcp)')
   .option('--image <ref>', 'neo4j local: the image to run (default: read from --image-env when up runs)')
@@ -613,7 +614,7 @@ adapterCommand
     }
     const flags = [
       'id', 'roles', 'mode', 'url', 'username', 'database', 'passwordEnv', 'apiKeyEnv', 'scope', 'output',
-      'file', 'namespace', 'palace', 'wing', 'embeddingModel', 'command',
+      'file', 'namespace', 'palace', 'wing', 'dataset', 'embeddingModel', 'command',
       'image', 'imageEnv', 'port', 'runtimeId', 'composeFile', 'projectName', 'pullPolicy'
     ]
     const values = Object.fromEntries(

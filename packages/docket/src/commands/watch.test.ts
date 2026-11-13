@@ -11,6 +11,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -19,6 +20,7 @@ import {
   type DocumentRecord,
   type EdgeRecord
 } from '@docket/adapter-jsonl'
+import { addToConfigText } from '../install/config-edit.js'
 import type { WatchEvent } from '../watcher/reconciler.js'
 import { init } from './init.js'
 import { watch, type WatchHandle } from './watch.js'
@@ -418,5 +420,49 @@ describe('watch', () => {
     await new Promise((done) => setTimeout(done, 1000))
     expect(await h.documents()).toEqual([])
     expect(h.events).toEqual([])
+  })
+
+  it('hands adapters the files as they are at each pass, so an entity linking to a retitled one is re-filed', async () => {
+    const h = await harness()
+    const fixture = new URL('../../../adapter-cognee/fixtures/fake-cognee.ts', import.meta.url).href
+    const { startFakeCognee } = (await import(fixture)) as {
+      startFakeCognee(): { fetch: typeof fetch; datasets: Map<string, { items: Map<string, { text: string; externalMetadata: Record<string, unknown> | null }> }> }
+    }
+    const fake = startFakeCognee()
+    const globals = globalThis as { __docketWatchCognee?: typeof fetch }
+    globals.__docketWatchCognee = fake.fetch
+    const cognee = fileURLToPath(new URL('../../../adapter-cognee/dist/index.js', import.meta.url))
+    await writeFile(
+      join(h.root, 'cognee.mjs'),
+      `import cognee, { createCogneeAdapter } from ${JSON.stringify(cognee)}\n` +
+        `export default { ...cognee, create: async (config, services) => createCogneeAdapter(config, services, { version: 'test', fetch: globalThis.__docketWatchCognee }) }\n`
+    )
+    const config = join(h.root, '.docket.yaml')
+    await writeFile(
+      config,
+      addToConfigText(await readFile(config, 'utf8'), {
+        entry: { id: 'cognee', module: './cognee.mjs', roles: ['projection'], config: { url: 'http://cognee.test:8000', dataset: 'docket-watch' } }
+      })
+    )
+    await h.write('resources/teams/payments.md', memoryFile('team.payments', 'team', 'Payments team'))
+    await h.write(
+      'resources/services/orders.md',
+      memoryFile('service.orders', 'service', 'Orders', 'links:\n  - rel: owned_by\n    target: team.payments\n')
+    )
+    const orders = (): string[] =>
+      [...(fake.datasets.get('docket-watch')?.items.values() ?? [])]
+        .filter((item) => item.externalMetadata?.docket_id === 'service.orders')
+        .map((item) => item.text)
+
+    try {
+      await h.start()
+      expect(orders()).toEqual([expect.stringContaining('owned by: Payments team')])
+
+      await h.write('resources/teams/payments.md', memoryFile('team.payments', 'team', 'Billing team'))
+      await until(() => (orders().some((text) => text.includes('owned by: Billing team')) ? true : undefined), 'the linking entity to be re-filed')
+      expect(orders()).toEqual([expect.stringContaining('owned by: Billing team')])
+    } finally {
+      delete globals.__docketWatchCognee
+    }
   })
 })

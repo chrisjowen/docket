@@ -4,7 +4,8 @@ How fast, how accurate and how relevant docket's search is, across corpora
 from six ontologies, and which way of searching does best. It loads each
 corpus into a local docket under one of docket's ontology templates, syncs it,
 asks every strategy the same queries, and writes a report. The latest results
-are in [RESULTS.md](RESULTS.md).
+are in [RESULTS.md](RESULTS.md), and cognee's in
+[RESULTS-cognee.md](RESULTS-cognee.md).
 
 It answers one question in particular: what should `docket_search` return
 when nothing in the docket answers? Asked "who is sophia" in a workspace with
@@ -72,6 +73,8 @@ only re-embeds what changed.
 | `DOCKET_EVAL_AGENT` | `ollama:qwen2.5:7b` | The agentic strategy's model: `ollama:<model>`, `claude` or `claude:<model>`. |
 | `DOCKET_EVAL_AGENTIC_MAX` | all | At most this many test queries per corpus for the agentic strategy. |
 | `DOCKET_EVAL_OLLAMA_URL` | `http://localhost:11434` | |
+| `DOCKET_EVAL_COGNEE_URL` | | A cognee server to project every corpus into as well, adding the `cognee` strategies ([cognee](#cognee)). |
+| `DOCKET_EVAL_COGNEE_API_KEY` | | That server's API key, when it needs one. |
 
 To update [RESULTS.md](RESULTS.md), run with `DOCKET_EVAL_OUT` set and copy
 its `report.md` over it.
@@ -179,6 +182,8 @@ combines in Docket Cloud:
 | `floor` | `current` with a relevance floor on each source: semantic hits need a minimum cosine similarity, full-text hits must cover a minimum share of the query's terms, weighted by idf. |
 | `floor+rrf` | The floor on each source's top 20, then reciprocal rank fusion and a cut to 10. |
 | `precached` | Work moved to sync time. Each entity is embedded with the titles of what it links to and without its confidence, and the full-text vocabulary is kept. A query naming a word no entity holds - a capitalised word that does not start a sentence, or whatever follows "who is" unless it starts "our", "the" or another determiner; acronyms and words with digits never count - returns nothing without searching. Otherwise floor and fusion as above, over the link-aware embeddings. Answers are cached by query terms. |
+| `cognee` | Only with `DOCKET_EVAL_COGNEE_URL`: the corpus synced into cognee through [`@docket/adapter-cognee`](../../../adapter-cognee/README.md), and each query answered by the adapter - cognee's `CHUNKS` search, top 10, no floor. |
+| `cognee+floor` | `cognee` keeping only chunks with cosine similarity (1 - cognee's distance) at or above a floor tuned on the dev queries like the others: the adapter's `maxDistance`. |
 | `agentic` | A model (`DOCKET_EVAL_AGENT`) plans 1-3 searches, the record types to expect, and whether to follow links. The single-pass sources run each search, adding neighbours when asked. The model then judges which candidates are about exactly what was asked, and an empty judgement is the answer. Two model calls per query. |
 
 The floors are tuned on the dev queries, pooled over corpora, by grid
@@ -190,6 +195,62 @@ reply precision. A cosine floor belongs to its
 embedding model. The floors here are for `nomic-embed-text`; the hosted mem0
 platform embeds with its own model, so its scores sit on a different scale
 and its floor must be tuned the same way on its own scores.
+
+## cognee
+
+With `DOCKET_EVAL_COGNEE_URL` set, each corpus's docket also gets a cognee
+adapter instance (dataset `docket-eval-<corpus>`) and is synced into it with
+`docket sync`, so the numbers are the adapter's own: what it adds, what
+cognify makes of it, and what its `ask` returns. Only the entities it names
+count, as for every strategy.
+
+Syncing cognifies every entity, and cognify runs the cognee server's LLM over
+each chunk: 10-20 seconds an entity with `qwen2.5:7b` on an M-series
+laptop, so a few minutes for `people` and `acme` and hours for the larger
+corpora. Answering runs no model. Run it on a server from the adapter's
+[local recipe](../../../adapter-cognee/README.md#running-a-cognee-server-locally),
+which uses the same Ollama models as this evaluation:
+
+```sh
+DOCKET_EVAL_COGNEE_URL=http://localhost:8000 DOCKET_EVAL_COGNEE_API_KEY=$COGNEE_API_KEY \
+DOCKET_EVAL_CORPORA=people,acme DOCKET_EVAL_STRATEGIES=current,floor,floor+rrf,precached,cognee,cognee+floor \
+  pnpm -C packages/docket eval:search
+```
+
+The floors are tuned on the dev queries of the corpora in the run, so a run
+on fewer corpora tunes them differently from [RESULTS.md](RESULTS.md).
+
+### What the cognee run says
+
+[RESULTS-cognee.md](RESULTS-cognee.md) is that command's run on `people` and
+`acme` - cognee 1.6.8 on `qwen2.5:7b` and `nomic-embed-text` through Ollama,
+the eval's own models. Two small corpora: 30 test queries, 6 of them
+no-answer, so a single query moves the no-answer numbers by a sixth.
+Macro-averaged over the two:
+
+| strategy | nDCG@10 | no-answer FPR | reply precision | p50 ms |
+| --- | ---: | ---: | ---: | ---: |
+| precached | 0.754 | 0.00 | 0.45 | 9.8 |
+| cognee | 0.907 | 1.00 | 0.18 | 235 |
+| cognee+floor | 0.790 | 0.50 | 0.41 | 230 |
+
+- cognee's chunk search ranks the best here: nDCG@10 0.907 against
+  `current`'s 0.874, the best on lookup and multi-hop questions and level with
+  `current` on count questions.
+  Its chunks carry each entity's links by title, as `precached`'s embeddings
+  do, which helps multi-hop questions.
+- Like any top-k, it answers every no-answer query with ten entities and
+  most of every reply is noise (reply precision 0.18).
+- With a floor tuned on the dev queries (cosine similarity 0.59, the
+  adapter's `maxDistance: 0.41`), it keeps more ranking quality than
+  `precached` (nDCG@10 0.790 against 0.754) but still answers half the
+  no-answer queries, which `precached`'s name check answers with nothing,
+  and its replies are a little noisier (0.41 against 0.45).
+- It costs far more: answering is a round trip to the server, about 230 ms
+  against 10, and syncing ran the model over every entity - 205 s for
+  `people`'s 20 entities and 449 s for `acme`'s 21. A run on `crm` was
+  stopped after five hours with 699 of its 1,044 entities added and cognify
+  still running, so the larger corpora are out of reach with a local 7B model.
 
 ## Metrics
 
@@ -222,4 +283,5 @@ JSONL `lexicalSearch` against a prebuilt index.
 - [datasets/](datasets): one loader per corpus.
 - [engine.ts](engine.ts): the full-text index, embeddings and links every strategy searches.
 - [strategies.ts](strategies.ts), [metrics.ts](metrics.ts), [report.ts](report.ts).
+- [cognee.ts](cognee.ts): the corpus synced into cognee, and the `cognee` strategies.
 - [download.mjs](download.mjs), [datasets.json](datasets.json): fetching the datasets.

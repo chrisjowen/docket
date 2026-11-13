@@ -81,6 +81,7 @@
   },
   "devDependencies": {
     "@docket/adapter-cloud": "workspace:*",
+    "@docket/adapter-cognee": "workspace:*",
     "@docket/adapter-jsonl": "workspace:*",
     "@docket/adapter-kit": "workspace:*",
     "@docket/adapter-mem0": "workspace:*",

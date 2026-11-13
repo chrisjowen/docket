@@ -48,7 +48,7 @@ Proposed packages:
 - `@docket/contracts`: types, runtime validators and contract test helpers; no engine drivers or UI dependencies.
 - `@docket/core`: canonical model, sync, adapter loader, coordinator, CLI/API and runtime manager.
 - `@docket/adapter-jsonl`: lightweight local fallback.
-- `@docket/adapter-neo4j`, `@docket/adapter-mem0`, `@docket/adapter-mempalace`, `@docket/adapter-memvid`: optional packages with their own dependencies.
+- `@docket/adapter-neo4j`, `@docket/adapter-mem0`, `@docket/adapter-mempalace`, `@docket/adapter-memvid`, `@docket/adapter-cognee`: optional packages with their own dependencies.
 
 Core must not import all optional adapters or encode their configuration unions. Each module exports an `AdapterDefinition` as its default export. Core validates the generic envelope; the adapter validates its own configuration without silently dropping unfamiliar fields.
 
@@ -344,6 +344,7 @@ Cancellation propagates through AbortSignal where supported. Adapters that canno
 | mem0 | Documents/observations or explicit facts; configure raw versus inferred ingestion | Native search/filters, with adapter-specific planning if needed | One canonical input can create multiple extracted memories; retain native mapping and derivation |
 | MemPalace | Project documents and conversations | Native recall/search; temporal graph where supported by installed version | Map project scope to native organisation; preserve source passages |
 | Memvid | Documents/observations with metadata and timestamps | Native lexical/semantic/temporal retrieval | Native frame IDs map to canonical input revisions; preserve history only when replayable canonically |
+| cognee | Entities (and optionally observations/documents) added to a dataset, then cognified into a model-extracted graph | Native chunk search; cited graph or RAG completion as a derived fact | Canonical identity in each data item's external metadata, returned on every chunk; one dataset per scope |
 | JSONL | Canonical entity/debug records and optional observations | Lexical retrieval and deterministic structured operations where implemented | No external service required |
 
 These are integration intentions, not guarantees of identical features across library versions. Pin and test SDK/API versions. A TS package can wrap a Python CLI, MCP service or HTTP endpoint; package modularity does not require rewriting the engine in TypeScript. Declare and diagnose external runtime requirements. Do not download Python runtimes, SDKs or models implicitly.
@@ -509,5 +510,6 @@ Skills teach agents to use CLI JSON results and inspect evidence; they do not im
 - mem0 ingestion/retrieval documentation: https://github.com/mem0ai/mem0/blob/main/docs/core-concepts/how-it-works.mdx
 - MemPalace native ingestion, search and temporal graph: https://github.com/MemPalace/mempalace
 - Memvid current single-file architecture and SDKs: https://github.com/memvid/memvid
+- cognee add, cognify and search: https://github.com/topoteretes/cognee
 
 External engine descriptions informed the integration direction; the interfaces, package names, configuration and migration above are proposed Docket design.

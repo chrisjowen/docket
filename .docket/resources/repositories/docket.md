@@ -91,6 +91,14 @@ links:
         observedBy: claude
         commit: 9fe78c8
   - rel: contains
+    target: library.adapter-cognee
+    evidence:
+      - source: manifest
+        path: packages/adapter-cognee/package.json
+        lines: 2
+        observedAt: 2026-11-13
+        observedBy: claude
+  - rel: contains
     target: agent.docket-claude-plugin
     evidence:
       - source: manifest

@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
 import { claudeChat } from '../../src/llm/claude-chat.js'
+import { cogneeFloored, cogneeFloorStrategy, cogneeIndex, cogneeStrategy, type CogneeIndex } from './cognee.js'
 import { splitOf, writeDocket, type Corpus } from './corpus.js'
 import { loadAcme } from './datasets/acme.js'
 import { dataDir, MissingData, type QueryBudget } from './datasets/common.js'
@@ -16,7 +17,7 @@ import { loadLocomo } from './datasets/locomo.js'
 import { loadPeople } from './datasets/people.js'
 import { loadScifact } from './datasets/scifact.js'
 import { loadWands } from './datasets/wands.js'
-import { contextualText, embedAll, Engine, mem0Text, ollamaEmbedder, type Embedder, type VectorIndex } from './engine.js'
+import { contextualText, embedAll, Engine, mem0Text, ollamaEmbedder, type Embedder, type Scored, type VectorIndex } from './engine.js'
 import { percentile, summarise, macroAverage, type QueryOutcome, type Summary } from './metrics.js'
 import { report, type RunInfo } from './report.js'
 import {
@@ -57,6 +58,8 @@ const ONLY_CORPORA = env.DOCKET_EVAL_CORPORA?.split(',').map((name) => name.trim
 const ONLY_STRATEGIES = env.DOCKET_EVAL_STRATEGIES?.split(',').map((name) => name.trim()).filter(Boolean)
 /** At most this many test queries per corpus for the agentic strategy, which is slow. */
 const AGENTIC_MAX = Number(env.DOCKET_EVAL_AGENTIC_MAX ?? Number.POSITIVE_INFINITY)
+/** A cognee server to project every corpus into as well (cognee.ts); unset, the cognee strategies are left out. */
+const COGNEE_URL = env.DOCKET_EVAL_COGNEE_URL
 
 const LOADERS: { name: string; load: () => Promise<Corpus> }[] = [
   { name: 'people', load: loadPeople },
@@ -109,10 +112,18 @@ const unavailable = async (): Promise<string | null> => {
     if (provider === 'ollama' && !names.has(rest.join(':')) && (!ONLY_STRATEGIES || ONLY_STRATEGIES.includes('agentic'))) {
       return `the agentic model ${rest.join(':')} is not pulled: run ollama pull ${rest.join(':')}, or set DOCKET_EVAL_STRATEGIES without agentic`
     }
-    return null
   } catch {
     return `Ollama is not reachable at ${OLLAMA_URL}`
   }
+  if (COGNEE_URL) {
+    try {
+      const health = (await (await fetch(`${COGNEE_URL.replace(/\/+$/, '')}/health`, { signal: AbortSignal.timeout(5000) })).json()) as { version?: string }
+      log(`cognee ${health.version ?? '(no version)'} at ${COGNEE_URL}`)
+    } catch {
+      return `DOCKET_EVAL_COGNEE_URL is set but no cognee answers at ${COGNEE_URL}`
+    }
+  }
+  return null
 }
 
 const log = (line: string): void => {
@@ -124,6 +135,8 @@ interface Prepared {
   engine: Engine
   mem0: VectorIndex
   contextual: VectorIndex
+  /** The corpus in cognee, when DOCKET_EVAL_COGNEE_URL names a server. */
+  cognee?: CogneeIndex
   info: RunInfo['corpora'][number]
 }
 
@@ -141,6 +154,8 @@ const prepare = async (corpus: Corpus, embedder: Embedder): Promise<Prepared> =>
   const mem0 = await embedAll(embedder, new Map(engine.entities.map((entity) => [entity.id, mem0Text(entity)])), cacheDir, progress('mem0 texts'))
   const contextual = await embedAll(embedder, new Map(engine.entities.map((entity) => [entity.id, contextualText(engine, entity)])), cacheDir, progress('contextual texts'))
   const embedMs = performance.now() - started
+  if (COGNEE_URL) log(`  ${corpus.name}: syncing into cognee - cognify runs its model over every entity`)
+  const cognee = COGNEE_URL ? await cogneeIndex(dir, corpus.name, COGNEE_URL) : undefined
 
   const test = corpus.queries.filter((query) => splitOf(corpus.name, query) === 'test')
   const documents = engine.entities.map((entity) => ({ ...entity, path: '', paths: [] }) as DocumentRecord)
@@ -158,6 +173,7 @@ const prepare = async (corpus: Corpus, embedder: Embedder): Promise<Prepared> =>
     engine,
     mem0,
     contextual,
+    ...(cognee ? { cognee } : {}),
     info: {
       name: corpus.name,
       domain: corpus.domain,
@@ -175,6 +191,7 @@ const prepare = async (corpus: Corpus, embedder: Embedder): Promise<Prepared> =>
       },
       syncMs,
       embedMs,
+      ...(cognee ? { cogneeSyncMs: cognee.syncMs } : {}),
       lexicalMs: { jsonl: timed((query) => lexicalSearch(documents, query, SOURCE_LIMIT)), indexed: timed((query) => engine.bm25.search(query, SOURCE_LIMIT)) }
     }
   }
@@ -193,6 +210,8 @@ interface DevRow {
   /** Each source's top 20, for fusion. */
   wide: Retrieval
   precached: Retrieval
+  /** cognee's entities, best first, with cosine similarity: when the run has a cognee server. */
+  cognee?: Scored[]
 }
 
 /** A floor and how it scored on the dev queries, each corpus counting the same. */
@@ -244,7 +263,7 @@ describe('search evaluation', () => {
 
     log('calibrating the relevance floors on the dev queries')
     const dev: DevRow[] = []
-    for (const { corpus, engine, mem0, contextual } of prepared) {
+    for (const { corpus, engine, mem0, contextual, cognee } of prepared) {
       for (const query of corpus.queries.filter((item) => splitOf(corpus.name, item) === 'dev')) {
         const wide = await retrieve(engine, mem0, embedder, query.text, 2 * SOURCE_LIMIT)
         dev.push({
@@ -253,7 +272,8 @@ describe('search evaluation', () => {
           query,
           single: { semantic: wide.semantic.slice(0, SOURCE_LIMIT), lexical: wide.lexical.slice(0, SOURCE_LIMIT) },
           wide,
-          precached: await retrievePrecached(engine, contextual, embedder, query.text)
+          precached: await retrievePrecached(engine, contextual, embedder, query.text),
+          ...(cognee ? { cognee: await cognee.search(query.text) } : {})
         })
       }
     }
@@ -265,6 +285,8 @@ describe('search evaluation', () => {
       })
     )
     const precached = mostBalanced(grid(dev, (row, params) => precachedAnswer(row.engine, row.precached, row.query.text, params)))
+    // cognee's floor is on cosine similarity alone: every coverage scores the same.
+    const cogneeFloor = COGNEE_URL ? mostBalanced(grid(dev, (row, params) => cogneeFloored(row.cognee ?? [], params))) : undefined
     const calibrated = (strategy: string, { floor: params, dev: scores }: Calibrated): RunInfo['calibration'][number] => ({
       strategy,
       ...params,
@@ -276,7 +298,8 @@ describe('search evaluation', () => {
     const calibration = [
       calibrated('floor', floor),
       calibrated('floor+rrf', floorRrf),
-      calibrated('precached', precached)
+      calibrated('precached', precached),
+      ...(cogneeFloor ? [{ ...calibrated('cognee+floor', cogneeFloor), coverage: Number.NaN }] : [])
     ]
     for (const row of calibration) log(`  ${JSON.stringify(row)}`)
 
@@ -288,7 +311,8 @@ describe('search evaluation', () => {
         floorStrategy(item.engine, item.mem0, embedder, floor.floor),
         floorRrfStrategy(item.engine, item.mem0, embedder, floorRrf.floor),
         precachedStrategy(item.engine, item.contextual, embedder, precached.floor),
-        agenticStrategy(item.engine, item.mem0, embedder, chat, AGENT)
+        agenticStrategy(item.engine, item.mem0, embedder, chat, AGENT),
+        ...(item.cognee && cogneeFloor ? [cogneeStrategy(item.cognee), cogneeFloorStrategy(item.cognee, cogneeFloor.floor)] : [])
       ].filter((strategy) => !ONLY_STRATEGIES || ONLY_STRATEGIES.includes(strategy.name))
 
     const outcomes: QueryOutcome[] = []
@@ -353,6 +377,7 @@ describe('search evaluation', () => {
       warmMs: percentile(warm, 50),
       spotlight
     }
+    for (const item of prepared) await item.cognee?.close()
     const markdown = report(info, outcomes)
     await writeFile(join(OUT, 'report.md'), markdown)
     await writeFile(join(OUT, 'outcomes.json'), `${JSON.stringify({ info, outcomes }, null, 2)}\n`)

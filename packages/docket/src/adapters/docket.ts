@@ -268,9 +268,9 @@ const stderrLogger = (id: string): AdapterLogger => {
 /**
  * The project's canonical inputs - entities, the observations their evidence
  * records and their files' bodies as documents - read on first use, exactly
- * as sync derives them.
+ * as sync derives them, and read again on the first use after `refresh`.
  */
-const projectCanonicalReader = (resolved: ResolvedConfig): CanonicalReader => {
+export const projectCanonicalReader = (resolved: ResolvedConfig): CanonicalReader & { refresh(): void } => {
   let inputs: Promise<CanonicalInput[]> | undefined
   const load = (): Promise<CanonicalInput[]> => {
     inputs ??= validate({ cwd: resolved.projectRoot }).then(({ entities, documents }) =>
@@ -280,7 +280,10 @@ const projectCanonicalReader = (resolved: ResolvedConfig): CanonicalReader => {
   }
   return {
     get: async (kind, id) => (await load()).find((record) => record.kind === kind && record.id === id),
-    list: async (kind) => (await load()).filter((record) => record.kind === kind)
+    list: async (kind) => (await load()).filter((record) => record.kind === kind),
+    refresh: () => {
+      inputs = undefined
+    }
   }
 }
 

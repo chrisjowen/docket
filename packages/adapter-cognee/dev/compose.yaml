@@ -1,0 +1,38 @@
+# A local cognee 1.6.8 server for docket's cognee adapter: see ../README.md.
+# Its models come from Ollama on this machine - pull them first:
+#   ollama pull qwen2.5:7b && ollama pull nomic-embed-text
+# Then: COGNEE_DEFAULT_PASSWORD=<choose one> docker compose -f compose.yaml up -d
+services:
+  cognee:
+    image: cognee/cognee:1.6.8
+    ports:
+      # Loopback only: the default user's password login is for this machine.
+      - "127.0.0.1:${COGNEE_PORT:-8000}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Access control stays on (cognee's default): every request needs a key,
+      # and each dataset is kept apart from every other.
+      DEFAULT_USER_PASSWORD: ${COGNEE_DEFAULT_PASSWORD:?Set COGNEE_DEFAULT_PASSWORD, the password of cognee's default user}
+      TELEMETRY_DISABLED: "true"
+      # Extraction and answers: cognee validates llama3.1:8b; qwen2.5:7b is the
+      # model docket's search evaluation already uses.
+      LLM_PROVIDER: ollama
+      LLM_MODEL: ${COGNEE_LLM_MODEL:-qwen2.5:7b}
+      LLM_ENDPOINT: http://host.docker.internal:11434
+      LLM_API_KEY: ollama
+      LLM_TEMPERATURE: "0.0"
+      EMBEDDING_PROVIDER: ollama
+      EMBEDDING_MODEL: nomic-embed-text:latest
+      EMBEDDING_ENDPOINT: http://host.docker.internal:11434/api/embed
+      EMBEDDING_DIMENSIONS: "768"
+      # Counts tokens to size chunks; cognee fetches it from Hugging Face on first start.
+      HUGGINGFACE_TOKENIZER: nomic-ai/nomic-embed-text-v1.5
+      SYSTEM_ROOT_DIRECTORY: /cognee-storage/system
+      DATA_ROOT_DIRECTORY: /cognee-storage/data
+    volumes:
+      - cognee-system:/cognee-storage/system
+      - cognee-data:/cognee-storage/data
+volumes:
+  cognee-system: {}
+  cognee-data: {}

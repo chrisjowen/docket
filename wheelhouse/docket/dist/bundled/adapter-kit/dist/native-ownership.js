@@ -7,7 +7,8 @@ const keyOf = (kind, id) => `${kind}\u0000${id}`;
  * An upsert writes the new revision first, then deletes every other record of
  * that input - an earlier revision, or a duplicate a crash left behind - so
  * the input is never missing, and once the upsert returns no stale record of
- * it is current. Replaying a revision already stored writes nothing.
+ * it is current. Replaying a revision already stored writes nothing, unless
+ * the store says that record no longer holds what it would write now.
  */
 export class NativeOwnership {
     store;
@@ -25,7 +26,7 @@ export class NativeOwnership {
         const owned = await this.ownership(signal);
         const key = keyOf(record.kind, record.id);
         const existing = owned.get(key) ?? [];
-        const kept = existing.find((native) => native.identity.revision === record.revision) ?? (await this.store.write(record, signal));
+        const kept = (await this.current(existing, record, signal)) ?? (await this.store.write(record, signal));
         owned.set(key, [kept, ...existing.filter((native) => native.nativeId !== kept.nativeId)]);
         await this.prune(key, kept, signal);
     }
@@ -49,6 +50,16 @@ export class NativeOwnership {
     /** Forgets the cached mapping, so the next operation reads it from the engine again. */
     invalidate() {
         this.owned = null;
+    }
+    /** The record already holding the input at its revision, if any still does. */
+    async current(existing, record, signal) {
+        for (const native of existing) {
+            if (native.identity.revision !== record.revision)
+                continue;
+            if (!this.store.holds || (await this.store.holds(native, record, signal)))
+                return native;
+        }
+        return undefined;
     }
     /** Deletes the input's records other than `kept`, one at a time, forgetting each as it goes. */
     async prune(key, kept, signal) {

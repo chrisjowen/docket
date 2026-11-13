@@ -484,7 +484,7 @@ describe('a version 1 .docket.yaml', () => {
 
 /** docket's workspace copies of the adapter packages it does not bundle, as a project would install them. */
 const workspacePackages: AdapterDistribution = {
-  packages: ['@docket/adapter-memvid', '@docket/adapter-mempalace'],
+  packages: ['@docket/adapter-memvid', '@docket/adapter-mempalace', '@docket/adapter-cognee'],
   find: (name) => fileURLToPath(new URL(`../../../${name.replace('@docket/', '')}`, import.meta.url))
 }
 
@@ -536,9 +536,38 @@ describe('docket adapter add mempalace', () => {
   })
 })
 
+describe('docket adapter add cognee', () => {
+  it('adds an instance for a server it does not start, naming the key variable and never its value', async () => {
+    const result = await add('cognee', { '--url': 'http://localhost:8000', '--api-key-env': 'DOCKET_COGNEE_KEY', '--dataset': 'payments' })
+    const { resolved, entry } = await instance('cognee')
+    expect(entry).toEqual({
+      id: 'cognee',
+      module: '@docket/adapter-cognee',
+      roles: ['projection', 'query'],
+      config: { url: 'http://localhost:8000', apiKeyEnv: 'DOCKET_COGNEE_KEY', dataset: 'payments' }
+    })
+    expect(resolved.config.runtimes).toEqual({})
+    expect(result.plan.env).toEqual([expect.objectContaining({ name: 'DOCKET_COGNEE_KEY', secret: true, required: false })])
+    expect(result.plan.next[0]).toMatch(/^Add @docket\/adapter-cognee to the project: it is not published/)
+    expect(result.plan.prerequisites[0]).toMatch(/cognee 1\.6\.8 server/)
+    expect(calls).toEqual([])
+    await expect(openDocket(resolved, { distribution: workspacePackages })).resolves.toBeDefined()
+  })
+
+  it('keeps only what differs from the adapter\'s defaults', async () => {
+    await add('cognee', { '--url': 'http://localhost:8000' })
+    expect((await instance('cognee')).entry?.config).toEqual({ url: 'http://localhost:8000' })
+  })
+
+  it('needs the server URL, and refuses a dataset cognee would', async () => {
+    await expect(add('cognee')).rejects.toThrow(/--url/)
+    await expect(add('cognee', { '--url': 'http://localhost:8000', '--dataset': 'has.dot' })).rejects.toThrow(/no dots and no spaces/)
+  })
+})
+
 describe('docket adapter add, other providers', () => {
   it('lists what it can set up when given one it cannot', async () => {
-    await expect(add('nonesuch')).rejects.toThrow(/No provider "nonesuch"\. .* jsonl, neo4j, mem0, memvid, mempalace/)
+    await expect(add('nonesuch')).rejects.toThrow(/No provider "nonesuch"\. .* jsonl, neo4j, mem0, memvid, mempalace, cognee/)
   })
 })
 
@@ -565,6 +594,6 @@ describe('docket adapters list', () => {
     ])
     expect(result.adapters.find((adapter) => adapter.id === 'missing')?.problem).toMatch(/is not installed/)
     expect(result.adapters.find((adapter) => adapter.id === 'memvid')?.problem).toMatch(/not published to npm/)
-    expect(result.providers.map((provider) => provider.name)).toEqual(['jsonl', 'neo4j', 'mem0', 'memvid', 'mempalace'])
+    expect(result.providers.map((provider) => provider.name)).toEqual(['jsonl', 'neo4j', 'mem0', 'memvid', 'mempalace', 'cognee'])
   })
 })

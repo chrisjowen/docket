@@ -17,6 +17,8 @@ export interface RunInfo {
     queries: { dev: number; test: number; answerable: number; noAnswer: number }
     syncMs: number
     embedMs: number
+    /** Syncing into cognee, cognify included, when the run had a cognee server. */
+    cogneeSyncMs?: number
     /** docket's JSONL lexicalSearch per query, re-reading every document, against the prebuilt index. */
     lexicalMs: { jsonl: number; indexed: number }
   }[]
@@ -84,6 +86,7 @@ export const report = (info: RunInfo, outcomes: readonly QueryOutcome[]): string
   const perCorpus = (strategy: string) => corpora.filter((corpus) => of(strategy, corpus).length > 0).map((corpus) => summarise(of(strategy, corpus)))
   const overall = new Map(strategies.map((strategy) => [strategy, macroAverage(perCorpus(strategy))]))
 
+  const withCognee = info.corpora.some((corpus) => corpus.cogneeSyncMs !== undefined)
   const lines: string[] = []
   lines.push(
     '# Search evaluation results',
@@ -95,7 +98,7 @@ export const report = (info: RunInfo, outcomes: readonly QueryOutcome[]): string
     '## Corpora',
     '',
     table(
-      ['corpus', 'domain', 'template', 'entities', 'links', 'types (with entities)', 'test queries (no-answer)', 'sync ms', 'embed ms'],
+      ['corpus', 'domain', 'template', 'entities', 'links', 'types (with entities)', 'test queries (no-answer)', 'sync ms', 'embed ms', ...(withCognee ? ['cognee sync ms'] : [])],
       info.corpora.map((corpus) => [
         corpus.name,
         corpus.domain,
@@ -105,7 +108,8 @@ export const report = (info: RunInfo, outcomes: readonly QueryOutcome[]): string
         `${corpus.types} (${corpus.typesWithEntities})`,
         `${corpus.queries.test} (${outcomes.filter((outcome) => outcome.corpus === corpus.name && outcome.strategy === strategies[0] && outcome.query.kind === 'no-answer').length})`,
         ms(corpus.syncMs),
-        ms(corpus.embedMs)
+        ms(corpus.embedMs),
+        ...(withCognee ? [ms(corpus.cogneeSyncMs ?? Number.NaN)] : [])
       ])
     ),
     '',

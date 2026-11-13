@@ -7,7 +7,8 @@ What docket's own adapters share, so each adapter package stays small:
   `AdapterDefinition` and `MemoryAdapter` from
   [`docs/adapter-spec.md`](../../docs/adapter-spec.md) §7: entity inputs only,
   answers as one entities block.
-- For recall engines that store every input kind as text (memvid, MemPalace):
+- For recall engines that store every input kind as text (memvid, MemPalace,
+  cognee):
   - `canonicalPassage` - the passage stored for an entity, observation or
     document, and the canonical reference back to it.
   - `NativeOwnership` over a `NativeStore` - the canonical-to-native mapping

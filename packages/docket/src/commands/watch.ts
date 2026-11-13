@@ -1,4 +1,4 @@
-import { openDocket } from '../adapters/docket.js'
+import { openDocket, projectCanonicalReader } from '../adapters/docket.js'
 import type { ResolvedConfig } from '../config/config.js'
 import { loadConfig } from '../config/loader.js'
 import { error } from '../model/diagnostic.js'
@@ -66,7 +66,9 @@ export const watch = async (
   const resolved = await loadConfig(options.cwd)
   const report = options.report ?? consoleReporter
 
-  const docket = await openDocket(resolved)
+  // Adapters read the files as they are when each pass applies, not as they were when watching began.
+  const canonical = projectCanonicalReader(resolved)
+  const docket = await openDocket(resolved, { canonical })
   const manager = await ProjectionManager.forDocket(docket)
   // A watcher runs for hours: an instance that cannot start now would never
   // be synced, so it fails to start rather than watching without it.
@@ -82,6 +84,10 @@ export const watch = async (
   report({ kind: 'watching', root: resolved.memoryRoot })
   const reconciler = createReconciler(resolved, manager, report)
   await reconciler.sync()
+  const fresh = (run: () => Promise<void>): Promise<void> => {
+    canonical.refresh()
+    return run()
+  }
 
   const fail = (cause: unknown): void => {
     const event: WatchEvent = {
@@ -97,9 +103,9 @@ export const watch = async (
   }
 
   const watcher = await watchSource(resolved, {
-    onSource: (path) => reconciler.reconcile(path),
-    onOntology: () => reconciler.reconcileOntology(),
-    onCatchUp: () => reconciler.sync(),
+    onSource: (path) => fresh(() => reconciler.reconcile(path)),
+    onOntology: () => fresh(() => reconciler.reconcileOntology()),
+    onCatchUp: () => fresh(() => reconciler.sync()),
     onError: fail
   })
 

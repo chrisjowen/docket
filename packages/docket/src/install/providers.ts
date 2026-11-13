@@ -469,10 +469,51 @@ const mempalace: AdapterProvider = {
   }
 }
 
+/** cognee's rule for dataset names (1.6.8): no dots and no spaces. */
+const COGNEE_DATASET = /^[^.\s]+$/
+
+const cognee: AdapterProvider = {
+  name: 'cognee',
+  module: '@docket/adapter-cognee',
+  summary: 'a cognee dataset, cognified into a knowledge graph and searched through its REST API',
+  defaultId: 'cognee',
+  async configure({ answers }) {
+    const url = await answers.text({
+      flag: '--url',
+      question: 'cognee server URL',
+      hint: 'the URL of a cognee server you run, e.g. http://localhost:8000',
+      check: checkUrl(['http', 'https'])
+    })
+    const apiKeyEnv = await answers.text({
+      flag: '--api-key-env',
+      question: 'Environment variable holding a cognee API key, if the server needs one',
+      fallback: 'COGNEE_API_KEY',
+      check: checkEnvName
+    })
+    const dataset = await answers.text({
+      flag: '--dataset',
+      question: 'Dataset to file into (empty: one unique to the checkout)',
+      optional: true,
+      check: (value) => (COGNEE_DATASET.test(value) ? undefined : 'a cognee dataset name: no dots and no spaces')
+    })
+    return {
+      config: { url, ...unlessDefault('apiKeyEnv', apiKeyEnv, 'COGNEE_API_KEY'), ...(dataset ? { dataset } : {}) },
+      files: [],
+      env: [{ name: apiKeyEnv, purpose: `a cognee API key for ${url}, when it requires one`, secret: true, required: false }],
+      prerequisites: [
+        'A cognee 1.6.8 server at that URL - the one it was tested with; docket never starts one (packages/adapter-cognee/README.md has a Docker recipe)'
+      ],
+      notes: [
+        'Each sync cognifies what it added: the cognee server runs its own LLM over every new entity, so the first sync of a large docket takes a while and costs model calls.'
+      ]
+    }
+  }
+}
+
 /**
  * Every provider `docket adapter add` knows, by name. A new adapter package
  * gets one here; a project-local module is configured by hand instead.
  */
-export const PROVIDERS: readonly AdapterProvider[] = [jsonl, neo4j, mem0, memvid, mempalace]
+export const PROVIDERS: readonly AdapterProvider[] = [jsonl, neo4j, mem0, memvid, mempalace, cognee]
 
 export const findProvider = (name: string): AdapterProvider | undefined => PROVIDERS.find((provider) => provider.name === name)
