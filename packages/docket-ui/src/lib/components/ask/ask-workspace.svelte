@@ -94,7 +94,7 @@
 <div class="h-full min-h-0 overflow-y-auto">
   <div class="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-5 sm:px-6">
     <form class="flex flex-col gap-2.5" onsubmit={submit}>
-      <label for="ask-question" class="font-serif text-xl font-semibold">Ask the adapters</label>
+      <label for="ask-question" class="serif-title mb-1 text-4xl sm:text-[2.6rem]"><em>Ask</em> the adapters</label>
       <div class="flex gap-2">
         <Input
           id="ask-question"
@@ -169,7 +169,7 @@
     {#if outcome}
       <div class="flex flex-col gap-5 transition-opacity {session.pending ? 'opacity-50' : ''}">
         <div class="flex flex-col gap-2">
-          <p class="flex gap-2.5"><span class="text-gilt font-serif font-semibold">Q.</span><span class="font-serif text-lg italic">{outcome.question}</span></p>
+          <p class="flex gap-2.5"><span class="text-signal font-serif font-semibold">Q.</span><span class="font-serif text-lg italic">{outcome.question}</span></p>
           <ul class="flex flex-wrap gap-1.5 text-xs" aria-label="Adapters asked">
             {#each outcome.results as result (result.adapter)}
               <li>

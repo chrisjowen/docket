@@ -1,12 +1,12 @@
 import { SEARCH_SCHEMA, type SearchGraph } from '../../../docket/src/mcp/types.js'
-import type { GraphLink, GraphNode } from '$lib/components/graph-view.svelte'
-import { edgeKey, neighbourhood, slotColour, slotsByCount } from '$lib/model.js'
+import type { CardLink, CardNode } from '$lib/components/card-graph.svelte'
+import { edgeKey, neighbourhood, slotColour, slotsByCount, typeCode } from '$lib/model.js'
 
 export type { SearchGraph, SearchMatch, SearchNode } from '../../../docket/src/mcp/types.js'
 
 export interface Board {
-  nodes: GraphNode[]
-  links: GraphLink[]
+  nodes: CardNode[]
+  links: CardLink[]
   /** What stays at full strength once a resource is picked: it, its neighbours and its links. Null: everything. */
   emphasis: { nodes: Set<string>; links: Set<string> } | null
 }
@@ -16,7 +16,8 @@ export const hasSubgraph = (graph: SearchGraph): boolean =>
   graph.links.some((link) => link.via === 'adapter') || graph.nodes.some((node) => !node.match && node.via === 'adapter')
 
 /**
- * The evidence board for a search, as the casebook draws it: every match,
+ * The evidence board for a search, as the casebook draws it - a case card for
+ * each resource, as Docket Cloud draws its network: every match,
  * every node and link of the subgraphs the projections returned, and the
  * canonical context - neighbours one link away and the links the files
  * declare between them - labelled as the casebook labels its board. When a
@@ -25,8 +26,26 @@ export const hasSubgraph = (graph: SearchGraph): boolean =>
  * a resource picked, it and what it links to stand out.
  */
 export const boardOf = (graph: SearchGraph, selected: string | null): Board => {
-  const nodes: GraphNode[] = graph.nodes.map((node) => ({ id: node.id, title: node.title, type: node.type, ghost: node.ghost }))
-  const links: GraphLink[] = graph.links.map((link) => ({ key: edgeKey(link), source: link.source, rel: link.rel, target: link.target }))
+  const colour = typeColours(graph)
+  const confidence = new Map(graph.matches.map((match) => [match.id, match.confidence]))
+  const nodes: CardNode[] = graph.nodes.map((node) => ({
+    id: node.id,
+    title: node.title,
+    type: node.type,
+    ghost: node.ghost,
+    code: node.ghost ? '' : typeCode(node.type),
+    colour: node.ghost ? 'var(--graph-other)' : colour(node.type),
+    weight: confidence.get(node.id) ?? null,
+    note: node.ghost ? null : node.match ? 'match' : node.via === 'adapter' ? 'returned' : 'one link away',
+    weak: false
+  }))
+  const links: CardLink[] = graph.links.map((link) => ({
+    key: edgeKey(link),
+    source: link.source,
+    rel: link.rel,
+    target: link.target,
+    weak: link.confidence !== undefined && link.confidence < 0.5
+  }))
   if (selected !== null && graph.nodes.some((node) => node.id === selected)) {
     return {
       nodes,

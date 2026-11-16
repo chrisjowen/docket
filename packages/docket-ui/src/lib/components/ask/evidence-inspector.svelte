@@ -76,7 +76,7 @@
     {#if isDerived(evidence)}
       <p class="font-serif text-lg leading-snug break-words">{evidence.text}</p>
     {:else}
-      <blockquote class="border-gilt border-l-2 pl-3 font-serif text-lg leading-snug break-words whitespace-pre-wrap">{evidence.text}</blockquote>
+      <blockquote class="border-signal border-l-2 pl-3 font-serif text-lg leading-snug break-words whitespace-pre-wrap">{evidence.text}</blockquote>
     {/if}
     <p class="text-muted-foreground text-xs">{STANDING_DETAIL[standing]}</p>
   </header>

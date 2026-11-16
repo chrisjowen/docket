@@ -3,6 +3,23 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## Unreleased
+
+### Docket Cloud's look, in docket open and the search app
+
+`docket open`, the `docket_search` MCP app and the casebook inside
+Wheelhouse now look like Docket Cloud: its "Case Record" design of ivory
+paper, ink and one accent, signal red, in light and dark, set in Instrument
+Serif, Geist and Geist Mono. The evidence board is Docket Cloud's network:
+each exhibit a case card - its id, type code, title and confidence - on a
+dotted canvas, joined by curved connectors; picking one frames it and its
+neighbours, draws its links in red and fades the rest. The casebook is laid
+out as a docket is in the cloud - a sidebar with Browse, Ask and Adapters, a
+breadcrumb bar, serif page titles and tabbed views - with the type and
+relationship filters behind the board's Filters button. The search app keeps
+this look in every host, following only the host's light or dark theme, so
+Docket Cloud returns it the same way once it takes this release.
+
 ## 0.8.0
 
 ### A cognee adapter

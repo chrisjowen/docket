@@ -1,11 +1,12 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import './lib/styles/fonts.css';
 @import './lib/styles/casebook.css';
 @import './lib/styles/tokens.css';
 
 /*
- * A bound casebook: pages of cool paper ruled faintly for the evidence board,
- * set in docket open's own page. shadcn-svelte tokens map onto it
+ * docket open's page, in Docket Cloud's "Case Record" look: ivory paper, ink
+ * and one accent, signal red. The shadcn-svelte tokens map onto it
  * (lib/styles/tokens.css); the casebook's own tokens are in
  * lib/styles/casebook.css.
  */
@@ -13,6 +14,11 @@
   html,
   body {
     @apply h-full overflow-hidden bg-background text-foreground;
-    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--sans);
+    font-size: 14.5px;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: var(--signal-soft);
   }
 }

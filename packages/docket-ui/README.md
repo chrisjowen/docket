@@ -74,11 +74,11 @@ same bundle into `wheelhouse/ui/index.js`; see
 ## docket_search's MCP app
 
 `src/mcp-app/` is the app an MCP host draws for docket's `docket_search`
-tool ([docs/mcp.md](../../docs/mcp.md)). It is the casebook's graph view
-(`src/lib/components/graph-view.svelte`) showing what the search found and
+tool ([docs/mcp.md](../../docs/mcp.md)). It is the casebook's evidence board
+(`src/lib/components/card-graph.svelte`) showing what the search found and
 the resources one link away, with the matches listed beside it. It speaks the
-MCP Apps bridge over postMessage (`bridge.ts`) and draws in the host's colours
-where the host gives them. `vite.mcp-app.config.ts` builds it as one HTML page
+MCP Apps bridge over postMessage (`bridge.ts`), follows the host's light or
+dark theme and keeps docket's own look over the host's colours. `vite.mcp-app.config.ts` builds it as one HTML page
 with everything inlined, which `pnpm build` writes to `mcp-app/search.html`.
 The docket package's build copies it to `dist/mcp-app/`, where `docket open`
 serves it as `ui://docket/search.html`.

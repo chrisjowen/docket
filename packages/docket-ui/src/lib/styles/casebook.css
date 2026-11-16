@@ -1,59 +1,80 @@
-@custom-variant dark (&:is(.dark *));
-
 /*
- * The casebook's own tokens: the bottle-green cloth spine with gilt lettering,
- * the evidence board's ruled paper and the graph's categorical series. Set on
- * :host as well as :root, so the casebook drawn in a shadow root inside
- * another page - Wheelhouse's - has them too. The shadcn-svelte tokens they
- * sit beside (--background, --foreground, ...) are the page's: docket open's
- * own in app.css, or Wheelhouse's, which reach into the shadow root.
+ * The casebook's own tokens, in Docket Cloud's "Case Record" look: paper and
+ * ink, hairline rules, one accent (signal red) and the graph's categorical
+ * series. Set on :host as well as :root, so the casebook drawn in a shadow
+ * root inside another page - Wheelhouse's - has them too. There the paper and
+ * ink come from the page's shadcn-svelte tokens (--background, --card, ...),
+ * so the casebook follows its themes; docket open and the search app set them
+ * exactly (lib/styles/tokens.css).
  */
 :root,
 :host {
-  --spine: #1f3b2d;
-  --spine-foreground: #ece6d2;
-  --spine-muted: #a9b5a6;
-  --gilt: #b08d3c;
+  --bg: var(--background);
+  --paper: var(--card);
+  --sunk: var(--muted);
+  --side: var(--muted);
+  --ink: var(--foreground);
+  --ink-2: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  --mute: var(--muted-foreground);
+  --rule: var(--border);
+  --rule-2: var(--input);
+  --shadow-1: 0 1px 2px rgb(20 16 8 / 0.05), 0 0 0 1px var(--rule);
+  --shadow-2: 0 14px 36px -14px rgb(20 16 8 / 0.28), 0 0 0 1px var(--rule);
 
-  --graph-surface: #f8f8f3;
-  --graph-rule: #e7e8df;
-  --graph-edge: #bfc2b5;
-  --graph-label: #4b524c;
-  --graph-other: #8a8d84;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
-  --series-6: #008300;
-  --series-7: #4a3aa7;
-  --series-8: #e34948;
+  --signal: #d92d20;
+  --signal-ink: #ffffff;
+  --signal-soft: #fbe5e1;
+  --ok: #1d7348;
+  --ok-soft: #e3f1e8;
+  --warn: #b54708;
+  --warn-soft: #fcefd9;
+  --r-card: 10px;
+  --serif: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --graph-surface: var(--paper);
+  --graph-rule: #ece7db;
+  --graph-edge: #bdb6a6;
+  --graph-label: var(--ink-2);
+  --graph-other: #8f897c;
+  --series-1: #2c5a88;
+  --series-2: #d95926;
+  --series-3: #0f736b;
+  --series-4: #a15c07;
+  --series-5: #c4457a;
+  --series-6: #4a7a12;
+  --series-7: #5a52b3;
+  --series-8: #d92d20;
   /* Types past the palette get generated hues at this lightness and chroma. */
-  --series-generated-l: 0.58;
-  --series-generated-c: 0.15;
+  --series-generated-l: 0.55;
+  --series-generated-c: 0.14;
 }
 
 .dark {
-  --spine: #0c120e;
-  --spine-foreground: #e4d9b4;
-  --spine-muted: #8d9a90;
-  --gilt: #c9a752;
+  --signal: #ff5a47;
+  --signal-ink: #160403;
+  --signal-soft: #3a1612;
+  --ok: #5cc48f;
+  --ok-soft: #12291d;
+  --warn: #f5a14a;
+  --warn-soft: #33220d;
 
-  --graph-surface: #141b16;
-  --graph-rule: #1b241e;
-  --graph-edge: #46524a;
-  --graph-label: #bfc6bc;
-  --graph-other: #7f877f;
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #d55181;
-  --series-6: #008300;
-  --series-7: #9085e9;
-  --series-8: #e66767;
-  --series-generated-l: 0.66;
-  --series-generated-c: 0.14;
+  --graph-rule: #1c1c19;
+  --graph-edge: #4a4842;
+  --graph-other: #8f8a7f;
+  --series-1: #82b2e3;
+  --series-2: #f08a5d;
+  --series-3: #5fcbbf;
+  --series-4: #eab35a;
+  --series-5: #e88bb3;
+  --series-6: #a6d16a;
+  --series-7: #a8a2f0;
+  --series-8: #ff6b59;
+  --series-generated-l: 0.72;
+  --series-generated-c: 0.13;
 }
 
 @theme inline {
@@ -80,24 +101,114 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-graph-surface: var(--graph-surface);
-  --color-spine: var(--spine);
-  --color-spine-foreground: var(--spine-foreground);
-  --color-spine-muted: var(--spine-muted);
-  --color-gilt: var(--gilt);
-  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --color-bg: var(--bg);
+  --color-paper: var(--paper);
+  --color-sunk: var(--sunk);
+  --color-side: var(--side);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-mute: var(--mute);
+  --color-rule: var(--rule);
+  --color-rule-2: var(--rule-2);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --shadow-paper: var(--shadow-1);
+  --shadow-lift: var(--shadow-2);
+  --font-serif: var(--serif);
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  /* Instrument Serif has one weight: never fake a bold one. */
+  :root,
+  :host {
+    font-synthesis: none;
+  }
 }
 
-/* Section heads in the side panels: set like a casebook's running heads. */
+/* Section heads in the side panels: small mono capitals, as Docket Cloud sets its labels. */
 @utility section-title {
-  font-family: var(--font-serif);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: 0.005em;
-  color: var(--foreground);
+  font: 500 10.5px/1.2 var(--mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+/* The same label anywhere: captions, column heads. */
+@utility label-mono {
+  font: 500 10.5px/1.2 var(--mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+/* A page or panel title: the serif, with its key word in red italic (`<em>`). */
+@utility serif-title {
+  font-family: var(--serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  & em {
+    font-style: italic;
+    color: var(--signal);
+  }
+}
+
+/* A record type's short code (SVC, API, DS), coloured by --c. */
+@utility type-code {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font: 600 9.5px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--paper);
+  background: var(--c, var(--graph-other));
+}
+
+/* A live dot that pings: the index up to date, or behind. */
+@utility live-dot {
+  position: relative;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ok);
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--ok);
+    animation: docket-ping 2.4s ease-out infinite;
+  }
+}
+
+@keyframes docket-ping {
+  from {
+    transform: scale(0.7);
+    opacity: 0.85;
+  }
+  to {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

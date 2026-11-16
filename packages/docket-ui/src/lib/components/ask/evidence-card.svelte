@@ -42,7 +42,7 @@
   {#if byEngine}
     <span class="break-words">{evidence.text}</span>
   {:else}
-    <blockquote class="border-gilt/60 border-l-2 pl-2.5 font-serif break-words">{evidence.text}</blockquote>
+    <blockquote class="border-signal/60 border-l-2 pl-2.5 font-serif break-words">{evidence.text}</blockquote>
   {/if}
   {#if where}
     <span class="text-muted-foreground truncate font-mono text-[11px]" title={referenceLocation(where)}>

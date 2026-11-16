@@ -51,7 +51,7 @@
   <div class="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-5 sm:px-6">
     <header class="flex flex-wrap items-end gap-3">
       <div class="flex flex-col gap-1">
-        <h1 class="font-serif text-xl font-semibold">Adapters</h1>
+        <h1 class="serif-title text-4xl sm:text-[2.6rem]">The <em>adapters</em></h1>
         <p class="text-muted-foreground text-sm">
           The memory engines configured in <code class="font-mono">.docket.yaml</code>: what each is enabled for, whether it can be reached,
           and how far its index lags the files. A healthy connection does not mean a fresh index.
