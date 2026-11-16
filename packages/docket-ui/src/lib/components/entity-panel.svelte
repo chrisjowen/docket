@@ -56,7 +56,7 @@
       <TypeMark type={entity.type} size="lg" />
       <span class="text-muted-foreground text-sm">Exhibit, {entity.type.replaceAll('_', ' ')}</span>
     </div>
-    <h2 class="font-serif text-2xl leading-tight font-semibold">{entity.title}</h2>
+    <h2 class="font-serif text-3xl leading-tight">{entity.title}</h2>
     <div class="flex items-center gap-1">
       <code class="bg-muted truncate rounded px-1.5 py-0.5 font-mono text-xs">{entity.id}</code>
       <Button variant="ghost" size="icon-xs" aria-label="Copy id" onclick={() => copy(entity.id)}><Copy /></Button>

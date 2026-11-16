@@ -388,3 +388,34 @@ export const boardAnswer = (reply: UiChatAnswer): UiAnswer => {
     paths: reply.answer.paths.filter((path) => cited.has(path.nodes[0] ?? '') && cited.has(path.nodes.at(-1) ?? ''))
   }
 }
+
+/** The short codes types wear on their cards, as Docket Cloud's do; any other type takes the first three letters of its name. */
+const TYPE_CODES: Record<string, string> = {
+  service: 'SVC',
+  api: 'API',
+  datastore: 'DS',
+  'data-store': 'DS',
+  database: 'DB',
+  queue: 'Q',
+  team: 'TM',
+  person: 'PER',
+  decision: 'DEC',
+  incident: 'INC',
+  runbook: 'RB',
+  system: 'SYS',
+  library: 'LIB',
+  repository: 'REPO',
+  repo: 'REPO',
+  document: 'DOC',
+  environment: 'ENV'
+}
+
+export const typeCode = (type: string): string =>
+  TYPE_CODES[type.toLowerCase()] ?? (type.replace(/[^a-z0-9]/gi, '').slice(0, 3).toUpperCase() || '?')
+
+/** Every word of `needle` somewhere in the haystack, ignoring case. */
+export const matches = (haystack: (string | undefined)[], needle: string): boolean => {
+  const words = needle.toLowerCase().split(/\s+/).filter(Boolean)
+  const joined = haystack.filter(Boolean).join(' ').toLowerCase()
+  return words.every((word) => joined.includes(word))
+}

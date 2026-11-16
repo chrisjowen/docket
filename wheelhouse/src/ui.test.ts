@@ -137,7 +137,7 @@ describe('<docket-casebook>', () => {
     expect(customElements.get('docket-casebook')).toBeDefined()
     const element = mount({ service: async () => stopped, launch: async () => running }, data())
     await shows(element, 'docket’s viewer is not running')
-    expect(element.shadowRoot?.querySelector('style')?.textContent).toContain('--spine')
+    expect(element.shadowRoot?.querySelector('style')?.textContent).toContain('--signal')
   })
 
   it('offers Launch while the viewer is stopped, starts it through the host on a click, then opens the casebook', async () => {
@@ -152,7 +152,7 @@ describe('<docket-casebook>', () => {
     expect(text).toContain('cd /work/shop && docket open --port 4400')
     expect(text).toContain('Runs docket 0.6.0, shipped with this plugin.')
     button(element, 'Launch').click()
-    await shows(element, '2 exhibits, 1 relationship')
+    await shows(element, '2 exhibits and 1 relationship')
     expect(launch).toHaveBeenCalledWith('viewer')
   })
 
@@ -160,8 +160,8 @@ describe('<docket-casebook>', () => {
     const fetch = api()
     vi.stubGlobal('fetch', fetch)
     const element = mount({ service: async () => running, launch: async () => running }, data())
-    const text = await shows(element, '2 exhibits, 1 relationship')
-    for (const label of ['Browse', 'Ask', 'Adapters', 'Graph', 'Table', 'History', 'Inspector', 'Chat']) expect(text).toContain(label)
+    const text = await shows(element, '2 exhibits and 1 relationship')
+    for (const label of ['Browse', 'Ask', 'Adapters', 'Network', 'Exhibits', 'History', 'Inspector', 'Chat']) expect(text).toContain(label)
     expect(element.shadowRoot?.querySelector('input[name="quick-search"]')).not.toBeNull()
     expect(element.shadowRoot?.querySelector('[aria-label="Sync the projections"]')).not.toBeNull()
     // Every request goes to the viewer, never to Wheelhouse's own origin.

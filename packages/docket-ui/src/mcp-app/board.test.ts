@@ -66,13 +66,23 @@ describe('boardOf', () => {
         edgeKey({ source: 'service.ledger', rel: 'depends_on', target: 'datasource.ledger-db' })
       ])
     )
-    // The graph view is handed only what it draws.
+    // The board is handed only what it draws.
     expect(board.links[0]).toEqual({
       key: edgeKey({ source: 'service.orders', rel: 'depends_on', target: 'service.ledger' }),
       source: 'service.orders',
       rel: 'depends_on',
-      target: 'service.ledger'
+      target: 'service.ledger',
+      weak: false
     })
+  })
+
+  it('draws each resource as a case card: its type code and colour, its confidence when a match, and why it is there', () => {
+    const search = graph()
+    search.matches[0] = { ...search.matches[0]!, confidence: 0.8 }
+    const [orders, payments, ledger] = boardOf(search, null).nodes
+    expect(orders).toMatchObject({ code: 'SVC', colour: 'var(--series-1)', weight: 0.8, note: 'match' })
+    expect(payments).toMatchObject({ code: 'TM', colour: 'var(--series-2)', weight: null, note: 'one link away' })
+    expect(ledger).toMatchObject({ ghost: true, code: '', note: null })
   })
 
   it('still brings a picked resource forward over a returned subgraph, canonical context included', () => {

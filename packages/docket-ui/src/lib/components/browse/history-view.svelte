@@ -116,7 +116,7 @@
                   {@const time = timeOf(entry.at)}
                   <li class="relative">
                     <span
-                      class="absolute top-3 -left-[1.3rem] size-2 rounded-full {entry.semantics === 'event' ? 'bg-gilt' : 'border-muted-foreground border bg-background'}"
+                      class="absolute top-3 -left-[1.3rem] size-2 rounded-full {entry.semantics === 'event' ? 'bg-signal' : 'border-muted-foreground border bg-background'}"
                       aria-hidden="true"
                     ></span>
                     <button

@@ -115,7 +115,8 @@ export class Workspace {
   inspector = $state.raw<InspectorTarget | null>(null)
   sideTab = $state<'inspector' | 'chat'>('inspector')
   panelOpen = $state(true)
-  showFilters = $state(true)
+  /** The board's filter panel is open. */
+  showFilters = $state(false)
 
   browseView = $state<BrowseView>('graph')
   readonly hiddenTypes = new SvelteSet<string>()

@@ -113,11 +113,11 @@
       {#each turns as turn, index (index)}
         <article class="flex flex-col gap-3">
           <div class="flex gap-2.5">
-            <span class="text-gilt w-4 shrink-0 font-serif font-semibold">Q.</span>
+            <span class="text-signal w-4 shrink-0 font-serif font-semibold">Q.</span>
             <p class="min-w-0 font-serif break-words italic">{turn.question}</p>
           </div>
           <div class="flex gap-2.5">
-            <span class="text-gilt w-4 shrink-0 font-serif font-semibold">A.</span>
+            <span class="text-signal w-4 shrink-0 font-serif font-semibold">A.</span>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
               {#if turn.error}
                 <div class="border-destructive/40 text-destructive flex gap-2 rounded-md border p-3 text-sm">

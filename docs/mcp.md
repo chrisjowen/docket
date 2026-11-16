@@ -186,12 +186,9 @@ The app speaks the MCP Apps bridge:
   `docket-search.v1`, else shows the result's text) and
   `ui/notifications/tool-cancelled`. It answers `ui/resource-teardown`.
 - It follows `ui/notifications/host-context-changed`, and the `hostContext`
-  from `ui/initialize`. It takes the light or dark `theme`, and the host's
-  style variables over docket's own colours: `--color-background-primary`,
-  `--color-background-secondary`, `--color-text-primary`,
-  `--color-text-secondary`, `--color-border-primary`, `--border-radius-md` and
-  `--font-sans` (`HOST_TOKENS` in `bridge.ts`). The graph keeps the casebook's
-  own surface and type colours.
+  from `ui/initialize`. It takes the light or dark `theme`, and keeps docket's
+  own look - Docket Cloud's paper, ink and signal red, its type and its
+  network of case cards - over the host's style variables.
 - It asks the host for:
   - `tools/call` of `docket_search`, from its search box.
   - `ui/open-link` of `<viewer>#<id>`, through **Open in docket** on a picked

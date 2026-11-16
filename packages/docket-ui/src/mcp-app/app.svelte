@@ -3,18 +3,18 @@
   import Maximize2 from '@lucide/svelte/icons/maximize-2'
   import Minimize2 from '@lucide/svelte/icons/minimize-2'
   import Search from '@lucide/svelte/icons/search'
-  import GraphView, { type FocusRequest } from '$lib/components/graph-view.svelte'
-  import TypeMark from '$lib/components/type-mark.svelte'
+  import CardGraph, { type FocusRequest } from '$lib/components/card-graph.svelte'
+  import DocketMark from '$lib/components/docket-mark.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { iconOf } from '$lib/icons.js'
-  import { setTypeStyle } from '$lib/type-style.js'
+  import { typeCode } from '$lib/model.js'
   import type { AppBridge, ToolResult } from './bridge.js'
   import { boardOf, hasSubgraph, searchOf, typeColours, type SearchGraph, type SearchNode } from './board.js'
 
   /**
    * docket_search's app: the resources the search found, the subgraphs the
    * projections returned, and the resources a link away as faded context, on
-   * the casebook's evidence board, with the matches and paths listed beside it.
+   * the casebook's evidence board - case cards, in Docket Cloud's look - with
+   * the matches and paths listed beside it.
    * It searches again through the same tool, and opens a resource in docket
    * open's casebook when the host lets it open links.
    */
@@ -55,8 +55,6 @@
   })
 
   const colours = $derived(graph ? typeColours(graph) : () => 'var(--graph-other)')
-  const icons = $derived(new Map(graph?.types.map((type) => [type.name, type.icon]) ?? []))
-  setTypeStyle({ colour: (type) => colours(type), icon: (type) => iconOf(type, icons.get(type)) })
 
   const board = $derived(graph ? boardOf(graph, selected) : null)
   const picked = $derived(graph?.nodes.find((node) => node.id === selected) ?? null)
@@ -121,19 +119,28 @@
 
 {#snippet provenance(link: SearchGraph['links'][number])}
   {#if link.via === 'adapter'}
-    <span class="text-muted-foreground">· {link.foundBy?.join(', ')}{link.confidence === undefined ? '' : ` · confidence ${link.confidence}`}</span>
+    <span class="text-mute">· {link.foundBy?.join(', ')}{link.confidence === undefined ? '' : ` · confidence ${link.confidence}`}</span>
     {#each link.why ?? [] as why, index (index)}
-      <span class="text-muted-foreground block pl-2 text-[11px] break-words">{why}</span>
+      <span class="text-mute block pl-2 text-[11px] break-words">{why}</span>
     {/each}
   {/if}
 {/snippet}
 
-<div class="bg-background text-foreground flex flex-col {fullscreen ? 'h-screen' : 'h-[30rem]'}">
-  <header class="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-    <div class="flex min-w-0 flex-1 items-center gap-2">
-      <Search class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+{#snippet code(type: string | null)}
+  {#if type}
+    <span class="type-code mt-0.5 shrink-0" style="--c: {colours(type)}">{typeCode(type)}</span>
+  {:else}
+    <span class="type-code ghost mt-0.5 shrink-0">REF</span>
+  {/if}
+{/snippet}
+
+<div class="bg-bg text-ink flex flex-col {fullscreen ? 'h-screen' : 'h-[34rem]'}">
+  <header class="flex flex-wrap items-center gap-2.5 px-3 pt-3 pb-2">
+    <DocketMark size={24} />
+    <label class="find flex min-w-0 flex-1 items-center gap-2">
+      <Search class="text-mute size-4 shrink-0" aria-hidden="true" />
       <input
-        class="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
+        class="placeholder:text-mute min-w-0 flex-1 bg-transparent text-sm outline-none"
         placeholder="Search the docket"
         aria-label="Search the docket"
         enterkeyhint="search"
@@ -141,11 +148,11 @@
         onkeydown={search}
         disabled={searching}
       />
-    </div>
+    </label>
     {#if graph}
-      <span class="text-muted-foreground shrink-0 text-xs">
+      <span class="label-mono shrink-0">
         {graph.matches.length}
-        {graph.matches.length === 1 ? 'match' : 'matches'} in {graph.project.name}
+        {graph.matches.length === 1 ? 'match' : 'matches'} · {graph.project.name}
       </span>
     {/if}
     {#if displayModes().includes('fullscreen')}
@@ -156,62 +163,60 @@
   </header>
 
   {#if error}
-    <p class="text-destructive border-b px-3 py-1.5 text-xs">{error}</p>
+    <p class="text-signal px-3 pb-1.5 text-xs">{error}</p>
   {/if}
 
   {#if !result()}
-    <div class="text-muted-foreground grid flex-1 place-items-center text-sm">Searching the docket…</div>
+    <div class="text-mute grid flex-1 place-items-center font-serif text-xl italic">Searching the docket…</div>
   {:else if problem !== null}
     <div class="grid flex-1 place-items-center p-6">
-      <p class="text-muted-foreground max-w-md text-sm whitespace-pre-line">{problem}</p>
+      <p class="text-mute max-w-md text-sm whitespace-pre-line">{problem}</p>
     </div>
   {:else if graph && board}
-    <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_15rem] sm:grid-rows-1">
+    <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-3 px-3 pb-3 sm:grid-cols-[minmax(0,1fr)_16rem] sm:grid-rows-1">
       <div class="min-h-0 min-w-0">
         <!-- Each result is a board of its own, laid out and framed afresh. -->
         {#key graph}
-        <GraphView
+        <CardGraph
           nodes={board.nodes}
           links={board.links}
-          colourOf={colours}
-          iconOf={(type) => iconOf(type, icons.get(type))}
           {selected}
           emphasis={board.emphasis}
           {focus}
           onselect={pick}
+          find={false}
+          hint={false}
           emptyHint={graph.index.synced && graph.index.behind === 0
             ? 'Nothing in the docket matches. Try other words.'
             : 'Nothing matches, and the search index is behind the files: run docket sync.'}
         />
         {/key}
       </div>
-      <aside class="bg-card flex max-h-48 min-h-0 flex-col overflow-y-auto border-t text-sm sm:max-h-none sm:border-t-0 sm:border-l">
+      <aside class="bg-paper shadow-paper flex max-h-48 min-h-0 flex-col overflow-y-auto rounded-[14px] text-sm sm:max-h-none">
         {#if picked}
-          <div class="flex flex-col gap-1.5 p-3">
+          <div class="flex flex-col gap-2 p-3.5">
             <div class="flex items-start gap-2">
-              <TypeMark type={picked.ghost ? null : picked.type} size="sm" class="mt-0.5" />
-              <div class="min-w-0">
-                <p class="font-medium break-words">{picked.ghost ? picked.id : picked.title}</p>
-                <p class="text-muted-foreground font-mono text-[11px] break-all">{picked.id}</p>
-              </div>
+              {@render code(picked.ghost ? null : picked.type)}
+              <span class="text-mute min-w-0 font-mono text-[11px] break-all">{picked.id}</span>
             </div>
+            <p class="font-serif text-[1.4rem] leading-tight break-words">{picked.ghost ? picked.id : picked.title}</p>
             {#if picked.ghost}
-              <p class="text-muted-foreground text-xs">No file in the docket defines it yet{picked.via === 'adapter' ? ': a projection returned it' : ''}.</p>
+              <p class="text-mute text-xs">No file in the docket defines it yet{picked.via === 'adapter' ? ': a projection returned it' : ''}.</p>
             {:else}
-              <p class="text-muted-foreground text-xs">{picked.type} · {roleOf(picked)}</p>
-              {#if picked.path}<p class="text-muted-foreground font-mono text-[11px] break-all">{picked.path}</p>{/if}
+              <p class="text-mute text-xs">{picked.type} · {roleOf(picked)}</p>
+              {#if picked.path}<p class="text-mute font-mono text-[11px] break-all">{picked.path}</p>{/if}
             {/if}
             {#if pickedLinks}
-              <ul class="mt-1 flex flex-col gap-0.5 text-xs">
+              <ul class="mt-1 flex flex-col gap-1 text-xs">
                 {#each pickedLinks.outgoing as link (`${link.rel}\u0000${link.target}`)}
                   <li class={subgraph && link.via === 'canonical' ? 'opacity-60' : ''}>
-                    <span class="text-muted-foreground">{link.rel} →</span> <button class="text-left hover:underline" onclick={() => pick(link.target)}>{titleOf(link.target)}</button>
+                    <span class="rel">{link.rel} →</span> <button class="text-left hover:underline" onclick={() => pick(link.target)}>{titleOf(link.target)}</button>
                     {@render provenance(link)}
                   </li>
                 {/each}
                 {#each pickedLinks.incoming as link (`${link.source}\u0000${link.rel}`)}
                   <li class={subgraph && link.via === 'canonical' ? 'opacity-60' : ''}>
-                    <button class="text-left hover:underline" onclick={() => pick(link.source)}>{titleOf(link.source)}</button> <span class="text-muted-foreground">{link.rel} →</span>
+                    <button class="text-left hover:underline" onclick={() => pick(link.source)}>{titleOf(link.source)}</button> <span class="rel">{link.rel} →</span>
                     {@render provenance(link)}
                   </li>
                 {/each}
@@ -225,49 +230,74 @@
             </div>
           </div>
         {:else}
-          <ul class="flex flex-col py-1">
+          <p class="label-mono px-3.5 pt-3.5 pb-1.5">Matches</p>
+          <ul class="flex flex-col pb-1">
             {#each graph.matches as match (match.id)}
               <li>
-                <button class="hover:bg-accent flex w-full items-start gap-2 px-3 py-1.5 text-left" onclick={() => pick(match.id)}>
-                  <TypeMark type={match.type} size="sm" class="mt-0.5" />
+                <button class="hover:bg-sunk flex w-full items-start gap-2 px-3.5 py-1.5 text-left" onclick={() => pick(match.id)}>
+                  {@render code(match.type)}
                   <span class="min-w-0">
                     <span class="block truncate">{match.title}</span>
-                    <span class="text-muted-foreground block truncate font-mono text-[11px]">{match.id}</span>
+                    <span class="text-mute block truncate font-mono text-[11px]">{match.id}</span>
                   </span>
                 </button>
               </li>
             {:else}
-              <li class="text-muted-foreground px-3 py-2 text-xs">No matches.</li>
+              <li class="text-mute px-3.5 py-2 text-xs">No matches.</li>
             {/each}
           </ul>
           {#if graph.paths.length > 0}
-            <p class="text-muted-foreground border-t px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide uppercase">Paths returned</p>
-            <ol class="flex flex-col gap-1 px-3 pb-2 text-xs">
+            <p class="label-mono border-t px-3.5 pt-3 pb-1.5">Paths returned</p>
+            <ol class="flex flex-col gap-1 px-3.5 pb-2 text-xs">
               {#each graph.paths as path, index (index)}
                 <li class="flex flex-wrap items-center gap-x-1">
                   {#each path.nodes as id, step (step)}
-                    {#if step > 0}<span class="text-muted-foreground">→</span>{/if}
+                    {#if step > 0}<span class="text-mute">→</span>{/if}
                     <button class="text-left hover:underline" onclick={() => pick(id)}>{titleOf(id)}</button>
                   {/each}
-                  <span class="text-muted-foreground">· {path.foundBy.join(', ')}</span>
+                  <span class="text-mute">· {path.foundBy.join(', ')}</span>
                   {#each path.why ?? [] as why, line (line)}
-                    <span class="text-muted-foreground block w-full pl-2 text-[11px] break-words">{why}</span>
+                    <span class="text-mute block w-full pl-2 text-[11px] break-words">{why}</span>
                   {/each}
                 </li>
               {/each}
             </ol>
           {/if}
           {#if subgraph && graph.nodes.some((node) => node.via === 'canonical')}
-            <p class="text-muted-foreground px-3 pb-2 text-xs">Faded: one link away in the files, not returned by a projection.</p>
+            <p class="text-mute px-3.5 pb-2 text-xs">Faded: one link away in the files, not returned by a projection.</p>
           {/if}
           {#if graph.omitted > 0}
-            <p class="text-muted-foreground px-3 pb-2 text-xs">{graph.omitted} more linked resources are left off the board.</p>
+            <p class="text-mute px-3.5 pb-2 text-xs">{graph.omitted} more linked resources are left off the board.</p>
           {/if}
           {#each graph.sources.filter((source) => source.error) as source (source.name)}
-            <p class="text-muted-foreground px-3 pb-2 text-xs">{source.name} could not search: {source.error}</p>
+            <p class="text-mute px-3.5 pb-2 text-xs">{source.name} could not search: {source.error}</p>
           {/each}
         {/if}
       </aside>
     </div>
   {/if}
 </div>
+
+<style>
+  .find {
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--paper);
+  }
+  .find:focus-within {
+    border-color: var(--rule-2);
+  }
+  .rel {
+    color: var(--signal);
+    font-family: var(--serif);
+    font-size: 13px;
+    font-style: italic;
+  }
+  .type-code.ghost {
+    color: var(--mute);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--graph-other);
+  }
+</style>

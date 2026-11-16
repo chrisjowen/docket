@@ -1,5 +1,6 @@
 @import 'tailwindcss' source(none);
 @import 'tw-animate-css';
+@import '../lib/styles/fonts.css';
 @import '../lib/styles/casebook.css';
 @import '../lib/styles/tokens.css';
 
@@ -8,8 +9,8 @@
  * tokens, which the host's style variables override where it gives them
  * (bridge.ts, HOST_TOKENS). Only the sources below are scanned for classes.
  */
-@source '../lib/components/graph-view.svelte';
-@source '../lib/components/type-mark.svelte';
+@source '../lib/components/card-graph.svelte';
+@source '../lib/components/docket-mark.svelte';
 @source '../lib/components/ui/button';
 @source './';
 
@@ -18,5 +19,7 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
 }

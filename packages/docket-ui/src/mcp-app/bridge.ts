@@ -90,27 +90,12 @@ export class AppBridge {
 }
 
 /**
- * Which of docket's tokens each of the host's style variables sets, so the app
- * draws in the host's colours where it gives them, and docket's own where not.
+ * Apply a host context's theme to the document. Its style variables are left
+ * alone: the app keeps docket's own look, Docket Cloud's, in light or dark.
  */
-export const HOST_TOKENS: Record<string, string[]> = {
-  '--color-background-primary': ['--background'],
-  '--color-background-secondary': ['--card', '--popover', '--secondary'],
-  '--color-text-primary': ['--foreground', '--card-foreground', '--popover-foreground', '--secondary-foreground'],
-  '--color-text-secondary': ['--muted-foreground'],
-  '--color-border-primary': ['--border', '--input'],
-  '--border-radius-md': ['--radius'],
-  '--font-sans': ['--font-sans']
-}
-
-/** Apply a host context's theme and colours to the document. */
 export const applyHostContext = (context: HostContext, root: HTMLElement): void => {
   if (context.theme) {
     root.classList.toggle('dark', context.theme === 'dark')
     root.style.colorScheme = context.theme
-  }
-  for (const [name, value] of Object.entries(context.styles?.variables ?? {})) {
-    if (typeof value !== 'string' || value === '') continue
-    for (const token of HOST_TOKENS[name] ?? []) root.style.setProperty(token, value)
   }
 }

@@ -5,11 +5,11 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { resolves } from '$lib/ask/evidence.js'
   import type { AnsweredResult } from '$lib/ask/outcome.js'
-  import { edgeKey } from '$lib/model.js'
+  import { edgeKey, typeCode } from '$lib/model.js'
   import { getTypeStyle } from '$lib/type-style.js'
   import type { BoardScope } from '$lib/workspace.svelte.js'
   import { getWorkspace } from '$lib/workspace.svelte.js'
-  import GraphView, { type GraphLink, type GraphNode } from '../../graph-view.svelte'
+  import CardGraph, { type CardLink, type CardNode } from '../../card-graph.svelte'
   import EvidenceChips from '../evidence-chips.svelte'
   import { getAskView } from '../view.js'
 
@@ -36,23 +36,33 @@
   const boardId = (id: string): string => canonicalOf.get(id) ?? `${block.id}\u0000${id}`
   const labelOf = $derived(new Map(block.nodes.map((node) => [node.id, node.label])))
 
-  const nodes: GraphNode[] = $derived.by(() => {
+  const nodes: CardNode[] = $derived.by(() => {
     const seen = new Set<string>()
     return block.nodes
-      .map((node): GraphNode => {
+      .map((node): CardNode => {
         const entity = byId.get(canonicalOf.get(node.id) ?? '')
         return entity
-          ? { id: entity.id, title: node.label || entity.title, type: entity.type, ghost: false }
-          : { id: boardId(node.id), title: node.label, type: node.type ?? '', ghost: true }
+          ? {
+              id: entity.id,
+              title: node.label || entity.title,
+              type: entity.type,
+              ghost: false,
+              code: typeCode(entity.type),
+              colour: style.colour(entity.type),
+              weight: entity.assessment?.confidence ?? null,
+              note: null,
+              weak: false
+            }
+          : { id: boardId(node.id), title: node.label, type: node.type ?? '', ghost: true, code: '', colour: 'var(--graph-other)', weight: null, note: null, weak: false }
       })
       .filter((node) => !seen.has(node.id) && seen.add(node.id))
   })
-  const links: GraphLink[] = $derived.by(() => {
+  const links: CardLink[] = $derived.by(() => {
     const seen = new Set<string>()
     return block.edges
-      .map((edge): GraphLink => {
+      .map((edge): CardLink => {
         const [source, target] = [boardId(edge.source), boardId(edge.target)]
-        return { key: edgeKey({ source, rel: edge.rel, target }), source, target, rel: edge.rel }
+        return { key: edgeKey({ source, rel: edge.rel, target }), source, target, rel: edge.rel, weak: false }
       })
       .filter((link) => !seen.has(link.key) && seen.add(link.key))
   })
@@ -87,15 +97,14 @@
   })
 </script>
 
-<div class="h-72 overflow-hidden rounded-md border">
-  <GraphView
+<div class="h-80">
+  <CardGraph
     {nodes}
     {links}
-    colourOf={style.colour}
-    iconOf={style.icon}
     selected={workspace.selected}
     {emphasis}
-    focus={null}
+    find={false}
+    hint={false}
     emptyHint="The adapter returned an empty graph."
     onselect={(id) => {
       if (id && byId.has(id)) workspace.select(id)

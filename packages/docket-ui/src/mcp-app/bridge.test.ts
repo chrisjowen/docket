@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { APPS_PROTOCOL, AppBridge, applyHostContext, HOST_TOKENS } from './bridge.js'
+import { APPS_PROTOCOL, AppBridge, applyHostContext } from './bridge.js'
 
 /** A host page and the app's own window, enough of each for the bridge. */
 const frame = () => {
@@ -93,15 +93,9 @@ describe('applyHostContext', () => {
     expect(classes.has('dark')).toBe(false)
   })
 
-  it('draws docket\'s tokens in the host\'s colours where it gives them, and ignores the rest', () => {
+  it('keeps docket\'s own colours over the host\'s style variables', () => {
     const { element, properties } = root()
-    applyHostContext(
-      { styles: { variables: { '--color-background-primary': '#16191f', '--color-text-primary': '#ebe5d6', '--color-ring-primary': '#f00', '--font-sans': '' } } },
-      element
-    )
-    expect(properties.get('--background')).toBe('#16191f')
-    for (const token of HOST_TOKENS['--color-text-primary'] ?? []) expect(properties.get(token)).toBe('#ebe5d6')
-    expect([...properties.keys()].some((name) => name.includes('ring'))).toBe(false)
-    expect(properties.has('--font-sans')).toBe(false)
+    applyHostContext({ styles: { variables: { '--color-background-primary': '#16191f', '--color-text-primary': '#ebe5d6', '--font-sans': 'Inter' } } }, element)
+    expect(properties.size).toBe(0)
   })
 })

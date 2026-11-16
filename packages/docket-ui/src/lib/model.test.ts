@@ -6,10 +6,12 @@ import {
   citationsAsMentions,
   evidenceLocation,
   inline,
+  matches,
   neighbourhood,
   parseQuery,
   quickSearch,
   slotColour,
+  typeCode,
   typeSlots
 } from './model.js'
 import type { UiAnswer, UiChatAnswer, UiEntity, UiGraph } from './types.js'
@@ -126,6 +128,22 @@ describe('slotColour', () => {
 
   it('leaves what has no slot neutral', () => {
     expect(slotColour(undefined)).toBe('var(--graph-other)')
+  })
+})
+
+describe('typeCode', () => {
+  it('gives a known type its code, and any other the first three letters of its name', () => {
+    expect(typeCode('service')).toBe('SVC')
+    expect(typeCode('Repository')).toBe('REPO')
+    expect(typeCode('feature_flag')).toBe('FEA')
+    expect(typeCode('--')).toBe('?')
+  })
+})
+
+describe('matches', () => {
+  it('finds every word, in any order and case', () => {
+    expect(matches(['Orders Postgres', 'datastore.orders'], 'postgres ORDERS')).toBe(true)
+    expect(matches(['Orders Postgres', undefined], 'orders redis')).toBe(false)
   })
 })
 

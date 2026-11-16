@@ -26,12 +26,12 @@
   {#each events as event, index (index)}
     <li class="relative flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-1.5 text-sm">
       <span
-        class="absolute top-3 -left-[1.3rem] size-2 rounded-full {event.semantics === 'event' ? 'bg-gilt' : 'border-muted-foreground bg-background border'}"
+        class="absolute top-3 -left-[1.3rem] size-2 rounded-full {event.semantics === 'event' ? 'bg-signal' : 'border-muted-foreground bg-background border'}"
         aria-hidden="true"
       ></span>
       <time datetime={event.at} class="text-muted-foreground w-44 shrink-0 text-xs tabular-nums" title={event.at}>{when(event.at)}</time>
       <span
-        class="rounded border px-1 text-[10px] {event.semantics === 'event' ? 'border-gilt/60' : 'border-dashed'}"
+        class="rounded border px-1 text-[10px] {event.semantics === 'event' ? 'border-signal/60' : 'border-dashed'}"
         title="What the time means: {SEMANTICS[event.semantics]}"
       >
         {SEMANTICS[event.semantics]}
