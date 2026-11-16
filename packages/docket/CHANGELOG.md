@@ -3,7 +3,7 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
-## Unreleased
+## 0.9.0
 
 ### Docket Cloud's look, in docket open and the search app
 
