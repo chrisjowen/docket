@@ -8,7 +8,7 @@ import { deleteWorkspace, putDocument } from '../postgres/index.js'
 import { dueWorkspaces, outboxLoop } from './outbox.js'
 import { reconciler } from './reconcile.js'
 import type { Reranker } from './reranker.js'
-import { QueryFailure, queryService, type QueryEvent } from './search.js'
+import { QueryFailure, queryService, unopenedAdapter, type QueryEvent } from './search.js'
 
 const quiet = { info: () => undefined, error: () => undefined }
 
@@ -176,6 +176,24 @@ describe.skipIf(!TEST_PG_URL).each(STORE_KINDS)('the runtime loops over $name', 
       const before = events.length
       await expect(service().search({ workspaceId: 'nosuch', query: 'orders', limit: 5, userId: 'u-1' })).rejects.toBeInstanceOf(QueryFailure)
       expect(events).toHaveLength(before)
+    })
+
+    it('redacts a secret a failed projection\'s error quotes before it reaches the caller', async () => {
+      const unopened = queryService({
+        store: () => test.store,
+        projections: async (query) => ({
+          adapters: { ...projections.adapters(query.workspaceId), graph: unopenedAdapter('graph', new Error('qdrant: 503 for api_key=sekret')) },
+          close: async () => undefined
+        }),
+        instances: projections.instances,
+        reranker,
+        signals: { graph: 'lexical', memories: 'semantic' },
+        observe: (event) => void events.push(event),
+        log: quiet
+      })
+      const found = await unopened.search({ workspaceId, query: 'commerce team', limit: 5, userId: 'u-1' })
+      expect(found.sources.find((source) => source.name === 'graph')).toMatchObject({ error: 'qdrant: 503 for api_key=[redacted]' })
+      expect(JSON.stringify(found)).not.toContain('sekret')
     })
   })
 })
