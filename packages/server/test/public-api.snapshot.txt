@@ -2416,6 +2416,9 @@ tokensOf
 unknownNames
   export declare function unknownNames(vocabulary: Vocabulary, query: string): string[];
 
+unopenedAdapter
+  export declare function unopenedAdapter(id: string, cause: unknown): MemoryAdapter;
+
 Vocabulary
   export declare class Vocabulary {
       private readonly words;

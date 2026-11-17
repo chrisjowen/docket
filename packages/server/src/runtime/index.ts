@@ -35,6 +35,7 @@ export {
   searchBoard,
   searchCandidates,
   searchDepth,
+  unopenedAdapter,
   type Asked,
   type BoardOptions,
   type Models,

@@ -25,7 +25,10 @@ import type { Logger } from './outbox.js'
 import { CUT_MODEL, RETRIEVAL_CUT_MODEL } from './relevance-model.js'
 import { coverage, cut, rerankText, unknownNames, vocabularyOf, type Candidate, type Placed, type Vocabulary } from './relevance.js'
 import { MAX_TEXTS, type Reranker } from './reranker.js'
-import { workspaceScope } from './scope.js'
+import { redactSecrets, workspaceScope } from './scope.js'
+
+/** An error's message, redacted of any secret an adapter's own text may quote. */
+const logMessage = (cause: unknown): string => redactSecrets(cause instanceof Error ? cause.message : String(cause))
 
 /**
  * The search pipeline: `docket_search` and `docket_ask` over a workspace's
@@ -118,8 +121,12 @@ export type QueryEvent<S extends SearchQuery = SearchQuery, A extends AskQuery =
   error?: string
 }
 
-/** An instance that could not be opened: it answers every question with why, so the coordinator and the trace show it failed. */
-function unopened(id: string, cause: unknown): MemoryAdapter {
+/**
+ * The stand-in a deployment's projections factory returns for an instance
+ * that could not be opened: it answers every question with why, so the
+ * coordinator and observers see it failed.
+ */
+export function unopenedAdapter(id: string, cause: unknown): MemoryAdapter {
   const message = cause instanceof Error ? cause.message : String(cause)
   return {
     describe: () => ({ name: id, version: 'unavailable', inputs: [], resultKinds: ['entities'], rebuild: 'reconstructible' }),
@@ -132,7 +139,6 @@ function unopened(id: string, cause: unknown): MemoryAdapter {
     close: async () => undefined
   } as MemoryAdapter
 }
-
 
 /** One of the deployment's adapter instances, offered to docket's coordinator as a registration. */
 function registration(id: string, adapter: MemoryAdapter): AdapterRegistration {
@@ -218,7 +224,7 @@ export async function rankCandidates(
       const scored = candidates.map((candidate, index) => ({ ...candidate, logit: logits[index] }))
       return { relevance: new Map(cut(CUT_MODEL, scored, limit).map((kept) => [kept.id, kept.relevance])) }
     } catch (cause) {
-      log.error(`search: the re-ranker failed, so results are cut on the projections' scores alone: ${cause instanceof Error ? cause.message : String(cause)}`)
+      log.error(`search: the re-ranker failed, so results are cut on the projections' scores alone: ${logMessage(cause)}`)
       return {
         relevance: new Map(cut(RETRIEVAL_CUT_MODEL, candidates, limit).map((kept) => [kept.id, kept.relevance])),
         warnings: ['The re-ranker did not answer, so these results are ranked on the projections\' scores alone and may hold more noise.']
@@ -250,7 +256,7 @@ export function queryService<S extends SearchQuery = SearchQuery, A extends AskQ
       try {
         await deps.observe({ ...event, outcome, durationMs: performance.now() - started, ...(seen.asked ? { asked: seen.asked } : {}), ...extra } as QueryEvent<S, A>)
       } catch (cause) {
-        deps.log.error(`query: observing a ${event.tool}: ${cause instanceof Error ? cause.message : String(cause)}`)
+        deps.log.error(`query: observing a ${event.tool}: ${logMessage(cause)}`)
       }
     }
     let value: T
@@ -258,7 +264,7 @@ export function queryService<S extends SearchQuery = SearchQuery, A extends AskQ
       value = await run(seen)
     } catch (cause) {
       // A workspace that does not exist has nothing to observe.
-      if (!(cause instanceof QueryFailure && cause.status === 404)) await tell('failed', { error: cause instanceof Error ? cause.message : String(cause) })
+      if (!(cause instanceof QueryFailure && cause.status === 404)) await tell('failed', { error: logMessage(cause) })
       throw cause
     }
     await tell('answered', { result: value })
@@ -338,7 +344,7 @@ export function queryService<S extends SearchQuery = SearchQuery, A extends AskQ
       const name = cause instanceof Error ? cause.name : ''
       if (name === 'AiCapReached') return { answer, notice: 'AI budget for this month reached — search still works; ask an owner to raise the cap.' }
       if (name === 'AiNotConfigured') return { answer, notice: 'AI is not set up for this organisation yet; search still works.' }
-      deps.log.error(`ask: synthesis failed for workspace ${asked.project.root}: ${cause instanceof Error ? cause.message : String(cause)}`)
+      deps.log.error(`ask: synthesis failed for workspace ${asked.project.root}: ${logMessage(cause)}`)
       return { answer, notice: 'The model could not write a summary just now, so here is what the projections found.' }
     }
   }
@@ -702,7 +708,7 @@ export function searchBoard(query: string, asked: Asked, ranked: Ranked, options
       name: source.name,
       hits: source.hits.length,
       ...(source.note ? { note: source.note } : {}),
-      ...(source.error ? { error: source.error } : {})
+      ...(source.error ? { error: redactSecrets(source.error) } : {})
     })),
     index: asked.index,
     viewer: null,

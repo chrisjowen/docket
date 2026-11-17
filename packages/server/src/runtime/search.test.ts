@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { FIXTURE_ROOT } from '../../test/fixture.js'
 import { Vocabulary } from './relevance.js'
 import type { Reranker } from './reranker.js'
-import { changesFound, MAX_RERANKED, POOL_PER_SOURCE, rankCandidates, searchBoard, searchCandidates, searchDepth, type Asked, type BoardOptions, type Ranked } from './search.js'
+import { changesFound, MAX_RERANKED, POOL_PER_SOURCE, rankCandidates, searchBoard, searchCandidates, searchDepth, unopenedAdapter, type Asked, type BoardOptions, type Ranked } from './search.js'
 
 const NOW = new Date('2026-11-12T00:00:00Z')
 const daysAgo = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString()
@@ -473,5 +473,19 @@ describe('cognee in the search, for a workspace that turned it on', () => {
     const read = asked([hannah], [{ name: 'cognee', hits: [] }])
     expect(searchCandidates('who is sophia', read, new Vocabulary(read.read.entities))).toEqual([])
     expect(searchBoard('who is sophia', read, { relevance: new Map() }).matches).toEqual([])
+  })
+})
+
+describe('the stand-in for a projection a deployment could not open', () => {
+  it('answers every question with why it could not open', async () => {
+    const adapter = unopenedAdapter('neo4j', new Error('connect ECONNREFUSED 127.0.0.1:7687'))
+    expect(adapter.describe()).toMatchObject({ name: 'neo4j' })
+    await expect(adapter.status()).resolves.toEqual({ state: 'unavailable', message: 'connect ECONNREFUSED 127.0.0.1:7687' })
+    await expect(adapter.query?.ask({} as never)).rejects.toThrow('connect ECONNREFUSED 127.0.0.1:7687')
+  })
+
+  it('answers with a non-Error cause read as its string', async () => {
+    const adapter = unopenedAdapter('mem0', 'timed out')
+    await expect(adapter.status()).resolves.toEqual({ state: 'unavailable', message: 'timed out' })
   })
 })
