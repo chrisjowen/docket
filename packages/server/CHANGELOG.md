@@ -2,6 +2,41 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.2.0
+
+### The ontology lifecycle, and how writes become documents
+
+The second release moves Docket Cloud's pure logic into the core: everything
+here works on values, with no store.
+
+- **The ontology lifecycle**: `checkDraft` and `evaluateDraft` re-validate a
+  workspace's documents against a draft, diff the diagnostics with the
+  published head's, classify the change as safe, narrowing or breaking, and
+  apply a migration's rewrites of server-written documents first. They take
+  the workspace as a `WorkspaceSnapshot` and its `StoredDocument`s, which a
+  store reads. With them come `compare`, `classify`, `parseDraft`,
+  `diffOntologies`, the migrations (`rewriteDocument`, `migrationProblems`,
+  `migrationSteps`, `describeMigration`), `importYaml`, `exportYaml` and
+  `lintOntology`, `proposedText` and `mergePatch` for proposals, the starter
+  `TEMPLATES` (SDLC, a lean service catalogue and blank, generated from
+  docket's default ontology), and the lifecycle's errors
+  (`OntologyInvalid`, `OntologyBreakingChange`, `OntologyNarrowingChange`,
+  `MigrationInvalid`, `StaleDraft` and others).
+- **Write building**: `composeDocument` merges a change to one resource into
+  its document's Markdown, or makes a new one, keeping the existing layout
+  and comments and adding only evidence it does not already hold.
+  `stampEvidence` stamps a client's evidence with the writer, the request and
+  the time; `appendedNotes`, `sameMeaning`, `splitDocument` and
+  `renderDocument` go with it, and the write inputs, `WriteResult` and
+  `WRITE_LIMITS` describe a write.
+- **Write tool arguments**: `argumentsOf`, `parseEvidence`,
+  `parseAttributes`, `requiredText`, `optionalText`, the `EVIDENCE_SCHEMA`
+  the write tools publish, and `writeAnswer`, how a write's result reads.
+
+`@chrisjowen/docket` (`^0.10.0`) is now a peer dependency: the core parses
+and validates with the host's own docket, so a server validates exactly as
+`docket validate` does. `yaml` is a dependency.
+
 ## 0.1.0
 
 ### The first release: ports, and the scope and role vocabulary

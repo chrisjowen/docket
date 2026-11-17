@@ -16,6 +16,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      # docket-server typechecks against docket's built declarations, so build first.
       - run: pnpm build
+      - run: pnpm typecheck
       - run: pnpm test

@@ -360,7 +360,14 @@ importers:
         version: 3.2.7(@types/node@22.20.4)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
 
   packages/server:
+    dependencies:
+      yaml:
+        specifier: ^2.8.1
+        version: 2.9.1
     devDependencies:
+      '@chrisjowen/docket':
+        specifier: workspace:*
+        version: link:../docket
       '@types/node':
         specifier: ^22.10.2
         version: 22.20.4

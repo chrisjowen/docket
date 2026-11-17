@@ -1,0 +1,56 @@
+# A small platform workspace: services, their datastores, teams, APIs and pods.
+version: 1
+
+resourceTypes:
+  service:
+    description: A deployable application or worker.
+    icon: server
+    attributes:
+      tier:
+        type: string
+        enum: [critical, standard]
+        description: How bad an outage is.
+      language:
+        type: string
+  datasource:
+    description: A database, queue or bucket a service reads or writes.
+    icon: database
+    attributes:
+      engine:
+        type: string
+  team:
+    description: The people who own something.
+    icon: users
+  api:
+    description: An interface a service exposes.
+    icon: plug
+  pod:
+    description: A running instance of a service.
+    icon: box
+
+relationships:
+  depends_on:
+    description: Needs the target to work.
+    from: [service]
+    to: [service, datasource]
+  owned_by:
+    from: '*'
+    to: [team]
+  exposes:
+    from: [service]
+    to: [api]
+
+evidence:
+  unevidenced: 0.5
+  sources:
+    human:
+      description: Stated or confirmed by a person.
+      confidence: 0.9
+    code:
+      description: Source code.
+      confidence: 0.6
+      requires: [path]
+    manifest:
+      description: A dependency or package manifest.
+      confidence: 0.9
+      requires: [path]

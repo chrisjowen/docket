@@ -1,0 +1,20 @@
+/*
+ * The one place the server core reaches into docket: its document parser,
+ * ontology loader and validator, so a server validates exactly as `docket
+ * validate` does and never invents a second rule. All of it is docket's
+ * public API, and `@chrisjowen/docket` is a peer dependency, so the core
+ * validates with the host's own docket.
+ */
+
+import { parseOntology as docketParseOntology, type LoadedOntology } from '@chrisjowen/docket'
+
+export type { MemoryDocument, Ontology, ValidationDiagnostic as Diagnostic } from '@chrisjowen/docket'
+export { EVIDENCE_LOCATION_FIELDS, InvalidArgumentsError, parseMemoryFile, validateDocuments } from '@chrisjowen/docket'
+
+/** Where a server's ontology appears to live, so diagnostics read as they would in a repo. */
+export const ONTOLOGY_PATH = '.docket/entities.yaml'
+
+/** docket's `parseOntology`, reading the text as the workspace's ontology. Never throws. */
+export function parseOntology(raw: string): LoadedOntology {
+  return docketParseOntology(raw, ONTOLOGY_PATH)
+}

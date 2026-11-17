@@ -1118,8 +1118,9 @@ purpose.
 
 [`@chrisjowen/docket-server`](packages/server) is the core a Docket server is
 built on, shared by Docket Cloud and a self-hosted, single-tenant server: the
-ports a deployment plugs its storage, sign-in and tenancy into, and the scope
-and role vocabulary MCP calls are checked against. It is published on its own,
+ports a deployment plugs its storage, sign-in and tenancy into, the scope
+and role vocabulary MCP calls are checked against, the ontology lifecycle and
+how a write becomes a document. It is published on its own,
 imports nothing of any one deployment, and records its API in
 [`packages/server/test/public-api.snapshot.txt`](packages/server/test/public-api.snapshot.txt)
 the same way. See [its README](packages/server/README.md).
@@ -1202,10 +1203,11 @@ Agents never write to an index. See its
 
 ```bash
 pnpm install
-pnpm typecheck   # sources and tests
 pnpm build       # the adapter contracts, kit and adapters and the web UI
-                 # first, then docket, which ships copies of them; the
+                 # first, then docket, which ships copies of them, then
+                 # docket-server, which validates with docket; the
                  # end-to-end tests run the built CLI, so build first
+pnpm typecheck   # sources and tests
 pnpm test        # the contracts', adapters', CLI's and plugin's suites
 pnpm -C packages/docket eval:ask   # how well docket ask answers: calls models,
                                    # so never part of pnpm test
@@ -1241,7 +1243,7 @@ specification is [`docs/SPEC.md`](docs/SPEC.md).
 
 [`.github/workflows/publish.yml`](.github/workflows/publish.yml) stages
 `@chrisjowen/docket` on npm, with provenance, when a `v<version>` tag is pushed
-(or a GitHub release creates one). It typechecks, builds and tests first, and
+(or a GitHub release creates one). It builds, typechecks and tests first, and
 refuses a tag that does not match `packages/docket/package.json`. npm does not
 allow publishing from CI without 2FA, so the workflow runs `npm stage publish`:
 the version lands in npm's staging area and goes live only once a maintainer

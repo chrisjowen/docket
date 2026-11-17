@@ -1,7 +1,7 @@
 {
   "name": "@chrisjowen/docket-server",
-  "version": "0.1.0",
-  "description": "The core a Docket server is built on: the ports a deployment plugs its storage, auth and tenancy into, and the scope and role vocabulary MCP calls are checked against.",
+  "version": "0.2.0",
+  "description": "The core a Docket server is built on: the ports a deployment plugs its storage, auth and tenancy into, the scope and role vocabulary MCP calls are checked against, the ontology lifecycle and how writes become documents.",
   "license": "Apache-2.0",
   "keywords": [
     "docket",
@@ -41,10 +41,18 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "prepack": "npm run build",
+    "templates": "node scripts/templates.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run"
   },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "peerDependencies": {
+    "@chrisjowen/docket": "^0.10.0"
+  },
   "devDependencies": {
+    "@chrisjowen/docket": "workspace:*",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
     "vitest": "^3.2.4"

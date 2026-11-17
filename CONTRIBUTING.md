@@ -67,7 +67,7 @@ By making a contribution to this project, I certify that:
    can be agreed before you build it.
 2. Set up the workspace and check it as the README's
    [Development](README.md#development) section describes: `pnpm install`,
-   then `pnpm typecheck`, `pnpm build` and `pnpm test`. CI runs the same
+   then `pnpm build`, `pnpm typecheck` and `pnpm test`. CI runs the same
    steps on every pull request.
 3. Keep a pull request to one change, with tests for the behaviour it adds or
    fixes, and describe what changed and why.
