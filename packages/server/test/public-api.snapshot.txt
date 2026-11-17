@@ -1,0 +1,182 @@
+## . (./dist/index.d.ts)
+
+AuditEventInput
+  export interface AuditEventInput {
+      workspaceId?: string | null;
+      actor: string;
+      ip?: string | null;
+      userAgent?: string | null;
+      action: string;
+      target?: readonly string[];
+      args?: unknown;
+      outcome: AuditOutcome;
+      latencyMs: number;
+      requestId: string;
+  }
+
+AuditOutcome
+  export type AuditOutcome = 'ok' | 'denied' | 'error' | 'invalid';
+
+AuditSink
+  export interface AuditSink {
+      record(ctx: StoreContext | null, event: AuditEventInput): Promise<void>;
+  }
+
+Authenticator
+  export interface Authenticator<P extends Principal = Principal, R extends McpResource = McpResource> {
+      resolve(bearer: string, resource: R): Promise<P | null>;
+  }
+
+Authorizer
+  export interface Authorizer<P extends Principal = Principal> {
+      role(principal: P): Promise<Role | null>;
+      ontologyWriters?(workspaceId: string): Promise<readonly Role[]>;
+  }
+
+checkScope
+  export declare function checkScope(effective: readonly Scope[], needed: Scope): Refusal | null;
+
+DocumentCodec
+  export interface DocumentCodec {
+      seal(plain: Uint8Array, aad: string): Promise<SealedBody>;
+      open(sealed: SealedBody, aad: string): Promise<Uint8Array>;
+      aad(ref: DocumentRef): string;
+  }
+
+DocumentRef
+  export interface DocumentRef {
+      workspaceId: string;
+      documentId: string;
+      revision: number;
+  }
+
+effectiveScopes
+  export declare function effectiveScopes<P extends Principal>(principal: P, authorizer: Authorizer<P>): Promise<Scope[]>;
+
+impliedScopes
+  export declare function impliedScopes(scopes: readonly Scope[]): Scope[];
+
+isRole
+  export declare function isRole(value: unknown): value is Role;
+
+isScope
+  export declare function isScope(value: unknown): value is Scope;
+
+Limiter
+  export interface Limiter<P extends Principal = Principal> {
+      check(principal: P, message: McpMessage): Promise<Response | null>;
+  }
+
+McpMessage
+  export interface McpMessage {
+      jsonrpc: '2.0';
+      id?: string | number | null;
+      method: string;
+      params?: unknown;
+  }
+
+McpResource
+  export interface McpResource {
+      url: string;
+      workspaceId: string;
+  }
+
+ModelGate
+  export interface ModelGate<P extends Principal = Principal> {
+      beforeModelCall(principal: P): Promise<void>;
+  }
+
+parseScopeString
+  export declare function parseScopeString(value: string | undefined | null): Scope[];
+
+Principal
+  export interface Principal {
+      subject: string;
+      workspaceId: string;
+      scopes: Scope[];
+      actor: string;
+      expiresAt?: Date;
+  }
+
+QueryBackend
+  export interface QueryBackend<SearchQuery = unknown, SearchResult = unknown, AskQuery = unknown, AskResult = unknown> {
+      search(query: SearchQuery): Promise<SearchResult>;
+      ask(query: AskQuery): Promise<AskResult>;
+  }
+
+Refusal
+  export type Refusal = {
+      status: 401;
+      error: 'invalid_token';
+      description: string;
+  } | {
+      status: 403;
+      error: 'insufficient_scope';
+      scope: Scope;
+      description: string;
+  };
+
+Role
+  export type Role = (typeof ROLES)[number];
+
+ROLES
+  export declare const ROLES: readonly [
+      "owner",
+      "admin",
+      "editor",
+      "viewer"
+  ];
+
+roleScopes
+  export declare function roleScopes(role: Role | null, ontologyWriters?: readonly Role[]): readonly Scope[];
+
+Scope
+  export type Scope = (typeof SCOPES)[number];
+
+SCOPE_LABELS
+  export declare const SCOPE_LABELS: Record<Scope, string>;
+
+SCOPES
+  export declare const SCOPES: readonly [
+      "docket:read",
+      "docket:write",
+      "ontology:read",
+      "ontology:propose",
+      "ontology:write"
+  ];
+
+ScopeSource
+  export interface ScopeSource {
+      scopes(): Promise<readonly StoreScope[]>;
+  }
+
+SealedBody
+  export interface SealedBody {
+      ciphertext: Uint8Array;
+      nonce: Uint8Array;
+  }
+
+StoreContext
+  export interface StoreContext {
+      tx: Tx;
+      codec: DocumentCodec;
+  }
+
+StoreRunner
+  export interface StoreRunner {
+      run<T>(fn: (ctx: StoreContext) => Promise<T>): Promise<T>;
+  }
+
+StoreScope
+  export interface StoreScope {
+      id: string;
+      store: StoreRunner;
+  }
+
+Tx
+  export interface Tx {
+      query<R extends Record<string, any> = any>(text: string, values?: unknown[]): Promise<{
+          rows: R[];
+          rowCount: number | null;
+      }>;
+  }
