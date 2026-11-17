@@ -180,6 +180,7 @@ const shippedDocket = async () => {
     version: manifest.version,
     private: true,
     description: `docket ${manifest.version}, as docket's Wheelhouse plugin ships and runs it. Built by wheelhouse/build.mjs from packages/docket; do not edit.`,
+    license: manifest.license,
     type: manifest.type,
     engines: manifest.engines,
     peerDependencies: manifest.peerDependencies,

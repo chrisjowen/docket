@@ -1226,6 +1226,13 @@ creates a public `0.0.0-stage` placeholder version on npm.
 Check what a release will contain with `npm pack --dry-run` in
 `packages/docket`.
 
+## Contributing and licence
+
+docket is licensed under the [Apache License, Version 2.0](LICENSE).
+Contributions are welcome under the same licence, with each commit signed off
+under the Developer Certificate of Origin; see
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ---
 
 <sub>The case-file illustration at the top, `docs/assets/docket-hero.svg`, is

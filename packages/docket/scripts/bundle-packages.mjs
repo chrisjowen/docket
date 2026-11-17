@@ -55,7 +55,7 @@ for (const directory of directories) {
   // Versioned as the docket it ships in, which is what an adapter reports.
   await writeFile(
     join(to, 'package.json'),
-    `${JSON.stringify({ name: manifest.name, version, private: true, type: manifest.type, exports }, null, 2)}\n`
+    `${JSON.stringify({ name: manifest.name, version, private: true, license: manifest.license, type: manifest.type, exports }, null, 2)}\n`
   )
   bundled.set(manifest.name, { directory: to, exports })
 }

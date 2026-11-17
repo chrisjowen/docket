@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "docket's mem0 adapter: one verbatim memory per entity on hosted mem0, its self-hosted server or mem0ai/oss.",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {

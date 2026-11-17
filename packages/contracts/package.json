@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "The contracts between docket and its memory adapters: types, runtime validators and contract test helpers (docs/adapter-spec.md §4, §7-9).",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {

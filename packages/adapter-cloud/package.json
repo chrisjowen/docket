@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Answers docket's questions from a Docket Cloud workspace too: query only, and unavailable rather than failing when the cloud cannot be reached.",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {
