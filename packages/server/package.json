@@ -1,0 +1,52 @@
+{
+  "name": "@chrisjowen/docket-server",
+  "version": "0.1.0",
+  "description": "The core a Docket server is built on: the ports a deployment plugs its storage, auth and tenancy into, and the scope and role vocabulary MCP calls are checked against.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "docket",
+    "mcp",
+    "ontology",
+    "knowledge"
+  ],
+  "homepage": "https://github.com/chrisjowen/docket/tree/main/packages/server#readme",
+  "bugs": {
+    "url": "https://github.com/chrisjowen/docket/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrisjowen/docket.git",
+    "directory": "packages/server"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

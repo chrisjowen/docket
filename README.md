@@ -1114,6 +1114,16 @@ recorded in
 and the tests fail when they change, so an API change is always made on
 purpose.
 
+### The server core
+
+[`@chrisjowen/docket-server`](packages/server) is the core a Docket server is
+built on, shared by Docket Cloud and a self-hosted, single-tenant server: the
+ports a deployment plugs its storage, sign-in and tenancy into, and the scope
+and role vocabulary MCP calls are checked against. It is published on its own,
+imports nothing of any one deployment, and records its API in
+[`packages/server/test/public-api.snapshot.txt`](packages/server/test/public-api.snapshot.txt)
+the same way. See [its README](packages/server/README.md).
+
 ## Local runtimes
 
 An adapter connects to a service; docket does not start one unless asked.
@@ -1253,6 +1263,14 @@ creates a public `0.0.0-stage` placeholder version on npm.
 
 Check what a release will contain with `npm pack --dry-run` in
 `packages/docket`.
+
+`@chrisjowen/docket-server` is released the same way on its own version line:
+bump `version` in `packages/server/package.json` and add its notes to
+[`packages/server/CHANGELOG.md`](packages/server/CHANGELOG.md), merge, then tag
+that commit `docket-server-v<version>`.
+[`.github/workflows/publish-server.yml`](.github/workflows/publish-server.yml)
+stages it, and a maintainer approves it with 2FA. `NPM_TOKEN` needs publish
+rights to `@chrisjowen/docket-server` too.
 
 ## Contributing and licence
 
