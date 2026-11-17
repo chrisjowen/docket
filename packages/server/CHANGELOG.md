@@ -2,6 +2,51 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.3.0
+
+### The canonical store on Postgres
+
+The third release moves Docket Cloud's canonical store into the core, at
+`@chrisjowen/docket-server/postgres`. It imports no driver: a deployment
+passes its own pool.
+
+- **Migrations**: `migrate(pool, { schema })` applies the core tables -
+  workspaces, documents and their revisions, ontology versions, adapter
+  manifests, the outbox, projection standing, the activity log, workspace
+  deletions, sync runs and supersessions - to `public` or any schema, from
+  `{{schema}}`-templated SQL, recording them in the schema's own
+  `docket_migrations` ledger and refusing one whose text has changed.
+  `postgresStore({ pool, schema, codec, limits })` is a `StoreRunner` over
+  it.
+- **Documents**: `putDocument`, `retireDocument`, `readDocument(s)`,
+  `listDocuments`, `listDocumentPage`, `documentHistory` and the rest, every
+  body sealed by the store's codec and hash-checked when read.
+- **Writes**: `writeResource`, `addEvidence`, `appendNotes`,
+  `writeInference`, `retireResource` and `describeResource`, validated
+  against the ontology head held `FOR SHARE` in the transaction they commit
+  in, with `lockOntologyHead` and `lockResource`.
+- **The ontology**: `createDraft`, `updateDraft`, `discardDraft`,
+  `checkDraft`, `evaluate`, `publish`, `rollback`, `proposeOntologyChange`,
+  `publishOntologyChange` and `createWorkspace`, with `headOf`,
+  `listPublished`, `listDrafts` and `versionBy*`.
+- **The activity log, supersessions, workspaces and the outbox**:
+  `recordIngest`, `listIngests`, `supersedeResource`, `liveSupersessions`,
+  `insertWorkspace`, `deleteWorkspace`, `pendingDeletions`,
+  `setOntologyMcpRoles`, `enqueue` and others.
+- **docket's ports over the store**: `postgresSource` (a `CanonicalSource`)
+  and `postgresManifests` (a `ManifestStore`).
+
+In the root entry point:
+
+- **Codecs**: `plaintextCodec()` and `localKeyCodec({ key, keyVersion,
+  aad })`, AES-256-GCM with one local key.
+- **Document rules**: `pathProblem`, `cloudDocumentPath`, `checkDocument`,
+  `DocumentError` and `DOCUMENT_BYTES`.
+- **Supersession notes**: `currentRecord`, `changeNote` and `dayOf`.
+- **Ports**: `SealedBody` gains an optional `keyVersion`, which the store
+  keeps beside each sealed body so a deployment that rotates keys opens each
+  with its own; `StoreContext` gains optional `limits` (`StoreLimits`).
+
 ## 0.2.0
 
 ### The ontology lifecycle, and how writes become documents

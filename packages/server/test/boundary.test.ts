@@ -13,7 +13,8 @@ import { describe, expect, it } from 'vitest'
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
 const ALLOWED_PACKAGES: readonly string[] = ['@chrisjowen/docket', 'yaml']
-const TEST_PACKAGES: readonly string[] = ['vitest']
+// Tests reach a real Postgres with the `pg` driver; the store itself takes any pool and imports none.
+const TEST_PACKAGES: readonly string[] = ['vitest', 'pg']
 
 const sources = async (dir: string): Promise<string[]> => {
   const entries = await readdir(dir, { withFileTypes: true })

@@ -38,6 +38,8 @@ export { MIGRATION_OPS, describeMigration, migrationProblems, migrationSteps, re
 export { mergePatch, proposedText, type Proposal } from './ontology/propose.js'
 export { TEMPLATES, TEMPLATE_IDS, isTemplateId, template, type Template, type TemplateId } from './ontology/templates.js'
 export { MAX_ONTOLOGY_BYTES, exportHeader, exportYaml, importYaml, lintOntology, sizeProblem, stripHeader, type Imported } from './ontology/yaml-io.js'
+export { CodecError, defaultAad, localKeyCodec, plaintextCodec } from './codecs.js'
+export { DOCUMENT_BYTES, DocumentError, checkDocument, cloudDocumentPath, pathProblem } from './documents.js'
 export type { Origin } from './origin.js'
 export type {
   AuditEventInput,
@@ -56,10 +58,12 @@ export type {
   ScopeSource,
   SealedBody,
   StoreContext,
+  StoreLimits,
   StoreRunner,
   StoreScope,
   Tx
 } from './ports.js'
+export { changeNote, currentRecord, dayOf } from './supersession.js'
 export {
   appendedNotes,
   composeDocument,

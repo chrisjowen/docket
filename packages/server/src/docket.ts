@@ -8,8 +8,24 @@
 
 import { parseOntology as docketParseOntology, type LoadedOntology } from '@chrisjowen/docket'
 
-export type { MemoryDocument, Ontology, ValidationDiagnostic as Diagnostic } from '@chrisjowen/docket'
-export { EVIDENCE_LOCATION_FIELDS, InvalidArgumentsError, parseMemoryFile, validateDocuments } from '@chrisjowen/docket'
+export type {
+  AdapterManifest,
+  CanonicalSource,
+  ManifestStore,
+  MemoryDocument,
+  Ontology,
+  ResolvedConfig,
+  ValidationDiagnostic as Diagnostic
+} from '@chrisjowen/docket'
+export {
+  EVIDENCE_LOCATION_FIELDS,
+  InvalidArgumentsError,
+  hashContent,
+  memoryConfigSchema,
+  parseMemoryFile,
+  readCanonical,
+  validateDocuments
+} from '@chrisjowen/docket'
 
 /** Where a server's ontology appears to live, so diagnostics read as they would in a repo. */
 export const ONTOLOGY_PATH = '.docket/entities.yaml'
