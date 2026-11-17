@@ -1120,8 +1120,9 @@ purpose.
 built on, shared by Docket Cloud and a self-hosted, single-tenant server: the
 ports a deployment plugs its storage, sign-in and tenancy into, the scope
 and role vocabulary MCP calls are checked against, the ontology lifecycle,
-how a write becomes a document, and the canonical store on Postgres
-(`@chrisjowen/docket-server/postgres`). It is published on its own,
+how a write becomes a document, the canonical store on Postgres
+(`@chrisjowen/docket-server/postgres`), and the MCP tools and endpoint
+(`@chrisjowen/docket-server/mcp`). It is published on its own,
 imports nothing of any one deployment, and records its API in
 [`packages/server/test/public-api.snapshot.txt`](packages/server/test/public-api.snapshot.txt)
 the same way. See [its README](packages/server/README.md).

@@ -15,8 +15,8 @@ validate` does.
 
 It is being extracted from Docket Cloud release by release. This release
 carries the ports, the scope and role vocabulary, the ontology lifecycle, how
-a write becomes a document, and the canonical store on Postgres; the MCP
-tools and handler, and the reconcile and search loops follow.
+a write becomes a document, the canonical store on Postgres, and the MCP
+tools and endpoint; the reconcile and search loops follow.
 
 ## Ports
 
@@ -170,6 +170,48 @@ with the plaintext codec, and a templated schema with a local key - when
 ```bash
 DOCKET_TEST_PG_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres pnpm -C packages/server test
 ```
+
+## The MCP endpoint
+
+`@chrisjowen/docket-server/mcp` is a workspace's MCP endpoint: the eleven
+tools, and `handleMcp`, the request pipeline in front of them as one
+framework-free function from a `Request` to a `Response`, so any HTTP server
+can mount it.
+
+| Tool | Scope | What it does |
+| --- | --- | --- |
+| `docket_search` | `docket:read` | The projections' relevant results, each with its confidence and where it was found, and what has gone out of date |
+| `docket_get` | `docket:read` | One resource's merged record, evidence, documents and revision history, and whether it was superseded |
+| `docket_ask` | `docket:read` | A question answered from the projections, with a model's cited summary |
+| `docket_ontology` | `ontology:read` | The published ontology |
+| `docket_remember`, `docket_update_notes`, `docket_add_evidence` | `docket:write` | Write a resource, append notes, add evidence: every write with evidence, checked against the ontology |
+| `docket_retire`, `docket_supersede` | `docket:write` | Retire a resource written here, or mark one out of date in favour of its replacement |
+| `docket_propose_ontology_change` | `ontology:propose` | A checked draft; it never publishes |
+| `docket_publish_ontology_change` | `ontology:write` | Publish directly, where the workspace lets the caller's role |
+
+```ts
+import { handleMcp } from '@chrisjowen/docket-server/mcp'
+
+const response = await handleMcp(request, {
+  resourceUrl, resource,              // the workspace the path names, or null
+  authenticator, authorizer,          // the bearer's principal, and its role now
+  audit: () => auditSink,
+  store: () => store,                 // the workspace's StoreRunner
+  query: () => queryClient,           // where search and ask are answered
+  links: () => ({ viewer, ontologyHistory }),
+  requestId
+})
+```
+
+The pipeline, in order: a credential in the URL is refused before it is
+looked up; a missing or unknown bearer gets a `401` with a challenge naming
+the resource's protected resource metadata; the deployment's `Limiter` may
+answer instead; the credential's scopes are cut to its subject's role now
+(`effectiveScopes`), and a tool they do not reach is refused `403
+insufficient_scope`; then docket's own MCP server answers, with only the
+tools the effective scopes allow. Each request is audited once: a write
+records its event in the write's own transaction, so the change and its
+event commit or roll back together.
 
 ## Licence
 
