@@ -248,7 +248,7 @@ export async function projectInstance(
   try {
     adapter = await target.open()
   } catch (cause) {
-    return { report: { ...report, error: `could not connect: ${messageOf(cause)}` } }
+    return { report: { ...report, error: `could not connect: ${redactSecrets(messageOf(cause))}` } }
   }
   try {
     const description = adapter.describe()
@@ -304,7 +304,7 @@ export async function projectInstance(
             receipt = await port.apply(projection)
           } catch (cause) {
             // A throw acknowledges nothing in the batch: it and the rest wait for the next pass.
-            report.error = messageOf(cause)
+            report.error = redactSecrets(messageOf(cause))
             report.failed += retry.length + batches.slice(index).reduce((sum, rest) => sum + rest.length, 0)
             retry.length = 0
             break
@@ -319,7 +319,7 @@ export async function projectInstance(
               if (failure.retryable && attempt < ATTEMPTS) retry.push(planned)
               else {
                 report.failed += 1
-                report.error ??= failure.message
+                report.error ??= redactSecrets(failure.message)
               }
               continue
             }
@@ -347,14 +347,14 @@ export async function projectInstance(
       // A flush that fails writes nothing: what was acknowledged is replayed next pass.
       await port.flush?.()
     } catch (cause) {
-      return { report: { ...report, error: messageOf(cause) } }
+      return { report: { ...report, error: redactSecrets(messageOf(cause)) } }
     }
     await deps.hooks?.afterApply?.(instance)
     manifest = { ...manifest, checkpoint: checkpoint.toString() }
     try {
       await scope.store.run(({ tx }) => postgresManifests(tx, workspaceId).write(instance, manifest))
     } catch (cause) {
-      return { report: { ...report, error: messageOf(cause) } }
+      return { report: { ...report, error: redactSecrets(messageOf(cause)) } }
     }
     return { report: { ...report, checkpoint: manifest.checkpoint }, manifest }
   } finally {
@@ -457,7 +457,7 @@ export function reconciler(deps: ReconcileDeps): Reconciler {
       try {
         connected = await deps.projections.connect(scope, workspaceId)
       } catch (cause) {
-        connectError = `the stores are not reachable: ${messageOf(cause)}`
+        connectError = `the stores are not reachable: ${redactSecrets(messageOf(cause))}`
       }
 
       const reports: InstanceReport[] = []
