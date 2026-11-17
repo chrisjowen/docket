@@ -2,6 +2,34 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.5.0
+
+### The reconcile and search loops
+
+The fifth release moves Docket Cloud's worker loops into the core, at
+`@chrisjowen/docket-server/runtime`, completing the shared core.
+
+- **Reconciliation**: `reconciler({ projections })` brings a workspace's
+  projections up to its canonical documents from the outbox - manifests in
+  Postgres, acknowledged changes only, backoff per instance, a queued rebuild
+  resetting each instance once, deleted workspaces purged - over any
+  `StoreScope` and a deployment's `ProjectionSet`. `projectInstance`,
+  `recordStatus` and `backoffMs` are its parts.
+- **The outbox loop**: `outboxLoop` drains every store a `ScopeSource`
+  names, one workspace at a time under an advisory lock, woken by
+  `NOTIFY docket_outbox` or `kick()`, sweeping on an interval besides.
+- **The search pipeline**: `queryService` answers `docket_search` and
+  `docket_ask` over the projections through docket's coordinator, with
+  reciprocal rank fusion, a cross-encoder re-ranker (`rerankerClient`), the
+  fitted relevance cut (`CUT_MODEL`, `RETRIEVAL_CUT_MODEL`, `cut`), the
+  unknown-name gate, supersession notes, and a model's summary when one is
+  set up. `searchBoard`, `searchCandidates`, `rankCandidates`,
+  `changesFound` and `askProjections` are its parts; `fitCut`, `macroScores`
+  and `ndcgAt` refit and score it.
+- **In the Postgres store**: the sync history (`recordSyncRun`,
+  `listSyncRuns`, `syncStanding`, `requestRecheck`) and each projection's
+  standing (`indexStatus`, `instanceStatuses`).
+
 ## 0.4.0
 
 ### The MCP tools and endpoint

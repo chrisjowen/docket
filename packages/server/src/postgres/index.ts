@@ -64,7 +64,24 @@ export {
   type Publisher
 } from './ontology.js'
 export { openText, sealText, type SealedColumns } from './sealing.js'
+export { FAILURES_BEFORE_BEHIND, indexStatus, instanceStatuses, type IndexStatus, type InstanceStatus, type StatusRead } from './index-status.js'
 export { NoPublishedOntology, postgresManifests, postgresSource, publishedOntology, workspaceResolvedConfig } from './source.js'
+export {
+  CHANGES_KEPT,
+  HISTORY_DAYS,
+  HISTORY_LIMIT,
+  listSyncRuns,
+  recordSyncRun,
+  requestRecheck,
+  syncStanding,
+  type OutboxStanding,
+  type ProjectionStanding,
+  type SyncChange,
+  type SyncInstanceRun,
+  type SyncRun,
+  type SyncRunInput,
+  type SyncTrigger
+} from './sync-runs.js'
 export {
   liveSupersessions,
   supersedeResource,

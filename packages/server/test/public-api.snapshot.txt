@@ -1183,6 +1183,9 @@ addEvidence
 appendNotes
   export declare function appendNotes(ctx: StoreContext, writer: Writer, input: AppendNotesInput, options?: WriteOptions): Promise<WriteResult>;
 
+CHANGES_KEPT
+  export declare const CHANGES_KEPT = 50;
+
 CHANNELS
   export declare const CHANNELS: readonly Channel[];
 
@@ -1282,14 +1285,33 @@ evaluate
       login?: string;
   }): Promise<Evaluation>;
 
+FAILURES_BEFORE_BEHIND
+  export declare const FAILURES_BEFORE_BEHIND = 5;
+
 fillMigration
   export declare function fillMigration(sql: string, values: Record<string, string>): string;
 
 headOf
   export declare function headOf(tx: Tx, workspaceId: string): Promise<OntologyVersion | null>;
 
+HISTORY_DAYS
+  export declare const HISTORY_DAYS = 30;
+
+HISTORY_LIMIT
+  export declare const HISTORY_LIMIT = 200;
+
 ident
   export declare function ident(name: string): string;
+
+indexStatus
+  export declare function indexStatus(tx: Tx, workspaceId: string, read: StatusRead, ids: readonly string[]): Promise<IndexStatus>;
+
+IndexStatus
+  export interface IndexStatus {
+      synced: boolean;
+      behind: number;
+      instances: InstanceStatus[];
+  }
 
 InferenceInput
   export interface InferenceInput {
@@ -1397,6 +1419,23 @@ insertWorkspace
       maxWorkspaces?: number;
   }): Promise<Workspace>;
 
+InstanceStatus
+  export interface InstanceStatus {
+      id: string;
+      behind: number;
+      synced: boolean;
+      checkpoint: string | null;
+      syncedAt: string | null;
+      failures: number;
+      error: string | null;
+  }
+
+instanceStatuses
+  export declare function instanceStatuses(tx: Tx, workspaceId: string, read: StatusRead, ids: readonly string[]): Promise<{
+      instances: InstanceStatus[];
+      lagging: Set<string>;
+  }>;
+
 isInferredPath
   export declare const isInferredPath: (path: string) => boolean;
 
@@ -1428,6 +1467,9 @@ listIngests
 
 listPublished
   export declare function listPublished(tx: Tx, workspaceId: string): Promise<OntologyVersion[]>;
+
+listSyncRuns
+  export declare function listSyncRuns(tx: Tx, workspaceId: string, limit?: number): Promise<SyncRun[]>;
 
 listWorkspaces
   export declare function listWorkspaces(tx: Tx): Promise<Workspace[]>;
@@ -1556,6 +1598,14 @@ openText
       keyVersion: number;
   }, ref: DocumentRef): Promise<string>;
 
+OutboxStanding
+  export interface OutboxStanding {
+      pending: number;
+      oldestAt: Date | null;
+      recheckPending: boolean;
+      lastDocumentChange: Date | null;
+  }
+
 PendingDeletion
   export interface PendingDeletion {
       workspaceId: string;
@@ -1594,6 +1644,17 @@ PostgresStoreOptions
       schema?: string;
       codec: DocumentCodec;
       limits?: StoreLimits;
+  }
+
+ProjectionStanding
+  export interface ProjectionStanding {
+      instanceId: string;
+      optional: boolean;
+      failures: number;
+      lastError: string | null;
+      attemptedAt: Date | null;
+      syncedAt: Date | null;
+      retryAt: Date | null;
   }
 
 proposeOntologyChange
@@ -1668,6 +1729,12 @@ recordPurge
       retryAt: Date;
   }): Promise<void>;
 
+recordSyncRun
+  export declare function recordSyncRun(tx: Tx, run: SyncRunInput): Promise<void>;
+
+requestRecheck
+  export declare function requestRecheck(tx: Tx, workspaceId: string): Promise<void>;
+
 resourceChanges
   export declare function resourceChanges(tx: Tx, workspaceId: string): Promise<Map<string, Date>>;
 
@@ -1724,6 +1791,13 @@ sealText
 setOntologyMcpRoles
   export declare function setOntologyMcpRoles(tx: Tx, workspaceId: string, roles: readonly string[]): Promise<OntologyMcpRole[]>;
 
+StatusRead
+  export interface StatusRead {
+      entities: readonly MemoryEntity[];
+      documents: readonly MemoryDocument[];
+      broken: ReadonlySet<string>;
+  }
+
 summaryPath
   export declare const summaryPath: (resourceId: string) => string;
 
@@ -1771,6 +1845,49 @@ Supersession
 
 SupersessionSource
   export type SupersessionSource = 'agent' | 'consolidation';
+
+SyncChange
+  export interface SyncChange {
+      operation: 'upsert' | 'delete';
+      kind: string;
+      id: string;
+  }
+
+SyncInstanceRun
+  export interface SyncInstanceRun {
+      id: string;
+      applied: number;
+      failed: number;
+      reset: boolean;
+      error?: string;
+      upserts: number;
+      deletes: number;
+      changes: SyncChange[];
+  }
+
+SyncRun
+  export interface SyncRun extends SyncRunInput {
+      id: string;
+  }
+
+SyncRunInput
+  export interface SyncRunInput {
+      workspaceId: string;
+      startedAt: Date;
+      finishedAt: Date;
+      triggers: SyncTrigger[];
+      ok: boolean;
+      instances: SyncInstanceRun[];
+  }
+
+syncStanding
+  export declare function syncStanding(tx: Tx, workspaceId: string, instances: readonly string[], optional?: readonly string[]): Promise<{
+      instances: ProjectionStanding[];
+      outbox: OutboxStanding;
+  }>;
+
+SyncTrigger
+  export type SyncTrigger = 'documents' | 'ontology' | 'rebuild' | 'recheck';
 
 transaction
   export declare function transaction<T>(pool: Pool, fn: (tx: PoolClient) => Promise<T>): Promise<T>;
@@ -1828,3 +1945,492 @@ writeInference
 
 writeResource
   export declare function writeResource(ctx: StoreContext, writer: Writer, input: RememberInput, options?: WriteOptions): Promise<WriteResult>;
+
+## ./runtime (./dist/runtime/index.d.ts)
+
+answersOf
+  export declare const answersOf: (model: CutModel, questions: readonly EvalQuestion[], limit?: number) => {
+      question: EvalQuestion;
+      ids: string[];
+  }[];
+
+Asked
+  export interface Asked {
+      outcome: AskOutcome;
+      read: ValidateResult;
+      index: {
+          synced: boolean;
+          behind: number;
+      };
+      project: {
+          name: string;
+          root: string;
+      };
+      supersessions?: ReadonlyMap<string, Pick<Supersession, 'supersededBy' | 'validUntil' | 'reason'>>;
+  }
+
+askProjections
+  export declare function askProjections<S extends SearchQuery, A extends AskQuery>(deps: Pick<QueryServiceDeps<S, A>, 'store' | 'projections' | 'instances' | 'read'>, query: S | A, question: string, maxResults: number, cypher?: Chat): Promise<Asked>;
+
+ATTEMPTS
+  export declare const ATTEMPTS = 2;
+
+backoffMs
+  export declare function backoffMs(failures: number): number;
+
+balanced
+  export declare const balanced: (scores: Scores) => number;
+
+BATCH_SIZE
+  export declare const BATCH_SIZE = 100;
+
+BoardOptions
+  export interface BoardOptions {
+      include?: readonly SearchBackend[] | undefined;
+      limit?: number | undefined;
+      timeline?: readonly Pick<IngestEvent, 'documents'>[] | undefined;
+      reranked?: number | undefined;
+      signals?: Readonly<Record<string, 'semantic' | 'lexical'>> | undefined;
+  }
+
+Candidate
+  export interface Candidate {
+      id: string;
+      semantic?: Placed | undefined;
+      lexical?: Placed | undefined;
+      coverage: number;
+      logit?: number | undefined;
+  }
+
+changesFound
+  export declare function changesFound(asked: Asked): SearchChange[];
+
+ConnectedProjections
+  export interface ConnectedProjections {
+      fingerprint(instance: string): string;
+      open(instance: string): Promise<MemoryAdapter>;
+  }
+
+coverage
+  export declare function coverage(vocabulary: Vocabulary, query: string, entity: Indexed): number;
+
+cut
+  export declare function cut(model: CutModel, candidates: readonly Candidate[], limit: number): {
+      id: string;
+      relevance: number;
+  }[];
+
+CUT_MODEL
+  export declare const CUT_MODEL: CutModel;
+
+CUT_RATIOS
+  export declare const RATIOS: number[];
+
+CUT_THRESHOLDS
+  export declare const THRESHOLDS: number[];
+
+CutModel
+  export interface CutModel {
+      name: string;
+      reranker: string | null;
+      features: readonly string[];
+      mean: readonly number[];
+      scale: readonly number[];
+      weights: readonly number[];
+      bias: number;
+      answer: number;
+      threshold: number;
+      ratio: number;
+  }
+
+dueWorkspaces
+  export declare function dueWorkspaces(store: StoreRunner, instances: readonly string[], now: Date): Promise<string[]>;
+
+EVAL_K
+  export declare const K = 10;
+
+EvalQuestion
+  export interface EvalQuestion {
+      corpus: string;
+      id: string;
+      text: string;
+      kind: 'answerable' | 'no-answer';
+      category: string;
+      split: 'dev' | 'test';
+      relevant: Record<string, number>;
+      gated: boolean;
+      candidates: Candidate[];
+  }
+
+featuresOf
+  export declare function featuresOf(candidates: readonly Candidate[]): Record<string, number>[];
+
+fitCut
+  export declare function fitCut(options: {
+      name: string;
+      reranker: string | null;
+      features: readonly string[];
+      dev: readonly EvalQuestion[];
+      minNdcg: number;
+      l2?: number;
+  }): {
+      model: CutModel;
+      dev: Scores;
+  };
+
+fitLogistic
+  export declare function fitLogistic(rows: readonly {
+      x: readonly number[];
+      y: 0 | 1;
+      weight: number;
+  }[], l2?: number): {
+      mean: number[];
+      scale: number[];
+      weights: number[];
+      bias: number;
+  };
+
+Indexed
+  export interface Indexed {
+      id: string;
+      type: string;
+      title: string;
+      content: string;
+      tags?: readonly string[];
+      attributes?: Readonly<Record<string, unknown>>;
+  }
+
+InstanceReport
+  export interface InstanceReport {
+      id: string;
+      applied: number;
+      failed: number;
+      reset: boolean;
+      checkpoint: string | null;
+      error?: string;
+      changes: {
+          upserts: number;
+          deletes: number;
+          named: SyncChange[];
+      };
+  }
+
+Logger
+  export interface Logger {
+      info(message: string): void;
+      error(message: string): void;
+  }
+
+macroScores
+  export declare function macroScores(answers: readonly {
+      question: EvalQuestion;
+      ids: readonly string[];
+  }[]): Scores & {
+      byCorpus: Record<string, Scores>;
+  };
+
+MAX_RERANKED
+  export declare const MAX_RERANKED = 20;
+
+MAX_TEXTS
+  export declare const MAX_TEXTS = 64;
+
+messageOf
+  export declare const messageOf: (cause: unknown) => string;
+
+Models
+  export interface Models {
+      synthesis?: {
+          model: string;
+          chat: Chat;
+      };
+      cypher?: Chat;
+  }
+
+ndcgAt
+  export declare const ndcgAt: (ids: readonly string[], grades: Readonly<Record<string, number>>, k?: number) => number;
+
+outboxLoop
+  export declare function outboxLoop(options: OutboxLoopOptions): OutboxLoop;
+
+OutboxLoop
+  export interface OutboxLoop {
+      start(): void;
+      kick(): void;
+      stop(): Promise<void>;
+      lastSweep(): Date | null;
+  }
+
+OutboxLoopOptions
+  export interface OutboxLoopOptions {
+      scopes: ScopeSource;
+      pool: Pool;
+      reconciler: Reconciler;
+      instances: readonly string[];
+      log: Logger;
+      intervalMs?: number;
+      channel?: string;
+      now?: () => Date;
+  }
+
+Placed
+  export interface Placed {
+      rank: number;
+      score: number;
+  }
+
+POOL_PER_SOURCE
+  export declare const POOL_PER_SOURCE = 10;
+
+projectInstance
+  export declare function projectInstance(deps: Pick<ReconcileDeps, 'hooks'>, scope: StoreScope, workspaceId: string, target: ProjectionTarget, snap: Pick<Snapshot, 'state' | 'broken'>, fresh: boolean): Promise<{
+      report: InstanceReport;
+      manifest?: AdapterManifest;
+  }>;
+
+ProjectionSet
+  export interface ProjectionSet {
+      instances: readonly string[];
+      connect(scope: StoreScope, workspaceId: string): Promise<ConnectedProjections>;
+  }
+
+ProjectionTarget
+  export interface ProjectionTarget {
+      id: string;
+      fingerprint: string;
+      loaded: AdapterManifest | undefined;
+      open(): Promise<MemoryAdapter>;
+  }
+
+QueryEvent
+  export type QueryEvent<S extends SearchQuery = SearchQuery, A extends AskQuery = AskQuery> = ({
+      tool: 'search';
+      query: S;
+      result?: WorkspaceSearch;
+  } | {
+      tool: 'ask';
+      query: A;
+      result?: AskResponse;
+  }) & {
+      outcome: 'answered' | 'failed';
+      durationMs: number;
+      asked?: Asked;
+      error?: string;
+  };
+
+QueryFailure
+  export declare class QueryFailure extends Error {
+      readonly status: number;
+      name: string;
+      constructor(status: number, message: string);
+  }
+
+queryService
+  export declare function queryService<S extends SearchQuery = SearchQuery, A extends AskQuery = AskQuery>(deps: QueryServiceDeps<S, A>): {
+      search: (query: S) => Promise<WorkspaceSearch>;
+      ask: (query: A) => Promise<AskResponse>;
+  };
+
+QueryService
+  export type QueryService<S extends SearchQuery = SearchQuery, A extends AskQuery = AskQuery> = ReturnType<typeof queryService<S, A>>;
+
+QueryServiceDeps
+  export interface QueryServiceDeps<S extends SearchQuery = SearchQuery, A extends AskQuery = AskQuery> {
+      store(query: S | A): StoreRunner;
+      projections(query: S | A, options: {
+          cypher?: Chat;
+      }): Promise<{
+          adapters: Readonly<Record<string, MemoryAdapter>>;
+          read?(reader: CanonicalReader): void;
+          close(): Promise<void>;
+      }>;
+      instances: readonly string[];
+      read?(ctx: StoreContext, workspaceId: string): Promise<ValidateResult>;
+      models?(query: A): Models | null;
+      reranker: Reranker | null;
+      signals?: Readonly<Record<string, 'semantic' | 'lexical'>>;
+      observe?(event: QueryEvent<S, A>): Promise<void> | void;
+      log: Logger;
+  }
+
+queryTerms
+  export declare const queryTerms: (query: string) => string[];
+
+rankCandidates
+  export declare function rankCandidates(reranker: Reranker | null, query: string, workspace: string, asked: Asked, options: BoardOptions, log: Logger): Promise<Ranked>;
+
+Ranked
+  export interface Ranked {
+      relevance: ReadonlyMap<string, number>;
+      warnings?: readonly string[];
+  }
+
+ReconcileDeps
+  export interface ReconcileDeps {
+      projections: ProjectionSet;
+      purgeAlso?: readonly {
+          id: string;
+          open(scope: StoreScope, workspaceId: string): Promise<MemoryAdapter>;
+          unavailable?(cause: unknown): boolean;
+      }[];
+      hooks?: {
+          afterApply?(instance: string): Promise<void> | void;
+      };
+      now?(): Date;
+  }
+
+ReconcileError
+  export declare class ReconcileError extends Error {
+      name: string;
+  }
+
+reconciler
+  export declare function reconciler(deps: ReconcileDeps): Reconciler;
+
+Reconciler
+  export interface Reconciler {
+      reconcile(scope: StoreScope, workspaceId: string, options?: {
+          fresh?: boolean;
+      }): Promise<ReconcileResult>;
+      purge(scope: StoreScope, deletion: {
+          workspaceId: string;
+          failures: number;
+      }): Promise<{
+          error?: string;
+      }>;
+  }
+
+ReconcileResult
+  export interface ReconcileResult {
+      applied: number;
+      failed: number;
+      checkpoint: string;
+      instances: InstanceReport[];
+  }
+
+recordStatus
+  export declare function recordStatus(tx: Tx, workspaceId: string, report: InstanceReport, rebuilt: number | null, now: Date): Promise<void>;
+
+redactSecrets
+  export declare function redactSecrets(text: string): string;
+
+relevanceOf
+  export declare function relevanceOf(model: CutModel, candidates: readonly Candidate[]): number[];
+
+RERANK_PATH
+  export declare const RERANK_PATH = "/rerank";
+
+RERANKED_FEATURES
+  export declare const RERANKED_FEATURES: readonly [
+      "logit",
+      "probability",
+      "logitGap",
+      "topProbability",
+      "rerankRank",
+      "cosine",
+      "cosineGap",
+      "topCosine",
+      "semanticRank",
+      "coverage",
+      "lexicalShare",
+      "lexicalRank",
+      "both",
+      "semanticOnly",
+      "lexicalOnly"
+  ];
+
+Reranker
+  export interface Reranker {
+      readonly model: string;
+      score(query: string, texts: readonly string[]): Promise<number[]>;
+  }
+
+RERANKER_MODEL
+  export declare const RERANKER_MODEL: RerankerModel;
+
+rerankerClient
+  export declare function rerankerClient(options: {
+      url: string;
+      model: string;
+      timeoutMs?: number;
+      fetch?: typeof fetch;
+  }): Reranker;
+
+RerankerModel
+  export interface RerankerModel {
+      name: string;
+      repo: string;
+      revision: string;
+      onnx: string;
+      sha256: string;
+  }
+
+rerankText
+  export declare function rerankText(entity: Indexed & {
+      links?: readonly {
+          rel: string;
+          target: string;
+      }[];
+  }, titleOf: (id: string) => string | undefined): string;
+
+RETRIEVAL_CUT_MODEL
+  export declare const RETRIEVAL_CUT_MODEL: CutModel;
+
+RETRIEVAL_FEATURES
+  export declare const RETRIEVAL_FEATURES: ("logit" | "probability" | "logitGap" | "topProbability" | "rerankRank" | "cosine" | "cosineGap" | "topCosine" | "semanticRank" | "coverage" | "lexicalShare" | "lexicalRank" | "both" | "semanticOnly" | "lexicalOnly")[];
+
+Scores
+  export interface Scores {
+      ndcg: number;
+      fpr: number;
+      replyPrecision: number;
+      returned: number;
+  }
+
+scoresOf
+  export declare function scoresOf(answers: readonly {
+      question: EvalQuestion;
+      ids: readonly string[];
+  }[]): Scores;
+
+searchBoard
+  export declare function searchBoard(query: string, asked: Asked, ranked: Ranked, options?: BoardOptions): WorkspaceSearch;
+
+searchCandidates
+  export declare function searchCandidates(query: string, asked: Asked, vocabulary: Vocabulary, options?: BoardOptions, most?: number): (Candidate & {
+      text: string;
+  })[];
+
+searchDepth
+  export declare function searchDepth(pool?: number): {
+      perSource: number;
+      reranked: number;
+  };
+
+SIGNALS
+  export declare const SIGNALS: Readonly<Record<string, 'semantic' | 'lexical'>>;
+
+tokensOf
+  export declare const tokensOf: (text: string) => string[];
+
+unknownNames
+  export declare function unknownNames(vocabulary: Vocabulary, query: string): string[];
+
+Vocabulary
+  export declare class Vocabulary {
+      private readonly words;
+      private readonly counts;
+      readonly documents: number;
+      constructor(entities: Iterable<Indexed>);
+      private first;
+      has(term: string): boolean;
+      idf(term: string): number;
+  }
+
+vocabularyOf
+  export declare function vocabularyOf(workspace: string, entities: readonly (Indexed & {
+      revision?: string;
+  })[]): Vocabulary;
+
+workspaceScope
+  export declare function workspaceScope(workspaceId: string): string;

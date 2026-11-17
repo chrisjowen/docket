@@ -13,10 +13,10 @@ npm install @chrisjowen/docket-server @chrisjowen/docket
 documents with your docket, so a server validates exactly as `docket
 validate` does.
 
-It is being extracted from Docket Cloud release by release. This release
-carries the ports, the scope and role vocabulary, the ontology lifecycle, how
-a write becomes a document, the canonical store on Postgres, and the MCP
-tools and endpoint; the reconcile and search loops follow.
+It was extracted from Docket Cloud release by release, and now carries the
+whole shared core: the ports, the scope and role vocabulary, the ontology
+lifecycle, how a write becomes a document, the canonical store on Postgres,
+the MCP tools and endpoint, and the reconcile and search loops.
 
 ## Ports
 
@@ -212,6 +212,49 @@ insufficient_scope`; then docket's own MCP server answers, with only the
 tools the effective scopes allow. Each request is audited once: a write
 records its event in the write's own transaction, so the change and its
 event commit or roll back together.
+
+## The runtime loops
+
+`@chrisjowen/docket-server/runtime` is what a server runs beside its
+endpoint. A deployment names its stores (a `ScopeSource`: Docket Cloud has
+one per organisation, a self-hosted server one) and its projections (a
+`ProjectionSet`: the instances every workspace projects into, and how to
+reach their stores).
+
+```ts
+import { outboxLoop, queryService, reconciler } from '@chrisjowen/docket-server/runtime'
+
+const reconcile = reconciler({ projections })
+const loop = outboxLoop({ scopes, pool, reconciler: reconcile, instances: projections.instances, log: console })
+loop.start() // drains every store's outbox; `kick()` after a write, or NOTIFY docket_outbox
+
+const search = queryService({ store, projections: openForQuery, instances: projections.instances, reranker: null, log: console })
+await search.search({ workspaceId, query: 'who owns orders', limit: 10, userId })
+```
+
+- **Reconciliation** brings each workspace's projections up to its canonical
+  documents, as docket's sync does a checkout: each instance planned from
+  its manifest in Postgres, only what an adapter acknowledged advancing the
+  manifest, and the manifest written only after the adapter flushed, so a
+  pass that crashes replays without duplicates. One instance failing never
+  holds up another; it backs off (30 s doubling, at most 30 minutes) and its
+  outbox rows stay pending until it catches up. A queued rebuild resets each
+  instance once. Every pass goes in the sync history (`listSyncRuns`), with
+  any secret an error quotes redacted.
+- **The outbox loop** drains every store's outbox one workspace at a time,
+  under a session advisory lock so two processes never project the same
+  workspace at once, and purges a deleted workspace from the projections
+  first.
+- **The search pipeline** puts a question to every projection through
+  docket's coordinator and checks each hit against the canonical documents.
+  A search fuses the projections' hits (reciprocal rank fusion) with what the
+  activity log names, lets a cross-encoder (`rerankerClient`) read the
+  question with each candidate, and keeps what a fitted model says is
+  relevant: often fewer than `limit`, and nothing for a question about
+  someone the workspace never recorded. A record gone out of date is never a
+  match: its replacement stands in for it, with a note of the change. Without
+  a re-ranker it cuts on the projections' scores alone. `docket_ask` adds a
+  model's cited summary when `models` names one.
 
 ## Licence
 
