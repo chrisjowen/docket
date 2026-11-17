@@ -3,6 +3,27 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.10.0
+
+### Apache-2.0, and public entry points for what hosts build on
+
+docket is now licensed under the Apache License, Version 2.0: the package
+ships `LICENSE`, and contributions are signed off under the Developer
+Certificate of Origin (`CONTRIBUTING.md` in the repository).
+
+The modules a host such as Docket Cloud builds on are exported at entry
+points of their own, so it no longer needs to patch the package to reach
+its built files: `@chrisjowen/docket/contracts` and `/adapter-kit` (the
+bundled adapter contracts and kit), `/sync/inputs`, `/manifest/plan`,
+`/manifest/adapter-manifest`, `/source/parser`, `/source/hashing`,
+`/ontology/icons`, `/open/graph`, `/open/types`, `/mcp/search`,
+`/mcp/types`, `/query/ask`, `/query/snapshot`, `/query/synthesis` and
+`/query/legacy`, beside the root and `/adapters/neo4j`, `/adapters/mem0`
+and `/adapters/cognee`. Each is the whole module, and the root's exports
+are unchanged. A snapshot of every entry point's declarations is part of
+the tests, so a change to the public API fails them until it is recorded
+on purpose. Nothing docket does changed.
+
 ## 0.9.0
 
 ### Docket Cloud's look, in docket open and the search app

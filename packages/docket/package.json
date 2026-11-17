@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
   "license": "Apache-2.0",
   "keywords": [
@@ -40,6 +40,70 @@
     "./adapters/cognee": {
       "types": "./dist/bundled/adapter-cognee/dist/index.d.ts",
       "import": "./dist/bundled/adapter-cognee/dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/bundled/contracts/dist/index.d.ts",
+      "import": "./dist/bundled/contracts/dist/index.js"
+    },
+    "./adapter-kit": {
+      "types": "./dist/bundled/adapter-kit/dist/index.d.ts",
+      "import": "./dist/bundled/adapter-kit/dist/index.js"
+    },
+    "./manifest/adapter-manifest": {
+      "types": "./dist/manifest/adapter-manifest.d.ts",
+      "import": "./dist/manifest/adapter-manifest.js"
+    },
+    "./manifest/plan": {
+      "types": "./dist/manifest/plan.d.ts",
+      "import": "./dist/manifest/plan.js"
+    },
+    "./mcp/search": {
+      "types": "./dist/mcp/search.d.ts",
+      "import": "./dist/mcp/search.js"
+    },
+    "./mcp/types": {
+      "types": "./dist/mcp/types.d.ts",
+      "import": "./dist/mcp/types.js"
+    },
+    "./ontology/icons": {
+      "types": "./dist/ontology/icons.d.ts",
+      "import": "./dist/ontology/icons.js"
+    },
+    "./open/graph": {
+      "types": "./dist/open/graph.d.ts",
+      "import": "./dist/open/graph.js"
+    },
+    "./open/types": {
+      "types": "./dist/open/types.d.ts",
+      "import": "./dist/open/types.js"
+    },
+    "./query/ask": {
+      "types": "./dist/query/ask.d.ts",
+      "import": "./dist/query/ask.js"
+    },
+    "./query/legacy": {
+      "types": "./dist/query/legacy.d.ts",
+      "import": "./dist/query/legacy.js"
+    },
+    "./query/snapshot": {
+      "types": "./dist/query/snapshot.d.ts",
+      "import": "./dist/query/snapshot.js"
+    },
+    "./query/synthesis": {
+      "types": "./dist/query/synthesis.d.ts",
+      "import": "./dist/query/synthesis.js"
+    },
+    "./source/hashing": {
+      "types": "./dist/source/hashing.d.ts",
+      "import": "./dist/source/hashing.js"
+    },
+    "./source/parser": {
+      "types": "./dist/source/parser.d.ts",
+      "import": "./dist/source/parser.js"
+    },
+    "./sync/inputs": {
+      "types": "./dist/sync/inputs.d.ts",
+      "import": "./dist/sync/inputs.js"
     },
     "./package.json": "./package.json"
   },
