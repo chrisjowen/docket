@@ -1119,8 +1119,9 @@ purpose.
 [`@chrisjowen/docket-server`](packages/server) is the core a Docket server is
 built on, shared by Docket Cloud and a self-hosted, single-tenant server: the
 ports a deployment plugs its storage, sign-in and tenancy into, the scope
-and role vocabulary MCP calls are checked against, the ontology lifecycle and
-how a write becomes a document. It is published on its own,
+and role vocabulary MCP calls are checked against, the ontology lifecycle,
+how a write becomes a document, and the canonical store on Postgres
+(`@chrisjowen/docket-server/postgres`). It is published on its own,
 imports nothing of any one deployment, and records its API in
 [`packages/server/test/public-api.snapshot.txt`](packages/server/test/public-api.snapshot.txt)
 the same way. See [its README](packages/server/README.md).
@@ -1208,7 +1209,9 @@ pnpm build       # the adapter contracts, kit and adapters and the web UI
                  # docket-server, which validates with docket; the
                  # end-to-end tests run the built CLI, so build first
 pnpm typecheck   # sources and tests
-pnpm test        # the contracts', adapters', CLI's and plugin's suites
+pnpm test        # the contracts', adapters', CLI's, server's and plugin's suites;
+                 # set DOCKET_TEST_PG_URL to a Postgres role that may create
+                 # databases to run docket-server's store suites too
 pnpm -C packages/docket eval:ask   # how well docket ask answers: calls models,
                                    # so never part of pnpm test
 pnpm -C packages/docket eval:search:download  # fetch the search evaluation's datasets

@@ -14,9 +14,9 @@ documents with your docket, so a server validates exactly as `docket
 validate` does.
 
 It is being extracted from Docket Cloud release by release. This release
-carries the ports, the scope and role vocabulary, the ontology lifecycle and
-how a write becomes a document; the Postgres store, the MCP tools and
-handler, and the reconcile and search loops follow.
+carries the ports, the scope and role vocabulary, the ontology lifecycle, how
+a write becomes a document, and the canonical store on Postgres; the MCP
+tools and handler, and the reconcile and search loops follow.
 
 ## Ports
 
@@ -27,7 +27,7 @@ or its callers.
 | --- | --- |
 | `Tx` | One SQL transaction: anything with `query(text, values)`, such as a `pg` client |
 | `DocumentCodec` | How document bodies are stored at rest: `seal`, `open`, and the `aad` that binds a body to its revision |
-| `StoreContext`, `StoreRunner` | A transaction with its codec, and how to run one |
+| `StoreContext`, `StoreRunner`, `StoreLimits` | A transaction with its codec and limits, and how to run one |
 | `ScopeSource` | The stores the background loops visit: one per organisation, or just one |
 | `Principal`, `McpResource` | Who is calling, and the workspace a request is for |
 | `Authenticator` | Resolves a bearer credential to a principal |
@@ -109,6 +109,67 @@ document, or makes a new one, keeping what is there and adding only evidence
 it does not already hold, so repeating a write adds nothing. The write tools
 parse their arguments with `argumentsOf` and `parseEvidence`, and answer with
 `writeAnswer`.
+
+## The Postgres store
+
+`@chrisjowen/docket-server/postgres` keeps a workspace's canonical data in
+Postgres: documents with every revision, the ontology's drafts and published
+versions, the activity log, supersessions, adapter manifests and the outbox
+reconciliation reads. It imports no driver; pass it your own pool (a
+`pg.Pool`).
+
+```ts
+import { readFile } from 'node:fs/promises'
+
+import pg from 'pg'
+import { localKeyCodec } from '@chrisjowen/docket-server'
+import { createWorkspace, migrate, postgresStore, writeResource } from '@chrisjowen/docket-server/postgres'
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
+await migrate(pool) // the core tables, in `public`; safe to run from every replica at start
+
+const store = postgresStore({ pool, codec: localKeyCodec({ key: await readFile('docket.key') }) })
+await store.run((ctx) =>
+  createWorkspace(ctx, { name: 'Platform', slug: 'platform', start: { template: 'sdlc' }, publisher: { actor: 'user:me', login: 'me' } })
+)
+```
+
+- **One schema, or one per tenant.** `migrate(pool, { schema })` runs the
+  same `{{schema}}`-templated migrations into any schema and records them in
+  that schema's own `docket_migrations` ledger; `postgresStore({ schema })`
+  puts it first on each transaction's search path. A single-tenant server
+  keeps one store in `public`; Docket Cloud keeps one per organisation.
+- **Codecs.** Each document body, and each activity and supersession detail,
+  is sealed by the store's `DocumentCodec`, bound by its associated data to
+  the row and revision it belongs to, with the key version beside it.
+  `plaintextCodec()` stores text as it is, for a server whose operator owns
+  its disk; `localKeyCodec({ key })` seals with AES-256-GCM and one 32-byte
+  key kept outside the database. Every body is also hash-checked when it is
+  read.
+- **Writes are serialised where they meet.** A write validates against the
+  published ontology head while holding it `FOR SHARE`, and a publish takes
+  it `FOR UPDATE`, so a write validated against an old head is checked again
+  against the new one before it commits, and a publish waits for the writes
+  in flight and checks them too. Two writes to one resource take a lock on
+  it, so their evidence merges rather than overwrites.
+- **Limits** are the deployment's: `postgresStore({ limits: {
+  documentsPerWorkspace, workspaces } })`. There are none by default.
+
+`writeResource`, `addEvidence`, `appendNotes`, `writeInference` and
+`retireResource` are the write tools' paths; `supersedeResource` marks a
+record out of date. `createDraft`, `checkDraft`, `publish`, `rollback`,
+`proposeOntologyChange` and `publishOntologyChange` are the ontology's.
+`postgresSource` and `postgresManifests` are docket's `CanonicalSource` and
+`ManifestStore` over the store, so `docket validate` and sync read it as
+they read files.
+
+The integration tests run every suite against both shapes - a plain schema
+with the plaintext codec, and a templated schema with a local key - when
+`DOCKET_TEST_PG_URL` names a role that may create databases:
+
+```bash
+DOCKET_TEST_PG_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres pnpm -C packages/server test
+```
 
 ## Licence
 

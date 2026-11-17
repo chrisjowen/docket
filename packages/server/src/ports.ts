@@ -31,6 +31,12 @@ export interface DocumentRef {
 export interface SealedBody {
   ciphertext: Uint8Array
   nonce: Uint8Array
+  /**
+   * The version of the key it was sealed with, stored beside it, so a
+   * deployment that rotates keys opens each body with its own. A codec that
+   * does not version its key leaves it out; the store records 0.
+   */
+  keyVersion?: number
 }
 
 /**
@@ -50,6 +56,16 @@ export interface DocumentCodec {
 export interface StoreContext {
   tx: Tx
   codec: DocumentCodec
+  /** How much the store holds; unlimited where absent. */
+  limits?: StoreLimits
+}
+
+/** What a deployment holds a store to. Docket Cloud's beta holds each organisation to a few workspaces; a self-hosted server sets none. */
+export interface StoreLimits {
+  /** Live documents per workspace. */
+  documentsPerWorkspace?: number
+  /** Workspaces in the store. */
+  workspaces?: number
 }
 
 /** Runs `fn` in one transaction in one store, committing when it resolves and rolling back when it throws. */
