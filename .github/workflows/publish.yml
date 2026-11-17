@@ -42,9 +42,10 @@ jobs:
           fi
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      # The end-to-end tests run the built CLI, so build before testing.
+      # The end-to-end tests run the built CLI, and docket-server typechecks
+      # against docket's built declarations, so build first.
       - run: pnpm build
+      - run: pnpm typecheck
       - run: pnpm test
 
       # Staged publishing needs npm 11.15.0 or later; Node 22 ships npm 10.

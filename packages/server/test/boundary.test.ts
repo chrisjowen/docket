@@ -7,11 +7,12 @@ import { describe, expect, it } from 'vitest'
 /**
  * The core is shared by every deployment, so it imports nothing of any one
  * of them: a module of the package imports its own files, Node's built-ins
- * and the packages listed here, and never Docket Cloud's.
+ * and the packages listed here - docket, which it validates with, and the
+ * YAML library it edits documents with - and never Docket Cloud's.
  */
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
-const ALLOWED_PACKAGES: readonly string[] = []
+const ALLOWED_PACKAGES: readonly string[] = ['@chrisjowen/docket', 'yaml']
 const TEST_PACKAGES: readonly string[] = ['vitest']
 
 const sources = async (dir: string): Promise<string[]> => {

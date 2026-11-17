@@ -41,9 +41,10 @@ jobs:
           fi
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      # The API surface test reads the built declarations, so build before testing.
+      # The API surface test reads the built declarations, and docket-server
+      # typechecks against docket's, so build first.
       - run: pnpm build
+      - run: pnpm typecheck
       - run: pnpm test
 
       # Staged publishing needs npm 11.15.0 or later; Node 22 ships npm 10.

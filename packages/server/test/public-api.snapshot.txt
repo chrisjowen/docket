@@ -1,5 +1,28 @@
 ## . (./dist/index.d.ts)
 
+AddEvidenceInput
+  export interface AddEvidenceInput {
+      id: string;
+      link?: {
+          rel: string;
+          target: string;
+      };
+      evidence: EvidenceInput[];
+  }
+
+appendedNotes
+  export declare function appendedNotes(raw: string | undefined, notes: string, now: Date): string;
+
+AppendNotesInput
+  export interface AppendNotesInput {
+      id: string;
+      additionalNotes: string;
+      evidence: EvidenceInput[];
+  }
+
+argumentsOf
+  export declare function argumentsOf(name: string, raw: unknown, allowed: readonly string[], shape: string): Record<string, unknown>;
+
 AuditEventInput
   export interface AuditEventInput {
       workspaceId?: string | null;
@@ -33,8 +56,82 @@ Authorizer
       ontologyWriters?(workspaceId: string): Promise<readonly Role[]>;
   }
 
+BREAKING_CODES
+  export declare const BREAKING_CODES: ReadonlySet<string>;
+
+breakingChange
+  export declare function breakingChange(diagnostic: Diagnostic): string;
+
+Change
+  export interface Change {
+      op: '+' | '-' | '~';
+      text: string;
+  }
+
+Channel
+  export type Channel = 'repo' | 'mcp' | 'ui' | 'cli' | 'ontology' | 'enrichment';
+
+checkDraft
+  export declare function checkDraft(snapshot: WorkspaceSnapshot, stored: readonly StoredDocument[], draftYaml: string, options?: {
+      migration?: readonly Migration[];
+      login?: string;
+  }): DraftCheck;
+
+CheckResult
+  export interface CheckResult {
+      classification: 'safe' | 'narrowing' | 'breaking';
+      introduced: Diagnostic[];
+      resolved: Diagnostic[];
+      affected: {
+          resourceId: string;
+          origin: Origin;
+      }[];
+  }
+
 checkScope
   export declare function checkScope(effective: readonly Scope[], needed: Scope): Refusal | null;
+
+classify
+  export declare function classify(introduced: readonly Diagnostic[]): CheckResult['classification'];
+
+compare
+  export declare function compare(before: {
+      documents: readonly MemoryDocument[];
+      ontology: Ontology | null;
+  }, after: {
+      documents: readonly MemoryDocument[];
+      ontology: Ontology;
+  }, origins: ReadonlyMap<string, Origin>): CheckResult;
+
+ComposedDocument
+  export interface ComposedDocument {
+      raw: string;
+      added: number;
+      evidence: EvidenceGroup[];
+  }
+
+composeDocument
+  export declare function composeDocument(existing: string | null, change: ResourceChange, fallbackTitle: string): ComposedDocument | null;
+
+describeMigration
+  export declare function describeMigration(step: Migration): string;
+
+diagnosticKey
+  export declare function diagnosticKey(diagnostic: Diagnostic): string;
+
+diffOntologies
+  export declare function diffOntologies(before: Ontology | null, after: Ontology): Change[];
+
+Disposed
+  export interface Disposed extends Unresolved {
+      disposition: Disposition;
+  }
+
+Disposition
+  export type Disposition = 'update-in-repo' | 'accept-data-loss';
+
+DISPOSITIONS
+  export declare const DISPOSITIONS: readonly Disposition[];
 
 DocumentCodec
   export interface DocumentCodec {
@@ -50,11 +147,135 @@ DocumentRef
       revision: number;
   }
 
+DraftCheck
+  export interface DraftCheck extends CheckResult {
+      head: number;
+      documents: number;
+      ontology: Diagnostic[];
+      changes: Change[];
+      migrated: string[];
+      unresolved: Unresolved[];
+  }
+
 effectiveScopes
   export declare function effectiveScopes<P extends Principal>(principal: P, authorizer: Authorizer<P>): Promise<Scope[]>;
 
+evaluateDraft
+  export declare function evaluateDraft(snapshot: WorkspaceSnapshot, stored: readonly StoredDocument[], draft: Ontology, options?: {
+      migration?: readonly Migration[];
+      version?: number;
+      login?: string;
+  }): Evaluation;
+
+Evaluation
+  export interface Evaluation {
+      check: CheckResult;
+      rewrites: Rewrite[];
+      unresolved: Unresolved[];
+      head: WorkspaceSnapshot['head'];
+      documents: number;
+  }
+
+EVIDENCE_SCHEMA
+  export declare const EVIDENCE_SCHEMA: {
+      readonly type: "object";
+      readonly description: string;
+      readonly properties: {
+          readonly observedAt: {
+              readonly type: "string";
+              readonly maxLength: 40;
+              readonly description: "When it was seen: YYYY-MM-DD or an ISO timestamp. Defaults to now.";
+          };
+          readonly observedBy: {
+              readonly type: "string";
+              readonly maxLength: 100;
+              readonly description: "Who reported it, if not you: kept as reportedBy. You are recorded as the observer.";
+          };
+          readonly note: {
+              readonly type: "string";
+              readonly maxLength: 1000;
+              readonly description: "What was seen there, in a sentence.";
+          };
+          readonly source: {
+              readonly type: "string";
+              readonly minLength: 1;
+              readonly maxLength: 60;
+              readonly description: "The evidence source, for example code, manifest, api, human or conversation.";
+          };
+      };
+      readonly required: readonly [
+          "source"
+      ];
+      readonly additionalProperties: false;
+  };
+
+EvidenceGroup
+  export type EvidenceGroup = {
+      on: string;
+      entries: Record<string, unknown>[];
+  };
+
+EvidenceInput
+  export interface EvidenceInput {
+      source: string;
+      repository?: string;
+      path?: string;
+      lines?: string;
+      symbol?: string;
+      key?: string;
+      method?: string;
+      endpoint?: string;
+      urls?: string[];
+      commit?: string;
+      observedAt?: string;
+      observedBy?: string;
+      note?: string;
+  }
+
+evidenceProblems
+  export declare function evidenceProblems(evidence: readonly EvidenceInput[], subject: string, where: {
+      path: string;
+      id: string;
+  }): Diagnostic[];
+
+exportHeader
+  export declare function exportHeader(parts: {
+      org: string;
+      workspace: string;
+      number: number;
+      hash: string;
+  }): string;
+
+exportYaml
+  export declare function exportYaml(parts: {
+      org: string;
+      workspace: string;
+      number: number;
+      hash: string;
+      yaml: string;
+  }): string;
+
+hasErrors
+  export declare const hasErrors: (diagnostics: readonly Diagnostic[]) => boolean;
+
 impliedScopes
   export declare function impliedScopes(scopes: readonly Scope[]): Scope[];
+
+Imported
+  export interface Imported {
+      yaml: string;
+      ontology: Ontology | null;
+      diagnostics: Diagnostic[];
+  }
+
+importYaml
+  export declare function importYaml(text: string): Imported;
+
+isBreaking
+  export declare const isBreaking: (diagnostic: Diagnostic) => boolean;
+
+isObject
+  export declare const isObject: (value: unknown) => value is Record<string, unknown>;
 
 isRole
   export declare function isRole(value: unknown): value is Role;
@@ -62,10 +283,27 @@ isRole
 isScope
   export declare function isScope(value: unknown): value is Scope;
 
+isTemplateId
+  export declare function isTemplateId(value: unknown): value is TemplateId;
+
 Limiter
   export interface Limiter<P extends Principal = Principal> {
       check(principal: P, message: McpMessage): Promise<Response | null>;
   }
+
+LinkInput
+  export interface LinkInput {
+      rel: string;
+      target: string;
+      attributes?: Record<string, unknown>;
+      evidence: EvidenceInput[];
+  }
+
+lintOntology
+  export declare function lintOntology(ontology: Ontology): Diagnostic[];
+
+MAX_ONTOLOGY_BYTES
+  export declare const MAX_ONTOLOGY_BYTES: number;
 
 McpMessage
   export interface McpMessage {
@@ -81,10 +319,83 @@ McpResource
       workspaceId: string;
   }
 
+mergePatch
+  export declare function mergePatch(target: unknown, patch: unknown): unknown;
+
+Migration
+  export type Migration = {
+      op: 'renameType' | 'renameRelationship' | 'mapType' | 'dropAttribute';
+      from: string;
+      to?: string;
+      type?: string;
+  };
+
+MIGRATION_OPS
+  export declare const MIGRATION_OPS: readonly Migration['op'][];
+
+MigrationInvalid
+  export declare class MigrationInvalid extends Error {
+      readonly problems: string[];
+      name: string;
+      constructor(problems: string[]);
+  }
+
+migrationProblems
+  export declare function migrationProblems(migration: readonly Migration[], draft: Ontology): string[];
+
+migrationSteps
+  export declare function migrationSteps(value: unknown): Migration[] | null;
+
 ModelGate
   export interface ModelGate<P extends Principal = Principal> {
       beforeModelCall(principal: P): Promise<void>;
   }
+
+OntologyBreakingChange
+  export declare class OntologyBreakingChange extends Error {
+      readonly check: CheckResult;
+      name: string;
+      constructor(check: CheckResult);
+  }
+
+OntologyInvalid
+  export declare class OntologyInvalid extends Error {
+      readonly diagnostics: Diagnostic[];
+      name: string;
+      constructor(diagnostics: Diagnostic[]);
+  }
+
+OntologyNarrowingChange
+  export declare class OntologyNarrowingChange extends Error {
+      readonly check: CheckResult;
+      name: string;
+      constructor(check: CheckResult);
+  }
+
+OntologyWriteDisabled
+  export declare class OntologyWriteDisabled extends Error {
+      readonly role: string | null;
+      name: string;
+      constructor(role: string | null);
+  }
+
+optionalText
+  export declare function optionalText(value: unknown, at: string, max: number): string | undefined;
+
+Origin
+  export type Origin = 'repo' | 'cloud' | 'cli';
+
+parseAttributes
+  export declare function parseAttributes(raw: unknown, at: string): Record<string, unknown> | undefined;
+
+parseDraft
+  export declare function parseDraft(yaml: string): {
+      ontology: Ontology;
+      diagnostics: Diagnostic[];
+  };
+
+parseEvidence
+  export declare function parseEvidence(raw: unknown, at: string): EvidenceInput[];
 
 parseScopeString
   export declare function parseScopeString(value: string | undefined | null): Scope[];
@@ -97,6 +408,18 @@ Principal
       actor: string;
       expiresAt?: Date;
   }
+
+Proposal
+  export type Proposal = {
+      yaml: string;
+      message?: string;
+  } | {
+      patch: string;
+      message?: string;
+  };
+
+proposedText
+  export declare function proposedText(head: string | null, proposal: Proposal): string;
 
 QueryBackend
   export interface QueryBackend<SearchQuery = unknown, SearchResult = unknown, AskQuery = unknown, AskResult = unknown> {
@@ -116,6 +439,61 @@ Refusal
       description: string;
   };
 
+refuse
+  export declare const refuse: (code: string, message: string, where?: {
+      path?: string;
+      id?: string;
+  }) => Diagnostic;
+
+RememberInput
+  export interface RememberInput {
+      id: string;
+      type: string;
+      title: string;
+      attributes?: Record<string, unknown>;
+      body?: string;
+      links?: LinkInput[];
+      evidence: EvidenceInput[];
+  }
+
+renderDocument
+  export declare function renderDocument(frontmatter: Document | Record<string, unknown>, body: string): string;
+
+requiredText
+  export declare function requiredText(value: unknown, at: string, max: number): string;
+
+ResourceChange
+  export interface ResourceChange {
+      id: string;
+      type: string;
+      title?: string;
+      attributes?: Record<string, unknown>;
+      body?: string;
+      evidence: StampedEvidence[];
+      links: {
+          rel: string;
+          target: string;
+          attributes?: Record<string, unknown>;
+          evidence: StampedEvidence[];
+      }[];
+      provenance?: Record<string, unknown>;
+  }
+
+Rewrite
+  export interface Rewrite {
+      path: string;
+      raw: string;
+      resourceId: string;
+      evidence: Record<string, string>;
+  }
+
+rewriteDocument
+  export declare function rewriteDocument(raw: string, migration: readonly Migration[], evidence: (applied: Migration[]) => Record<string, string>): {
+      raw: string;
+      applied: Migration[];
+      evidence: Record<string, string>;
+  } | null;
+
 Role
   export type Role = (typeof ROLES)[number];
 
@@ -129,6 +507,9 @@ ROLES
 
 roleScopes
   export declare function roleScopes(role: Role | null, ontologyWriters?: readonly Role[]): readonly Scope[];
+
+sameMeaning
+  export declare function sameMeaning(a: string, b: string, path: string): boolean;
 
 Scope
   export type Scope = (typeof SCOPES)[number];
@@ -156,10 +537,45 @@ SealedBody
       nonce: Uint8Array;
   }
 
+sizeProblem
+  export declare function sizeProblem(text: string): Diagnostic | null;
+
+splitDocument
+  export declare function splitDocument(raw: string): {
+      frontmatter: Document;
+      body: string;
+  } | null;
+
+StaleDraft
+  export declare class StaleDraft extends Error {
+      readonly expectedHead: number;
+      readonly head: number;
+      name: string;
+      constructor(expectedHead: number, head: number);
+  }
+
+StampedEvidence
+  export interface StampedEvidence extends Omit<EvidenceInput, 'observedBy'> {
+      observedAt: string;
+      observedBy: string;
+      session: string;
+      reportedBy?: string;
+  }
+
+stampEvidence
+  export declare function stampEvidence(entry: EvidenceInput, writer: Pick<Writer, 'label' | 'requestId'>, now: Date): StampedEvidence;
+
 StoreContext
   export interface StoreContext {
       tx: Tx;
       codec: DocumentCodec;
+  }
+
+StoredDocument
+  export interface StoredDocument {
+      path: string;
+      origin: Origin;
+      raw?: string;
   }
 
 StoreRunner
@@ -173,10 +589,128 @@ StoreScope
       store: StoreRunner;
   }
 
+stripHeader
+  export declare function stripHeader(text: string): string;
+
+template
+  export declare function template(id: TemplateId): Template;
+
+Template
+  export interface Template {
+      id: TemplateId;
+      name: string;
+      description: string;
+      yaml: string;
+  }
+
+TEMPLATE_IDS
+  export declare const TEMPLATE_IDS: readonly [
+      "sdlc",
+      "lean-catalogue",
+      "blank"
+  ];
+
+TemplateId
+  export type TemplateId = (typeof TEMPLATE_IDS)[number];
+
+TEMPLATES
+  export declare const TEMPLATES: readonly Template[];
+
 Tx
   export interface Tx {
       query<R extends Record<string, any> = any>(text: string, values?: unknown[]): Promise<{
           rows: R[];
           rowCount: number | null;
       }>;
+  }
+
+Unresolved
+  export interface Unresolved {
+      resourceId: string;
+      origin: Origin;
+      changes: string[];
+      updatable: boolean;
+  }
+
+VersionNotFound
+  export declare class VersionNotFound extends Error {
+      name: string;
+  }
+
+WorkspaceSnapshot
+  export interface WorkspaceSnapshot {
+      documents: readonly MemoryDocument[];
+      origins: ReadonlyMap<string, Origin>;
+      head: {
+          number: number;
+          ontology: Ontology | null;
+      } | null;
+  }
+
+WRITE_LIMITS
+  export declare const WRITE_LIMITS: {
+      readonly evidencePerCall: 50;
+      readonly linksPerResource: 100;
+      readonly reasonLength: 500;
+  };
+
+WRITE_SCHEMA
+  export declare const WRITE_SCHEMA = "docket-write.v1";
+
+writeAnswer
+  export declare function writeAnswer(tool: string, id: string, viewer: string, result: WriteResult, dryRun: boolean): {
+      isError?: boolean | undefined;
+      content: {
+          type: "text";
+          text: string;
+      }[];
+      structuredContent: {
+          viewer: string;
+          diagnostics: {
+              severity: "error" | "warning";
+              code: string;
+              message: string;
+          }[];
+          revision?: number | undefined;
+          path?: string | undefined;
+          documentId?: string | undefined;
+          schema: string;
+          tool: string;
+          id: string;
+          ok: boolean;
+          dryRun: boolean;
+          created: boolean;
+          changed: boolean;
+          evidenceAdded: number;
+      };
+  };
+
+writeDiagnostics
+  export declare function writeDiagnostics(diagnostics: readonly Diagnostic[]): Diagnostic[];
+
+WriteOptions
+  export interface WriteOptions {
+      dryRun?: boolean;
+      now?: () => Date;
+  }
+
+Writer
+  export interface Writer {
+      workspaceId: string;
+      actor: string;
+      label: string;
+      channel: Exclude<Channel, 'repo' | 'ontology'>;
+      requestId: string;
+  }
+
+WriteResult
+  export interface WriteResult {
+      documentId?: string;
+      path?: string;
+      revision?: number;
+      created: boolean;
+      changed: boolean;
+      diagnostics: Diagnostic[];
+      evidenceAdded: number;
+      ingestId?: string;
   }
