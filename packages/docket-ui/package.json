@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The web UI `docket open` serves. Built into the docket package; never published on its own.",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite dev",

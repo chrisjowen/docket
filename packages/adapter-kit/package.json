@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "What docket's own adapters share: the entity-projection adapter, checkout scopes, stable JSON, atomic writes and the Ollama chat client.",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {

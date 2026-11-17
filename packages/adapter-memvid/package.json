@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "docket's memvid adapter: canonical inputs as frames of one .mv2 file, searched lexically through the memvid CLI.",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {

@@ -1086,6 +1086,34 @@ passages and the canonical records they came from; their READMEs list the
 engine versions they were tested against, what each needs installed, and what
 each does not do.
 
+### Package entry points
+
+A program builds on `@chrisjowen/docket` through the entry points its
+`exports` names, never through its built files (`dist/...`), which can move
+in any release:
+
+| Import | What it is |
+| --- | --- |
+| `@chrisjowen/docket` | The programmatic API: `createDocket`, sync, validation, the graph browser, the MCP server, asking, and the adapter contracts' types |
+| `@chrisjowen/docket/contracts` | The adapter contracts (`@docket/contracts`): types, runtime validators and `unacknowledged` |
+| `@chrisjowen/docket/adapter-kit` | The kit the bundled adapters are built with (`@docket/adapter-kit`) |
+| `@chrisjowen/docket/adapters/neo4j`, `/adapters/mem0`, `/adapters/cognee` | The bundled Neo4j, mem0 and cognee adapters |
+| `@chrisjowen/docket/sync/inputs` | The canonical inputs sync derives from a docket |
+| `@chrisjowen/docket/manifest/plan`, `/manifest/adapter-manifest` | Each adapter instance's sync plan, and what its manifest records |
+| `@chrisjowen/docket/source/parser`, `/source/hashing` | Parsing a canonical Markdown document, and the content hash revisions use |
+| `@chrisjowen/docket/ontology/icons` | The icons an ontology type can name |
+| `@chrisjowen/docket/open/graph`, `/open/types` | The graph `docket open` browses, and the shapes its API returns |
+| `@chrisjowen/docket/mcp/search`, `/mcp/types` | What `docket_search` finds, as text and as its MCP app's graph |
+| `@chrisjowen/docket/query/ask`, `/query/snapshot`, `/query/synthesis`, `/query/legacy` | Asking: the coordinator, the snapshot it reads, the synthesis prompt and citations, and the search result shape |
+
+Everything the root exports from these modules is also exported there; a
+subpath imports one module without the rest of docket, which suits a host
+that bundles code for a browser. The declarations of every entry point are
+recorded in
+[`packages/docket/test/public-api.snapshot.txt`](packages/docket/test/public-api.snapshot.txt),
+and the tests fail when they change, so an API change is always made on
+purpose.
+
 ## Local runtimes
 
 An adapter connects to a service; docket does not start one unless asked.
@@ -1225,6 +1253,13 @@ creates a public `0.0.0-stage` placeholder version on npm.
 
 Check what a release will contain with `npm pack --dry-run` in
 `packages/docket`.
+
+## Contributing and licence
+
+docket is licensed under the [Apache License, Version 2.0](LICENSE).
+Contributions are welcome under the same licence, with each commit signed off
+under the Developer Certificate of Origin; see
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 

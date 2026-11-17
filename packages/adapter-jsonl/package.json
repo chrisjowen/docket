@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "docket's default lightweight adapter: merged entities as JSONL files, searched lexically. No service or network.",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {

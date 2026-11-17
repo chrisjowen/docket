@@ -62,6 +62,34 @@ describe('the published package', () => {
     }
   })
 
+  it('exports the contracts, the adapter kit and the parts of sync, query, search and the graph browser at their own entry points', async () => {
+    const entries: Record<string, string[]> = {
+      './contracts': ['unacknowledged', 'ADAPTER_API_VERSION'],
+      './adapter-kit': ['entityProjectionAdapter'],
+      './manifest/adapter-manifest': ['Checkpoint', 'emptyRecords', 'INPUT_KINDS', 'resetPendingFingerprint'],
+      './manifest/plan': ['planAdapter'],
+      './mcp/search': ['MAX_SEARCH_LIMIT', 'searchText'],
+      './mcp/types': ['SEARCH_SCHEMA'],
+      './ontology/icons': ['iconFor', 'ICON_NAMES'],
+      './open/graph': ['readGraph'],
+      './open/types': [],
+      './query/ask': ['askWith'],
+      './query/legacy': ['toSearchResult'],
+      './query/snapshot': ['snapshotOf'],
+      './query/synthesis': ['citationsIn', 'synthesisPrompt'],
+      './source/hashing': ['hashContent'],
+      './source/parser': ['MATTER_OPTIONS'],
+      './sync/inputs': ['canonicalState']
+    }
+    for (const [subpath, names] of Object.entries(entries)) {
+      const module = await load(subpath)
+      for (const name of names) expect(module[name], `${subpath}: ${name}`).toBeDefined()
+    }
+    // The same modules as the root's, so a host mixing the two shares one copy of each.
+    expect((await load('./contracts')).unacknowledged).toBe((await load('.')).unacknowledged)
+    expect((await load('./adapter-kit')).entityProjectionAdapter).toBe((await load('.')).entityProjectionAdapter)
+  })
+
   it('exports the bundled Neo4j, mem0 and cognee adapters at their own entry points', async () => {
     const neo4j = await load('./adapters/neo4j')
     expect(neo4j.createNeo4jProjection).toBeTypeOf('function')

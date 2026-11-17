@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "docket's Neo4j adapter: entities as a typed graph, searched by full-text matches and the paths from them, or through hand-written query templates and generated read-only Cypher.",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {
