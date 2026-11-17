@@ -2,6 +2,33 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.4.0
+
+### The MCP tools and endpoint
+
+The fourth release moves Docket Cloud's MCP tools and its endpoint's
+request pipeline into the core, at `@chrisjowen/docket-server/mcp`.
+
+- **The eleven tools**: `docket_search`, `docket_get`, `docket_ask` and
+  `docket_ontology` to read; `docket_remember`, `docket_update_notes`,
+  `docket_add_evidence`, `docket_retire`, `docket_supersede`,
+  `docket_propose_ontology_change` and `docket_publish_ontology_change` to
+  write. Each names the scope a call needs (`readTools`, `writeTools`,
+  `serverTools`, `registryFor`, `scopeOf`, `isWriteTool`), and runs with a
+  `ToolContext`: the workspace, its `StoreRunner`, a `QueryClient` for search
+  and ask, a model gate, the writer and role, and `audited` for a write.
+- **`handleMcp(request, options)`**: the endpoint as one `Request` to
+  `Response` function with no web framework. It refuses a credential in the
+  URL, answers a missing or unknown bearer with an RFC 9728 challenge, runs
+  the deployment's `Limiter`, cuts the credential to its subject's role now,
+  refuses a tool out of reach with `403 insufficient_scope`, and audits each
+  request once, a write inside its own transaction. `bearerOf`,
+  `credentialInUrl`, `bearerChallenge`, `protectedResourceMetadataUrl`,
+  `PROTOCOL_VERSIONS` and `CORS_HEADERS` go with it.
+- **The query protocol**: `SearchQuery`, `AskQuery`, `WorkspaceSearch`,
+  `AskResponse`, `QueryError`, and `queryClient`, `queryKey` and
+  `queryAuthorised` for a query service in another process.
+
 ## 0.3.0
 
 ### The canonical store on Postgres
