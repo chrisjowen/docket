@@ -1118,8 +1118,9 @@ purpose.
 
 [`@chrisjowen/docket-server`](packages/server) is the core a Docket server is
 built on, shared by Docket Cloud and a self-hosted, single-tenant server: the
-ports a deployment plugs its storage, sign-in and tenancy into, and the scope
-and role vocabulary MCP calls are checked against. It is published on its own,
+ports a deployment plugs its storage, sign-in and tenancy into, the scope
+and role vocabulary MCP calls are checked against, the ontology lifecycle and
+how a write becomes a document. It is published on its own,
 imports nothing of any one deployment, and records its API in
 [`packages/server/test/public-api.snapshot.txt`](packages/server/test/public-api.snapshot.txt)
 the same way. See [its README](packages/server/README.md).
