@@ -188,7 +188,7 @@ export async function recordStatus(tx: Tx, workspaceId: string, report: Instance
     )
     return
   }
-  const message = report.error ?? `${report.failed} change${report.failed === 1 ? '' : 's'} not acknowledged`
+  const message = redactSecrets(report.error ?? `${report.failed} change${report.failed === 1 ? '' : 's'} not acknowledged`)
   const { rows } = await tx.query<{ failures: number }>(
     `INSERT INTO projection_status (workspace_id, instance_id, checkpoint, failures, last_error, attempted_at, rebuilt_through)
      VALUES ($1, $2, $3, 1, $4, $5, $6)
@@ -405,11 +405,11 @@ export function reconciler(deps: ReconcileDeps): Reconciler {
               await adapter.close().catch(() => undefined)
             }
           } catch (cause) {
-            errors.push(`${instance}: ${messageOf(cause)}`)
+            errors.push(`${instance}: ${redactSecrets(messageOf(cause))}`)
           }
         }
       } catch (cause) {
-        errors.push(`the stores are not reachable: ${messageOf(cause)}`)
+        errors.push(`the stores are not reachable: ${redactSecrets(messageOf(cause))}`)
       }
       for (const optional of deps.purgeAlso ?? []) {
         try {
@@ -422,7 +422,7 @@ export function reconciler(deps: ReconcileDeps): Reconciler {
             await adapter.close().catch(() => undefined)
           }
         } catch (cause) {
-          if (!optional.unavailable?.(cause)) errors.push(`${optional.id}: ${messageOf(cause)}`)
+          if (!optional.unavailable?.(cause)) errors.push(`${optional.id}: ${redactSecrets(messageOf(cause))}`)
         }
       }
       const at = now()

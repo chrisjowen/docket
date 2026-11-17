@@ -2,6 +2,9 @@ import type { ScopeSource, StoreRunner } from '../ports.js'
 import type { Pool, PoolClient } from '../postgres/db.js'
 import { pendingDeletions, type PendingDeletion } from '../postgres/workspaces.js'
 import type { Reconciler } from './reconcile.js'
+import { redactSecrets } from './scope.js'
+
+const logMessage = (error: unknown): string => redactSecrets(error instanceof Error ? error.message : String(error))
 
 export interface Logger {
   info(message: string): void
@@ -111,7 +114,7 @@ export function outboxLoop(options: OutboxLoopOptions): OutboxLoop {
         deleted = await scope.store.run(({ tx }) => pendingDeletions(tx, now()))
         due = await dueWorkspaces(scope.store, options.instances, now())
       } catch (error) {
-        options.log.error(`outbox: ${scope.id}: ${error instanceof Error ? error.message : String(error)}`)
+        options.log.error(`outbox: ${scope.id}: ${logMessage(error)}`)
         continue
       }
       for (const deletion of deleted) {
@@ -122,7 +125,7 @@ export function outboxLoop(options: OutboxLoopOptions): OutboxLoop {
             if (error) options.log.error(`purge ${scope.id} ws=${deletion.workspaceId}: ${error}`)
             else options.log.info(`purge ${scope.id} ws=${deletion.workspaceId} (${deletion.slug}) done`)
           } catch (error) {
-            options.log.error(`purge ${scope.id} ws=${deletion.workspaceId}: ${error instanceof Error ? error.message : String(error)}`)
+            options.log.error(`purge ${scope.id} ws=${deletion.workspaceId}: ${logMessage(error)}`)
           }
         })
       }
@@ -138,7 +141,7 @@ export function outboxLoop(options: OutboxLoopOptions): OutboxLoop {
               `reconcile ${scope.id} ws=${workspaceId} applied=${result.applied} failed=${result.failed} ms=${took}${failing.length ? ` failing=${failing.join(',')}` : ''}`
             )
           } catch (error) {
-            options.log.error(`reconcile ${scope.id} ws=${workspaceId}: ${error instanceof Error ? error.message : String(error)}`)
+            options.log.error(`reconcile ${scope.id} ws=${workspaceId}: ${logMessage(error)}`)
           }
         })
       }
@@ -153,7 +156,7 @@ export function outboxLoop(options: OutboxLoopOptions): OutboxLoop {
     }
     running = true
     sweeping = sweep()
-      .catch((error: unknown) => options.log.error(`outbox sweep: ${error instanceof Error ? error.message : String(error)}`))
+      .catch((error: unknown) => options.log.error(`outbox sweep: ${logMessage(error)}`))
       .finally(() => {
         running = false
         swept = now()
@@ -176,14 +179,14 @@ export function outboxLoop(options: OutboxLoopOptions): OutboxLoop {
       listener = held
       held.on('notification', () => run())
       held.on('error', (error) => {
-        options.log.error(`outbox listener: ${error.message}; reconnecting`)
+        options.log.error(`outbox listener: ${logMessage(error)}; reconnecting`)
         held.release(true)
         listener = undefined
         if (!stopping) setTimeout(() => void listen(), 5_000).unref()
       })
       await held.query(`LISTEN ${channel}`)
     } catch (error) {
-      options.log.error(`outbox listener: ${error instanceof Error ? error.message : String(error)}; polling only`)
+      options.log.error(`outbox listener: ${logMessage(error)}; polling only`)
       client?.release(true)
       listener = undefined
       if (!stopping) setTimeout(() => void listen(), 15_000).unref()
