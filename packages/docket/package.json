@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
   "license": "Apache-2.0",
   "keywords": [
@@ -61,6 +61,10 @@
       "types": "./dist/mcp/search.d.ts",
       "import": "./dist/mcp/search.js"
     },
+    "./mcp/surface": {
+      "types": "./dist/mcp/surface/index.d.ts",
+      "import": "./dist/mcp/surface/index.js"
+    },
     "./mcp/types": {
       "types": "./dist/mcp/types.d.ts",
       "import": "./dist/mcp/types.js"
@@ -104,6 +108,10 @@
     "./sync/inputs": {
       "types": "./dist/sync/inputs.d.ts",
       "import": "./dist/sync/inputs.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace/index.d.ts",
+      "import": "./dist/workspace/index.js"
     },
     "./package.json": "./package.json"
   },

@@ -8,7 +8,8 @@ import { filesystemSource, type CanonicalSource } from '../canonical/source.js'
 import { init } from '../commands/init.js'
 import { sync } from '../commands/sync.js'
 import { loadConfig } from '../config/loader.js'
-import { createMcpServer, InvalidArgumentsError, SEARCH_TOOL, searchTool, type ToolRegistry } from './server.js'
+import { createMcpServer, InvalidArgumentsError, SEARCH_TOOL, searchTool, type ToolDefinition, type ToolRegistry } from './server.js'
+import { SEARCH_DEFINITION, TOOL_DEFINITIONS, surfaceOf } from './surface/definitions.js'
 import type { SearchGraph } from './types.js'
 
 const ORDERS = `---
@@ -37,10 +38,13 @@ const call = (server: ReturnType<typeof createMcpServer>, name: string, args: un
   server.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } })
 
 describe('createMcpServer tools', () => {
-  it('offers docket_search alone by default', async () => {
-    const server = createMcpServer({ cwd: root })
-    const listed = await server.handle({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
-    expect(listed).toEqual({ jsonrpc: '2.0', id: 1, result: { tools: [searchTool.definition] } })
+  it("offers Docket's whole MCP surface over a directory by default, and docket_search alone over a source", async () => {
+    const listed = (await createMcpServer({ cwd: root }).handle({ jsonrpc: '2.0', id: 1, method: 'tools/list' })) as unknown as { result: { tools: ToolDefinition[] } }
+    expect(listed.result.tools.map(surfaceOf)).toEqual(TOOL_DEFINITIONS.map(surfaceOf))
+    const source = filesystemSource(await loadConfig(root))
+    const alone = await createMcpServer({ source }).handle({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
+    expect(alone).toEqual({ jsonrpc: '2.0', id: 1, result: { tools: [searchTool.definition] } })
+    expect(surfaceOf(searchTool.definition)).toEqual(surfaceOf(SEARCH_DEFINITION))
   })
 
   it('searches the canonical source it is given, not a directory', async () => {

@@ -11,6 +11,7 @@ import { startUiServer, type UiServer } from '../open/server.js'
 import type { UiHealth } from '../open/types.js'
 import { APP_MIME, APP_URI, PROTOCOL_VERSIONS, SEARCH_TOOL } from './server.js'
 import { MAX_NODES, MAX_SEARCH_LIMIT } from './search.js'
+import { TOOL_NAMES } from './surface/definitions.js'
 import { SEARCH_SCHEMA, type SearchGraph } from './types.js'
 
 const ORDERS = `---
@@ -107,11 +108,12 @@ describe('docket open /mcp', () => {
     expect(await response.text()).toBe('')
   })
 
-  it('offers docket_search as a read-only tool with its app', async () => {
+  it("offers every tool of Docket's MCP surface, docket_search first, read-only with its app", async () => {
     const { result } = await rpc('tools/list')
     const tools = result?.tools as Record<string, unknown>[]
-    expect(tools.map((tool) => tool.name)).toEqual([SEARCH_TOOL])
+    expect(tools.map((tool) => tool.name)).toEqual(TOOL_NAMES)
     expect(tools[0]).toMatchObject({
+      name: SEARCH_TOOL,
       annotations: { readOnlyHint: true },
       _meta: { ui: { resourceUri: APP_URI } },
       inputSchema: { required: ['query'] }
@@ -154,7 +156,7 @@ describe('docket open /mcp', () => {
     expect(graph.types).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'service', count: 1 }), expect.objectContaining({ name: 'team', count: 1 })]))
     expect(graph.sources).toEqual([expect.objectContaining({ name: 'local', hits: 1 })])
 
-    expect(text).toContain('service.orders (service) "Orders API": .docket/resources/services/orders.md')
+    expect(text).toContain('service.orders (service) [facts] "Orders API": .docket/resources/services/orders.md')
     expect(text).toContain('links: owned_by -> team.payments; depends_on -> service.ledger')
     expect(text).toContain('local: 1 hit')
   })

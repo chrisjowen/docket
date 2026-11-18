@@ -83,8 +83,13 @@ on the `viewer` service at `/mcp`:
 "mcpServers": [{ "id": "docket", "service": "viewer" }]
 ```
 
-Its one tool, `docket_search` (read-only, given a `query` and the Wheelhouse
-`project` it routes by), returns the resources a search of the project's docket finds, as text and as
+It offers Docket's MCP surface over the project's docket - `docket_search`,
+`docket_get`, `docket_ask` and `docket_ontology` to read, and
+`docket_remember`, `docket_update_notes`, `docket_add_evidence`,
+`docket_retire`, `docket_supersede`, `docket_propose_ontology_change` and
+`docket_publish_ontology_change` to write - the same tools Docket Cloud
+offers. `docket_search` (read-only, given a `query` and the Wheelhouse
+`project` it routes by) returns the resources a search of the project's docket finds, as text and as
 `docket-search.v1` structured content. Its app, `ui://docket/search.html`
 (`text/html;profile=mcp-app`, no network), draws them, the subgraphs the
 projections returned and the resources one link away on the casebook's
@@ -92,7 +97,7 @@ evidence board. From the app you can search again,
 pick a resource to see its file and links, open it in docket's own page, or go
 full screen. The plugin draws the app in no slot of its own; it is there for
 whatever in Wheelhouse calls `docket_search` for a project. The viewer must be
-running, as for the tab. [`docs/mcp.md`](../docs/mcp.md) is the tool's
+running, as for the tab. [`docs/mcp.md`](../docs/mcp.md) is the tools'
 contract.
 
 ![The docket_search app full screen in Wheelhouse: a search for "neo4j adapter" draws its matches and the subgraphs the adapters returned on the evidence board, with the resources one link away faded as context and the matches and paths returned listed beside it](../docs/assets/docket-search-app.png)
@@ -163,7 +168,7 @@ after the project installs docket, or the global docket with the driver
 installed next to it. `bin` is one plugin-wide setting, so it applies to every
 project.
 
-The tab says which docket the viewer runs (`Runs docket 0.10.0, shipped with
+The tab says which docket the viewer runs (`Runs docket 0.11.0, shipped with
 this plugin.`) while the viewer is not open, and its problems name it too.
 
 ## Settings

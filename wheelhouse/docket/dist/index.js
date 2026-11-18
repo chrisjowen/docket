@@ -43,7 +43,13 @@ export { ATTRIBUTE_TYPES, EVIDENCE_LOCATION_FIELDS, error, ontologySchema, warni
 export { FALLBACK_ICON, ICON_NAMES, iconFor, isIconName } from './ontology/icons.js';
 /** The graph `docket open` browses, read from any canonical source. */
 export { readGraph } from './open/graph.js';
-/** The transport-free MCP server (docs/mcp.md), over a canonical source, with the tools of a registry. */
+/**
+ * The transport-free MCP server (docs/mcp.md), over a canonical source, with
+ * the tools of a registry: by default every tool of Docket's MCP surface over
+ * a project's files (`localTools`). The surface itself - every tool's
+ * definition, argument checks and answers - is `@chrisjowen/docket/mcp/surface`.
+ */
+export { localTools } from './mcp/local/tools.js';
 export { createMcpServer, InvalidArgumentsError, searchTool } from './mcp/server.js';
 /** What `docket_search` finds, as its MCP app draws it and as text. */
 export { MAX_SEARCH_LIMIT, searchText } from './mcp/search.js';

@@ -110,6 +110,10 @@ it does not already hold, so repeating a write adds nothing. The write tools
 parse their arguments with `argumentsOf` and `parseEvidence`, and answer with
 `writeAnswer`.
 
+How a write becomes a document, and the ontology lifecycle above, are docket's
+workspace core (`@chrisjowen/docket/workspace`), re-exported here unchanged:
+docket's own MCP server writes a project's files through the same code.
+
 ## The Postgres store
 
 `@chrisjowen/docket-server/postgres` keeps a workspace's canonical data in
@@ -177,6 +181,21 @@ DOCKET_TEST_PG_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres pnpm -C 
 tools, and `handleMcp`, the request pipeline in front of them as one
 framework-free function from a `Request` to a `Response`, so any HTTP server
 can mount it.
+
+The tools are Docket's MCP surface, which docket defines once
+(`@chrisjowen/docket/mcp/surface`): every tool's name, input schema,
+annotations, argument checks and answers. docket's own MCP server (`docket
+open`'s `/mcp`) offers the same tools over a project's files, so an agent sees
+the same surface on the local CLI, a self-hosted server and Docket Cloud. Only
+the descriptions differ, worded for where each runs. `src/mcp/parity.test.ts`
+lists both side by side and fails when they drift. A deployment that builds its
+own tools on this package keeps them on the surface the same way:
+
+```ts
+import { TOOL_DEFINITIONS, surfaceOf } from '@chrisjowen/docket/mcp/surface'
+
+expect(listedTools.map(surfaceOf)).toEqual(TOOL_DEFINITIONS.map(surfaceOf))
+```
 
 | Tool | Scope | What it does |
 | --- | --- | --- |

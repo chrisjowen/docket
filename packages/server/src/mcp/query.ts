@@ -1,7 +1,8 @@
 import { hkdfSync, timingSafeEqual } from 'node:crypto'
 
-import type { CoordinatedAnswer } from '@chrisjowen/docket'
-import type { SearchGraph, SearchMatch } from '@chrisjowen/docket/mcp/types'
+import type { SearchGraph } from '@chrisjowen/docket/mcp/types'
+
+import type { AskResponse, SearchBackend, WorkspaceSearch } from '../docket.js'
 
 /**
  * The query protocol: how the MCP tools ask a workspace's projections to
@@ -12,50 +13,7 @@ import type { SearchGraph, SearchMatch } from '@chrisjowen/docket/mcp/types'
  */
 
 export type { SearchGraph }
-
-/** Where a search looks: the projections' hits, the subgraphs they returned, and the workspace's activity log. */
-export const SEARCH_BACKENDS = ['facts', 'graph', 'timeline'] as const
-export type SearchBackend = (typeof SEARCH_BACKENDS)[number]
-
-/** A result found in several places, collapsed into one: where it was found and how it ranks. */
-export interface WorkspaceMatch extends SearchMatch {
-  foundIn: SearchBackend[]
-  /**
-   * How probably it answers the query, from 0 to 1: a cross-encoder's reading
-   * of the query and the record together, with the projections' own scores.
-   * Its `confidence` is how well its evidence supports it, shown beside it and
-   * never part of this.
-   */
-  score: number
-  /** The out-of-date records the search found that this one replaces: it stands in for them. */
-  supersedes?: string[]
-}
-
-/**
- * A record the question found that has gone out of date: never a match
- * itself, it names the current record that stands in for it and what changed.
- */
-export interface SearchChange {
-  id: string
-  type: string
-  title: string
-  /** The record that replaced it. */
-  supersededBy: string
-  /** The record current now, at the end of the chain of replacements; null when it is no longer on file. */
-  current: { id: string; type: string; title: string } | null
-  /** Until when the older record held, YYYY-MM-DD. */
-  since: string
-  reason: string
-  /** The change in one line, e.g. 'Out of date: "Sophia" (agent.sophia) is superseded by "Captin" (agent.captin) since 2026-11-01. ...'. */
-  note: string
-}
-
-/** `docket_search`'s board, its matches collapsed by entity and ranked by score. */
-export interface WorkspaceSearch extends SearchGraph {
-  matches: WorkspaceMatch[]
-  /** The out-of-date records the search found, each answered by its current record among the matches; absent when there are none. */
-  changes?: SearchChange[]
-}
+export { MIN_CONFIDENCE_IGNORED, SEARCH_BACKENDS, searchScope, type AskResponse, type SearchBackend, type SearchChange, type WorkspaceMatch, type WorkspaceSearch } from '../docket.js'
 
 export interface SearchQuery {
   workspaceId: string
@@ -78,20 +36,6 @@ export interface SearchQuery {
   minConfidence?: number
 }
 
-/** Why a search ignores `minConfidence`, told to whoever still passes it. */
-export const MIN_CONFIDENCE_IGNORED = 'minConfidence is ignored: results are cut on relevance, and confidence is shown with each result.'
-
-/** A search's `include` and `minConfidence`, checked, or why they will not do. */
-export function searchScope(include: unknown, minConfidence: unknown): Pick<SearchQuery, 'include' | 'minConfidence'> | string {
-  if (include !== undefined && (!Array.isArray(include) || include.length === 0 || include.some((value) => !SEARCH_BACKENDS.includes(value as SearchBackend)))) {
-    return `include must list one or more of ${SEARCH_BACKENDS.map((backend) => `"${backend}"`).join(', ')}.`
-  }
-  if (minConfidence !== undefined && (typeof minConfidence !== 'number' || !(minConfidence >= 0 && minConfidence <= 1))) {
-    return 'minConfidence must be a number from 0 to 1.'
-  }
-  return { ...(include !== undefined ? { include: [...new Set(include as SearchBackend[])] } : {}), ...(minConfidence !== undefined ? { minConfidence } : {}) }
-}
-
 export interface AskQuery {
   workspaceId: string
   question: string
@@ -100,15 +44,6 @@ export interface AskQuery {
   actor: string
   /** The member asking, through whichever of their credentials: whose question the trace is. */
   userId: string
-}
-
-/** What an ask answers: docket's coordinated answer, with the summary a model wrote. */
-export interface AskResponse {
-  answer: CoordinatedAnswer
-  /** Why there is no summary, when there is none: the AI budget is spent, AI is not set up, or the model failed. */
-  notice?: string
-  /** Out-of-date records the projections found, and the current record for each; absent when there are none. */
-  changes?: SearchChange[]
 }
 
 export interface QueryClient {

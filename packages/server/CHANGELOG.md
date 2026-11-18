@@ -2,6 +2,29 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.6.0
+
+### One MCP surface with docket's own server
+
+docket's local MCP server now offers the same eleven tools as this core, so
+the surface each tool presents - its name, input schema, annotations,
+argument checks and answers - is defined once, in docket
+(`@chrisjowen/docket/mcp/surface`), and the server's tools are built on it.
+The workspace core they write through - how a write becomes a document,
+evidence, supersession, and the ontology's change check, migrations and
+proposals - moved to docket too (`@chrisjowen/docket/workspace`), so docket
+writes a project's files by the same rules. Everything this package exported
+is still exported, unchanged, except that:
+
+- `Origin` gains `'local'`, a project's own file as docket's local MCP server
+  writes it; a migration rewrites a `local` document as it does a `cloud`
+  one.
+- `writeAnswer` takes `viewer: string | null` and leaves the revision out of
+  its text when there is none.
+
+`src/mcp/parity.test.ts` lists docket's tools beside the server's and fails
+when they drift. `@chrisjowen/docket` (`^0.11.0`) is the peer dependency.
+
 ## 0.5.0
 
 ### The reconcile and search loops
