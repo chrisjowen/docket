@@ -21,6 +21,7 @@ spec:
   ingress:
     - ports:
         - { port: http }
+
 ---
 # Source: docket/templates/networkpolicies.yaml
 apiVersion: networking.k8s.io/v1
@@ -49,6 +50,7 @@ spec:
               app.kubernetes.io/name: docket
               app.kubernetes.io/instance: docket
               app.kubernetes.io/component: server
+
 ---
 # Source: docket/templates/networkpolicies.yaml
 apiVersion: networking.k8s.io/v1
@@ -77,6 +79,7 @@ spec:
               app.kubernetes.io/name: docket
               app.kubernetes.io/instance: docket
               app.kubernetes.io/component: server
+
 ---
 # Source: docket/templates/networkpolicies.yaml
 apiVersion: networking.k8s.io/v1
@@ -105,6 +108,7 @@ spec:
               app.kubernetes.io/name: docket
               app.kubernetes.io/instance: docket
               app.kubernetes.io/component: server
+
 ---
 # Source: docket/templates/networkpolicies.yaml
 apiVersion: networking.k8s.io/v1
@@ -138,6 +142,7 @@ spec:
               app.kubernetes.io/name: docket
               app.kubernetes.io/instance: docket
               app.kubernetes.io/component: cognee
+
 ---
 # Source: docket/templates/networkpolicies.yaml
 apiVersion: networking.k8s.io/v1
@@ -166,6 +171,7 @@ spec:
               app.kubernetes.io/name: docket
               app.kubernetes.io/instance: docket
               app.kubernetes.io/component: server
+
 ---
 # Source: docket/templates/cognee.yaml
 # cognee for a cognee projection: http://docket-cognee:8000, with access control
@@ -188,6 +194,7 @@ metadata:
 type: Opaque
 data:
   defaultUserPassword: <generated>
+
 ---
 # Source: docket/templates/neo4j.yaml
 # Neo4j for a graph projection: the docket's neo4j adapter connects to
@@ -209,6 +216,7 @@ metadata:
 type: Opaque
 data:
   password: <generated>
+
 ---
 # Source: docket/templates/postgres.yaml
 # A single Postgres for evaluation: no replicas, backups or failover. Run your
@@ -230,6 +238,7 @@ metadata:
 type: Opaque
 data:
   password: <generated>
+
 ---
 # Source: docket/templates/configmap.yaml
 apiVersion: v1
@@ -269,6 +278,7 @@ data:
     workspaces:
     - path: /data/docket
       slug: docket
+
 ---
 # Source: docket/templates/pvc.yaml
 apiVersion: v1
@@ -289,6 +299,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests: { storage: 5Gi }
+
 ---
 # Source: docket/templates/cognee.yaml
 apiVersion: v1
@@ -309,6 +320,7 @@ spec:
     app.kubernetes.io/component: cognee
   ports:
     - { name: http, port: 8000, targetPort: http }
+
 ---
 # Source: docket/templates/embedder.yaml
 # Ollama, serving the embedding model at http://docket-embedder:11434, so document
@@ -331,6 +343,7 @@ spec:
     app.kubernetes.io/component: embedder
   ports:
     - { name: http, port: 11434, targetPort: http }
+
 ---
 # Source: docket/templates/neo4j.yaml
 apiVersion: v1
@@ -351,6 +364,7 @@ spec:
     app.kubernetes.io/component: neo4j
   ports:
     - { name: bolt, port: 7687, targetPort: bolt }
+
 ---
 # Source: docket/templates/postgres.yaml
 apiVersion: v1
@@ -371,6 +385,7 @@ spec:
     app.kubernetes.io/component: postgres
   ports:
     - { name: postgres, port: 5432, targetPort: postgres }
+
 ---
 # Source: docket/templates/qdrant.yaml
 # Qdrant, mem0's vector store: http://docket-qdrant:6333. No key, since mem0's
@@ -394,6 +409,7 @@ spec:
     app.kubernetes.io/component: qdrant
   ports:
     - { name: http, port: 6333, targetPort: http }
+
 ---
 # Source: docket/templates/service.yaml
 apiVersion: v1
@@ -415,6 +431,7 @@ spec:
     app.kubernetes.io/component: server
   ports:
     - { name: http, port: 4390, targetPort: http }
+
 ---
 # Source: docket/templates/deployment.yaml
 apiVersion: apps/v1
@@ -555,6 +572,7 @@ spec:
             name: docket
         - name: tmp
           emptyDir: { sizeLimit: 256Mi }
+
 ---
 # Source: docket/templates/cognee.yaml
 apiVersion: apps/v1
@@ -637,6 +655,7 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests: { storage: 5Gi }
+
 ---
 # Source: docket/templates/embedder.yaml
 apiVersion: apps/v1
@@ -730,6 +749,7 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests: { storage: 5Gi }
+
 ---
 # Source: docket/templates/neo4j.yaml
 apiVersion: apps/v1
@@ -809,6 +829,7 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests: { storage: 5Gi }
+
 ---
 # Source: docket/templates/postgres.yaml
 apiVersion: apps/v1
@@ -893,6 +914,7 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests: { storage: 10Gi }
+
 ---
 # Source: docket/templates/qdrant.yaml
 apiVersion: apps/v1

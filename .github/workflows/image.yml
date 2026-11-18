@@ -35,6 +35,8 @@ jobs:
         with:
           node-version: 22
       - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.2
       - run: node deploy/test/check.mjs
 
   smoke:
@@ -61,6 +63,8 @@ jobs:
       - name: Compose, the postgres profile
         run: deploy/test/compose-e2e.sh postgres
       - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.2
       - uses: helm/kind-action@v1
         with:
           cluster_name: docket-smoke

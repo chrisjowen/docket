@@ -21,6 +21,7 @@ spec:
   ingress:
     - ports:
         - { port: http }
+
 ---
 # Source: docket/templates/networkpolicies.yaml
 apiVersion: networking.k8s.io/v1
@@ -49,6 +50,7 @@ spec:
               app.kubernetes.io/name: docket
               app.kubernetes.io/instance: docket
               app.kubernetes.io/component: server
+
 ---
 # Source: docket/templates/postgres.yaml
 # A single Postgres for evaluation: no replicas, backups or failover. Run your
@@ -70,6 +72,7 @@ metadata:
 type: Opaque
 data:
   password: <generated>
+
 ---
 # Source: docket/templates/configmap.yaml
 apiVersion: v1
@@ -100,6 +103,7 @@ data:
     workspaces:
     - path: /data/docket
       slug: docket
+
 ---
 # Source: docket/templates/pvc.yaml
 apiVersion: v1
@@ -120,6 +124,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests: { storage: 5Gi }
+
 ---
 # Source: docket/templates/postgres.yaml
 apiVersion: v1
@@ -140,6 +145,7 @@ spec:
     app.kubernetes.io/component: postgres
   ports:
     - { name: postgres, port: 5432, targetPort: postgres }
+
 ---
 # Source: docket/templates/service.yaml
 apiVersion: v1
@@ -161,6 +167,7 @@ spec:
     app.kubernetes.io/component: server
   ports:
     - { name: http, port: 4390, targetPort: http }
+
 ---
 # Source: docket/templates/deployment.yaml
 apiVersion: apps/v1
@@ -297,6 +304,7 @@ spec:
             name: docket
         - name: tmp
           emptyDir: { sizeLimit: 256Mi }
+
 ---
 # Source: docket/templates/postgres.yaml
 apiVersion: apps/v1

@@ -21,6 +21,7 @@ spec:
   ingress:
     - ports:
         - { port: http }
+
 ---
 # Source: docket/templates/configmap.yaml
 apiVersion: v1
@@ -48,6 +49,7 @@ data:
     workspaces:
     - path: /data/docket
       slug: docket
+
 ---
 # Source: docket/templates/pvc.yaml
 apiVersion: v1
@@ -68,6 +70,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests: { storage: 5Gi }
+
 ---
 # Source: docket/templates/service.yaml
 apiVersion: v1
@@ -89,6 +92,7 @@ spec:
     app.kubernetes.io/component: server
   ports:
     - { name: http, port: 4390, targetPort: http }
+
 ---
 # Source: docket/templates/deployment.yaml
 apiVersion: apps/v1
