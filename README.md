@@ -1385,6 +1385,12 @@ that commit `docket-server-v<version>`.
 stages it, and a maintainer approves it with 2FA. `NPM_TOKEN` needs publish
 rights to `@chrisjowen/docket-server` too.
 
+The same `v<version>` tag also has
+[`.github/workflows/image.yml`](.github/workflows/image.yml) build and push
+`docket serve`'s image to GHCR (`ghcr.io/chrisjowen/docket`), tagged
+`<version>`, `<major>.<minor>` and `latest`, once its own checks and gates
+pass. No separate step is needed, and it is never pushed by hand.
+
 ## Contributing and licence
 
 docket is licensed under the [Apache License, Version 2.0](LICENSE).
