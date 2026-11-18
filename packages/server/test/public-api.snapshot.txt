@@ -2698,6 +2698,7 @@ tokenAuth
       authenticator: Authenticator<TokenPrincipal, ServeResource>;
       authorizer: Authorizer<TokenPrincipal>;
       lookup(bearer: string): Promise<TokenRecord | null>;
+      byName(name: string): Promise<TokenRecord | null>;
   };
 
 TokenPrincipal
