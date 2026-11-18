@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { effectiveScopes, checkScope } from '../auth/effective.js'
 import { SCOPES, type Scope } from '../auth/scopes.js'
+import { checkoutProblem } from '../docket.js'
 import { CORS_HEADERS, MAX_BODY_BYTES, bearerChallenge, credentialInUrl, handleMcp } from '../mcp/handler.js'
 import { WRITE_TOOL_NAMES } from '../mcp/tools/index.js'
 import type { AuditOutcome } from '../ports.js'
@@ -145,6 +146,7 @@ export function serveHandler(options: ServeHandlerOptions): {
   const refuse = async (request: IncomingMessage, action: string, outcome: AuditOutcome) => {
     const key = addressOf(request) ?? 'unknown'
     const now = Date.now()
+    for (const [address, entry] of refusals) if (now - entry.since >= 60_000) refusals.delete(address)
     const entry = refusals.get(key)
     refusals.set(key, entry && now - entry.since < 60_000 ? { count: entry.count + 1, since: entry.since } : { count: 1, since: now })
     await audit.line({
@@ -306,9 +308,8 @@ export function serveHandler(options: ServeHandlerOptions): {
         return problem(response, raw === null ? 413 : 400, 'invalid_request', raw === null ? 'The push is too large: send it in smaller batches.' : 'Send a JSON object.')
       }
       const { checkout, dryRun, upsert = [], remove = [] } = body
-      if (typeof checkout !== 'string' || checkout.length === 0 || checkout.length > 200 || /[\s\u0000-\u001f\u007f]/.test(checkout)) {
-        return problem(response, 400, 'invalid_request', 'checkout is a string of 1-200 characters, with no whitespace.')
-      }
+      const checkoutIssue = checkoutProblem(checkout)
+      if (checkoutIssue) return problem(response, 400, 'invalid_request', checkoutIssue)
       if (dryRun !== undefined && typeof dryRun !== 'boolean') return problem(response, 400, 'invalid_request', 'dryRun is true or false.')
       const isFile = (value: unknown): value is { path: string; raw: string } =>
         typeof value === 'object' && value !== null && typeof (value as { path?: unknown }).path === 'string' && typeof (value as { raw?: unknown }).raw === 'string'
@@ -317,10 +318,10 @@ export function serveHandler(options: ServeHandlerOptions): {
       const result = await backend.push(
         workspace,
         { actor: principal.actor, label: `${principal.token} via docket serve`, requestId },
-        { checkout, upsert: upsert.map(({ path, raw: text }) => ({ path, raw: text })), remove: remove as string[] },
+        { checkout: checkout as string, upsert: upsert.map(({ path, raw: text }) => ({ path, raw: text })), remove: remove as string[] },
         dryRun === true
       )
-      await done(result.ok ? 'ok' : 'invalid', [checkout])
+      await done(result.ok ? 'ok' : 'invalid', [checkout as string])
       return json(response, 200, result)
     }
 
@@ -338,14 +339,16 @@ export function serveHandler(options: ServeHandlerOptions): {
     return problem(response, 404, 'not_found', `No API at ${url.pathname}.`)
   }
 
-  /** The signed-in browser's session, checked against its token now: a revoked token ends it. */
+  /** The signed-in browser's session, checked against its token's current scopes: a revoked or narrowed token ends it. */
   async function sessionOf(request: IncomingMessage): Promise<Session | null> {
     const id = cookieOf(request, SESSION_COOKIE)
     const session = id ? sessions.get(id) : undefined
     if (!id || !session) return null
     const workspace = workspaceOf(session.slug)
-    const role = workspace ? await auth.authorizer.role({ subject: '', workspaceId: workspace.id, scopes: [], actor: '', token: session.token, slug: session.slug }) : null
-    if (session.expires < Date.now() || role === null) {
+    const record = await auth.byName(session.token)
+    const principal = workspace && record ? { subject: `token:${record.name}`, workspaceId: workspace.id, scopes: record.scopes, actor: `token:${record.name}`, token: record.name, slug: session.slug } : null
+    const effective = principal ? await effectiveScopes(principal, auth.authorizer) : []
+    if (session.expires < Date.now() || !effective.includes('docket:read')) {
       sessions.delete(id)
       return null
     }
@@ -380,6 +383,7 @@ export function serveHandler(options: ServeHandlerOptions): {
       return fail(401, 'That token does not open this workspace.')
     }
     const id = randomBytes(24).toString('base64url')
+    for (const [sessionId, entry] of sessions) if (entry.expires < Date.now()) sessions.delete(sessionId)
     sessions.set(id, { token: principal.token, slug: workspace.slug, expires: Date.now() + SESSION_MS })
     await audit.record(null, { workspaceId: workspace.id, actor: principal.actor, action: 'ui.login', outcome: 'ok', target: [], latencyMs: 0, requestId: randomUUID(), ip: addressOf(request), userAgent: request.headers['user-agent'] ?? null })
     response.writeHead(303, {

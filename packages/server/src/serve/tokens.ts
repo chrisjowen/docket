@@ -137,6 +137,8 @@ export function tokenAuth(config: Pick<ServeConfig, 'auth' | 'ontology'>): {
   authorizer: Authorizer<TokenPrincipal>
   /** The token a bearer is, and the slugs it opens; null when it is none. */
   lookup(bearer: string): Promise<TokenRecord | null>
+  /** The token record named `name`, read live; null once it is revoked or renamed. */
+  byName(name: string): Promise<TokenRecord | null>
 } {
   let cached: { mtimeMs: number; records: TokenRecord[] } | null = null
   const records = async (): Promise<TokenRecord[]> => {
@@ -161,6 +163,7 @@ export function tokenAuth(config: Pick<ServeConfig, 'auth' | 'ontology'>): {
   const current = async (name: string): Promise<TokenRecord | null> => (await records()).find((record) => record.name === name) ?? null
   return {
     lookup,
+    byName: current,
     authenticator: {
       async resolve(bearer, resource) {
         const record = await lookup(bearer)
