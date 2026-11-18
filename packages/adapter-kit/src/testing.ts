@@ -289,3 +289,88 @@ export const startFakeCloud = async (options: FakeCloudOptions = {}): Promise<Fa
   cloud.url = url
   return cloud
 }
+
+// ---------------------------------------------------------------------------
+// The graph-path baseline every graph adapter answers alike
+
+/** One question asked of the graph fixture, and the paths an answer keeps from its one match, as `describePath` writes them. */
+export interface GraphPathCase {
+  question: string
+  traverse: { hops: number; minConfidence?: number; rels?: string[] }
+  paths: string[]
+}
+
+const fixtureEntity = (id: string, title: string, content: string, links: [string, string, number][] = []): EntityInput =>
+  entityInput({
+    id,
+    title,
+    content,
+    revision: `sha256:${id}`,
+    links: links.map(([rel, target, confidence]) => entityLink({ rel, target, confidence }))
+  })
+
+/**
+ * A small graph with a link to an entity never projected (a stub) and no two
+ * paths ranked alike, and what Neo4j's subgraph search - the native baseline -
+ * keeps from its one match, `service.orders`, the only entity that says
+ * "zebrafish". A graph adapter that finds its paths another way holds itself
+ * to the same answers. Paths rank by the product of their links' confidence
+ * over ln(2 + the degree of where they end); a path another extends is dropped.
+ */
+export const GRAPH_PATH_FIXTURE: { entities: EntityInput[]; cases: GraphPathCase[] } = {
+  entities: [
+    fixtureEntity('service.orders', 'Orders', 'Takes customer orders, and keeps a zebrafish as its mascot.', [
+      ['depends_on', 'datasource.orders-db', 0.9],
+      ['depends_on', 'service.ledger', 0.8],
+      ['owned_by', 'team.payments', 0.7]
+    ]),
+    fixtureEntity('datasource.orders-db', 'Orders database', 'Where orders are kept.'),
+    fixtureEntity('service.ledger', 'Ledger', 'Keeps the books.', [
+      ['depends_on', 'datasource.ledger-db', 0.95],
+      ['depends_on', 'lib.missing', 0.6]
+    ]),
+    fixtureEntity('team.payments', 'Payments team', 'Runs payments.'),
+    fixtureEntity('service.billing', 'Billing', 'Sends invoices.', [
+      ['depends_on', 'service.ledger', 0.5],
+      ['owned_by', 'team.payments', 0.9]
+    ]),
+    fixtureEntity('datasource.ledger-db', 'Ledger database', 'Where the books are kept.')
+  ],
+  cases: [
+    {
+      question: 'zebrafish',
+      traverse: { hops: 2 },
+      paths: [
+        'service.orders -depends_on-> datasource.orders-db',
+        'service.orders -depends_on-> service.ledger -depends_on-> datasource.ledger-db',
+        'service.orders -owned_by-> team.payments <-owned_by- service.billing'
+      ]
+    },
+    {
+      question: 'zebrafish',
+      traverse: { hops: 1 },
+      paths: [
+        'service.orders -depends_on-> datasource.orders-db',
+        'service.orders -owned_by-> team.payments',
+        'service.orders -depends_on-> service.ledger'
+      ]
+    },
+    {
+      question: 'zebrafish',
+      traverse: { hops: 2, rels: ['depends_on'] },
+      paths: [
+        'service.orders -depends_on-> datasource.orders-db',
+        'service.orders -depends_on-> service.ledger -depends_on-> datasource.ledger-db',
+        'service.orders -depends_on-> service.ledger -depends_on-> lib.missing'
+      ]
+    },
+    {
+      question: 'zebrafish',
+      traverse: { hops: 2, minConfidence: 0.75 },
+      paths: [
+        'service.orders -depends_on-> datasource.orders-db',
+        'service.orders -depends_on-> service.ledger -depends_on-> datasource.ledger-db'
+      ]
+    }
+  ]
+}

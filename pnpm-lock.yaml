@@ -193,6 +193,62 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.4)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
 
+  packages/adapter-postgres:
+    dependencies:
+      '@docket/adapter-kit':
+        specifier: workspace:*
+        version: link:../adapter-kit
+      '@docket/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      pg:
+        specifier: ^8.16.3
+        version: 8.23.1
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      '@types/pg':
+        specifier: ^8.15.6
+        version: 8.23.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.4)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
+  packages/adapter-sqlite:
+    dependencies:
+      '@docket/adapter-kit':
+        specifier: workspace:*
+        version: link:../adapter-kit
+      '@docket/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      better-sqlite3:
+        specifier: ^12.6.2
+        version: 12.11.1
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.5
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.4
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.4)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
   packages/claude-plugin: {}
 
   packages/contracts:
@@ -213,6 +269,9 @@ importers:
 
   packages/docket:
     dependencies:
+      better-sqlite3:
+        specifier: ^12.6.2
+        version: 12.11.1
       chokidar:
         specifier: ^4.0.3
         version: 4.0.3
@@ -228,6 +287,9 @@ importers:
       neo4j-driver:
         specifier: ^6.0.0
         version: 6.2.0
+      pg:
+        specifier: ^8.16.3
+        version: 8.23.1
       yaml:
         specifier: ^2.8.1
         version: 2.9.1
@@ -253,6 +315,12 @@ importers:
       '@docket/adapter-neo4j':
         specifier: workspace:*
         version: link:../adapter-neo4j
+      '@docket/adapter-postgres':
+        specifier: workspace:*
+        version: link:../adapter-postgres
+      '@docket/adapter-sqlite':
+        specifier: workspace:*
+        version: link:../adapter-sqlite
       '@docket/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -910,6 +978,9 @@ packages:
     resolution: {integrity: sha512-yYU8cogLeSh/ms2jh8Fj7jaba/EWa7Ja6GoUqYZaraEuCI5YS6ms6ObZgjjedm+jm6XZjdNRWBpPP6Z86oOxcw==}
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
+
+  '@types/better-sqlite3@7.6.13':
+    resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -2456,6 +2527,10 @@ snapshots:
       '@tailwindcss/oxide': 4.3.3
       tailwindcss: 4.3.3
       vite: 7.3.6(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
+  '@types/better-sqlite3@7.6.13':
+    dependencies:
+      '@types/node': 22.20.4
 
   '@types/chai@5.2.3':
     dependencies:

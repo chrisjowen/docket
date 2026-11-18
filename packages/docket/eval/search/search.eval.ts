@@ -20,6 +20,7 @@ import { loadWands } from './datasets/wands.js'
 import { contextualText, embedAll, Engine, mem0Text, ollamaEmbedder, type Embedder, type Scored, type VectorIndex } from './engine.js'
 import { percentile, summarise, macroAverage, type QueryOutcome, type Summary } from './metrics.js'
 import { report, type RunInfo } from './report.js'
+import { storeIndex, storeStrategy, type StoreIndex, type StoreName } from './stores.js'
 import {
   agenticStrategy,
   concatenated,
@@ -60,6 +61,15 @@ const ONLY_STRATEGIES = env.DOCKET_EVAL_STRATEGIES?.split(',').map((name) => nam
 const AGENTIC_MAX = Number(env.DOCKET_EVAL_AGENTIC_MAX ?? Number.POSITIVE_INFINITY)
 /** A cognee server to project every corpus into as well (cognee.ts); unset, the cognee strategies are left out. */
 const COGNEE_URL = env.DOCKET_EVAL_COGNEE_URL
+/** A Postgres 16+ (with pgvector) to project every corpus into as well (stores.ts); unset, the postgres strategies are left out. */
+const PG_URL = env.DOCKET_EVAL_PG_URL
+/** Set to 1 to project every corpus into SQLite files as well (stores.ts), adding the sqlite strategies. */
+const SQLITE = env.DOCKET_EVAL_SQLITE === '1'
+/** The store strategies this run has, each synced through its adapter. */
+const STORES: StoreName[] = [
+  ...(PG_URL ? (['postgres', 'postgres+hybrid'] as const) : []),
+  ...(SQLITE ? (['sqlite', 'sqlite+hybrid'] as const) : [])
+].filter((name) => !ONLY_STRATEGIES || ONLY_STRATEGIES.includes(name))
 
 const LOADERS: { name: string; load: () => Promise<Corpus> }[] = [
   { name: 'people', load: loadPeople },
@@ -137,6 +147,8 @@ interface Prepared {
   contextual: VectorIndex
   /** The corpus in cognee, when DOCKET_EVAL_COGNEE_URL names a server. */
   cognee?: CogneeIndex
+  /** The corpus in Postgres and SQLite, when the run has them. */
+  stores: StoreIndex[]
   info: RunInfo['corpora'][number]
 }
 
@@ -156,6 +168,11 @@ const prepare = async (corpus: Corpus, embedder: Embedder): Promise<Prepared> =>
   const embedMs = performance.now() - started
   if (COGNEE_URL) log(`  ${corpus.name}: syncing into cognee - cognify runs its model over every entity`)
   const cognee = COGNEE_URL ? await cogneeIndex(dir, corpus.name, COGNEE_URL) : undefined
+  const stores: StoreIndex[] = []
+  for (const name of STORES) {
+    log(`  ${corpus.name}: syncing into ${name}`)
+    stores.push(await storeIndex(dir, corpus.name, name, { pgUrl: PG_URL, ollamaUrl: OLLAMA_URL, embedder: EMBEDDER }))
+  }
 
   const test = corpus.queries.filter((query) => splitOf(corpus.name, query) === 'test')
   const documents = engine.entities.map((entity) => ({ ...entity, path: '', paths: [] }) as DocumentRecord)
@@ -174,6 +191,7 @@ const prepare = async (corpus: Corpus, embedder: Embedder): Promise<Prepared> =>
     mem0,
     contextual,
     ...(cognee ? { cognee } : {}),
+    stores,
     info: {
       name: corpus.name,
       domain: corpus.domain,
@@ -192,6 +210,7 @@ const prepare = async (corpus: Corpus, embedder: Embedder): Promise<Prepared> =>
       syncMs,
       embedMs,
       ...(cognee ? { cogneeSyncMs: cognee.syncMs } : {}),
+      ...(stores.length > 0 ? { storeSyncMs: Object.fromEntries(stores.map((store) => [store.name, store.syncMs])) } : {}),
       lexicalMs: { jsonl: timed((query) => lexicalSearch(documents, query, SOURCE_LIMIT)), indexed: timed((query) => engine.bm25.search(query, SOURCE_LIMIT)) }
     }
   }
@@ -312,7 +331,8 @@ describe('search evaluation', () => {
         floorRrfStrategy(item.engine, item.mem0, embedder, floorRrf.floor),
         precachedStrategy(item.engine, item.contextual, embedder, precached.floor),
         agenticStrategy(item.engine, item.mem0, embedder, chat, AGENT),
-        ...(item.cognee && cogneeFloor ? [cogneeStrategy(item.cognee), cogneeFloorStrategy(item.cognee, cogneeFloor.floor)] : [])
+        ...(item.cognee && cogneeFloor ? [cogneeStrategy(item.cognee), cogneeFloorStrategy(item.cognee, cogneeFloor.floor)] : []),
+        ...item.stores.map(storeStrategy)
       ].filter((strategy) => !ONLY_STRATEGIES || ONLY_STRATEGIES.includes(strategy.name))
 
     const outcomes: QueryOutcome[] = []
@@ -377,7 +397,10 @@ describe('search evaluation', () => {
       warmMs: percentile(warm, 50),
       spotlight
     }
-    for (const item of prepared) await item.cognee?.close()
+    for (const item of prepared) {
+      await item.cognee?.close()
+      for (const store of item.stores) await store.close()
+    }
     const markdown = report(info, outcomes)
     await writeFile(join(OUT, 'report.md'), markdown)
     await writeFile(join(OUT, 'outcomes.json'), `${JSON.stringify({ info, outcomes }, null, 2)}\n`)

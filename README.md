@@ -256,7 +256,7 @@ docket open --allow-origin http://127.0.0.1:4310  # also let another page on thi
 docket open --init          # start a docket here first, as docket init does, when this directory has none
 docket ontology list        # resource types, relationships and evidence sources
 docket ontology show service  # attributes, relationships and confidence by source
-docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid, mempalace or cognee: asks, shows the plan, applies it once confirmed
+docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid, mempalace, cognee, postgres or sqlite: asks, shows the plan, applies it once confirmed
 docket adapters list        # configured adapter instances and whether each can load
 docket config migrate --dry-run  # show a version 1 .docket.yaml rewritten as version 2
 docket config migrate       # rewrite it, once confirmed (--write: without asking); the original is kept
@@ -488,7 +488,7 @@ or **Update** in Wheelhouse's Settings → Plugins) brings the matching docket,
 with no build and nothing installed globally, so the viewer and its MCP server
 are always the plugin's version. The `docket` on your `PATH` is used only when
 the plugin's `bin` setting names it. The shipped docket does not load
-docket's optional drivers (`neo4j-driver`, `mem0ai`) installed in a project; to
+docket's optional drivers (`neo4j-driver`, `mem0ai`, `pg`, `better-sqlite3`) installed in a project; to
 use one, set `bin` to a docket that has the driver installed beside it, such as
 an absolute path to the project's own `node_modules/.bin/docket` or the global
 docket with the driver installed next to it. `bin` is one plugin-wide setting
@@ -703,10 +703,16 @@ watch push every change into each adapter `.docket.yaml` enables for
 projection, and `docket search` asks each one enabled for query.
 
 ```
-.docket/**/*.md ──► docket sync / watch ──┬──► jsonl  → .docket/.index/*.jsonl
-                                          ├──► mem0   → hosted or self-hosted mem0
-                                          └──► neo4j  → a Neo4j graph
+.docket/**/*.md ──► docket sync / watch ──┬──► jsonl     → .docket/.index/*.jsonl (the default)
+                                          ├──► mem0      → hosted or self-hosted mem0
+                                          ├──► neo4j     → a Neo4j graph
+                                          ├──► postgres  → tables in a Postgres 16+ (opt-in)
+                                          └──► sqlite    → one SQLite file (opt-in)
 ```
+
+`jsonl` is the default, and all a docket needs out of the box: it writes files
+under `.docket/.index` and needs no database or service. Every other adapter
+is opt-in, added with `docket adapter add`.
 
 An adapter declares which canonical inputs it takes, and is handed only those
 ([`docs/adapter-spec.md`](docs/adapter-spec.md) §8):
@@ -714,7 +720,7 @@ An adapter declares which canonical inputs it takes, and is handed only those
 - **entity** — one per id, however many files declare it, each resource and
   link carrying its evidence, evidence count, corroborating source kinds and
   confidence. Its id and revision (the merged hash) are what they always were.
-  The bundled jsonl, mem0 and neo4j adapters take entities only.
+  The bundled jsonl, mem0, neo4j, postgres and sqlite adapters take entities only.
 - **observation** — one per distinct evidence record, of a resource or of one
   of its links: what was seen, its source locations (`path` and `lines`), the
   canonical files that record it, and `observedAt` only when the record states
@@ -800,6 +806,8 @@ docket adapter add jsonl    # another JSONL index
 docket adapter add memvid   # a memvid .mv2 file, searched through the memvid CLI
 docket adapter add mempalace  # drawers in a MemPalace wing, through its MCP server
 docket adapter add cognee   # a cognee dataset, cognified and searched through its REST API
+docket adapter add postgres # tables in a Postgres 16+ you run: full-text, graph paths, optional pgvector
+docket adapter add sqlite   # one SQLite file: full-text, graph paths, optional embeddings; no server
 docket adapters list        # what is configured, and whether each module and driver loads
 ```
 
@@ -829,6 +837,16 @@ bundled with the CLI, like jsonl, neo4j and mem0, and needs no driver; docket
 never starts cognee: [its README](packages/adapter-cognee/README.md) has a
 Docker recipe for a local cognee 1.6.8 on Ollama models.
 
+**Postgres** is a database you run, 16 or later: give the name of the variable
+holding its connection URL (`--url-env`, `DOCKET_POSTGRES_URL` by default), and
+optionally a schema (`--schema`, `docket_index` by default) and scope. **SQLite**
+needs no server: optionally give a file (`--file`; by default one in the
+adapter's own state directory). Either takes `--semantic-model` - an Ollama
+embedding model such as `nomic-embed-text` - to search by meaning too; for
+Postgres that needs the pgvector extension. Both packages are bundled with the
+CLI; their drivers are `pg` and `better-sqlite3`. Neither replaces `jsonl` as
+the default.
+
 What it will and will not do:
 
 - It never overwrites a file. An existing Compose file at the chosen path is
@@ -839,7 +857,7 @@ What it will and will not do:
 - It writes version 2 entries. In a version 1 `.docket.yaml` it offers to run
   `docket config migrate` first (keeping the original as a backup) and
   otherwise explains how; it never migrates silently.
-- It installs the driver (`neo4j-driver` or `mem0ai`) only with your consent,
+- It installs the driver (`neo4j-driver`, `mem0ai`, `pg` or `better-sqlite3`) only with your consent,
   with the project's package manager (from `packageManager` or its lockfile):
   asked at a terminal, or `--install`.
 - It never pulls an image or starts a container. It prints `docket runtime up
@@ -857,6 +875,8 @@ docket adapter add neo4j --mode local --image registry.internal/neo4j:5.26 --yes
 docket adapter add neo4j --url neo4j+s://graph.internal.example --password-env DOCKET_GRAPH_PASSWORD --yes
 docket adapter add mem0 --mode platform --api-key-env MEM0_API_KEY --install --yes
 docket adapter add mem0 --mode server --url http://localhost:8888 --dry-run
+docket adapter add postgres --url-env DOCKET_POSTGRES_URL --semantic-model nomic-embed-text --install --yes
+docket adapter add sqlite --install --yes
 ```
 
 `docket adapter add --help` lists every option. A project-local adapter module
@@ -1007,6 +1027,37 @@ adapters:
 
 ![A Neo4j subgraph on the docket_search board: the Neo4j adapter exhibit picked, the paths the adapter's own query returned from it drawn at full strength - depends_on Neo4j, adapter-kit and contracts, governed by the core-imports constraint - and each path listed with the confidence and sources of every relationship on it](docs/assets/docket-search-app-neo4j.png)
 
+**`postgres`** (`@docket/adapter-postgres`) and **`sqlite`**
+(`@docket/adapter-sqlite`) are opt-in indexes for a team that wants ranked
+full-text search and graph answers without Neo4j, mem0 or Qdrant: tables in a
+Postgres 16+ you already run, or one SQLite file that needs no server. Each
+keeps one row per entity and one per (source, rel, target) link. Search is
+full-text by default, ranked by BM25 as Neo4j's Lucene index ranks -
+Postgres's `websearch_to_tsquery` over its weighted vectors, with a pg_trgm
+lift for titles named or misspelt in the query; SQLite's FTS5 -
+and, with `semantic` set, by Ollama embeddings too (pgvector in Postgres; in
+SQLite, compared in the adapter), fused by reciprocal rank. A question is
+answered with the matches and, from each, its best paths of up to two links,
+found by a recursive query over the links table under the same ranking rules
+as the Neo4j adapter, so the same graph gives the same paths. Neither is a
+default: `jsonl` stays the only adapter a new docket has. See their READMEs for
+requirements, configuration and how their search compares:
+[postgres](packages/adapter-postgres/README.md),
+[sqlite](packages/adapter-sqlite/README.md).
+
+```yaml
+adapters:
+  - id: postgres
+    module: "@docket/adapter-postgres"
+    config:
+      urlEnv: DOCKET_POSTGRES_URL       # the connection URL, from the environment
+      # schema: docket_index            # default
+      # semantic: { model: nomic-embed-text }   # needs pgvector
+  - id: sqlite
+    module: "@docket/adapter-sqlite"
+    config: {}                          # index.sqlite in .docket/.index/adapters/sqlite/
+```
+
 **`cloud`** (`@docket/adapter-cloud`) answers from a Docket Cloud workspace;
 `docket cloud link` sets it up (see [Docket Cloud](#docket-cloud-docket-cloud)).
 It is query-only and projects nothing.
@@ -1119,7 +1170,7 @@ in any release:
 | `@chrisjowen/docket` | The programmatic API: `createDocket`, sync, validation, the graph browser, the MCP server, asking, and the adapter contracts' types |
 | `@chrisjowen/docket/contracts` | The adapter contracts (`@docket/contracts`): types, runtime validators and `unacknowledged` |
 | `@chrisjowen/docket/adapter-kit` | The kit the bundled adapters are built with (`@docket/adapter-kit`) |
-| `@chrisjowen/docket/adapters/neo4j`, `/adapters/mem0`, `/adapters/cognee` | The bundled Neo4j, mem0 and cognee adapters |
+| `@chrisjowen/docket/adapters/neo4j`, `/adapters/mem0`, `/adapters/cognee`, `/adapters/postgres`, `/adapters/sqlite` | The bundled Neo4j, mem0, cognee, Postgres and SQLite adapters |
 | `@chrisjowen/docket/sync/inputs` | The canonical inputs sync derives from a docket |
 | `@chrisjowen/docket/manifest/plan`, `/manifest/adapter-manifest` | Each adapter instance's sync plan, and what its manifest records |
 | `@chrisjowen/docket/source/parser`, `/source/hashing` | Parsing a canonical Markdown document, and the content hash revisions use |
@@ -1238,7 +1289,9 @@ pnpm build       # the adapter contracts, kit and adapters and the web UI
 pnpm typecheck   # sources and tests
 pnpm test        # the contracts', adapters', CLI's, server's and plugin's suites;
                  # set DOCKET_TEST_PG_URL to a Postgres role that may create
-                 # databases to run docket-server's store suites too
+                 # databases to run docket-server's store suites and the
+                 # Postgres adapter's too (pgvector/pgvector:pg17 runs its
+                 # semantic suite as well)
 pnpm -C packages/docket eval:ask   # how well docket ask answers: calls models,
                                    # so never part of pnpm test
 pnpm -C packages/docket eval:search:download  # fetch the search evaluation's datasets

@@ -4,8 +4,9 @@ How fast, how accurate and how relevant docket's search is, across corpora
 from six ontologies, and which way of searching does best. It loads each
 corpus into a local docket under one of docket's ontology templates, syncs it,
 asks every strategy the same queries, and writes a report. The latest results
-are in [RESULTS.md](RESULTS.md), and cognee's in
-[RESULTS-cognee.md](RESULTS-cognee.md).
+are in [RESULTS.md](RESULTS.md), cognee's in
+[RESULTS-cognee.md](RESULTS-cognee.md), and the Postgres and SQLite adapters' in
+[RESULTS-postgres-sqlite.md](RESULTS-postgres-sqlite.md).
 
 It answers one question in particular: what should `docket_search` return
 when nothing in the docket answers? Asked "who is sophia" in a workspace with
@@ -75,6 +76,8 @@ only re-embeds what changed.
 | `DOCKET_EVAL_OLLAMA_URL` | `http://localhost:11434` | |
 | `DOCKET_EVAL_COGNEE_URL` | | A cognee server to project every corpus into as well, adding the `cognee` strategies ([cognee](#cognee)). |
 | `DOCKET_EVAL_COGNEE_API_KEY` | | That server's API key, when it needs one. |
+| `DOCKET_EVAL_PG_URL` | | A Postgres 16+ with pgvector (a role that may create a schema and the extension) to project every corpus into as well, adding the `postgres` strategies ([Postgres and SQLite](#postgres-and-sqlite)). |
+| `DOCKET_EVAL_SQLITE` | | `1` to project every corpus into SQLite files as well, adding the `sqlite` strategies. |
 
 To update [RESULTS.md](RESULTS.md), run with `DOCKET_EVAL_OUT` set and copy
 its `report.md` over it.
@@ -184,6 +187,10 @@ combines in Docket Cloud:
 | `precached` | Work moved to sync time. Each entity is embedded with the titles of what it links to and without its confidence, and the full-text vocabulary is kept. A query naming a word no entity holds - a capitalised word that does not start a sentence, or whatever follows "who is" unless it starts "our", "the" or another determiner; acronyms and words with digits never count - returns nothing without searching. Otherwise floor and fusion as above, over the link-aware embeddings. Answers are cached by query terms. |
 | `cognee` | Only with `DOCKET_EVAL_COGNEE_URL`: the corpus synced into cognee through [`@docket/adapter-cognee`](../../../adapter-cognee/README.md), and each query answered by the adapter - cognee's `CHUNKS` search, top 10, no floor. |
 | `cognee+floor` | `cognee` keeping only chunks with cosine similarity (1 - cognee's distance) at or above a floor tuned on the dev queries like the others: the adapter's `maxDistance`. |
+| `postgres` | Only with `DOCKET_EVAL_PG_URL`: the corpus synced through [`@docket/adapter-postgres`](../../../adapter-postgres/README.md), and each query answered by the adapter - full-text with the trigram title lift, top 10, no floor. |
+| `postgres+hybrid` | As `postgres`, fused by reciprocal rank with pgvector cosine similarity of the embedder's embeddings (`semantic` set), top 10, no floor. |
+| `sqlite` | Only with `DOCKET_EVAL_SQLITE=1`: the corpus synced through [`@docket/adapter-sqlite`](../../../adapter-sqlite/README.md), and each query answered by the adapter - FTS5 BM25, top 10, no floor. |
+| `sqlite+hybrid` | As `sqlite`, fused by reciprocal rank with cosine similarity of the embedder's embeddings, top 10, no floor. |
 | `agentic` | A model (`DOCKET_EVAL_AGENT`) plans 1-3 searches, the record types to expect, and whether to follow links. The single-pass sources run each search, adding neighbours when asked. The model then judges which candidates are about exactly what was asked, and an empty judgement is the answer. Two model calls per query. |
 
 The floors are tuned on the dev queries, pooled over corpora, by grid
@@ -252,6 +259,30 @@ Macro-averaged over the two:
   stopped after five hours with 699 of its 1,044 entities added and cognify
   still running, so the larger corpora are out of reach with a local 7B model.
 
+## Postgres and SQLite
+
+With `DOCKET_EVAL_PG_URL` set, and with `DOCKET_EVAL_SQLITE=1`, each corpus's
+docket also gets adapter instances for the opt-in Postgres and SQLite
+adapters - one full-text, one hybrid, each in a scope or file of its own - and
+is synced into them with `docket sync`, embedding included for the hybrid
+ones. The numbers are the adapters' own: only the entities each answer names
+count, as for cognee. `current`, the stand-in for Neo4j full-text plus mem0
+with no floor, is what they are compared with.
+
+```sh
+docker run -d -p 127.0.0.1:55432:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg17
+DOCKET_EVAL_PG_URL=postgres://postgres:postgres@127.0.0.1:55432/postgres DOCKET_EVAL_SQLITE=1 \
+DOCKET_EVAL_STRATEGIES=current,current+confidence,floor,floor+rrf,precached,postgres,postgres+hybrid,sqlite,sqlite+hybrid \
+  pnpm -C packages/docket eval:search
+```
+
+[RESULTS-postgres-sqlite.md](RESULTS-postgres-sqlite.md) is that command's run
+on all six corpora; the adapters' READMEs summarise it. Macro-averaged nDCG@10:
+`current` 0.731, `postgres` 0.725, `postgres+hybrid` 0.752, `sqlite` 0.715 and
+`sqlite+hybrid` 0.747. Full-text alone ranks about as well as the Neo4j and
+mem0 stand-ins together, and with embeddings fused in, better; like
+`current`, neither has a relevance floor.
+
 ## Metrics
 
 All at k = 10, `docket_search`'s default limit, on test queries.
@@ -284,4 +315,5 @@ JSONL `lexicalSearch` against a prebuilt index.
 - [engine.ts](engine.ts): the full-text index, embeddings and links every strategy searches.
 - [strategies.ts](strategies.ts), [metrics.ts](metrics.ts), [report.ts](report.ts).
 - [cognee.ts](cognee.ts): the corpus synced into cognee, and the `cognee` strategies.
+- [stores.ts](stores.ts): the corpus synced into Postgres and SQLite, and their strategies.
 - [download.mjs](download.mjs), [datasets.json](datasets.json): fetching the datasets.

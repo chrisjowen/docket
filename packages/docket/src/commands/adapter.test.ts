@@ -566,9 +566,59 @@ describe('docket adapter add cognee', () => {
   })
 })
 
+describe('docket adapter add postgres', () => {
+  it('adds an instance of the bundled adapter, naming the URL variable and never its value', async () => {
+    const result = await add('postgres', { '--url-env': 'INDEX_DATABASE_URL', '--scope': 'payments' })
+    const { resolved, entry } = await instance('postgres')
+    expect(entry).toEqual({
+      id: 'postgres',
+      module: '@docket/adapter-postgres',
+      roles: ['projection', 'query'],
+      config: { urlEnv: 'INDEX_DATABASE_URL', scope: 'payments' }
+    })
+    expect(resolved.config.runtimes).toEqual({})
+    expect(result.plan.env).toEqual([expect.objectContaining({ name: 'INDEX_DATABASE_URL', secret: true, required: true })])
+    expect(result.plan.driver).toMatchObject({ name: 'pg' })
+    expect(result.plan.prerequisites[0]).toMatch(/Postgres 16 or later/)
+    expect(calls).toEqual([])
+  })
+
+  it('keeps only what differs from the adapter\'s defaults, and embeds when given a model', async () => {
+    await add('postgres', { '--semantic-model': 'nomic-embed-text' })
+    expect((await instance('postgres')).entry?.config).toEqual({ urlEnv: 'DOCKET_POSTGRES_URL', semantic: { model: 'nomic-embed-text' } })
+    const result = await add('postgres', { '--id': 'pg-mxbai', '--schema': 'search_index', '--semantic-model': 'mxbai-embed-large' })
+    expect((await instance('pg-mxbai')).entry?.config).toEqual({
+      urlEnv: 'DOCKET_POSTGRES_URL',
+      schema: 'search_index',
+      semantic: { model: 'mxbai-embed-large' }
+    })
+    expect(result.plan.prerequisites.join('\n')).toMatch(/pgvector/)
+    expect(result.plan.notes.join('\n')).toMatch(/semantic.dimensions defaults to 768/)
+  })
+
+  it('refuses a schema it could not write into SQL', async () => {
+    await expect(add('postgres', { '--schema': 'Index-Tables' })).rejects.toThrow(/--schema/)
+  })
+})
+
+describe('docket adapter add sqlite', () => {
+  it('adds an instance of the bundled adapter keeping its file in its state directory', async () => {
+    const result = await add('sqlite')
+    const { entry } = await instance('sqlite')
+    expect(entry).toEqual({ id: 'sqlite', module: '@docket/adapter-sqlite', roles: ['projection', 'query'], config: {} })
+    expect(result.plan.env).toEqual([])
+    expect(result.plan.driver).toMatchObject({ name: 'better-sqlite3' })
+  })
+
+  it('takes a file and an embedding model', async () => {
+    await add('sqlite', { '--file': '.docket/.index/docket.sqlite', '--semantic-model': 'nomic-embed-text' })
+    expect((await instance('sqlite')).entry?.config).toEqual({ file: '.docket/.index/docket.sqlite', semantic: { model: 'nomic-embed-text' } })
+  })
+})
+
 describe('docket adapter add, other providers', () => {
   it('lists what it can set up when given one it cannot', async () => {
-    await expect(add('nonesuch')).rejects.toThrow(/No provider "nonesuch"\. .* jsonl, neo4j, mem0, memvid, mempalace, cognee/)
+    await expect(add('nonesuch')).rejects.toThrow(/No provider "nonesuch"\. .* jsonl, neo4j, mem0, memvid, mempalace, cognee, postgres, sqlite/)
   })
 })
 
@@ -598,6 +648,6 @@ describe('docket adapters list', () => {
     expect(result.adapters.find((adapter) => adapter.id === 'missing')?.problem).toMatch(/is not installed/)
     expect(result.adapters.find((adapter) => adapter.id === 'memvid')?.problem).toMatch(/not published to npm/)
     expect(result.adapters.find((adapter) => adapter.id === 'cognee')?.problem).toBeUndefined()
-    expect(result.providers.map((provider) => provider.name)).toEqual(['jsonl', 'neo4j', 'mem0', 'memvid', 'mempalace', 'cognee'])
+    expect(result.providers.map((provider) => provider.name)).toEqual(['jsonl', 'neo4j', 'mem0', 'memvid', 'mempalace', 'cognee', 'postgres', 'sqlite'])
   })
 })

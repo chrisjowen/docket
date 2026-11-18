@@ -1,0 +1,14 @@
+{
+  "name": "@docket/adapter-sqlite",
+  "version": "0.12.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  }
+}

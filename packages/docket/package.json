@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
   "license": "Apache-2.0",
   "keywords": [
@@ -10,7 +10,9 @@
     "claude-code",
     "mem0",
     "neo4j",
-    "cognee"
+    "cognee",
+    "postgres",
+    "sqlite"
   ],
   "homepage": "https://github.com/chrisjowen/docket#readme",
   "bugs": {
@@ -40,6 +42,14 @@
     "./adapters/cognee": {
       "types": "./dist/bundled/adapter-cognee/dist/index.d.ts",
       "import": "./dist/bundled/adapter-cognee/dist/index.js"
+    },
+    "./adapters/postgres": {
+      "types": "./dist/bundled/adapter-postgres/dist/index.d.ts",
+      "import": "./dist/bundled/adapter-postgres/dist/index.js"
+    },
+    "./adapters/sqlite": {
+      "types": "./dist/bundled/adapter-sqlite/dist/index.d.ts",
+      "import": "./dist/bundled/adapter-sqlite/dist/index.js"
     },
     "./contracts": {
       "types": "./dist/bundled/contracts/dist/index.d.ts",
@@ -146,14 +156,22 @@
     "zod": "^4.1.12"
   },
   "peerDependencies": {
+    "better-sqlite3": "^12.6.2",
     "mem0ai": "^3.3.1",
-    "neo4j-driver": "^6.0.0"
+    "neo4j-driver": "^6.0.0",
+    "pg": "^8.16.3"
   },
   "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    },
     "mem0ai": {
       "optional": true
     },
     "neo4j-driver": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     }
   },
@@ -164,6 +182,8 @@
     "@docket/adapter-kit": "workspace:*",
     "@docket/adapter-mem0": "workspace:*",
     "@docket/adapter-neo4j": "workspace:*",
+    "@docket/adapter-postgres": "workspace:*",
+    "@docket/adapter-sqlite": "workspace:*",
     "@docket/contracts": "workspace:*",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
