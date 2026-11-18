@@ -3,6 +3,56 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.13.0
+
+### `docket serve`: a self-hosted, single-tenant Docket server
+
+`docket serve` serves a docket to several people and agents at once, over
+MCP from wherever they work, all writing to one ontology and one set of
+documents. It offers Docket's whole MCP surface - the same eleven tools as
+Docket Cloud and `docket open` - at `/mcp/<workspace>` (and `/mcp` when it
+serves one), with `/healthz`, `/readyz` and `docket open`'s page behind a token
+sign-in. It runs on `@chrisjowen/docket-server` 0.8.0, which docket loads only
+when serving: install it beside docket. See
+[docs/self-hosting.md](../../docs/self-hosting.md).
+
+- **No database by default.** Each workspace is a project's own files,
+  written through the same local tools as `docket open`'s MCP server and
+  indexed by the project's own projections (jsonl unless it says otherwise),
+  synced after every write. Postgres is an opt-in (`DOCKET_DATABASE_URL`), as
+  the canonical store with jsonl, SQLite or Postgres projections.
+- **Static tokens.** `docket serve token create|list|revoke`: each token has a
+  role (owner, admin, editor, viewer), optional narrower scopes and the
+  workspaces it opens. It is shown once and only its hash is kept. Bearer
+  only, refused in a URL. `ontology.mcpWriters` names the roles that may
+  publish the ontology over MCP (owners by default). Without an `ai` model,
+  `docket_ask` says it is off and search still works.
+- **`docket cloud link|push|pull|status`** work against a `docket serve` URL
+  with `--token-env`: the server answers the documents API at Docket Cloud's
+  paths for its one tenant. Over files, a push writes the checkout's documents
+  into the project, recording which checkout each came from in
+  `<root>/pushed.yaml`.
+
+### Writes take turns across processes
+
+The local MCP tools' writes now hold the project's lock file
+(`.docket/.cache/write.lock`) as well as queueing within the process, so
+`docket open`, `docket serve` and any other docket process writing to the
+same project wait their turn instead of writing over each other. A lock left
+by a process that died is taken over.
+
+### For hosts
+
+- `@chrisjowen/docket/host`: what a server hosting a project's docket runs it
+  with - the project's config, its write lock, `ProjectIndexer` (sync after
+  writes, rebuild), the documents API over files (`listProjectDocuments`,
+  `pushToProject`), and `docket open`'s page and reads as one request handler
+  (`readViews`).
+- `localTools` takes `ask` (a server's own model, or `false` to turn
+  `docket_ask` off) and `publisher` (who may publish the ontology, re-checked
+  on every call). `askWith` takes a `summarize` model of the caller's own.
+- `checkoutProblem` joins the workspace core.
+
 ## 0.12.0
 
 ### Postgres and SQLite adapters, opt-in

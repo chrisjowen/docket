@@ -4,6 +4,7 @@ import type { ConversationTurn, Diagnostic, InputKind } from '@docket/contracts'
 
 import { openDocket, type AdapterSlot, type Docket, type OpenDocketOptions } from '../adapters/docket.js'
 import type { CanonicalSource } from '../canonical/source.js'
+import type { SummarizeConfig } from '../config/config.js'
 import { connectingPaths } from '../open/paths.js'
 import { askAdapters } from './coordinator.js'
 import { freshnessOf, freshnessWarning } from './freshness.js'
@@ -30,6 +31,8 @@ export interface AskInput {
   conversation?: readonly ConversationTurn[] | undefined
   /** Write a summary over the results; omitted, `query.synthesis`. */
   synthesis?: boolean | undefined
+  /** The model that writes it; omitted, the project's `summarize`. A server sets its own. */
+  summarize?: SummarizeConfig | undefined
   /** IANA time zone relative times are read in; omitted, this machine's. */
   timezone?: string | undefined
   /** When the question is asked; omitted, now. */
@@ -114,7 +117,8 @@ const selectAdapters = (docket: Docket, named: readonly string[] | undefined): A
 export const askWith = async (snapshot: RequestSnapshot, docket: Docket, input: AskInput): Promise<AskOutcome> => {
   const question = input.question.trim()
   if (question === '') throw new AskRequestError('Ask something: the question is empty.')
-  const { query, summarize } = docket.resolved.config
+  const { query } = docket.resolved.config
+  const summarize = input.summarize ?? docket.resolved.config.summarize
   const timezone = zoneOf(input.timezone)
   const slots = selectAdapters(docket, input.adapters)
   const maxResults = positive(input.maxResults, 'maxResults', DEFAULT_ASK_RESULTS, MAX_ASK_RESULTS)

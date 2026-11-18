@@ -11,8 +11,9 @@ import { addEvidenceArguments, askArguments, getArguments, ontologyArguments, pr
 import { ontologyAnswer, proposalAnswer, proposalRefusal, publishAnswer, publishRefusal, resourceAnswer, retireAnswer, searchAnswer, supersedeAnswer } from '../surface/answers.js';
 import { ADD_EVIDENCE_DEFINITION, ASK_DEFINITION, GET_DEFINITION, ONTOLOGY_DEFINITION, PROPOSE_ONTOLOGY_DEFINITION, PUBLISH_ONTOLOGY_DEFINITION, REMEMBER_DEFINITION, RETIRE_DEFINITION, SEARCH_BASE_DESCRIPTION, SEARCH_DEFINITION, SUPERSEDE_DEFINITION, UPDATE_NOTES_DEFINITION, describedAs } from '../surface/definitions.js';
 import { ASK_SCHEMA, answerText, failed } from '../surface/results.js';
+import { OntologyWriteDisabled } from '../../workspace/ontology/errors.js';
 import { writeAnswer } from '../surface/write-args.js';
-import { declaring, describeResource, headOf, historyPath, liveSupersessions, readWorkspace, serialized, storeOf } from './files.js';
+import { declaring, describeResource, headOf, historyPath, liveSupersessions, readWorkspace, storeOf, writeLock } from './files.js';
 import { proposeOntologyChange, publishOntologyChange } from './ontology.js';
 import { changesOf, scopedSearch, withSupersessions } from './search.js';
 import { addEvidence, appendNotes, retireResource, supersedeResource, writeResource } from './write.js';
@@ -102,10 +103,10 @@ export function localTools(options) {
         requestId: `mcp:${randomUUID()}`
     });
     const describe = (definition) => describedAs(definition, DESCRIPTIONS[definition.name] ?? definition.description);
-    /** Runs a write against the project's files as they are now, after any write already running. */
+    /** Runs a write against the project's files as they are now, after any write already running here or in another process. */
     const writing = async (fn) => {
         const resolved = await loadConfig(cwd);
-        return serialized(resolved.projectRoot, async () => fn(await readWorkspace(resolved), writerFor(resolved)));
+        return writeLock(resolved, async () => fn(await readWorkspace(resolved), writerFor(resolved)));
     };
     const tools = [
         {
@@ -165,10 +166,16 @@ export function localTools(options) {
             definition: describe(ASK_DEFINITION),
             async call(raw) {
                 const { question, maxResults } = askArguments(raw);
+                if (options.ask === false)
+                    return failed('docket_ask is off on this server: it has no model to answer with. Use docket_search, which needs none.');
                 let response;
                 try {
                     const resolved = await loadConfig(cwd);
-                    const { answer } = await askProject(cwd, { question, ...(maxResults !== undefined ? { maxResults } : {}) });
+                    const { answer } = await askProject(cwd, {
+                        question,
+                        ...(maxResults !== undefined ? { maxResults } : {}),
+                        ...(options.ask ? { summarize: options.ask.summarize, synthesis: true } : {})
+                    });
                     const live = await liveSupersessions(storeOf(resolved));
                     const found = [...new Set((answer.references ?? []).flatMap((reference) => (reference.entity && live.has(reference.entity) ? [reference.entity] : [])))];
                     const changes = found.length ? changesOf(await readWorkspace(resolved), live, found) : [];
@@ -251,6 +258,11 @@ export function localTools(options) {
             async call(raw) {
                 const change = publishArguments(raw);
                 try {
+                    if (options.publisher) {
+                        const role = await options.publisher.role();
+                        if (role === null || !(await options.publisher.allowed()).includes(role))
+                            throw new OntologyWriteDisabled(role);
+                    }
                     const { published, history } = await writing(async (workspace, writer) => ({
                         published: await publishOntologyChange(workspace, writer, change, { now }),
                         history: historyPath(workspace)

@@ -72,7 +72,8 @@ export const askWith = async (snapshot, docket, input) => {
     const question = input.question.trim();
     if (question === '')
         throw new AskRequestError('Ask something: the question is empty.');
-    const { query, summarize } = docket.resolved.config;
+    const { query } = docket.resolved.config;
+    const summarize = input.summarize ?? docket.resolved.config.summarize;
     const timezone = zoneOf(input.timezone);
     const slots = selectAdapters(docket, input.adapters);
     const maxResults = positive(input.maxResults, 'maxResults', DEFAULT_ASK_RESULTS, MAX_ASK_RESULTS);

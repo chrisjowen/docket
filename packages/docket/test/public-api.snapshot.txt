@@ -233,6 +233,7 @@ AskInput
       adapters?: readonly string[] | undefined;
       conversation?: readonly ConversationTurn[] | undefined;
       synthesis?: boolean | undefined;
+      summarize?: SummarizeConfig | undefined;
       timezone?: string | undefined;
       now?: Date | undefined;
       maxResults?: number | undefined;
@@ -778,6 +779,13 @@ LocalToolsOptions
           label: string;
       } | undefined;
       now?: (() => Date) | undefined;
+      ask?: {
+          summarize: SummarizeConfig;
+      } | false | undefined;
+      publisher?: {
+          role(): Promise<string | null>;
+          allowed(): Promise<readonly string[]>;
+      } | undefined;
   }
 
 LOW_CONFIDENCE
@@ -3118,6 +3126,196 @@ validateMemoryAdapter
 validateProjectionBatch
   export declare const validateProjectionBatch: (value: unknown) => ProjectionBatch;
 
+## ./host (./dist/host/index.d.ts)
+
+CONFIG_FILENAME
+  export declare const CONFIG_FILENAME = ".docket.yaml";
+
+defaultConfig
+  export declare const defaultConfig: (projectRoot: string) => ResolvedConfig;
+
+defaultUiDir
+  export declare const defaultUiDir: () => string;
+
+findConfigFile
+  export declare const findConfigFile: (startDir: string) => string | undefined;
+
+listProjectDocuments
+  export declare function listProjectDocuments(resolved: ResolvedConfig, query: {
+      origin: 'cli' | 'cloud';
+      originRef?: string | undefined;
+      raw?: boolean | undefined;
+  }): Promise<ProjectDocument[]>;
+
+loadConfig
+  export declare const loadConfig: (startDir?: string) => Promise<ResolvedConfig>;
+
+LOCK_WAIT_MS
+  export declare const LOCK_WAIT_MS = 30000;
+
+lockFile
+  export declare const lockFile: (resolved: ResolvedConfig) => string;
+
+ProjectDocument
+  export interface ProjectDocument {
+      path: string;
+      hash: string;
+      origin: 'cli' | 'cloud';
+      originRef?: string;
+      updatedAt?: string;
+      raw?: string;
+  }
+
+ProjectIndexer
+  export declare class ProjectIndexer {
+      #private;
+      readonly runner: SyncRunner;
+      constructor(options: ProjectIndexerOptions);
+      kick(): void;
+      idle(): Promise<UiSyncRun | null>;
+      rebuild(): Promise<UiSyncRun | null>;
+      close(): Promise<void>;
+  }
+
+ProjectIndexerOptions
+  export interface ProjectIndexerOptions {
+      cwd: string;
+      intervalMs?: number | undefined;
+      runSync?: ((options: SyncOptions) => Promise<SyncResult>) | undefined;
+      runRebuild?: ((options: SyncOptions) => Promise<SyncResult>) | undefined;
+  }
+
+PushDiagnostic
+  export interface PushDiagnostic {
+      severity: 'error' | 'warning';
+      code: string;
+      message: string;
+      path?: string;
+  }
+
+PUSHED_FILE
+  export declare const PUSHED_FILE = "pushed.yaml";
+
+PushedRecord
+  export interface PushedRecord {
+      path: string;
+      checkout: string;
+      pushedBy: string;
+      pushedAt: string;
+  }
+
+PushInput
+  export interface PushInput {
+      checkout: string;
+      upsert: {
+          path: string;
+          raw: string;
+      }[];
+      remove: string[];
+  }
+
+PushResult
+  export interface PushResult {
+      ok: boolean;
+      dryRun: boolean;
+      created: string[];
+      updated: string[];
+      unchanged: string[];
+      removed: string[];
+      diagnostics: PushDiagnostic[];
+  }
+
+pushToProject
+  export declare function pushToProject(resolved: ResolvedConfig, writer: {
+      label: string;
+  }, input: PushInput, options?: {
+      dryRun?: boolean;
+      now?: () => Date;
+  }): Promise<PushResult>;
+
+readViews
+  export declare const readViews: (options: ReadViewsOptions) => ((request: IncomingMessage, response: ServerResponse) => Promise<void>);
+
+ReadViewsOptions
+  export interface ReadViewsOptions {
+      cwd: string;
+      uiDir?: string | undefined;
+      sync?: SyncRunner | undefined;
+      refusal?: string | undefined;
+      summarize?: SummarizeConfig | false | undefined;
+  }
+
+ResolvedConfig
+  export interface ResolvedConfig {
+      config: MemoryConfig;
+      projectRoot: string;
+      memoryRoot: string;
+      ontologyPath: string;
+  }
+
+STALE_LOCK_MS
+  export declare const STALE_LOCK_MS = 120000;
+
+SummarizeConfig
+  export type SummarizeConfig = z.infer<typeof summarizeConfigSchema>;
+
+summarizeConfigSchema
+  export declare const summarizeConfigSchema: z.ZodPrefault<z.ZodUnion<readonly [
+      z.ZodObject<{
+          provider: z.ZodLiteral<"claude">;
+          model: z.ZodOptional<z.ZodString>;
+          timeoutMs: z.ZodDefault<z.ZodNumber>;
+      }, z.core.$strip>,
+      z.ZodObject<{
+          provider: z.ZodDefault<z.ZodLiteral<"ollama">>;
+          url: z.ZodDefault<z.ZodString>;
+          model: z.ZodString;
+          timeoutMs: z.ZodDefault<z.ZodNumber>;
+      }, z.core.$strip>
+  ]>>;
+
+summarizerFor
+  export declare const summarizerFor: (config: SummarizeConfig) => Summarizer;
+
+SyncResult
+  export interface SyncResult {
+      diagnostics: Diagnostic[];
+      upserted: string[];
+      removed: string[];
+      unchanged: number;
+      adapters: TargetReport[];
+  }
+
+UiSyncRun
+  export interface UiSyncRun {
+      id: string;
+      state: 'running' | 'succeeded' | 'failed';
+      adapters: string[] | null;
+      startedAt: string;
+      finishedAt?: string;
+      stage?: UiSyncStage;
+      results: UiSyncAdapterResult[];
+      fileErrors: number;
+      error?: string;
+  }
+
+UiSyncStatus
+  export interface UiSyncStatus {
+      run: UiSyncRun | null;
+      adapters: UiSyncTarget[];
+      outOfDate: boolean;
+      lastSyncedAt?: string;
+      error?: string;
+  }
+
+withLockFile
+  export declare function withLockFile<T>(path: string, fn: () => Promise<T>, options?: {
+      waitMs?: number;
+  }): Promise<T>;
+
+writeLock
+  export declare const writeLock: <T>(resolved: ResolvedConfig, fn: () => Promise<T>) => Promise<T>;
+
 ## ./manifest/adapter-manifest (./dist/manifest/adapter-manifest.d.ts)
 
 ADAPTER_MANIFEST_VERSION
@@ -4760,6 +4958,7 @@ AskInput
       adapters?: readonly string[] | undefined;
       conversation?: readonly ConversationTurn[] | undefined;
       synthesis?: boolean | undefined;
+      summarize?: SummarizeConfig | undefined;
       timezone?: string | undefined;
       now?: Date | undefined;
       maxResults?: number | undefined;
@@ -5060,6 +5259,9 @@ checkDraft
       migration?: readonly Migration[];
       login?: string;
   }): DraftCheck;
+
+checkoutProblem
+  export declare function checkoutProblem(checkout: unknown): string | null;
 
 CheckResult
   export interface CheckResult {

@@ -3,8 +3,9 @@
 `docket open` is also an [MCP](https://modelcontextprotocol.io) server for the
 docket it serves. It offers Docket's MCP surface: the same eleven tools, with
 the same names, input schemas, annotations, argument checks and result shapes,
-as a self-hosted Docket server (`@chrisjowen/docket-server`) and Docket Cloud,
-over the project's own files. `docket_search`'s result carries an
+as a self-hosted Docket server (`docket serve`, on `@chrisjowen/docket-server`;
+see [self-hosting.md](self-hosting.md)) and Docket Cloud, over the project's
+own files. `docket_search`'s result carries an
 [MCP app](https://modelcontextprotocol.io/extensions/apps) (the
 `io.modelcontextprotocol/ui` extension, stable spec 2026-01-26). The app draws
 the matching resources and their links on the casebook's evidence board. A host
@@ -76,7 +77,9 @@ reordered, or a name, input schema, annotation or argument check that differs.
 ### Over the project's files
 
 docket's server is one person's, on their machine, so it has no tenancy and
-no sign-in, and offers every tool, publishing the ontology too. A server
+no sign-in, and offers every tool, publishing the ontology too. `docket serve`
+offers the same tools over the same files to several people, behind tokens
+with a role each ([self-hosting.md](self-hosting.md)). A server
 keeps its own records in a database; docket keeps them as files under the
 docket's root, committed with the rest, so git keeps their history:
 
@@ -88,7 +91,10 @@ docket's root, committed with the rest, so git keeps their history:
   `.docket/resources/<type>/` (`<slug>-2.md` when the path is taken). Each write is validated against the ontology with docket's own
   validator before anything is written, and evidence is stamped as observed by
   the person at the machine (`<user> via docket MCP`). Writing the same thing
-  again changes nothing. Two calls at once run one after the other.
+  again changes nothing. Two calls at once run one after the other, and a
+  write holds the project's lock file (`.docket/.cache/write.lock`) so a write
+  from another process - a second `docket open`, `docket serve` - waits its
+  turn too.
 - **Retiring** removes the documents that declare the resource; git keeps
   them. A result names no revision: the project's history is git's.
 - **Supersessions** are kept in `.docket/supersessions.yaml`. The documents

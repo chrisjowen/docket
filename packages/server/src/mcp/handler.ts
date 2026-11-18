@@ -7,6 +7,7 @@ import { publishedOntology, workspaceResolvedConfig } from '../postgres/source.j
 import type { Writer } from '../write/inputs.js'
 import { isObject } from './args.js'
 import type { ToolContext } from './context.js'
+import type { ServerTool } from './context.js'
 import type { QueryClient } from './query.js'
 import { SERVER_INSTRUCTIONS, registryFor, scopeOf, serverTools } from './tools/index.js'
 
@@ -87,6 +88,15 @@ export interface McpHandlerOptions<P extends Principal = Principal, R extends Mc
   audit(principal: P): AuditSink
   /** The principal's workspace store. */
   store(principal: P): StoreRunner
+  /**
+   * The tools the request may call, made for its context: the eleven over
+   * the store (`serverTools`) by default. A deployment that keeps its
+   * documents elsewhere - a self-hosted server over a project's files -
+   * offers its own, with the same names, schemas and scopes.
+   */
+  tools?(context: ToolContext, principal: P): ServerTool[]
+  /** The principal's workspace documents, as the MCP server reads them: the store's by default. */
+  source?(principal: P): CanonicalSource
   /** Where the principal's searches and questions are answered. */
   query(principal: P): QueryClient
   /** The principal's workspace pages, linked from results. */
@@ -267,7 +277,7 @@ export async function handleMcp<P extends Principal, R extends McpResource>(requ
       return value
     }
   }
-  const tools = serverTools(context)
+  const tools = options.tools ? options.tools(context, principal) : serverTools(context)
 
   const limited = await options.limiter?.check(principal, { jsonrpc: '2.0', id: jsonRpcId(message?.id), method, params })
   if (limited) {
@@ -307,7 +317,9 @@ export async function handleMcp<P extends Principal, R extends McpResource>(requ
     return refusal(refused)
   }
 
-  const server = createMcpServer({ source: storeSource(store, principal.workspaceId), tools: registryFor(tools, effective), appFile: options.appFile })
+  const source = options.source ? options.source(principal) : storeSource(store, principal.workspaceId)
+  // A deployment's own tools link their results to its viewer through the MCP server's context.
+  const server = createMcpServer({ source, tools: registryFor(tools, effective), appFile: options.appFile, ...(options.tools ? { viewer: links.viewer } : {}) })
   let response: JsonRpcResponse | null
   try {
     response = (await server.handle(body.message)) as JsonRpcResponse | null

@@ -18,6 +18,7 @@ import { ontology, relationshipsFrom, relationshipsTo } from './commands/ontolog
 import { rebuild } from './commands/rebuild.js';
 import { runtimeDown, runtimePlan, runtimeStatus, runtimeUp } from './commands/runtime.js';
 import { DEFAULT_SEARCH_LIMIT, search } from './commands/search.js';
+import { SERVE_ROLES, loadServeModule } from './commands/serve.js';
 import { setup } from './commands/setup.js';
 import { failureOf, sync, SyncError } from './commands/sync.js';
 import { validate } from './commands/validate.js';
@@ -387,6 +388,106 @@ program
     };
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
+});
+/** `docket serve`'s configuration, as `--config` (on the command or its parent) and the environment give it. */
+const serveConfig = async (options) => {
+    let port;
+    if (options.port !== undefined) {
+        port = Number(options.port);
+        if (!Number.isInteger(port) || port < 0 || port > 65535)
+            throw new Error(`--port must be a port number, got "${options.port}"`);
+    }
+    const serve = await loadServeModule();
+    return { serve, config: await serve.loadServeConfig({ file: options.config, host: options.host, port }) };
+};
+const serveCommand = program
+    .command('serve')
+    .description('Serve this docket to several people and agents over MCP: a self-hosted, single-tenant Docket server')
+    .option('-c, --config <file>', 'the server config (default: $DOCKET_SERVE_CONFIG, or docket-server.yaml here if there is one)')
+    .option('--host <address>', 'interface to listen on (default: 127.0.0.1; 0.0.0.0 for every interface)')
+    .option('-p, --port <port>', 'port to listen on (default: 4390)')
+    .option('--rebuild', 'reset every workspace\'s projections and project everything again before serving')
+    .action(async (options) => {
+    const { serve, config } = await serveConfig(options);
+    const running = await serve.startServe(config, { rebuild: options.rebuild === true });
+    const store = running.backend.kind === 'postgres' ? `Postgres (schema ${config.database?.schema ?? 'public'})` : 'the projects\' own files - no database';
+    console.log(`docket serve ${running.url}  (${store})`);
+    for (const workspace of config.workspaces) {
+        console.log(`  ${workspace.slug}  MCP ${running.url}/mcp/${workspace.slug}${workspace.path ? `  (${workspace.path})` : ''}`);
+    }
+    if (running.backend.workspaces.length === 1)
+        console.log(`  MCP also at ${running.url}/mcp`);
+    if (config.ui)
+        console.log(`  page  ${running.url}/  (sign in with a token)`);
+    console.log(`  health  ${running.url}/healthz, ${running.url}/readyz`);
+    console.log(`  ontology published over MCP by: ${config.ontology.mcpWriters.join(', ')}`);
+    if (!config.ai)
+        console.log('  docket_ask is off: no ai model configured (docket_search needs none)');
+    const tokens = await serve.listTokens(config);
+    if (tokens.length === 0)
+        console.log('\nNo tokens yet: create one with `docket serve token create <name> --role owner`.');
+    const host = config.listen.host;
+    if (host !== '127.0.0.1' && host !== '::1' && host !== 'localhost' && !config.publicUrl?.startsWith('https:')) {
+        console.log(`\nListening on ${host} over plain HTTP: put it behind TLS (a reverse proxy) and set publicUrl before tokens cross a network.`);
+    }
+    console.log('Press Ctrl-C to stop.');
+    const stop = () => {
+        void running.close().then(() => process.exit(0));
+    };
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+});
+const serveTokenCommand = serveCommand.command('token').description('Manage the bearer tokens docket serve accepts');
+/** `--config` given on `docket serve` or on the token command itself. */
+const serveConfigOf = (options) => serveConfig({ ...serveCommand.opts(), ...(options.config ? { config: options.config } : {}) });
+serveTokenCommand
+    .command('create')
+    .argument('<name>', 'what the token is for: a person or an agent, e.g. ada or ci-bot')
+    .description('Create a token; it is shown once, and only its hash is kept')
+    .addOption(new Option('--role <role>', 'what it may do: owner, admin, editor (write, propose) or viewer (read)').choices([...SERVE_ROLES]).makeOptionMandatory())
+    .option('--scopes <scopes>', 'narrow it further: comma-separated docket:read, docket:write, ontology:read, ontology:propose, ontology:write', collect, [])
+    .option('--workspace <slug>', 'a workspace it opens (repeatable; default: every one)', collect, [])
+    .option('-c, --config <file>', 'the server config')
+    .action(async (name, options) => {
+    const { serve, config } = await serveConfigOf(options);
+    const scopes = options.scopes.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean);
+    const { token, record } = await serve.createToken(config, {
+        name,
+        role: options.role,
+        ...(scopes.length ? { scopes } : {}),
+        ...(options.workspace.length ? { workspaces: options.workspace } : {})
+    });
+    console.log(`✓ created ${record.name} (${record.role}) for ${record.workspaces.join(', ')}`);
+    console.log(`  scopes  ${record.scopes.join(' ')}`);
+    console.log(`  kept in ${config.auth.tokensFile} as its SHA-256`);
+    console.log('\nThe token - shown only now; send it as Authorization: Bearer <token>, never in a URL:');
+    console.log(`  ${token}`);
+});
+serveTokenCommand
+    .command('list')
+    .description('List the tokens docket serve accepts')
+    .option('-c, --config <file>', 'the server config')
+    .action(async (options) => {
+    const { serve, config } = await serveConfigOf(options);
+    const tokens = await serve.listTokens(config);
+    if (tokens.length === 0)
+        console.log('no tokens');
+    const width = widest(tokens.map((token) => token.name));
+    for (const token of tokens) {
+        const where = token.inConfig ? '  (in the config file)' : '';
+        console.log(`  ${pad(token.name, width)}  ${token.prefix ? `${token.prefix}…` : ''}  ${token.role}  ${token.workspaces.join(',')}  ${token.scopes.join(' ')}${token.createdAt ? `  created ${token.createdAt}` : ''}${where}`);
+    }
+});
+serveTokenCommand
+    .command('revoke')
+    .argument('<name>', 'the token name, from `docket serve token list`')
+    .description('Revoke a token; its next call is refused')
+    .option('-c, --config <file>', 'the server config')
+    .action(async (name, options) => {
+    const { serve, config } = await serveConfigOf(options);
+    if (!(await serve.revokeToken(config, name)))
+        throw new Error(`There is no token named "${name}".`);
+    console.log(`✓ revoked ${name}`);
 });
 const runtimeCommand = program
     .command('runtime')

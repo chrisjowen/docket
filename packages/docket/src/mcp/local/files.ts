@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, posix as posixPath, relative, resolve, sep } from 'node:path'
+import { hostname } from 'node:os'
+import { dirname, join, posix as posixPath, relative, resolve, sep } from 'node:path'
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 
@@ -156,7 +157,7 @@ export type Store = Pick<LocalWorkspace, 'resolved' | 'root'>
 /** The store of a project, without reading its documents. */
 export const storeOf = (resolved: ResolvedConfig): Store => ({ resolved, root: posix(relative(resolved.projectRoot, resolved.memoryRoot)) || '.' })
 
-async function readRecords<T>(workspace: Store, name: string, key: string): Promise<T[]> {
+export async function readRecords<T>(workspace: Store, name: string, key: string): Promise<T[]> {
   let text: string
   try {
     text = await readFile(absolute(workspace.resolved, recordFile(workspace, name)), 'utf8')
@@ -169,7 +170,7 @@ async function readRecords<T>(workspace: Store, name: string, key: string): Prom
   return list as T[]
 }
 
-async function writeRecords(workspace: Store, name: string, header: string, key: string, records: readonly unknown[]): Promise<void> {
+export async function writeRecords(workspace: Store, name: string, header: string, key: string, records: readonly unknown[]): Promise<void> {
   const body = stringifyYaml({ [key]: records }, { lineWidth: 0 })
   await writeText(absolute(workspace.resolved, recordFile(workspace, name)), `${header.trim().replace(/^/gm, '# ')}\n${body}`)
 }
@@ -271,7 +272,8 @@ const queues = new Map<string, Promise<unknown>>()
 
 /**
  * Runs `fn` after every write already queued for the project, so two calls
- * never read the same files and write over each other.
+ * never read the same files and write over each other. Only within this
+ * process: `writeLock` holds other processes off too.
  */
 export function serialized<T>(project: string, fn: () => Promise<T>): Promise<T> {
   const previous = queues.get(project) ?? Promise.resolve()
@@ -286,3 +288,72 @@ export function serialized<T>(project: string, fn: () => Promise<T>): Promise<T>
   })
   return next
 }
+
+/** The file a project's writers take turns on: in the docket's disposable `.cache/`. */
+export const lockFile = (resolved: ResolvedConfig): string => join(resolved.memoryRoot, '.cache', 'write.lock')
+
+/** How long a writer waits for another process's write before giving up. */
+export const LOCK_WAIT_MS = 30_000
+
+/** A lock older than this is a writer that died holding it: no write takes so long. */
+export const STALE_LOCK_MS = 120_000
+
+/** Whether the process that wrote a lock on this machine is gone. */
+function deadHolder(holder: { pid?: unknown; host?: unknown }): boolean {
+  if (typeof holder.pid !== 'number' || holder.host !== hostname()) return false
+  try {
+    process.kill(holder.pid, 0)
+    return false
+  } catch (cause) {
+    return (cause as NodeJS.ErrnoException).code === 'ESRCH'
+  }
+}
+
+/**
+ * Runs `fn` holding the lock file at `path`, made with `O_EXCL` so one
+ * process holds it at a time; waits for another holder, and takes over a lock
+ * whose holder died (its process is gone, or it is older than any write).
+ */
+export async function withLockFile<T>(path: string, fn: () => Promise<T>, options: { waitMs?: number } = {}): Promise<T> {
+  await mkdir(dirname(path), { recursive: true })
+  const deadline = Date.now() + (options.waitMs ?? LOCK_WAIT_MS)
+  let delay = 10
+  for (;;) {
+    try {
+      await writeFile(path, JSON.stringify({ pid: process.pid, host: hostname(), at: new Date().toISOString() }), { flag: 'wx' })
+      break
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== 'EEXIST') throw cause
+    }
+    let holder: { pid?: unknown; host?: unknown } = {}
+    let age = 0
+    try {
+      holder = JSON.parse(await readFile(path, 'utf8')) as typeof holder
+      age = Date.now() - (await stat(path)).mtimeMs
+    } catch {
+      // Released, or still being written: try again.
+    }
+    if (deadHolder(holder) || age > STALE_LOCK_MS) {
+      await rm(path, { force: true })
+      continue
+    }
+    if (Date.now() > deadline) throw new Error(`Another writer has held ${path} for longer than ${Math.round((options.waitMs ?? LOCK_WAIT_MS) / 1000)} s; try again.`)
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    delay = Math.min(delay * 2, 200)
+  }
+  try {
+    return await fn()
+  } finally {
+    await rm(path, { force: true })
+  }
+}
+
+/**
+ * Runs a write to the project's files after every other: queued behind this
+ * process's writes, then holding the project's lock file against other
+ * processes' - `docket open`'s MCP server, `docket serve`, another agent's
+ * `docket mcp` - so no two writers read the same files and write over each
+ * other.
+ */
+export const writeLock = <T>(resolved: ResolvedConfig, fn: () => Promise<T>): Promise<T> =>
+  serialized(resolved.projectRoot, () => withLockFile(lockFile(resolved), fn))

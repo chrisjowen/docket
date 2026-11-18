@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
   "license": "Apache-2.0",
   "keywords": [
@@ -58,6 +58,10 @@
     "./adapter-kit": {
       "types": "./dist/bundled/adapter-kit/dist/index.d.ts",
       "import": "./dist/bundled/adapter-kit/dist/index.js"
+    },
+    "./host": {
+      "types": "./dist/host/index.d.ts",
+      "import": "./dist/host/index.js"
     },
     "./manifest/adapter-manifest": {
       "types": "./dist/manifest/adapter-manifest.d.ts",

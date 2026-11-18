@@ -898,6 +898,8 @@ McpHandlerOptions
       authorizer: Authorizer<P>;
       audit(principal: P): AuditSink;
       store(principal: P): StoreRunner;
+      tools?(context: ToolContext, principal: P): ServerTool[];
+      source?(principal: P): CanonicalSource;
       query(principal: P): QueryClient;
       links(principal: P): {
           viewer: string;
@@ -1197,6 +1199,9 @@ checkDraft
       migration?: readonly Migration[];
       login?: string;
   }): Promise<DraftCheck>;
+
+checkoutProblem
+  export declare function checkoutProblem(checkout: unknown): string | null;
 
 CORE_MIGRATIONS
   export declare const CORE_MIGRATIONS: readonly Migration[];
@@ -1699,6 +1704,41 @@ PublishOptions
       publisher: Publisher;
       message?: string | null;
       requestId?: string;
+  }
+
+PushDiagnostic
+  export interface PushDiagnostic {
+      severity: 'error' | 'warning';
+      code: string;
+      message: string;
+      path?: string;
+  }
+
+pushDocuments
+  export declare function pushDocuments(ctx: StoreContext, writer: Writer, input: PushInput, options?: {
+      dryRun?: boolean;
+  }): Promise<PushResult>;
+
+PushInput
+  export interface PushInput {
+      checkout: string;
+      upsert: {
+          path: string;
+          raw: string;
+      }[];
+      remove: string[];
+  }
+
+PushResult
+  export interface PushResult {
+      ok: boolean;
+      dryRun: boolean;
+      created: string[];
+      updated: string[];
+      unchanged: string[];
+      removed: string[];
+      diagnostics: PushDiagnostic[];
+      ingestId?: string;
   }
 
 putDocument
@@ -2440,3 +2480,247 @@ vocabularyOf
 
 workspaceScope
   export declare function workspaceScope(workspaceId: string): string;
+
+## ./serve (./dist/serve/index.d.ts)
+
+ASK_OFF
+  export declare const ASK_OFF = "docket_ask is off on this server: it has no model to answer with. Use docket_search, which needs none.";
+
+AuditLine
+  export interface AuditLine {
+      at: string;
+      workspace: string | null;
+      actor: string;
+      action: string;
+      outcome: string;
+      target: readonly string[];
+      latencyMs: number;
+      requestId: string;
+      ip: string | null;
+      userAgent: string | null;
+      argsSha256?: string;
+  }
+
+CONFIG_FILE
+  export declare const CONFIG_FILE = "docket-server.yaml";
+
+createToken
+  export declare function createToken(config: Pick<ServeConfig, 'auth' | 'workspaces'>, input: CreateTokenInput): Promise<{
+      token: string;
+      record: TokenRecord;
+  }>;
+
+CreateTokenInput
+  export interface CreateTokenInput {
+      name: string;
+      role: Role;
+      scopes?: readonly Scope[] | undefined;
+      workspaces?: readonly string[] | undefined;
+      now?: Date;
+  }
+
+DEFAULT_HOST
+  export declare const DEFAULT_HOST = "127.0.0.1";
+
+DEFAULT_PORT
+  export declare const DEFAULT_PORT = 4390;
+
+fileAuditLog
+  export declare function fileAuditLog(file: string, slugOf: (workspaceId: string) => string | null): AuditSink & {
+      line(line: AuditLine): Promise<void>;
+  };
+
+filesBackend
+  export declare function filesBackend(config: ServeConfig, options?: {
+      syncIntervalMs?: number;
+  }): Promise<ServeBackend>;
+
+listTokens
+  export declare function listTokens(config: Pick<ServeConfig, 'auth'>): Promise<(TokenRecord & {
+      inConfig: boolean;
+  })[]>;
+
+loadServeConfig
+  export declare function loadServeConfig(options?: LoadServeConfigOptions): Promise<ServeConfig>;
+
+LoadServeConfigOptions
+  export interface LoadServeConfigOptions {
+      file?: string | undefined;
+      cwd?: string | undefined;
+      env?: NodeJS.ProcessEnv | undefined;
+      host?: string | undefined;
+      port?: number | undefined;
+  }
+
+newToken
+  export declare const newToken: () => string;
+
+postgresBackend
+  export declare function postgresBackend(config: ServeConfig, options?: {
+      pool?: Pool & {
+          end(): Promise<void>;
+      };
+      loopIntervalMs?: number;
+  }): Promise<ServeBackend>;
+
+PROJECTION_PRESETS
+  export declare const PROJECTION_PRESETS: Record<string, (database: string | null) => ProjectionConfig>;
+
+ProjectionConfig
+  export interface ProjectionConfig {
+      id: string;
+      module: string;
+      config: Record<string, unknown>;
+  }
+
+readTokensFile
+  export declare function readTokensFile(file: string): Promise<TokenRecord[]>;
+
+revokeToken
+  export declare function revokeToken(config: Pick<ServeConfig, 'auth'>, name: string): Promise<boolean>;
+
+RunningServe
+  export interface RunningServe {
+      url: string;
+      port: number;
+      backend: ServeBackend;
+      close(): Promise<void>;
+  }
+
+ServeBackend
+  export interface ServeBackend {
+      readonly kind: 'files' | 'postgres';
+      readonly workspaces: readonly ServedWorkspace[];
+      mcp(workspace: ServedWorkspace): Pick<McpHandlerOptions<TokenPrincipal, ServeResource>, 'store' | 'query' | 'tools' | 'source' | 'modelGate'>;
+      written(workspace: ServedWorkspace): void;
+      documents(workspace: ServedWorkspace, query: DocumentsQuery): Promise<{
+          documents: ListedDocument[];
+          next?: string;
+      }>;
+      push(workspace: ServedWorkspace, writer: PushWriter, request: PushRequest, dryRun: boolean): Promise<PushAnswer>;
+      readViews(workspace: ServedWorkspace): (request: IncomingMessage, response: ServerResponse) => Promise<void>;
+      indexed(workspace: ServedWorkspace): Promise<void>;
+      rebuild(workspace: ServedWorkspace): Promise<void>;
+      ready(): Promise<{
+          ok: boolean;
+          detail: string;
+      }>;
+      close(): Promise<void>;
+  }
+
+ServeConfig
+  export interface ServeConfig {
+      file: string | null;
+      listen: {
+          host: string;
+          port: number;
+      };
+      publicUrl: string | null;
+      dataDir: string;
+      workspaces: WorkspaceConfig[];
+      database: {
+          url: string;
+          schema: string;
+      } | null;
+      codec: {
+          kind: 'plaintext';
+      } | {
+          kind: 'localKey';
+          file: string;
+      };
+      projections: ProjectionConfig[];
+      auth: {
+          tokensFile: string;
+          tokens: TokenRecord[];
+      };
+      ontology: {
+          mcpWriters: Role[];
+      };
+      ai: SummarizeConfig | null;
+      ui: boolean;
+  }
+
+ServeConfigError
+  export declare class ServeConfigError extends Error {
+      name: string;
+  }
+
+ServedWorkspace
+  export interface ServedWorkspace {
+      slug: string;
+      id: string;
+  }
+
+serveHandler
+  export declare function serveHandler(options: ServeHandlerOptions): {
+      handle(request: IncomingMessage, response: ServerResponse): Promise<void>;
+  };
+
+ServeHandlerOptions
+  export interface ServeHandlerOptions {
+      config: ServeConfig;
+      backend: ServeBackend;
+      baseUrl: string;
+  }
+
+ServeResource
+  export interface ServeResource extends McpResource {
+      slug: string;
+  }
+
+SERVICE
+  export declare const SERVICE = "docket-serve";
+
+SESSION_COOKIE
+  export declare const SESSION_COOKIE = "docket_session";
+
+slugOf
+  export declare function slugOf(directory: string): string;
+
+startServe
+  export declare function startServe(config: ServeConfig, options?: StartServeOptions): Promise<RunningServe>;
+
+StartServeOptions
+  export interface StartServeOptions {
+      pool?: Pool & {
+          end(): Promise<void>;
+      };
+      syncIntervalMs?: number;
+      loopIntervalMs?: number;
+      rebuild?: boolean;
+  }
+
+TOKEN_PREFIX
+  export declare const TOKEN_PREFIX = "dks_";
+
+tokenAuth
+  export declare function tokenAuth(config: Pick<ServeConfig, 'auth' | 'ontology'>): {
+      authenticator: Authenticator<TokenPrincipal, ServeResource>;
+      authorizer: Authorizer<TokenPrincipal>;
+      lookup(bearer: string): Promise<TokenRecord | null>;
+      byName(name: string): Promise<TokenRecord | null>;
+  };
+
+TokenPrincipal
+  export interface TokenPrincipal extends Principal {
+      token: string;
+      slug: string;
+  }
+
+TokenRecord
+  export interface TokenRecord {
+      name: string;
+      sha256: string;
+      prefix?: string;
+      role: Role;
+      scopes: Scope[];
+      workspaces: string[];
+      createdAt?: string;
+  }
+
+WorkspaceConfig
+  export interface WorkspaceConfig {
+      slug: string;
+      path: string | null;
+      ontology: string | null;
+  }

@@ -3,7 +3,7 @@ import { userInfo } from 'node:os'
 
 import { filesystemSource, type CanonicalSource } from '../../canonical/source.js'
 import { validate } from '../../commands/validate.js'
-import type { ResolvedConfig } from '../../config/config.js'
+import type { ResolvedConfig, SummarizeConfig } from '../../config/config.js'
 import { loadConfig } from '../../config/loader.js'
 import { askProject } from '../../query/ask.js'
 import { currentRecord } from '../../workspace/supersession.js'
@@ -51,6 +51,7 @@ import {
   describedAs
 } from '../surface/definitions.js'
 import { ASK_SCHEMA, answerText, failed, type AskResponse } from '../surface/results.js'
+import { OntologyWriteDisabled } from '../../workspace/ontology/errors.js'
 import { writeAnswer } from '../surface/write-args.js'
 import {
   declaring,
@@ -59,8 +60,8 @@ import {
   historyPath,
   liveSupersessions,
   readWorkspace,
-  serialized,
   storeOf,
+  writeLock,
   type LocalWorkspace
 } from './files.js'
 import { proposeOntologyChange, publishOntologyChange } from './ontology.js'
@@ -82,6 +83,18 @@ export interface LocalToolsOptions {
   writer?: { actor: string; label: string } | undefined
   /** The clock, for tests. */
   now?: (() => Date) | undefined
+  /**
+   * How `docket_ask` writes its summary: with the model given, or not at all
+   * (`false`: the tool answers that asking is off, as a server without a
+   * model does). Omitted: as `.docket.yaml`'s `query` and `summarize` say.
+   */
+  ask?: { summarize: SummarizeConfig } | false | undefined
+  /**
+   * Who may publish the ontology (`docket_publish_ontology_change`): the
+   * caller's role and the roles allowed, re-checked on each call. Omitted:
+   * anyone, as on one person's machine.
+   */
+  publisher?: { role(): Promise<string | null>; allowed(): Promise<readonly string[]> } | undefined
 }
 
 /** The person at this machine, as evidence names them. */
@@ -179,10 +192,10 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
     requestId: `mcp:${randomUUID()}`
   })
   const describe = <T extends Tool['definition']>(definition: T): T => describedAs(definition, DESCRIPTIONS[definition.name] ?? definition.description)
-  /** Runs a write against the project's files as they are now, after any write already running. */
+  /** Runs a write against the project's files as they are now, after any write already running here or in another process. */
   const writing = async <T>(fn: (workspace: LocalWorkspace, writer: Writer) => Promise<T>): Promise<T> => {
     const resolved = await loadConfig(cwd)
-    return serialized(resolved.projectRoot, async () => fn(await readWorkspace(resolved), writerFor(resolved)))
+    return writeLock(resolved, async () => fn(await readWorkspace(resolved), writerFor(resolved)))
   }
 
   const tools: Tool[] = [
@@ -241,10 +254,15 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
       definition: describe(ASK_DEFINITION),
       async call(raw) {
         const { question, maxResults } = askArguments(raw)
+        if (options.ask === false) return failed('docket_ask is off on this server: it has no model to answer with. Use docket_search, which needs none.')
         let response: AskResponse
         try {
           const resolved = await loadConfig(cwd)
-          const { answer } = await askProject(cwd, { question, ...(maxResults !== undefined ? { maxResults } : {}) })
+          const { answer } = await askProject(cwd, {
+            question,
+            ...(maxResults !== undefined ? { maxResults } : {}),
+            ...(options.ask ? { summarize: options.ask.summarize, synthesis: true } : {})
+          })
           const live = await liveSupersessions(storeOf(resolved))
           const found = [...new Set((answer.references ?? []).flatMap((reference) => (reference.entity && live.has(reference.entity) ? [reference.entity] : [])))]
           const changes = found.length ? changesOf(await readWorkspace(resolved), live, found) : []
@@ -323,6 +341,10 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
       async call(raw) {
         const change = publishArguments(raw)
         try {
+          if (options.publisher) {
+            const role = await options.publisher.role()
+            if (role === null || !(await options.publisher.allowed()).includes(role)) throw new OntologyWriteDisabled(role)
+          }
           const { published, history } = await writing(async (workspace, writer) => ({
             published: await publishOntologyChange(workspace, writer, change, { now }),
             history: historyPath(workspace)

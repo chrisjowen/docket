@@ -54,3 +54,15 @@ export function checkDocument(path, raw) {
     }
     return parsed.document;
 }
+/**
+ * Why a checkout id `docket cloud push` sent cannot key a push: it is
+ * `checkoutScope(projectRoot)`, printable, at most 200 characters.
+ */
+export function checkoutProblem(checkout) {
+    if (typeof checkout !== 'string' || checkout.length === 0 || checkout.length > 200)
+        return 'checkout is a string of 1-200 characters.';
+    // eslint-disable-next-line no-control-regex
+    if (/[\s\u0000-\u001f\u007f]/.test(checkout))
+        return 'checkout has no whitespace or control characters.';
+    return null;
+}
