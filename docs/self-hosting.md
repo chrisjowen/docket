@@ -267,7 +267,8 @@ pushed documents are `cli` documents keyed by the checkout, as in Docket Cloud.
 With `ui` on (the default), the server serves `docket open`'s page. The
 browser signs in at `/login` with a token, which is checked there and never
 kept: the browser gets an opaque, `HttpOnly`, `SameSite=Lax` session cookie
-for twelve hours, which ends early if the token is revoked. The page reads
+for twelve hours, which ends early if the token is revoked or its scopes
+narrow below `docket:read`. The page reads
 only. It browses the graph, asks and searches, and shows evidence and how
 the index stands. It never starts a sync, since the server keeps the index
 in sync itself. Its answers are summarised with the server's `ai` model, and
