@@ -48,6 +48,26 @@ describe("docket serve's configuration", () => {
     expect(config.workspaces.map((workspace) => workspace.slug)).toEqual(['platform', 'data'])
   })
 
+  it('takes a variable set to nothing as unset, as Compose and Helm pass an option left out', async () => {
+    const blank = Object.fromEntries(
+      [
+        'DOCKET_SERVE_HOST',
+        'DOCKET_SERVE_PORT',
+        'DOCKET_PUBLIC_URL',
+        'DOCKET_DATA_DIR',
+        'DOCKET_WORKSPACES',
+        'DOCKET_DATABASE_URL',
+        'DOCKET_DATABASE_SCHEMA',
+        'DOCKET_CODEC_KEY_FILE',
+        'DOCKET_PROJECTIONS',
+        'DOCKET_TOKENS_FILE',
+        'DOCKET_ONTOLOGY_MCP_WRITERS',
+        'DOCKET_SERVE_UI'
+      ].map((name) => [name, ''])
+    )
+    expect(await loadServeConfig({ cwd: project, env: blank })).toEqual(await loadServeConfig({ cwd: project, env: {} }))
+  })
+
   it('reads docket-server.yaml, resolving its paths from its own directory', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'docket-serve-file-'))
     try {

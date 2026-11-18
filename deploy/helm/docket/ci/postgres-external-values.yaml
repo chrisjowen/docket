@@ -1,0 +1,21 @@
+# Your own Postgres, with document bodies sealed under a key, tokens from a Secret, behind an ingress with TLS.
+publicUrl: https://docket.example.com
+postgres:
+  enabled: true
+  projections: [sqlite]
+  external:
+    existingSecret: docket-database
+  codec:
+    existingSecret: docket-codec
+auth:
+  existingSecret: docket-tokens
+ingress:
+  enabled: true
+  className: nginx
+  host: docket.example.com
+  tls:
+    secretName: docket-tls
+networkPolicy:
+  from:
+    - namespaceSelector:
+        matchLabels: { kubernetes.io/metadata.name: ingress-nginx }

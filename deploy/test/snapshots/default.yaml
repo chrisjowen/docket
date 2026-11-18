@@ -1,0 +1,209 @@
+---
+# Source: docket/templates/networkpolicies.yaml
+# docket: its port, from whoever networkPolicy.from names (anyone, when empty).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: server
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: http }
+
+---
+# Source: docket/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+data:
+  # docket serve's configuration (docs/self-hosting.md). Secrets are not here:
+  # the database URL, the codec key and the tokens come from Secrets.
+  docket-server.yaml: |
+    dataDir: /data/state
+    listen:
+      host: 0.0.0.0
+      port: 4390
+    ontology:
+      mcpWriters:
+      - owner
+    ui: true
+    workspaces:
+    - path: /data/docket
+      slug: docket
+
+---
+# Source: docket/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+  annotations:
+    # The docket itself: kept if the release is removed.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests: { storage: 5Gi }
+
+---
+# Source: docket/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/component: server
+  ports:
+    - { name: http, port: 4390, targetPort: http }
+
+---
+# Source: docket/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: server
+spec:
+  # One server: it writes the docket on a ReadWriteOnce volume and keeps its state there.
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docket
+        app.kubernetes.io/instance: docket
+        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: docket-0.14.0
+        app.kubernetes.io/component: server
+      annotations:
+        checksum/config: 3a56a7fd61de1cc8e9f200a3cf85b535b59e98d6d81025cfdc7402559fd6b139
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        # The docket's directory and the server's, on a new volume. Not from the
+        # image's working directory, /data/docket: the runtime would make it, as root.
+        - name: dirs
+          image: ghcr.io/chrisjowen/docket:0.14.0
+          imagePullPolicy: IfNotPresent
+          workingDir: /data
+          command: [/nodejs/bin/node, -e, "for (const dir of ['/data/docket', '/data/state']) require('fs').mkdirSync(dir, { recursive: true })"]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+        # Makes a docket on a new volume (`docket init`); leaves an existing one as it is.
+        - name: init
+          image: ghcr.io/chrisjowen/docket:0.14.0
+          imagePullPolicy: IfNotPresent
+          args: [init]
+          workingDir: /data/docket
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+      containers:
+        - name: docket
+          image: ghcr.io/chrisjowen/docket:0.14.0
+          imagePullPolicy: IfNotPresent
+          args: [serve]
+          env:
+            # Read by `docket serve` and by `kubectl exec … docket serve token …` alike.
+            - { name: DOCKET_SERVE_CONFIG, value: /etc/docket/docket-server.yaml }
+          ports:
+            - { name: http, containerPort: 4390 }
+          startupProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 2
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /etc/docket/docket-server.yaml, subPath: docket-server.yaml, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: docket
+        - name: config
+          configMap:
+            name: docket
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }

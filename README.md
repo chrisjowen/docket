@@ -635,6 +635,11 @@ docket serve                                 # http://127.0.0.1:4390/mcp/<projec
 [docs/self-hosting.md](docs/self-hosting.md) for configuration, roles,
 Postgres and running it behind TLS.
 
+It also ships as an image, `ghcr.io/chrisjowen/docket`, with a Docker Compose
+stack (`deploy/compose`) and a Helm chart (`deploy/helm/docket`). Both start
+with no database and offer Postgres and the other stores as opt-ins: see
+[docs/deploy.md](docs/deploy.md).
+
 ## Evidence and confidence
 
 A captured resource or link says exactly where it was seen, as `evidence`: a
@@ -1379,6 +1384,12 @@ that commit `docket-server-v<version>`.
 [`.github/workflows/publish-server.yml`](.github/workflows/publish-server.yml)
 stages it, and a maintainer approves it with 2FA. `NPM_TOKEN` needs publish
 rights to `@chrisjowen/docket-server` too.
+
+The same `v<version>` tag also has
+[`.github/workflows/image.yml`](.github/workflows/image.yml) build and push
+`docket serve`'s image to GHCR (`ghcr.io/chrisjowen/docket`), tagged
+`<version>`, `<major>.<minor>` and `latest`, once its own checks and gates
+pass. No separate step is needed, and it is never pushed by hand.
 
 ## Contributing and licence
 

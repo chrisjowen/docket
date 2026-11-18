@@ -1,0 +1,158 @@
+# docket serve, self-hosted with Docker Compose: see docs/deploy.md.
+#
+#   cp .env.example .env                    # fill it in; .env is never committed
+#   docker compose pull --policy missing    # the only step that pulls images
+#   docker compose up -d
+#   docker compose run --rm docket serve token create ada --role owner
+#
+# By default this runs one container, `docket`, over the docket on the
+# `docket-data` volume, from its own files: no database. Profiles add opt-in
+# stores (COMPOSE_PROFILES in .env, or --profile):
+#
+#   postgres  Postgres 17 with pgvector: the canonical store, and a projection
+#   graph     Neo4j 5.26 community: a graph projection
+#   semantic  Qdrant and an Ollama embedder (nomic-embed-text): mem0's vectors,
+#             and the SQLite and Postgres projections' semantic search
+#   cognee    cognee 1.6.8: a cognee projection, which calls a model
+#
+# Nothing pulls implicitly: every service is `pull_policy: never`, so `up`
+# uses only images already here. `docker compose down` keeps the volumes;
+# only `down -v` removes them, and the data with them.
+
+name: docket
+
+services:
+  # Makes a docket on a new volume (`docket init`); leaves an existing one as it is.
+  init:
+    image: ${DOCKET_IMAGE:-ghcr.io/chrisjowen/docket:0.14.0}
+    pull_policy: never
+    command: [init]
+    volumes:
+      - docket-data:/data
+    restart: "no"
+
+  docket:
+    image: ${DOCKET_IMAGE:-ghcr.io/chrisjowen/docket:0.14.0}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+        required: false
+    ports:
+      # This machine only, unless DOCKET_BIND says otherwise: put TLS in front before tokens cross a network.
+      - "${DOCKET_BIND:-127.0.0.1}:${DOCKET_PORT:-4390}:4390"
+    environment:
+      DOCKET_WORKSPACES: ${DOCKET_WORKSPACE:-docket}=/data/docket
+      DOCKET_PUBLIC_URL: ${DOCKET_PUBLIC_URL:-}
+      DOCKET_ONTOLOGY_MCP_WRITERS: ${DOCKET_ONTOLOGY_MCP_WRITERS:-owner}
+      # Postgres (the postgres profile): set DOCKET_DATABASE_URL in .env to opt in.
+      DOCKET_DATABASE_URL: ${DOCKET_DATABASE_URL:-}
+      DOCKET_PROJECTIONS: ${DOCKET_PROJECTIONS:-}
+      # The key a Postgres store seals document bodies with: a file in ./secrets, never a variable.
+      DOCKET_CODEC_KEY_FILE: ${DOCKET_CODEC_KEY_FILE:-}
+      # What a project's adapters read their credentials from (`passwordEnv`, `apiKeyEnv`).
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-}
+      COGNEE_API_KEY: ${COGNEE_API_KEY:-}
+    volumes:
+      - docket-data:/data
+      - ./secrets:/run/secrets/docket:ro
+
+  # Each store's password comes from .env: Postgres and Neo4j refuse to start
+  # without one, and cognee would fall back to its own default.
+  postgres:
+    profiles: [postgres]
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: docket
+      POSTGRES_DB: docket
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U docket -d docket]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  neo4j:
+    profiles: [graph]
+    image: ${NEO4J_IMAGE:-neo4j:5.26-community}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-}
+    volumes:
+      - neo4j-data:/data
+
+  # mem0's vector store. No published port and no key: only the services on
+  # this project's network reach it, since mem0's config would otherwise hold
+  # the key in the project's .docket.yaml.
+  qdrant:
+    profiles: [semantic]
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.18.3-unprivileged}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  # Ollama, serving the embedding model (and, for cognee, a language model):
+  # it downloads EMBEDDER_MODELS onto its volume the first time it starts.
+  embedder:
+    profiles: [semantic, cognee]
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.40.14}
+    pull_policy: never
+    restart: unless-stopped
+    entrypoint: [/bin/sh, -c]
+    command:
+      - |
+        ollama serve & server=$$!
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        for model in $${EMBEDDER_MODELS}; do ollama pull "$$model"; done
+        wait "$$server"
+    environment:
+      EMBEDDER_MODELS: ${EMBEDDER_MODELS:-nomic-embed-text}
+      OLLAMA_KEEP_ALIVE: 24h
+    volumes:
+      - embedder-models:/root/.ollama
+
+  cognee:
+    profiles: [cognee]
+    image: ${COGNEE_IMAGE:-cognee/cognee:1.6.8}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      embedder:
+        condition: service_started
+    environment:
+      # Access control stays on (cognee's default): every request needs a key.
+      DEFAULT_USER_PASSWORD: ${COGNEE_DEFAULT_PASSWORD:-}
+      TELEMETRY_DISABLED: "true"
+      LLM_PROVIDER: ${COGNEE_LLM_PROVIDER:-ollama}
+      LLM_MODEL: ${COGNEE_LLM_MODEL:-qwen2.5:7b}
+      LLM_ENDPOINT: ${COGNEE_LLM_ENDPOINT:-http://embedder:11434}
+      LLM_API_KEY: ${COGNEE_LLM_API_KEY:-ollama}
+      LLM_TEMPERATURE: "0.0"
+      EMBEDDING_PROVIDER: ollama
+      EMBEDDING_MODEL: nomic-embed-text:latest
+      EMBEDDING_ENDPOINT: http://embedder:11434/api/embed
+      EMBEDDING_DIMENSIONS: "768"
+      HUGGINGFACE_TOKENIZER: nomic-ai/nomic-embed-text-v1.5
+      SYSTEM_ROOT_DIRECTORY: /cognee-storage/system
+      DATA_ROOT_DIRECTORY: /cognee-storage/data
+    volumes:
+      - cognee-data:/cognee-storage
+
+volumes:
+  docket-data: {}
+  postgres-data: {}
+  neo4j-data: {}
+  qdrant-data: {}
+  embedder-models: {}
+  cognee-data: {}

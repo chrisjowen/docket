@@ -1,0 +1,19 @@
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "docket.fullname" . }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+  annotations:
+    # The docket itself: kept if the release is removed.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests: { storage: {{ .Values.persistence.size }} }
+{{- end }}

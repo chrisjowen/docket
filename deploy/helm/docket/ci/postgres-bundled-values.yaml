@@ -1,0 +1,6 @@
+# Postgres in the release, for evaluation, projected into Postgres and jsonl.
+postgres:
+  enabled: true
+  projections: [postgres, jsonl]
+  bundled:
+    enabled: true

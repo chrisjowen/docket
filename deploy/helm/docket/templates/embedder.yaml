@@ -1,0 +1,97 @@
+{{- if .Values.embedder.enabled }}
+{{- $e := .Values.embedder -}}
+{{- $name := include "docket.storeName" (dict "root" . "store" "embedder") -}}
+# Ollama, serving the embedding model at http://{{ $name }}:11434, so document
+# text is embedded in the cluster. It downloads its models the first time.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: embedder
+spec:
+  selector:
+    {{- include "docket.selector" (dict "root" . "component" "embedder") | nindent 4 }}
+  ports:
+    - { name: http, port: 11434, targetPort: http }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: embedder
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" . "component" "embedder") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "docket.labels" . | nindent 8 }}
+        app.kubernetes.io/component: embedder
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: ollama
+          image: {{ $e.image | quote }}
+          imagePullPolicy: IfNotPresent
+          # Serve, and pull the models onto the volume the first time.
+          command: [/bin/sh, -c]
+          args:
+            - |
+              ollama serve & server=$!
+              until ollama list >/dev/null 2>&1; do sleep 1; done
+              for model in {{ join " " $e.models }}; do ollama pull "$model"; done
+              wait "$server"
+          env:
+            - { name: OLLAMA_HOST, value: "0.0.0.0:11434" }
+            - { name: OLLAMA_MODELS, value: /models }
+            - { name: OLLAMA_KEEP_ALIVE, value: "24h" }
+            - { name: HOME, value: /tmp }
+          ports:
+            - { name: http, containerPort: 11434 }
+          startupProbe:
+            exec: { command: [ollama, show, {{ first $e.models | quote }}] }
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            exec: { command: [ollama, show, {{ first $e.models | quote }}] }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          livenessProbe:
+            exec: { command: [ollama, list] }
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml $e.resources | nindent 12 }}
+          securityContext:
+            {{- include "docket.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: models, mountPath: /models }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+  volumeClaimTemplates:
+    - metadata:
+        name: models
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $e.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests: { storage: {{ $e.storage.size }} }
+{{- end }}

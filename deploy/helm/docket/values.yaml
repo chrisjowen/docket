@@ -1,0 +1,155 @@
+# docket serve on Kubernetes: see docs/deploy.md.
+#
+# By default: one docket pod over the docket on a PersistentVolumeClaim, from
+# its own files. No database. Everything else opts in below.
+
+image:
+  repository: ghcr.io/chrisjowen/docket
+  # Empty: the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# The workspace's name: its MCP endpoint is /mcp/<workspace> (and /mcp).
+workspace: docket
+# The URL clients reach docket at (https, behind the ingress). Links and the
+# MCP auth challenge use it.
+publicUrl: ""
+ontology:
+  # The roles whose tokens may publish the ontology over MCP.
+  mcpWriters: [owner]
+# docket open's page, read-only, behind a sign-in with a token.
+ui: true
+# The model docket_ask answers with; empty turns docket_ask off (docket_search needs none).
+# e.g. { provider: ollama, model: qwen2.5:7b, url: http://my-ollama:11434 }
+ai: {}
+
+auth:
+  # Empty: tokens live on the volume, made with
+  #   kubectl exec deploy/<release> -- docket serve token create ada --role owner
+  # Set: the name of a Secret whose key below holds the tokens instead, by
+  # hash ({ tokens: [{ name, sha256, role, scopes, workspaces }] }), read-only.
+  # Edits to the Secret apply without a restart.
+  existingSecret: ""
+  key: tokens.yaml
+
+# Where the docket (its documents and ontology) and the server's state (the
+# tokens, the audit log) live.
+persistence:
+  # false: an emptyDir, lost with the pod. For a demo only.
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  size: 5Gi
+
+# Postgres as the canonical store: opt in.
+postgres:
+  enabled: false
+  schema: public
+  # What the store is projected into for search: jsonl, sqlite, postgres.
+  projections: [jsonl]
+  # Your own Postgres (the default once enabled): a Secret holding the URL.
+  external:
+    existingSecret: ""
+    key: url
+  # A single Postgres StatefulSet in the release instead. For evaluation:
+  # no replicas, no backups, no failover.
+  bundled:
+    enabled: false
+    image: pgvector/pgvector:pg17
+    # A Secret holding `password` (URL-safe). Empty: generated once and kept.
+    existingSecret: ""
+    storage:
+      size: 10Gi
+      storageClass: ""
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { memory: 1Gi }
+  # Seals document bodies at rest with a key kept outside the database: a
+  # Secret holding 32 random bytes (or their hex). Empty: plaintext.
+  codec:
+    existingSecret: ""
+    key: codec.key
+
+# Opt-in stores. Each runs in the release, admits only docket (and, for the
+# embedder, cognee) through its NetworkPolicy, and is wired into the docket
+# as an adapter (docs/deploy.md).
+neo4j:
+  enabled: false
+  image: neo4j:5.26-community
+  # A Secret holding `password`. Empty: generated once and kept.
+  existingSecret: ""
+  storage: { size: 5Gi, storageClass: "" }
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 2Gi }
+
+qdrant:
+  enabled: false
+  image: qdrant/qdrant:v1.18.3-unprivileged
+  storage: { size: 5Gi, storageClass: "" }
+  resources:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { memory: 1Gi }
+
+# Ollama, serving the embedding model (and cognee's model, if listed): it
+# downloads `models` onto its volume the first time it starts.
+embedder:
+  enabled: false
+  image: ollama/ollama:0.40.14
+  models: [nomic-embed-text]
+  storage: { size: 5Gi, storageClass: "" }
+  resources:
+    requests: { cpu: 100m, memory: 384Mi }
+    limits: { memory: 2Gi }
+
+cognee:
+  enabled: false
+  image: cognee/cognee:1.6.8
+  # A Secret holding `defaultUserPassword`, and `apiKey` once one is made on
+  # cognee. Empty: one with a generated password, kept; add `apiKey` to it.
+  existingSecret: ""
+  # Its model: the embedder's Ollama by default (add the model to embedder.models).
+  llm:
+    provider: ollama
+    model: qwen2.5:7b
+    endpoint: ""
+  storage: { size: 5Gi, storageClass: "" }
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 2Gi }
+
+service:
+  type: ClusterIP
+  port: 4390
+  annotations: {}
+
+# Any ingress controller. Terminate TLS here: tokens must not cross a network in the clear.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: docket.example.com
+  tls:
+    # A Secret holding the certificate for host. Empty: no TLS at the ingress.
+    secretName: ""
+
+networkPolicy:
+  enabled: true
+  # Who may reach docket itself, as NetworkPolicy `from` entries. Empty:
+  # anyone in the cluster (the ingress controller included).
+  from: []
+
+# Merged over the docket-server.yaml the chart writes, e.g. a projection
+# that is any docket adapter: { projections: [{ id, module, config }] }.
+config: {}
+extraEnv: []
+
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { memory: 1Gi }
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
