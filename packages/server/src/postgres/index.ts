@@ -127,3 +127,4 @@ export {
   type RetireInput,
   type RetireResult
 } from './write.js'
+export { checkoutProblem, pushDocuments, type PushDiagnostic, type PushInput, type PushResult } from './push.js'

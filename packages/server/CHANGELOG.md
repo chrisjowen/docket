@@ -2,6 +2,33 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.8.0
+
+### `docket serve`
+
+`@chrisjowen/docket-server/serve` is `docket serve`, the self-hosted,
+single-tenant Docket server docket's CLI runs
+([docs/self-hosting.md](../../docs/self-hosting.md)): the eleven MCP tools at
+`/mcp/<workspace>`, static bearer tokens with a role, scopes and workspaces
+each (`createToken`, `listTokens`, `revokeToken`, `tokenAuth`), health and
+readiness, the documents API `docket cloud` calls at its single-tenant paths,
+`docket open`'s page behind a token sign-in, and an audit log of every call.
+It keeps its workspaces in projects' own files by default
+(`filesBackend`, with no database) or in this package's Postgres store
+(`postgresBackend`, with the outbox loop projecting into jsonl, SQLite or
+Postgres and the search pipeline answering in-process). `pg` becomes an
+optional peer dependency, used only by a Postgres-backed server. It needs
+`@chrisjowen/docket` 0.13.0 or later.
+
+### The endpoint and the store
+
+- `handleMcp` takes `tools` and `source`, for a deployment that keeps its
+  documents outside this store and offers its own tools with the same names,
+  schemas and scopes.
+- `pushDocuments` and `checkoutProblem` (`@chrisjowen/docket-server/postgres`):
+  `docket cloud push` into the store, ported from Docket Cloud, with the
+  store's document limit read from `StoreContext.limits`.
+
 ## 0.7.0
 
 ### Postgres and SQLite instances in search fusion

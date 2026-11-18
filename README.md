@@ -270,6 +270,8 @@ docket cloud push           # upload the files that changed; a differing ontolog
 docket cloud pull           # write the published ontology here (--resources: the cloud's documents instead; both with --ontology)
 docket cloud status         # link, sign-in, ontology against the cloud's, and what a push would send
 docket cloud token create --scopes docket:read --expires 30d  # an API token for CI (token list, token revoke <id>)
+docket serve                # serve this docket to people and agents over MCP: self-hosted, single-tenant (docs/self-hosting.md)
+docket serve token create ada --role owner  # a bearer token for it, shown once (token list, token revoke <name>)
 ```
 
 ![A terminal: docket graph --json piped through jq to one exhibit, the Neo4j adapter, with its 0.99 confidence from code and manifest evidence and its three depends_on links, each with its own confidence and sources](docs/assets/cli-graph.png)
@@ -612,6 +614,26 @@ the cloud adapter is reported `unavailable` and the local answers stand.
   already have is never overwritten.
 - **`token create`** makes an API token for CI, shown once. Set it in CI's
   secrets and name the variable with `docket cloud link --token-env`.
+
+## Self-hosted: `docket serve`
+
+`docket serve` runs a self-hosted, single-tenant Docket server, so several
+people and agents can connect over MCP from wherever they work and write to
+the same ontology and documents. It offers the same eleven MCP tools as Docket
+Cloud and `docket open`, behind static bearer tokens with a role each
+(`docket serve token create`). By default it serves the project's own files,
+with no database; Postgres is an opt-in. It runs on
+`@chrisjowen/docket-server`, so install that beside docket:
+
+```bash
+npm install -g @chrisjowen/docket @chrisjowen/docket-server
+docket serve token create ada --role owner   # shown once
+docket serve                                 # http://127.0.0.1:4390/mcp/<project>
+```
+
+`docket cloud link|push|pull` work against it with `--token-env`. See
+[docs/self-hosting.md](docs/self-hosting.md) for configuration, roles,
+Postgres and running it behind TLS.
 
 ## Evidence and confidence
 
@@ -1198,8 +1220,9 @@ and role vocabulary MCP calls are checked against, the ontology lifecycle,
 how a write becomes a document (docket's own workspace core), the canonical
 store on Postgres (`@chrisjowen/docket-server/postgres`), the MCP tools - the
 same surface docket's own MCP server offers - and endpoint
-(`@chrisjowen/docket-server/mcp`), and the reconcile and search loops
-(`@chrisjowen/docket-server/runtime`). It is published on its own,
+(`@chrisjowen/docket-server/mcp`), the reconcile and search loops
+(`@chrisjowen/docket-server/runtime`), and `docket serve`
+(`@chrisjowen/docket-server/serve`). It is published on its own,
 imports nothing of any one deployment, and records its API in
 [`packages/server/test/public-api.snapshot.txt`](packages/server/test/public-api.snapshot.txt)
 the same way. See [its README](packages/server/README.md).

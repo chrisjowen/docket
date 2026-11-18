@@ -222,8 +222,9 @@ const askBody = (body) => {
  * `DELETE /api/ask/<id>`: adapters still answering are closed and the model
  * stopped.
  */
-const coordinatedAsk = async (request, response, cwd, inFlight) => {
-    const body = askBody(await readJson(request, response));
+const coordinatedAsk = async (request, response, cwd, inFlight, summarize) => {
+    const asked = askBody(await readJson(request, response));
+    const body = summarize === false ? { ...asked, synthesis: false } : summarize ? { ...asked, summarize } : asked;
     const requestId = body.requestId ?? randomUUID();
     if (inFlight.has(requestId))
         throw new HttpError(409, `A question with request id "${requestId}" is already being answered.`);
@@ -277,11 +278,13 @@ const api = async (request, response, url, context) => {
             allow('GET', 'HEAD', 'POST');
             // GET is the legacy search answer; POST asks the coordinator.
             if (method === 'POST')
-                return coordinatedAsk(request, response, cwd, inFlight);
+                return coordinatedAsk(request, response, cwd, inFlight, context.summarize);
             return ask(cwd, question(url), askLimit(url.searchParams.get('limit')));
         case '/api/chat':
             allow('GET', 'HEAD');
-            return chat(cwd, question(url), askLimit(url.searchParams.get('limit')));
+            if (context.summarize === false)
+                throw new HttpError(403, 'Answers are not summarised here: this server has no model set up. Search still works.');
+            return chat(cwd, question(url), askLimit(url.searchParams.get('limit')), context.summarize);
         case '/api/adapters':
             allow('GET', 'HEAD');
             return adaptersStatus(cwd);
@@ -292,6 +295,8 @@ const api = async (request, response, url, context) => {
         }
         case '/api/session': {
             allow('GET');
+            if (context.readOnly)
+                throw new HttpError(403, context.readOnly);
             localOnly(request, context.port, context.allowOrigins);
             const session = { token: context.token };
             return session;
@@ -300,6 +305,8 @@ const api = async (request, response, url, context) => {
             allow('GET', 'HEAD', 'POST');
             if (method !== 'POST')
                 return context.sync.status();
+            if (context.readOnly)
+                throw new HttpError(403, context.readOnly);
             pageChange(request, context.port, context.token, context.allowOrigins);
             const adapters = syncBody(await readJson(request, response, { allowEmpty: true }));
             try {
@@ -446,7 +453,7 @@ const mcp = async (request, response, context) => {
 };
 const handle = async (request, response, options) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
-    if (url.pathname === MCP_PATH) {
+    if (url.pathname === MCP_PATH && !options.readOnly) {
         await mcp(request, response, options);
         return;
     }
@@ -579,6 +586,29 @@ export const startUiServer = async (options) => {
             await context.sync.settled();
         }
     };
+};
+/**
+ * docket open's page and its API's reads over a project, as one request
+ * handler, for a server that listens itself and decides who may reach them
+ * (`docket serve`): the graph, questions, adapter status, evidence and how
+ * the index stands. It never starts a sync, hands out a session or answers
+ * MCP: the server keeps the index in sync and serves MCP with its own
+ * credentials.
+ */
+export const readViews = (options) => {
+    const context = {
+        cwd: options.cwd,
+        readOnly: options.refusal ?? 'This server keeps its index in sync itself.',
+        summarize: options.summarize,
+        allowOrigins: new Set(),
+        uiDir: resolve(options.uiDir ?? defaultUiDir()),
+        inFlight: new Map(),
+        sync: options.sync ?? new SyncRunner(options.cwd),
+        token: '',
+        port: 0,
+        mcp: null
+    };
+    return (request, response) => handle(request, response, context);
 };
 /** Where the build puts the UI: `dist/ui`, next to `dist/open`. */
 export const defaultUiDir = () => join(import.meta.dirname, '..', 'ui');

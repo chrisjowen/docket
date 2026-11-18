@@ -10,6 +10,7 @@ import { init } from '../../commands/init.js'
 import { sync } from '../../commands/sync.js'
 import { validate } from '../../commands/validate.js'
 import { createMcpServer } from '../server.js'
+import { localTools } from './tools.js'
 import { TOOL_NAMES } from '../surface/definitions.js'
 
 const ORDERS = `---
@@ -257,5 +258,30 @@ describe("docket's local MCP tools", () => {
     const raw = await read('.docket/resources/services/orders.md')
     expect(raw).toContain('One.')
     expect(raw).toContain('Two.')
+  })
+
+  it('answers docket_ask that it is off, for a server without a model', async () => {
+    const off = createMcpServer({ cwd: root, tools: localTools({ cwd: root, ask: false }) })
+    const answer = (await off.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'docket_ask', arguments: { question: 'Who owns orders?' } } })) as unknown as Answer
+    expect(answer.result?.isError).toBe(true)
+    expect(text(answer)).toMatch(/docket_ask is off on this server/)
+  })
+
+  it("refuses a publish when the caller's role may not change the ontology, re-checked on every call", async () => {
+    let role: string | null = 'editor'
+    const guarded = createMcpServer({ cwd: root, tools: localTools({ cwd: root, publisher: { role: async () => role, allowed: async () => ['owner'] } }) })
+    const publish = async () =>
+      (await guarded.handle({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'docket_publish_ontology_change', arguments: { patch: 'resourceTypes:\n  queue:\n    description: A queue.\n' } }
+      })) as unknown as Answer
+    const refused = await publish()
+    expect(refused.result?.isError).toBe(true)
+    expect(text(refused)).toMatch(/Nothing was published: this workspace's settings do not let editors change the ontology over MCP/)
+    expect(await read('.docket/entities.yaml')).not.toContain('queue:')
+    role = 'owner'
+    expect(structured(await publish())).toMatchObject({ version: 2 })
   })
 })

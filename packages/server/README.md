@@ -16,7 +16,9 @@ validate` does.
 It was extracted from Docket Cloud release by release, and now carries the
 whole shared core: the ports, the scope and role vocabulary, the ontology
 lifecycle, how a write becomes a document, the canonical store on Postgres,
-the MCP tools and endpoint, and the reconcile and search loops.
+the MCP tools and endpoint, and the reconcile and search loops. It also runs
+`docket serve`, the self-hosted, single-tenant server built on all of them
+(`@chrisjowen/docket-server/serve`).
 
 ## Ports
 
@@ -231,6 +233,48 @@ insufficient_scope`; then docket's own MCP server answers, with only the
 tools the effective scopes allow. Each request is audited once: a write
 records its event in the write's own transaction, so the change and its
 event commit or roll back together.
+
+A deployment that keeps its documents outside the Postgres store passes its
+own `tools` (with the same names, schemas and scopes) and `source`, as
+`docket serve` does over a project's files.
+
+## `docket serve`
+
+`@chrisjowen/docket-server/serve` is `docket serve`, which docket's CLI loads
+from beside itself: a self-hosted, single-tenant server for several people and
+agents writing to one ontology. See
+[docs/self-hosting.md](../../docs/self-hosting.md) for running it.
+
+```ts
+import { createToken, loadServeConfig, startServe } from '@chrisjowen/docket-server/serve'
+
+const config = await loadServeConfig({ cwd })        // docket-server.yaml and the environment
+const { token } = await createToken(config, { name: 'ada', role: 'owner' })
+const running = await startServe(config)             // running.url, running.close()
+```
+
+It is the ports above, filled in for one tenant:
+
+- **Store.** With no `database`, each workspace is a project's own files,
+  written through docket's local tools (`localTools`) under the project's
+  write lock, which other processes take turns on too, and indexed by the
+  project's own projections after every write (`filesBackend`). With
+  `database.url`, it is this package's Postgres store, with the outbox loop
+  projecting into the configured projections and `queryService` answering
+  in-process (`postgresBackend`).
+- **Sign-in.** Static bearer tokens (`tokenAuth`): the SHA-256 of each, with a
+  role, scopes and workspaces, compared in constant time. The tokens file is
+  re-read when it changes, so `role()` reads a revocation on the next call.
+  `ontologyWriters` is the server's `ontology.mcpWriters`.
+- **Audit.** One JSON line per call (`fileAuditLog`), with the arguments as a
+  digest.
+- **HTTP.** `serveHandler` mounts `handleMcp` at `/mcp/{workspace}`, `/mcp`
+  and `/mcp/{org}/{workspace}`, the documents API `docket cloud` calls (with
+  `pushDocuments` over Postgres), `/healthz` and `/readyz`, and docket open's
+  page behind a token sign-in.
+
+`src/serve/gates.test.ts` runs both stores end to end over HTTP, and
+`src/mcp/parity.test.ts` holds the server's surface to docket's.
 
 ## The runtime loops
 

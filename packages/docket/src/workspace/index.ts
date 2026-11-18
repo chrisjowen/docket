@@ -6,7 +6,7 @@
  * `@chrisjowen/docket-server` runs it over Postgres.
  */
 export { ONTOLOGY_PATH, parseOntology as parseWorkspaceOntology } from './docket.js'
-export { DOCUMENT_BYTES, DocumentError, checkDocument, cloudDocumentPath, pathProblem } from './documents.js'
+export { DOCUMENT_BYTES, DocumentError, checkDocument, checkoutProblem, cloudDocumentPath, pathProblem } from './documents.js'
 export { writableHere, type Origin } from './origin.js'
 export { changeNote, currentRecord, dayOf } from './supersession.js'
 export {

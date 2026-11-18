@@ -15,6 +15,8 @@ const SRC = fileURLToPath(new URL('../src', import.meta.url))
 const ALLOWED_PACKAGES: readonly string[] = ['@chrisjowen/docket', 'yaml']
 // Tests reach a real Postgres with the `pg` driver; the store itself takes any pool and imports none.
 const TEST_PACKAGES: readonly string[] = ['vitest', 'pg']
+// `docket serve` is a deployment of its own: it makes the pool its Postgres store runs on, with `pg`, an optional peer.
+const SERVE_PACKAGES: readonly string[] = ['pg']
 
 const sources = async (dir: string): Promise<string[]> => {
   const entries = await readdir(dir, { withFileTypes: true })
@@ -66,7 +68,8 @@ describe('the import boundary', () => {
   it('imports only its own modules, Node built-ins and its listed packages', async () => {
     const outside: string[] = []
     for (const file of await sources(SRC)) {
-      const allowed = file.endsWith('.test.ts') ? [...ALLOWED_PACKAGES, ...TEST_PACKAGES] : ALLOWED_PACKAGES
+      const serve = relative(SRC, file).split('\\').join('/').startsWith('serve/') ? SERVE_PACKAGES : []
+      const allowed = file.endsWith('.test.ts') ? [...ALLOWED_PACKAGES, ...TEST_PACKAGES, ...serve] : [...ALLOWED_PACKAGES, ...serve]
       for (const specifier of specifiers(await readFile(file, 'utf8'), file)) {
         if (specifier.startsWith('.') || specifier.startsWith('node:')) continue
         if (!allowed.includes(packageOf(specifier))) outside.push(`${relative(SRC, file)}: ${specifier}`)

@@ -6,6 +6,7 @@ import { createMcpServer, localTools, type McpServer, type ToolDefinition } from
 import { TOOL_DEFINITIONS, TOOL_NAMES, surfaceOf } from '@chrisjowen/docket/mcp/surface'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { STORES, makeDatabase, startTestServe, type TestServe } from '../../test/serve.js'
 import { SCOPES } from '../auth/scopes.js'
 import type { ToolContext } from './context.js'
 import { registryFor, serverTools } from './tools/index.js'
@@ -13,7 +14,8 @@ import { registryFor, serverTools } from './tools/index.js'
 /**
  * Docket's MCP surface is the same wherever an agent connects: docket's own
  * local MCP server (`docket open`'s `/mcp`), this server core - a
- * self-hosted server's and, once it runs on this package, Docket Cloud's.
+ * self-hosted server's and, once it runs on this package, Docket Cloud's -
+ * and `docket serve` over HTTP, over a project's files and over Postgres.
  * These fail when the two drift: a tool added, dropped or reordered, or a
  * name, input schema, annotation or argument check that differs. Only a
  * tool's description may differ, worded for where it runs.
@@ -51,6 +53,23 @@ afterAll(async () => {
 const listed = async (mcp: McpServer): Promise<ToolDefinition[]> =>
   ((await mcp.handle({ jsonrpc: '2.0', id: 1, method: 'tools/list' })) as unknown as { result: { tools: ToolDefinition[] } }).result.tools
 
+/** The bad calls every server refuses with the same protocol error. */
+const BAD_CALLS: [string, unknown][] = [
+  ...TOOL_NAMES.map((name): [string, unknown] => [name, { bogus: 1 }]),
+  ...TOOL_NAMES.filter((name) => name !== 'docket_ontology').map((name): [string, unknown] => [name, {}]),
+  ['docket_search', { query: 'x', limit: 0 }],
+  ['docket_search', { query: 'x', include: ['everything'] }],
+  ['docket_ask', { question: 'x', maxResults: 51 }],
+  ['docket_remember', { id: 'a', type: 't', title: 'T', evidence: [{ where: 'x' }] }],
+  ['docket_remember', { id: 'a', type: 't', title: 'T', evidence: [], links: [{ rel: 'r' }] }],
+  ['docket_add_evidence', { id: 'a', evidence: [], link: { rel: 'r' } }],
+  ['docket_supersede', { id: 'a', by: 'b', reason: 'r', evidence: 'x' }],
+  ['docket_propose_ontology_change', { patch: 'a', yaml: 'b' }],
+  ['docket_publish_ontology_change', { patch: 'a', expectedHead: -1 }],
+  ['docket_publish_ontology_change', { patch: 'a', migration: [{ op: 'explode', from: 'a' }] }],
+  ['docket_publish_ontology_change', { patch: 'a', dispositions: { 'a.b': 'shrug' } }]
+]
+
 describe("Docket's MCP surface", () => {
   it('is what the server offers: every tool, in order, with its names, input schemas and annotations', async () => {
     expect((await listed(server)).map(surfaceOf)).toEqual(TOOL_DEFINITIONS.map(surfaceOf))
@@ -64,26 +83,39 @@ describe("Docket's MCP surface", () => {
   })
 
   it('refuses the same arguments with the same errors on both', async () => {
-    const calls: [string, unknown][] = [
-      ...TOOL_NAMES.map((name): [string, unknown] => [name, { bogus: 1 }]),
-      ...TOOL_NAMES.filter((name) => name !== 'docket_ontology').map((name): [string, unknown] => [name, {}]),
-      ['docket_search', { query: 'x', limit: 0 }],
-      ['docket_search', { query: 'x', include: ['everything'] }],
-      ['docket_ask', { question: 'x', maxResults: 51 }],
-      ['docket_remember', { id: 'a', type: 't', title: 'T', evidence: [{ where: 'x' }] }],
-      ['docket_remember', { id: 'a', type: 't', title: 'T', evidence: [], links: [{ rel: 'r' }] }],
-      ['docket_add_evidence', { id: 'a', evidence: [], link: { rel: 'r' } }],
-      ['docket_supersede', { id: 'a', by: 'b', reason: 'r', evidence: 'x' }],
-      ['docket_propose_ontology_change', { patch: 'a', yaml: 'b' }],
-      ['docket_publish_ontology_change', { patch: 'a', expectedHead: -1 }],
-      ['docket_publish_ontology_change', { patch: 'a', migration: [{ op: 'explode', from: 'a' }] }],
-      ['docket_publish_ontology_change', { patch: 'a', dispositions: { 'a.b': 'shrug' } }]
-    ]
-    for (const [name, args] of calls) {
+    for (const [name, args] of BAD_CALLS) {
       const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }
       const [mine, theirs] = [await server.handle(request), await local.handle(request)]
       expect(mine, `${name} ${JSON.stringify(args)}`).toMatchObject({ error: { code: -32602 } })
       expect(theirs, `${name} ${JSON.stringify(args)}`).toEqual(mine)
+    }
+  })
+})
+
+describe.each(STORES)("docket serve's MCP surface over $kind", ({ kind, skip }) => {
+  let serve: TestServe
+  let database: Awaited<ReturnType<typeof makeDatabase>> | null = null
+  beforeAll(async () => {
+    if (skip) return
+    database = kind === 'postgres' ? await makeDatabase() : null
+    serve = await startTestServe(kind, database ? { database: database.url } : {})
+  })
+  afterAll(async () => {
+    await serve?.close()
+    await database?.drop()
+  })
+
+  it.skipIf(skip)('is what docket offers, tool for tool, over HTTP with an owner\'s token', async () => {
+    const { body } = await serve.rpc(serve.tokens.owner, 'tools/list')
+    expect((body.result.tools as ToolDefinition[]).map(surfaceOf)).toEqual(TOOL_DEFINITIONS.map(surfaceOf))
+    expect((body.result.tools as ToolDefinition[]).map(surfaceOf)).toEqual((await listed(local)).map(surfaceOf))
+  })
+
+  it.skipIf(skip)('refuses the same arguments with the same errors', async () => {
+    for (const [name, args] of BAD_CALLS) {
+      const { body } = await serve.rpc(serve.tokens.owner, 'tools/call', { name, arguments: args })
+      const theirs = await local.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } })
+      expect(body.error, `${name} ${JSON.stringify(args)}`).toEqual((theirs as unknown as { error: unknown }).error)
     }
   })
 })

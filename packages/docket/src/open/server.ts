@@ -8,6 +8,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path'
 import type { ConversationTurn } from '@docket/contracts'
 
 import type { SyncOptions, SyncResult } from '../commands/sync.js'
+import type { SummarizeConfig } from '../config/config.js'
 import { createMcpServer, INVALID_REQUEST, PARSE_ERROR, type McpServer } from '../mcp/server.js'
 import { AskCancelledError, AskRequestError, askProject } from '../query/ask.js'
 import { EvidenceRequestError, readEvidenceBody, resolveReferences } from '../query/evidence.js'
@@ -284,9 +285,12 @@ const coordinatedAsk = async (
   request: IncomingMessage,
   response: ServerResponse,
   cwd: string,
-  inFlight: InFlight
+  inFlight: InFlight,
+  summarize?: SummarizeConfig | false
 ): Promise<unknown> => {
-  const body = askBody(await readJson(request, response))
+  const asked = askBody(await readJson(request, response))
+  const body: AskBody & { summarize?: SummarizeConfig } =
+    summarize === false ? { ...asked, synthesis: false } : summarize ? { ...asked, summarize } : asked
   const requestId = body.requestId ?? randomUUID()
   if (inFlight.has(requestId)) throw new HttpError(409, `A question with request id "${requestId}" is already being answered.`)
   response.setHeader('x-request-id', requestId)
@@ -312,6 +316,16 @@ const coordinatedAsk = async (
 /** What every request is served from. */
 interface Context {
   cwd: string
+  /**
+   * Served by a server for other machines (`docket serve`), which keeps its
+   * index in sync itself: the API answers reads only, never starting a sync.
+   */
+  readOnly?: string | undefined
+  /**
+   * The model questions are summarised with, when a server sets its own:
+   * `false` summarises none. Omitted: as `.docket.yaml` says.
+   */
+  summarize?: SummarizeConfig | false | undefined
   /** Other pages on this machine allowed to use the API. */
   allowOrigins: ReadonlySet<string>
   uiDir: string
@@ -352,11 +366,12 @@ const api = async (request: IncomingMessage, response: ServerResponse, url: URL,
     case '/api/ask':
       allow('GET', 'HEAD', 'POST')
       // GET is the legacy search answer; POST asks the coordinator.
-      if (method === 'POST') return coordinatedAsk(request, response, cwd, inFlight)
+      if (method === 'POST') return coordinatedAsk(request, response, cwd, inFlight, context.summarize)
       return ask(cwd, question(url), askLimit(url.searchParams.get('limit')))
     case '/api/chat':
       allow('GET', 'HEAD')
-      return chat(cwd, question(url), askLimit(url.searchParams.get('limit')))
+      if (context.summarize === false) throw new HttpError(403, 'Answers are not summarised here: this server has no model set up. Search still works.')
+      return chat(cwd, question(url), askLimit(url.searchParams.get('limit')), context.summarize)
     case '/api/adapters':
       allow('GET', 'HEAD')
       return adaptersStatus(cwd)
@@ -367,6 +382,7 @@ const api = async (request: IncomingMessage, response: ServerResponse, url: URL,
     }
     case '/api/session': {
       allow('GET')
+      if (context.readOnly) throw new HttpError(403, context.readOnly)
       localOnly(request, context.port, context.allowOrigins)
       const session: UiSession = { token: context.token }
       return session
@@ -374,6 +390,7 @@ const api = async (request: IncomingMessage, response: ServerResponse, url: URL,
     case '/api/sync': {
       allow('GET', 'HEAD', 'POST')
       if (method !== 'POST') return context.sync.status()
+      if (context.readOnly) throw new HttpError(403, context.readOnly)
       pageChange(request, context.port, context.token, context.allowOrigins)
       const adapters = syncBody(await readJson(request, response, { allowEmpty: true }))
       try {
@@ -517,7 +534,7 @@ const handle = async (
   options: Context
 ): Promise<void> => {
   const url = new URL(request.url ?? '/', 'http://localhost')
-  if (url.pathname === MCP_PATH) {
+  if (url.pathname === MCP_PATH && !options.readOnly) {
     await mcp(request, response, options)
     return
   }
@@ -649,6 +666,43 @@ export const startUiServer = async (options: UiServerOptions): Promise<UiServer>
       await context.sync.settled()
     }
   }
+}
+
+export interface ReadViewsOptions {
+  /** Directory to resolve `.docket.yaml` from on every request. */
+  cwd: string
+  /** The built web UI. Omitted: the one the build puts in `dist/ui`. */
+  uiDir?: string | undefined
+  /** Keeps the index in sync: `GET /api/sync` reports it. Omitted: one that is never started. */
+  sync?: SyncRunner | undefined
+  /** What the page is told when it asks to start a sync. */
+  refusal?: string | undefined
+  /** The model questions are summarised with: the server's own, or `false` for none. Omitted: as `.docket.yaml` says. */
+  summarize?: SummarizeConfig | false | undefined
+}
+
+/**
+ * docket open's page and its API's reads over a project, as one request
+ * handler, for a server that listens itself and decides who may reach them
+ * (`docket serve`): the graph, questions, adapter status, evidence and how
+ * the index stands. It never starts a sync, hands out a session or answers
+ * MCP: the server keeps the index in sync and serves MCP with its own
+ * credentials.
+ */
+export const readViews = (options: ReadViewsOptions): ((request: IncomingMessage, response: ServerResponse) => Promise<void>) => {
+  const context: Context = {
+    cwd: options.cwd,
+    readOnly: options.refusal ?? 'This server keeps its index in sync itself.',
+    summarize: options.summarize,
+    allowOrigins: new Set(),
+    uiDir: resolve(options.uiDir ?? defaultUiDir()),
+    inFlight: new Map<string, AbortController>(),
+    sync: options.sync ?? new SyncRunner(options.cwd),
+    token: '',
+    port: 0,
+    mcp: null
+  }
+  return (request, response) => handle(request, response, context)
 }
 
 /** Where the build puts the UI: `dist/ui`, next to `dist/open`. */
