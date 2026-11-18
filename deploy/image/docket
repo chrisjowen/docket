@@ -1,0 +1,4 @@
+#!/nodejs/bin/node
+// `docket` on the image's PATH. The distroless base has no /usr/bin/env for
+// the CLI's own shebang, so this starts it with the image's Node.
+import('/opt/docket/node_modules/@chrisjowen/docket/dist/cli.js')

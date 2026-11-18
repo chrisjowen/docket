@@ -2,6 +2,18 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.9.0
+
+### `docket serve` in containers
+
+`loadServeConfig` takes an environment variable set to nothing as unset, as
+Docker Compose and Helm pass an option left out: `DOCKET_PUBLIC_URL=""` or
+`DOCKET_PROJECTIONS=""` no longer fail, and `DOCKET_DATABASE_URL=""` serves
+from files. A Postgres-backed server also sets an empty `DOCKET_DATABASE_URL`
+to its own URL for the postgres projection. Needs `@chrisjowen/docket`
+0.14.0. `docket serve`'s image, Compose stack and Helm chart are in docket's
+repository ([docs/deploy.md](../../docs/deploy.md)).
+
 ## 0.8.0
 
 ### `docket serve`

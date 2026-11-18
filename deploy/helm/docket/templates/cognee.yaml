@@ -1,0 +1,97 @@
+{{- if .Values.cognee.enabled }}
+{{- $c := .Values.cognee -}}
+{{- $name := include "docket.storeName" (dict "root" . "store" "cognee") -}}
+{{- $ollama := printf "http://%s:11434" (include "docket.storeName" (dict "root" . "store" "embedder")) -}}
+{{- if not .Values.embedder.enabled }}
+{{- fail "cognee.enabled needs embedder.enabled: cognee embeds with the embedder's nomic-embed-text." }}
+{{- end }}
+# cognee for a cognee projection: http://{{ $name }}:8000, with access control
+# on. Its API key is made on cognee once it runs (docs/deploy.md) and kept as
+# `apiKey` in its Secret, which docket reads as COGNEE_API_KEY.
+{{- if not $c.existingSecret }}
+{{ include "docket.generatedSecret" (dict "root" . "name" $name "keys" (list "defaultUserPassword")) }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cognee
+spec:
+  selector:
+    {{- include "docket.selector" (dict "root" . "component" "cognee") | nindent 4 }}
+  ports:
+    - { name: http, port: 8000, targetPort: http }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cognee
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" . "component" "cognee") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "docket.labels" . | nindent 8 }}
+        app.kubernetes.io/component: cognee
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: cognee
+          image: {{ $c.image | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEFAULT_USER_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "docket.cogneeSecret" . }}, key: defaultUserPassword } }
+            - { name: TELEMETRY_DISABLED, value: "true" }
+            - { name: LLM_PROVIDER, value: {{ $c.llm.provider | quote }} }
+            - { name: LLM_MODEL, value: {{ $c.llm.model | quote }} }
+            - { name: LLM_ENDPOINT, value: {{ $c.llm.endpoint | default $ollama | quote }} }
+            - { name: LLM_API_KEY, value: ollama }
+            - { name: LLM_TEMPERATURE, value: "0.0" }
+            - { name: EMBEDDING_PROVIDER, value: ollama }
+            - { name: EMBEDDING_MODEL, value: "nomic-embed-text:latest" }
+            - { name: EMBEDDING_ENDPOINT, value: {{ printf "%s/api/embed" $ollama | quote }} }
+            - { name: EMBEDDING_DIMENSIONS, value: "768" }
+            - { name: HUGGINGFACE_TOKENIZER, value: nomic-ai/nomic-embed-text-v1.5 }
+            - { name: SYSTEM_ROOT_DIRECTORY, value: /cognee-storage/system }
+            - { name: DATA_ROOT_DIRECTORY, value: /cognee-storage/data }
+          ports:
+            - { name: http, containerPort: 8000 }
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+          resources:
+            {{- toYaml $c.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: storage, mountPath: /cognee-storage }
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $c.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests: { storage: {{ $c.storage.size }} }
+{{- end }}

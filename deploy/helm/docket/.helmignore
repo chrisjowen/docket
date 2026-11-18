@@ -1,0 +1,2 @@
+# The values sets deploy/test/check.mjs renders and snapshots; not part of the chart.
+ci/

@@ -1,0 +1,84 @@
+{{- if .Values.qdrant.enabled }}
+{{- $q := .Values.qdrant -}}
+{{- $name := include "docket.storeName" (dict "root" . "store" "qdrant") -}}
+# Qdrant, mem0's vector store: http://{{ $name }}:6333. No key, since mem0's
+# config would hold it in the docket's .docket.yaml; its NetworkPolicy admits
+# only docket.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+spec:
+  selector:
+    {{- include "docket.selector" (dict "root" . "component" "qdrant") | nindent 4 }}
+  ports:
+    - { name: http, port: 6333, targetPort: http }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" . "component" "qdrant") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "docket.labels" . | nindent 8 }}
+        app.kubernetes.io/component: qdrant
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: qdrant
+          image: {{ $q.image | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: QDRANT__TELEMETRY_DISABLED, value: "true" }
+          ports:
+            - { name: http, containerPort: 6333 }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /livez, port: http }
+            periodSeconds: 20
+          resources:
+            {{- toYaml $q.resources | nindent 12 }}
+          securityContext:
+            {{- include "docket.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: storage, mountPath: /qdrant/storage }
+            - { name: snapshots, mountPath: /qdrant/snapshots }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: snapshots
+          emptyDir: { sizeLimit: 1Gi }
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $q.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests: { storage: {{ $q.storage.size }} }
+{{- end }}

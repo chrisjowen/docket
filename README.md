@@ -635,6 +635,11 @@ docket serve                                 # http://127.0.0.1:4390/mcp/<projec
 [docs/self-hosting.md](docs/self-hosting.md) for configuration, roles,
 Postgres and running it behind TLS.
 
+It also ships as an image, `ghcr.io/chrisjowen/docket`, with a Docker Compose
+stack (`deploy/compose`) and a Helm chart (`deploy/helm/docket`). Both start
+with no database and offer Postgres and the other stores as opt-ins: see
+[docs/deploy.md](docs/deploy.md).
+
 ## Evidence and confidence
 
 A captured resource or link says exactly where it was seen, as `evidence`: a

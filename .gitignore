@@ -15,3 +15,6 @@ packages/docket-ui/mcp-app/
 # Except the docket that docket's Wheelhouse plugin ships and runs, which
 # wheelhouse/build.mjs builds and checks.
 !/wheelhouse/docket/**
+# Self-hosting secrets: Compose's .env and mounted key files, never committed.
+deploy/compose/.env
+deploy/compose/secrets/

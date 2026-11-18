@@ -85,7 +85,7 @@ export async function postgresBackend(config: ServeConfig, options: { pool?: Poo
   }
   const owned = options.pool === undefined
   // The postgres projection reads its URL from DOCKET_DATABASE_URL, never from a file: the server's own, however it was given.
-  process.env.DOCKET_DATABASE_URL ??= database.url
+  if (!process.env.DOCKET_DATABASE_URL) process.env.DOCKET_DATABASE_URL = database.url
   const schema = database.schema
   await migrate(pool, { schema })
   const store: StoreRunner = postgresStore({ pool, schema, codec: await codecOf(config) })

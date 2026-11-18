@@ -172,7 +172,8 @@ export interface LoadServeConfigOptions {
  * environment's and the command line's from `cwd`.
  */
 export async function loadServeConfig(options: LoadServeConfigOptions = {}): Promise<ServeConfig> {
-  const env = options.env ?? process.env
+  // A variable set to nothing is unset: Compose and Helm pass an option left out that way.
+  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(options.env ?? process.env).filter(([, value]) => value !== ''))
   const cwd = resolve(options.cwd ?? process.cwd())
   const named = options.file ?? env.DOCKET_SERVE_CONFIG
   const file = named ? resolve(cwd, named) : existsSync(join(cwd, CONFIG_FILE)) ? join(cwd, CONFIG_FILE) : null

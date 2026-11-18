@@ -3,6 +3,35 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.14.0
+
+### `docket serve` as an image, with Docker Compose and a Helm chart
+
+`docket serve` ships as `ghcr.io/chrisjowen/docket`, for linux/amd64 and
+linux/arm64: docket and `@chrisjowen/docket-server` on a distroless Node 22
+base, running as nonroot, with the drivers docket's opt-in stores load.
+[docs/deploy.md](../../docs/deploy.md) covers running it.
+
+- **Docker Compose** (`deploy/compose`): by default one container serving a
+  docket kept as files on a volume, made with `docket init` on first start.
+  No database. Profiles add Postgres (`postgres`), Neo4j (`graph`), Qdrant
+  and an Ollama embedder (`semantic`), and cognee (`cognee`). Nothing pulls
+  implicitly (`pull_policy: never`), `down` keeps the volumes, and secrets
+  come from `.env` or mounted files, which are kept out of git.
+- **Helm** (`deploy/helm/docket`): a single-pod Deployment over a
+  PersistentVolumeClaim, a Service, a generic Ingress and NetworkPolicies
+  that admit only docket to the stores. Postgres is opt-in, as your own
+  (`postgres.external`) or one in the release for evaluation
+  (`postgres.bundled`). Neo4j, Qdrant, the embedder and cognee are opt-ins
+  too. Every secret comes from an existing Secret, or is generated once and
+  kept, and tokens can be read from a Secret (`auth.existingSecret`).
+- `deploy/test` checks them: chart lint and render snapshots, and docket
+  serve's gates against Compose and against the chart on kind, with no
+  database and with Postgres. `.github/workflows/image.yml` runs them on
+  every pull request, and publishes the image on each `v<version>` tag.
+- Releases `@chrisjowen/docket-server` 0.9.0, where `docket serve` takes a
+  variable set to nothing as unset.
+
 ## 0.13.0
 
 ### `docket serve`: a self-hosted, single-tenant Docket server

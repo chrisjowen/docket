@@ -1,0 +1,89 @@
+{{- if .Values.neo4j.enabled }}
+{{- $n := .Values.neo4j -}}
+{{- $name := include "docket.storeName" (dict "root" . "store" "neo4j") -}}
+# Neo4j for a graph projection: the docket's neo4j adapter connects to
+# bolt://{{ $name }}:7687 as neo4j, with the password in NEO4J_PASSWORD.
+{{- if not $n.existingSecret }}
+{{ include "docket.generatedSecret" (dict "root" . "name" $name "keys" (list "password")) }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: neo4j
+spec:
+  selector:
+    {{- include "docket.selector" (dict "root" . "component" "neo4j") | nindent 4 }}
+  ports:
+    - { name: bolt, port: 7687, targetPort: bolt }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: neo4j
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" . "component" "neo4j") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "docket.labels" . | nindent 8 }}
+        app.kubernetes.io/component: neo4j
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 7474
+        runAsGroup: 7474
+        fsGroup: 7474
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: neo4j
+          image: {{ $n.image | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NEO4J_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "docket.neo4jSecret" . }}, key: password } }
+            - { name: NEO4J_AUTH, value: neo4j/$(NEO4J_PASSWORD) }
+            - { name: NEO4J_server_default__listen__address, value: 0.0.0.0 }
+          ports:
+            - { name: bolt, containerPort: 7687 }
+          startupProbe:
+            tcpSocket: { port: bolt }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: { port: bolt }
+            periodSeconds: 10
+          resources:
+            {{- toYaml $n.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: logs, mountPath: /logs }
+      volumes:
+        - name: logs
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $n.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests: { storage: {{ $n.storage.size }} }
+{{- end }}

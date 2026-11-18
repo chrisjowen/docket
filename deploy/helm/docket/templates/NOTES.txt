@@ -1,0 +1,41 @@
+docket serve is running: workspace "{{ .Values.workspace }}", {{ if .Values.postgres.enabled }}over Postgres{{ else }}from the docket's own files (no database){{ end }}.
+
+{{- if .Values.auth.existingSecret }}
+
+Tokens come from the Secret {{ .Values.auth.existingSecret }} ({{ .Values.auth.key }}), read-only.
+{{- else }}
+
+Make a token (shown once; only its hash is kept):
+
+  kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "docket.fullname" . }} -- docket serve token create ada --role owner
+{{- end }}
+
+Reach it:
+{{- if .Values.ingress.enabled }}
+  MCP  {{ if .Values.ingress.tls.secretName }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}/mcp/{{ .Values.workspace }}
+{{- else }}
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "docket.fullname" . }} {{ .Values.service.port }}
+  MCP  http://127.0.0.1:{{ .Values.service.port }}/mcp/{{ .Values.workspace }}
+{{- end }}
+  with the header  Authorization: Bearer <token>
+
+{{- if not .Values.publicUrl }}
+
+Set publicUrl to the https URL clients use, behind TLS: a token must never cross a network in the clear.
+{{- end }}
+{{- if .Values.neo4j.enabled }}
+
+Neo4j: docket adapter add neo4j --url bolt://{{ include "docket.storeName" (dict "root" . "store" "neo4j") }}:7687 --password-env NEO4J_PASSWORD
+{{- end }}
+{{- if .Values.qdrant.enabled }}
+
+Qdrant: http://{{ include "docket.storeName" (dict "root" . "store" "qdrant") }}:6333 (mem0's vector store; docs/deploy.md)
+{{- end }}
+{{- if .Values.embedder.enabled }}
+
+Embedder: http://{{ include "docket.storeName" (dict "root" . "store" "embedder") }}:11434 (Ollama: {{ join ", " .Values.embedder.models }})
+{{- end }}
+{{- if .Values.cognee.enabled }}
+
+cognee: http://{{ include "docket.storeName" (dict "root" . "store" "cognee") }}:8000. Make it an API key and add it to the Secret {{ include "docket.cogneeSecret" . }} as apiKey (docs/deploy.md).
+{{- end }}

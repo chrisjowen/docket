@@ -1,0 +1,184 @@
+{{- $pg := .Values.postgres -}}
+{{- if and $pg.enabled (not $pg.bundled.enabled) (not $pg.external.existingSecret) }}
+{{- fail "postgres.enabled needs postgres.external.existingSecret (a Secret holding the URL), or postgres.bundled.enabled for evaluation." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "docket.fullname" . }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  # One server: it writes the docket on a ReadWriteOnce volume and keeps its state there.
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" . "component" "server") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "docket.labels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        # The docket's directory and the server's, on a new volume. Not from the
+        # image's working directory, /data/docket: the runtime would make it, as root.
+        - name: dirs
+          image: {{ include "docket.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: /data
+          command: [/nodejs/bin/node, -e, "for (const dir of ['/data/docket', '/data/state']) require('fs').mkdirSync(dir, { recursive: true })"]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          securityContext:
+            {{- include "docket.containerSecurity" . | nindent 12 }}
+        # Makes a docket on a new volume (`docket init`); leaves an existing one as it is.
+        - name: init
+          image: {{ include "docket.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [init]
+          workingDir: /data/docket
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+          securityContext:
+            {{- include "docket.containerSecurity" . | nindent 12 }}
+        {{- if and $pg.enabled $pg.bundled.enabled }}
+        # Waits for the bundled Postgres to take connections.
+        - name: wait-for-postgres
+          image: {{ include "docket.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /nodejs/bin/node
+            - -e
+            - |
+              const net = require('net')
+              const attempt = () => net.connect(5432, process.env.PGHOST).on('connect', () => process.exit(0)).on('error', () => setTimeout(attempt, 2000))
+              attempt()
+          env:
+            - { name: PGHOST, value: {{ include "docket.storeName" (dict "root" . "store" "postgres") }} }
+          securityContext:
+            {{- include "docket.containerSecurity" . | nindent 12 }}
+        {{- end }}
+      containers:
+        - name: docket
+          image: {{ include "docket.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [serve]
+          env:
+            # Read by `docket serve` and by `kubectl exec … docket serve token …` alike.
+            - { name: DOCKET_SERVE_CONFIG, value: /etc/docket/docket-server.yaml }
+            {{- if .Values.auth.existingSecret }}
+            - { name: DOCKET_TOKENS_FILE, value: /etc/docket/tokens/{{ .Values.auth.key }} }
+            {{- end }}
+            {{- if $pg.enabled }}
+            {{- if $pg.bundled.enabled }}
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "docket.postgresSecret" . }}, key: password } }
+            - name: DOCKET_DATABASE_URL
+              value: postgres://docket:$(POSTGRES_PASSWORD)@{{ include "docket.storeName" (dict "root" . "store" "postgres") }}:5432/docket
+            {{- else }}
+            - name: DOCKET_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ $pg.external.existingSecret }}, key: {{ $pg.external.key }} } }
+            {{- end }}
+            - { name: DOCKET_DATABASE_SCHEMA, value: {{ $pg.schema | quote }} }
+            {{- if $pg.codec.existingSecret }}
+            - { name: DOCKET_CODEC_KEY_FILE, value: /etc/docket/codec/{{ $pg.codec.key }} }
+            {{- end }}
+            {{- end }}
+            {{- if .Values.neo4j.enabled }}
+            - name: NEO4J_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "docket.neo4jSecret" . }}, key: password } }
+            {{- end }}
+            {{- if .Values.cognee.enabled }}
+            - name: COGNEE_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "docket.cogneeSecret" . }}, key: apiKey, optional: true } }
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - { name: http, containerPort: {{ .Values.service.port }} }
+          startupProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 2
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- include "docket.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /etc/docket/docket-server.yaml, subPath: docket-server.yaml, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+            {{- if .Values.auth.existingSecret }}
+            - { name: tokens, mountPath: /etc/docket/tokens, readOnly: true }
+            {{- end }}
+            {{- if and $pg.enabled $pg.codec.existingSecret }}
+            - { name: codec, mountPath: /etc/docket/codec, readOnly: true }
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "docket.fullname" .) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "docket.fullname" . }}
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+        {{- if .Values.auth.existingSecret }}
+        # Mounted whole, not by subPath, so an edit to the Secret reaches the pod.
+        - name: tokens
+          secret:
+            secretName: {{ .Values.auth.existingSecret }}
+            defaultMode: 0440
+        {{- end }}
+        {{- if and $pg.enabled $pg.codec.existingSecret }}
+        - name: codec
+          secret:
+            secretName: {{ $pg.codec.existingSecret }}
+            defaultMode: 0440
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,52 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $root := . -}}
+# docket: its port, from whoever networkPolicy.from names (anyone, when empty).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "docket.fullname" . }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" . "component" "server") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: http }
+      {{- with .Values.networkPolicy.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- /* Each store admits docket only, on its own port; the embedder admits cognee too. */}}
+{{- $stores := list }}
+{{- if and .Values.postgres.enabled .Values.postgres.bundled.enabled }}{{ $stores = append $stores (dict "component" "postgres" "port" "postgres" "clients" (list "server")) }}{{ end }}
+{{- if .Values.neo4j.enabled }}{{ $stores = append $stores (dict "component" "neo4j" "port" "bolt" "clients" (list "server")) }}{{ end }}
+{{- if .Values.qdrant.enabled }}{{ $stores = append $stores (dict "component" "qdrant" "port" "http" "clients" (list "server")) }}{{ end }}
+{{- if .Values.embedder.enabled }}{{ $stores = append $stores (dict "component" "embedder" "port" "http" "clients" (ternary (list "server" "cognee") (list "server") .Values.cognee.enabled)) }}{{ end }}
+{{- if .Values.cognee.enabled }}{{ $stores = append $stores (dict "component" "cognee" "port" "http" "clients" (list "server")) }}{{ end }}
+{{- range $stores }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "docket.storeName" (dict "root" $root "store" .component) }}
+  labels:
+    {{- include "docket.labels" $root | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" $root "component" .component) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: {{ .port }} }
+      from:
+        {{- range .clients }}
+        - podSelector:
+            matchLabels:
+              {{- include "docket.selector" (dict "root" $root "component" .) | nindent 14 }}
+        {{- end }}
+{{- end }}
+{{- end }}

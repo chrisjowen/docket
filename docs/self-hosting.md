@@ -23,6 +23,12 @@ npm install -g @chrisjowen/docket @chrisjowen/docket-server
 npm install -g pg     # only for a Postgres database
 ```
 
+To run it in containers instead, use the image `ghcr.io/chrisjowen/docket`,
+with the Docker Compose stack or the Helm chart in this repository. See
+[Deploying `docket serve`: Docker Compose and Helm](deploy.md), which also
+covers where the state lives, backups and what a self-hosted server does not
+include.
+
 ## Quick start: no database
 
 In a project that has a docket (`docket init` makes one):

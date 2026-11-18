@@ -1,0 +1,974 @@
+---
+# Source: docket/templates/networkpolicies.yaml
+# docket: its port, from whoever networkPolicy.from names (anyone, when empty).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: server
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: http }
+---
+# Source: docket/templates/networkpolicies.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docket-postgres
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: postgres }
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: docket
+              app.kubernetes.io/instance: docket
+              app.kubernetes.io/component: server
+---
+# Source: docket/templates/networkpolicies.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docket-neo4j
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: neo4j
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: bolt }
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: docket
+              app.kubernetes.io/instance: docket
+              app.kubernetes.io/component: server
+---
+# Source: docket/templates/networkpolicies.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docket-qdrant
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: qdrant
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: http }
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: docket
+              app.kubernetes.io/instance: docket
+              app.kubernetes.io/component: server
+---
+# Source: docket/templates/networkpolicies.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docket-embedder
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: embedder
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: http }
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: docket
+              app.kubernetes.io/instance: docket
+              app.kubernetes.io/component: server
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: docket
+              app.kubernetes.io/instance: docket
+              app.kubernetes.io/component: cognee
+---
+# Source: docket/templates/networkpolicies.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docket-cognee
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: cognee
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: http }
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: docket
+              app.kubernetes.io/instance: docket
+              app.kubernetes.io/component: server
+---
+# Source: docket/templates/cognee.yaml
+# cognee for a cognee projection: http://docket-cognee:8000, with access control
+# on. Its API key is made on cognee once it runs (docs/deploy.md) and kept as
+# `apiKey` in its Secret, which docket reads as COGNEE_API_KEY.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docket-cognee
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+  annotations:
+    # Kept if the release is removed, so a store's data stays readable.
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  defaultUserPassword: <generated>
+---
+# Source: docket/templates/neo4j.yaml
+# Neo4j for a graph projection: the docket's neo4j adapter connects to
+# bolt://docket-neo4j:7687 as neo4j, with the password in NEO4J_PASSWORD.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docket-neo4j
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+  annotations:
+    # Kept if the release is removed, so a store's data stays readable.
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  password: <generated>
+---
+# Source: docket/templates/postgres.yaml
+# A single Postgres for evaluation: no replicas, backups or failover. Run your
+# own (postgres.external) for anything you would miss.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docket-postgres
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+  annotations:
+    # Kept if the release is removed, so a store's data stays readable.
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  password: <generated>
+---
+# Source: docket/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+data:
+  # docket serve's configuration (docs/self-hosting.md). Secrets are not here:
+  # the database URL, the codec key and the tokens come from Secrets.
+  docket-server.yaml: |
+    ai:
+      model: qwen2.5:7b
+      provider: ollama
+      url: http://docket-embedder:11434
+    dataDir: /data/state
+    listen:
+      host: 0.0.0.0
+      port: 4390
+    ontology:
+      mcpWriters:
+      - owner
+      - admin
+    projections:
+    - postgres
+    - config:
+        passwordEnv: NEO4J_PASSWORD
+        url: bolt://docket-neo4j:7687
+      id: graph
+      module: '@docket/adapter-neo4j'
+    ui: false
+    workspaces:
+    - path: /data/docket
+      slug: docket
+---
+# Source: docket/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+  annotations:
+    # The docket itself: kept if the release is removed.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests: { storage: 5Gi }
+---
+# Source: docket/templates/cognee.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: docket-cognee
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: cognee
+spec:
+  selector:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/component: cognee
+  ports:
+    - { name: http, port: 8000, targetPort: http }
+---
+# Source: docket/templates/embedder.yaml
+# Ollama, serving the embedding model at http://docket-embedder:11434, so document
+# text is embedded in the cluster. It downloads its models the first time.
+apiVersion: v1
+kind: Service
+metadata:
+  name: docket-embedder
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: embedder
+spec:
+  selector:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/component: embedder
+  ports:
+    - { name: http, port: 11434, targetPort: http }
+---
+# Source: docket/templates/neo4j.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: docket-neo4j
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: neo4j
+spec:
+  selector:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/component: neo4j
+  ports:
+    - { name: bolt, port: 7687, targetPort: bolt }
+---
+# Source: docket/templates/postgres.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: docket-postgres
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/component: postgres
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres }
+---
+# Source: docket/templates/qdrant.yaml
+# Qdrant, mem0's vector store: http://docket-qdrant:6333. No key, since mem0's
+# config would hold it in the docket's .docket.yaml; its NetworkPolicy admits
+# only docket.
+apiVersion: v1
+kind: Service
+metadata:
+  name: docket-qdrant
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: qdrant
+spec:
+  selector:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/component: qdrant
+  ports:
+    - { name: http, port: 6333, targetPort: http }
+---
+# Source: docket/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/component: server
+  ports:
+    - { name: http, port: 4390, targetPort: http }
+---
+# Source: docket/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docket
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: server
+spec:
+  # One server: it writes the docket on a ReadWriteOnce volume and keeps its state there.
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docket
+        app.kubernetes.io/instance: docket
+        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: docket-0.14.0
+        app.kubernetes.io/component: server
+      annotations:
+        checksum/config: 29f6242deb3575db4ea638f3ca7efe4c5d9ed2415933b816e9d2ebcdb0ec70d7
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        # The docket's directory and the server's, on a new volume. Not from the
+        # image's working directory, /data/docket: the runtime would make it, as root.
+        - name: dirs
+          image: ghcr.io/chrisjowen/docket:0.14.0
+          imagePullPolicy: IfNotPresent
+          workingDir: /data
+          command: [/nodejs/bin/node, -e, "for (const dir of ['/data/docket', '/data/state']) require('fs').mkdirSync(dir, { recursive: true })"]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+        # Makes a docket on a new volume (`docket init`); leaves an existing one as it is.
+        - name: init
+          image: ghcr.io/chrisjowen/docket:0.14.0
+          imagePullPolicy: IfNotPresent
+          args: [init]
+          workingDir: /data/docket
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+        # Waits for the bundled Postgres to take connections.
+        - name: wait-for-postgres
+          image: ghcr.io/chrisjowen/docket:0.14.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /nodejs/bin/node
+            - -e
+            - |
+              const net = require('net')
+              const attempt = () => net.connect(5432, process.env.PGHOST).on('connect', () => process.exit(0)).on('error', () => setTimeout(attempt, 2000))
+              attempt()
+          env:
+            - { name: PGHOST, value: docket-postgres }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+      containers:
+        - name: docket
+          image: ghcr.io/chrisjowen/docket:0.14.0
+          imagePullPolicy: IfNotPresent
+          args: [serve]
+          env:
+            # Read by `docket serve` and by `kubectl exec … docket serve token …` alike.
+            - { name: DOCKET_SERVE_CONFIG, value: /etc/docket/docket-server.yaml }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: docket-postgres, key: password } }
+            - name: DOCKET_DATABASE_URL
+              value: postgres://docket:$(POSTGRES_PASSWORD)@docket-postgres:5432/docket
+            - { name: DOCKET_DATABASE_SCHEMA, value: "public" }
+            - name: NEO4J_PASSWORD
+              valueFrom: { secretKeyRef: { name: docket-neo4j, key: password } }
+            - name: COGNEE_API_KEY
+              valueFrom: { secretKeyRef: { name: docket-cognee, key: apiKey, optional: true } }
+          ports:
+            - { name: http, containerPort: 4390 }
+          startupProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 2
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /etc/docket/docket-server.yaml, subPath: docket-server.yaml, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: docket
+        - name: config
+          configMap:
+            name: docket
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+---
+# Source: docket/templates/cognee.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: docket-cognee
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: cognee
+spec:
+  replicas: 1
+  serviceName: docket-cognee
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: cognee
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docket
+        app.kubernetes.io/instance: docket
+        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: docket-0.14.0
+        app.kubernetes.io/component: cognee
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: cognee
+          image: "cognee/cognee:1.6.8"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEFAULT_USER_PASSWORD
+              valueFrom: { secretKeyRef: { name: docket-cognee, key: defaultUserPassword } }
+            - { name: TELEMETRY_DISABLED, value: "true" }
+            - { name: LLM_PROVIDER, value: "ollama" }
+            - { name: LLM_MODEL, value: "qwen2.5:7b" }
+            - { name: LLM_ENDPOINT, value: "http://docket-embedder:11434" }
+            - { name: LLM_API_KEY, value: ollama }
+            - { name: LLM_TEMPERATURE, value: "0.0" }
+            - { name: EMBEDDING_PROVIDER, value: ollama }
+            - { name: EMBEDDING_MODEL, value: "nomic-embed-text:latest" }
+            - { name: EMBEDDING_ENDPOINT, value: "http://docket-embedder:11434/api/embed" }
+            - { name: EMBEDDING_DIMENSIONS, value: "768" }
+            - { name: HUGGINGFACE_TOKENIZER, value: nomic-ai/nomic-embed-text-v1.5 }
+            - { name: SYSTEM_ROOT_DIRECTORY, value: /cognee-storage/system }
+            - { name: DATA_ROOT_DIRECTORY, value: /cognee-storage/data }
+          ports:
+            - { name: http, containerPort: 8000 }
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 100m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: storage, mountPath: /cognee-storage }
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 5Gi }
+---
+# Source: docket/templates/embedder.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: docket-embedder
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: embedder
+spec:
+  replicas: 1
+  serviceName: docket-embedder
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: embedder
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docket
+        app.kubernetes.io/instance: docket
+        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: docket-0.14.0
+        app.kubernetes.io/component: embedder
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: ollama
+          image: "ollama/ollama:0.40.14"
+          imagePullPolicy: IfNotPresent
+          # Serve, and pull the models onto the volume the first time.
+          command: [/bin/sh, -c]
+          args:
+            - |
+              ollama serve & server=$!
+              until ollama list >/dev/null 2>&1; do sleep 1; done
+              for model in nomic-embed-text qwen2.5:7b; do ollama pull "$model"; done
+              wait "$server"
+          env:
+            - { name: OLLAMA_HOST, value: "0.0.0.0:11434" }
+            - { name: OLLAMA_MODELS, value: /models }
+            - { name: OLLAMA_KEEP_ALIVE, value: "24h" }
+            - { name: HOME, value: /tmp }
+          ports:
+            - { name: http, containerPort: 11434 }
+          startupProbe:
+            exec: { command: [ollama, show, "nomic-embed-text"] }
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            exec: { command: [ollama, show, "nomic-embed-text"] }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          livenessProbe:
+            exec: { command: [ollama, list] }
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 100m
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: models, mountPath: /models }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+  volumeClaimTemplates:
+    - metadata:
+        name: models
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 5Gi }
+---
+# Source: docket/templates/neo4j.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: docket-neo4j
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: neo4j
+spec:
+  replicas: 1
+  serviceName: docket-neo4j
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: neo4j
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docket
+        app.kubernetes.io/instance: docket
+        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: docket-0.14.0
+        app.kubernetes.io/component: neo4j
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 7474
+        runAsGroup: 7474
+        fsGroup: 7474
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: neo4j
+          image: "neo4j:5.26-community"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NEO4J_PASSWORD
+              valueFrom: { secretKeyRef: { name: docket-neo4j, key: password } }
+            - { name: NEO4J_AUTH, value: neo4j/$(NEO4J_PASSWORD) }
+            - { name: NEO4J_server_default__listen__address, value: 0.0.0.0 }
+          ports:
+            - { name: bolt, containerPort: 7687 }
+          startupProbe:
+            tcpSocket: { port: bolt }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: { port: bolt }
+            periodSeconds: 10
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 100m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: logs, mountPath: /logs }
+      volumes:
+        - name: logs
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 5Gi }
+---
+# Source: docket/templates/postgres.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: docket-postgres
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  serviceName: docket-postgres
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docket
+        app.kubernetes.io/instance: docket
+        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: docket-0.14.0
+        app.kubernetes.io/component: postgres
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: postgres
+          image: "pgvector/pgvector:pg17"
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: POSTGRES_USER, value: docket }
+            - { name: POSTGRES_DB, value: docket }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: docket-postgres, key: password } }
+            # A directory under the volume's root, which may hold lost+found.
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - { name: postgres, containerPort: 5432 }
+          readinessProbe:
+            exec: { command: [pg_isready, -U, docket, -d, docket] }
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: [pg_isready, -U, docket, -d, docket] }
+            periodSeconds: 20
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: run, mountPath: /var/run/postgresql }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 10Gi }
+---
+# Source: docket/templates/qdrant.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: docket-qdrant
+  labels:
+    app.kubernetes.io/name: docket
+    app.kubernetes.io/instance: docket
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: docket-0.14.0
+    app.kubernetes.io/component: qdrant
+spec:
+  replicas: 1
+  serviceName: docket-qdrant
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docket
+      app.kubernetes.io/instance: docket
+      app.kubernetes.io/component: qdrant
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docket
+        app.kubernetes.io/instance: docket
+        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: docket-0.14.0
+        app.kubernetes.io/component: qdrant
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: qdrant
+          image: "qdrant/qdrant:v1.18.3-unprivileged"
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: QDRANT__TELEMETRY_DISABLED, value: "true" }
+          ports:
+            - { name: http, containerPort: 6333 }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /livez, port: http }
+            periodSeconds: 20
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 50m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: storage, mountPath: /qdrant/storage }
+            - { name: snapshots, mountPath: /qdrant/snapshots }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: snapshots
+          emptyDir: { sizeLimit: 1Gi }
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 5Gi }

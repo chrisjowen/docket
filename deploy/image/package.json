@@ -1,0 +1,16 @@
+{
+  "name": "docket-image",
+  "private": true,
+  "description": "What the ghcr.io/chrisjowen/docket image installs: docket and docket-server as packed from this checkout, and the drivers docket's opt-in stores load. The versions are the ones the workspace's lockfile tests.",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@chrisjowen/docket": "file:/pack/docket.tgz",
+    "@chrisjowen/docket-server": "file:/pack/docket-server.tgz",
+    "@qdrant/js-client-rest": "1.18.0",
+    "better-sqlite3": "12.11.1",
+    "mem0ai": "3.3.1",
+    "neo4j-driver": "6.2.0",
+    "ollama": "0.5.18",
+    "pg": "8.23.1"
+  }
+}

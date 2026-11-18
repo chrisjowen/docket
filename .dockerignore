@@ -1,0 +1,23 @@
+# The image (deploy/image/Dockerfile) builds from the workspace's sources only.
+**/node_modules
+**/dist
+**/.svelte-kit
+**/*.tsbuildinfo
+.git
+.claude
+.claude-plugin
+.docket
+.scout
+.serena
+.wheelhouse-plugin
+docs
+examples
+deploy/compose
+deploy/helm
+deploy/test
+packages/docket-ui/build
+packages/docket-ui/embed
+packages/docket-ui/mcp-app
+wheelhouse/docket
+**/.env
+**/*.key

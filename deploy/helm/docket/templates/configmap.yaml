@@ -1,0 +1,22 @@
+{{- $config := dict
+  "listen" (dict "host" "0.0.0.0" "port" (int .Values.service.port))
+  "dataDir" "/data/state"
+  "workspaces" (list (dict "slug" .Values.workspace "path" "/data/docket"))
+  "ontology" (dict "mcpWriters" .Values.ontology.mcpWriters)
+  "ui" .Values.ui
+-}}
+{{- if .Values.publicUrl }}{{ $_ := set $config "publicUrl" .Values.publicUrl }}{{ end }}
+{{- if .Values.postgres.enabled }}{{ $_ := set $config "projections" .Values.postgres.projections }}{{ end }}
+{{- if .Values.ai }}{{ $_ := set $config "ai" .Values.ai }}{{ end }}
+{{- $config = mergeOverwrite $config (deepCopy .Values.config) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "docket.fullname" . }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+data:
+  # docket serve's configuration (docs/self-hosting.md). Secrets are not here:
+  # the database URL, the codec key and the tokens come from Secrets.
+  docket-server.yaml: |
+    {{- toYaml $config | nindent 4 }}

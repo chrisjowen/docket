@@ -1,0 +1,28 @@
+# Every opt-in store over the bundled Postgres, with a model for docket_ask and
+# a projection given as any docket adapter.
+postgres:
+  enabled: true
+  bundled:
+    enabled: true
+  projections:
+    - postgres
+    - id: graph
+      module: "@docket/adapter-neo4j"
+      config: { url: "bolt://docket-neo4j:7687", passwordEnv: NEO4J_PASSWORD }
+neo4j:
+  enabled: true
+qdrant:
+  enabled: true
+embedder:
+  enabled: true
+  models: [nomic-embed-text, qwen2.5:7b]
+cognee:
+  enabled: true
+ai:
+  provider: ollama
+  model: qwen2.5:7b
+  url: http://docket-embedder:11434
+ontology:
+  mcpWriters: [owner, admin]
+config:
+  ui: false

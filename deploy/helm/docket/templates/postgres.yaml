@@ -1,0 +1,92 @@
+{{- $pg := .Values.postgres -}}
+{{- if and $pg.enabled $pg.bundled.enabled }}
+{{- $name := include "docket.storeName" (dict "root" . "store" "postgres") -}}
+# A single Postgres for evaluation: no replicas, backups or failover. Run your
+# own (postgres.external) for anything you would miss.
+{{- if not $pg.bundled.existingSecret }}
+{{ include "docket.generatedSecret" (dict "root" . "name" $name "keys" (list "password")) }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  selector:
+    {{- include "docket.selector" (dict "root" . "component" "postgres") | nindent 4 }}
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "docket.labels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: postgres
+          image: {{ $pg.bundled.image | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: POSTGRES_USER, value: docket }
+            - { name: POSTGRES_DB, value: docket }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "docket.postgresSecret" . }}, key: password } }
+            # A directory under the volume's root, which may hold lost+found.
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - { name: postgres, containerPort: 5432 }
+          readinessProbe:
+            exec: { command: [pg_isready, -U, docket, -d, docket] }
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: [pg_isready, -U, docket, -d, docket] }
+            periodSeconds: 20
+          resources:
+            {{- toYaml $pg.bundled.resources | nindent 12 }}
+          securityContext:
+            {{- include "docket.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: run, mountPath: /var/run/postgresql }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $pg.bundled.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests: { storage: {{ $pg.bundled.storage.size }} }
+{{- end }}
