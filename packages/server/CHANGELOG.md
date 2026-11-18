@@ -2,6 +2,16 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.7.0
+
+### Postgres and SQLite instances in search fusion
+
+`SIGNALS` reads a `postgres` or `sqlite` projection instance's scores as a
+`lexical` signal, as it does Neo4j's full-text scores: docket 0.12.0's
+Postgres and SQLite adapters rank by full-text unless set to `search:
+semantic`, when a deployment names the instance `semantic` in `signals`.
+`@chrisjowen/docket` 0.12.0 satisfies the peer dependency as well as 0.11.
+
 ## 0.6.0
 
 ### One MCP surface with docket's own server

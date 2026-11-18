@@ -99,6 +99,22 @@ links:
         observedAt: 2026-11-13
         observedBy: claude
   - rel: contains
+    target: library.adapter-postgres
+    evidence:
+      - source: manifest
+        path: packages/adapter-postgres/package.json
+        lines: 2
+        observedAt: 2026-11-18
+        observedBy: claude
+  - rel: contains
+    target: library.adapter-sqlite
+    evidence:
+      - source: manifest
+        path: packages/adapter-sqlite/package.json
+        lines: 2
+        observedAt: 2026-11-18
+        observedBy: claude
+  - rel: contains
     target: agent.docket-claude-plugin
     evidence:
       - source: manifest

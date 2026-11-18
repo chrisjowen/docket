@@ -431,10 +431,17 @@ function similarity(a: string, b: string): number {
 
 /**
  * What each projection's own score means, by instance: mem0's is a cosine similarity, Neo4j's a full-text (Lucene)
- * score, and cognee's the cosine similarity its floor turns cognee's distance into. A deployment with other
- * projections names theirs in `BoardOptions.signals`.
+ * score, cognee's the cosine similarity its floor turns cognee's distance into, and the Postgres and SQLite
+ * adapters' a full-text rank, as they search by default. A deployment with other projections - or a Postgres or
+ * SQLite instance set to `search: semantic` - names theirs in `BoardOptions.signals`.
  */
-export const SIGNALS: Readonly<Record<string, 'semantic' | 'lexical'>> = { mem0: 'semantic', neo4j: 'lexical', cognee: 'semantic' }
+export const SIGNALS: Readonly<Record<string, 'semantic' | 'lexical'>> = {
+  mem0: 'semantic',
+  neo4j: 'lexical',
+  cognee: 'semantic',
+  postgres: 'lexical',
+  sqlite: 'lexical'
+}
 
 /** One resource a search found, wherever it found it. */
 interface Found {

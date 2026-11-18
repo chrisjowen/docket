@@ -19,6 +19,8 @@ export interface RunInfo {
     embedMs: number
     /** Syncing into cognee, cognify included, when the run had a cognee server. */
     cogneeSyncMs?: number
+    /** Syncing into each Postgres or SQLite store strategy, embedding included, when the run had them. */
+    storeSyncMs?: Record<string, number>
     /** docket's JSONL lexicalSearch per query, re-reading every document, against the prebuilt index. */
     lexicalMs: { jsonl: number; indexed: number }
   }[]
@@ -87,6 +89,7 @@ export const report = (info: RunInfo, outcomes: readonly QueryOutcome[]): string
   const overall = new Map(strategies.map((strategy) => [strategy, macroAverage(perCorpus(strategy))]))
 
   const withCognee = info.corpora.some((corpus) => corpus.cogneeSyncMs !== undefined)
+  const stores = [...new Set(info.corpora.flatMap((corpus) => Object.keys(corpus.storeSyncMs ?? {})))]
   const lines: string[] = []
   lines.push(
     '# Search evaluation results',
@@ -98,7 +101,7 @@ export const report = (info: RunInfo, outcomes: readonly QueryOutcome[]): string
     '## Corpora',
     '',
     table(
-      ['corpus', 'domain', 'template', 'entities', 'links', 'types (with entities)', 'test queries (no-answer)', 'sync ms', 'embed ms', ...(withCognee ? ['cognee sync ms'] : [])],
+      ['corpus', 'domain', 'template', 'entities', 'links', 'types (with entities)', 'test queries (no-answer)', 'sync ms', 'embed ms', ...(withCognee ? ['cognee sync ms'] : []), ...stores.map((store) => `${store} sync ms`)],
       info.corpora.map((corpus) => [
         corpus.name,
         corpus.domain,
@@ -109,7 +112,8 @@ export const report = (info: RunInfo, outcomes: readonly QueryOutcome[]): string
         `${corpus.queries.test} (${outcomes.filter((outcome) => outcome.corpus === corpus.name && outcome.strategy === strategies[0] && outcome.query.kind === 'no-answer').length})`,
         ms(corpus.syncMs),
         ms(corpus.embedMs),
-        ...(withCognee ? [ms(corpus.cogneeSyncMs ?? Number.NaN)] : [])
+        ...(withCognee ? [ms(corpus.cogneeSyncMs ?? Number.NaN)] : []),
+        ...stores.map((store) => ms(corpus.storeSyncMs?.[store] ?? Number.NaN))
       ])
     ),
     '',

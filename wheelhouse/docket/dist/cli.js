@@ -533,9 +533,12 @@ adapterCommand
     .option('--database <name>', 'neo4j: database (default: the server\'s)')
     .option('--password-env <name>', 'neo4j: environment variable holding the password ("none": no auth)')
     .option('--api-key-env <name>', 'mem0, cognee: environment variable holding the API key (default MEM0_API_KEY, COGNEE_API_KEY)')
-    .option('--scope <scope>', 'neo4j scope, or mem0 agent id (default: one unique to the checkout)')
+    .option('--scope <scope>', 'neo4j or postgres scope, or mem0 agent id (default: one unique to the checkout)')
+    .option('--url-env <name>', 'postgres: environment variable holding the connection URL (default DOCKET_POSTGRES_URL)')
+    .option('--schema <name>', 'postgres: schema to keep the index tables in (default docket_index)')
+    .option('--semantic-model <model>', 'postgres, sqlite: Ollama embedding model to search by meaning too (default: full-text only)')
     .option('--output <dir>', 'jsonl: directory to write to')
-    .option('--file <path>', 'memvid: the .mv2 file (default: in the adapter\'s state directory)')
+    .option('--file <path>', 'memvid: the .mv2 file; sqlite: the database file (default: in the adapter\'s state directory)')
     .option('--namespace <name>', 'memvid: namespace for this project\'s frames')
     .option('--palace <dir>', 'mempalace: palace directory (default: in the adapter\'s state directory)')
     .option('--wing <name>', 'mempalace: wing to file drawers under')
@@ -561,7 +564,7 @@ adapterCommand
         return typeof given === 'string' ? given : undefined;
     };
     const flags = [
-        'id', 'roles', 'mode', 'url', 'username', 'database', 'passwordEnv', 'apiKeyEnv', 'scope', 'output',
+        'id', 'roles', 'mode', 'url', 'urlEnv', 'schema', 'semanticModel', 'username', 'database', 'passwordEnv', 'apiKeyEnv', 'scope', 'output',
         'file', 'namespace', 'palace', 'wing', 'dataset', 'embeddingModel', 'command',
         'image', 'imageEnv', 'port', 'runtimeId', 'composeFile', 'projectName', 'pullPolicy'
     ];

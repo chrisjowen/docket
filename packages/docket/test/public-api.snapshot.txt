@@ -1735,8 +1735,29 @@ CredentialStoreOptions
 DEFAULT_CLOUD_URL
   export declare const DEFAULT_CLOUD_URL = "https://docket.chrisjowen.net";
 
+DEFAULT_TRAVERSAL
+  export declare const DEFAULT_TRAVERSAL: Traversal;
+
 defaultCredentialsFile
   export declare const defaultCredentialsFile: (env?: NodeJS.ProcessEnv) => string;
+
+describePath
+  export declare const describePath: (path: MatchPath, why?: boolean) => string;
+
+Embedder
+  export interface Embedder {
+      readonly model: string;
+      readonly dimensions: number;
+      embed(texts: readonly string[]): Promise<number[][]>;
+  }
+
+embeddingText
+  export declare const embeddingText: (entity: {
+      title: string;
+      type: string;
+      content: string;
+      tags: readonly string[];
+  }) => string;
 
 EntityProjection
   export interface EntityProjection {
@@ -1779,6 +1800,15 @@ Excerpt
       truncated: boolean;
   }
 
+fuseRankings
+  export declare const fuseRankings: <T extends {
+      id: string;
+      score: number;
+  }>(lists: readonly (readonly T[])[], limit: number) => T[];
+
+hitOf
+  export declare const hitOf: (match: Match, terms: readonly string[]) => SearchHit;
+
 Keychain
   export interface Keychain {
       readonly name: string;
@@ -1789,6 +1819,25 @@ Keychain
 
 KEYCHAIN_ENV
   export declare const KEYCHAIN_ENV = "DOCKET_KEYCHAIN";
+
+Match
+  export interface Match {
+      id: string;
+      title?: string;
+      content?: string;
+      hash?: string;
+      score: number;
+      paths: MatchPath[];
+  }
+
+matchesOf
+  export declare const matchesOf: (rows: readonly Record<string, unknown>[]) => Match[];
+
+MatchPath
+  export interface MatchPath {
+      nodes: PathNode[];
+      edges: PathEdge[];
+  }
 
 MCP_PROTOCOL_VERSION
   export declare const MCP_PROTOCOL_VERSION = "2025-11-25";
@@ -1841,6 +1890,12 @@ NativeStore
       holds?(native: NativeRecord, record: CanonicalInput, signal?: AbortSignal): Promise<boolean>;
   }
 
+NOMIC_PREFIXES
+  export declare const NOMIC_PREFIXES: {
+      readonly document: "search_document: ";
+      readonly query: "search_query: ";
+  };
+
 offline
   export declare const offline: (env?: NodeJS.ProcessEnv) => boolean;
 
@@ -1856,6 +1911,9 @@ OllamaChatConfig
       model: string;
       timeoutMs: number;
   }
+
+ollamaEmbedder
+  export declare const ollamaEmbedder: (config: SemanticConfig, fetchImpl?: typeof fetch) => Embedder;
 
 OllamaModelConfig
   export type OllamaModelConfig = z.infer<typeof ollamaModelSchema>;
@@ -1879,6 +1937,36 @@ PassageSink
       upsert(record: CanonicalInput, signal?: AbortSignal): Promise<void>;
       remove(kind: InputKind, id: string, signal?: AbortSignal): Promise<void>;
   }
+
+PathEdge
+  export interface PathEdge {
+      source: string;
+      rel: string;
+      target: string;
+      confidence?: number;
+      sources: string[];
+  }
+
+PathNode
+  export interface PathNode {
+      id: string;
+      title?: string;
+      type?: string;
+      hash?: string;
+      stub: boolean;
+  }
+
+PATHS_PER_MATCH
+  export declare const PATHS_PER_MATCH = 3;
+
+pathsAnswer
+  export declare const pathsAnswer: (matches: readonly Match[], request: Pick<AskRequest, "question" | "context" | "budget">, interpretation: Partial<AdapterAnswer["interpretation"]>, engine: string) => AdapterAnswer;
+
+prefixesOf
+  export declare const prefixesOf: (semantic: SemanticConfig) => {
+      document: string;
+      query: string;
+  };
 
 ProjectionContext
   export interface ProjectionContext {
@@ -1926,6 +2014,9 @@ ResolvedHits
 resolveNativeHits
   export declare const resolveNativeHits: (hits: readonly NativeHit[], canonical: CanonicalReader) => Promise<ResolvedHits>;
 
+RRF_K
+  export declare const RRF_K = 60;
+
 searchAnswer
   export declare const searchAnswer: (search: SearchAnswer, request: Pick<AskRequest, "context" | "budget">, interpretation?: Partial<AdapterAnswer["interpretation"]>) => AdapterAnswer;
 
@@ -1946,6 +2037,23 @@ SearchHit
           nativeId?: string;
       };
   }
+
+SemanticConfig
+  export type SemanticConfig = z.infer<typeof semanticConfigSchema>;
+
+semanticConfigSchema
+  export declare const semanticConfigSchema: z.ZodObject<{
+      provider: z.ZodDefault<z.ZodLiteral<"ollama">>;
+      url: z.ZodDefault<z.ZodString>;
+      model: z.ZodDefault<z.ZodString>;
+      dimensions: z.ZodDefault<z.ZodNumber>;
+      prefixes: z.ZodOptional<z.ZodObject<{
+          document: z.ZodString;
+          query: z.ZodString;
+      }, z.core.$strict>>;
+      batchSize: z.ZodDefault<z.ZodNumber>;
+      timeoutMs: z.ZodDefault<z.ZodNumber>;
+  }, z.core.$strict>;
 
 stableStringify
   export declare function stableStringify(value: unknown): string;
@@ -1975,6 +2083,13 @@ ToolResult
   export interface ToolResult<T> {
       structured: T;
       text: string;
+  }
+
+Traversal
+  export interface Traversal {
+      hops: number;
+      minConfidence: number;
+      rels?: readonly string[];
   }
 
 workspaceResource
@@ -2345,6 +2460,151 @@ Neo4jProjectionDependencies
   export interface Neo4jProjectionDependencies {
       chat?: Chat;
       models?: AdapterServices['models'];
+  }
+
+## ./adapters/postgres (./dist/bundled/adapter-postgres/dist/index.d.ts)
+
+createPostgresProjection
+  export declare function createPostgresProjection(config: PostgresConfig, dependencies?: PostgresProjectionDependencies): EntityProjection;
+
+default
+  declare const definition: import("../../contracts/dist/index.js").AdapterDefinition<{
+      type: "postgres";
+      schema: string;
+      language: string;
+      trigram: boolean;
+      url?: string | undefined;
+      urlEnv?: string | undefined;
+      passwordEnv?: string | undefined;
+      scope?: string | undefined;
+      semantic?: {
+          provider: "ollama";
+          url: string;
+          model: string;
+          dimensions: number;
+          batchSize: number;
+          timeoutMs: number;
+          prefixes?: {
+              document: string;
+              query: string;
+          } | undefined;
+      } | undefined;
+      search?: "semantic" | "lexical" | "hybrid" | undefined;
+      traverse?: {
+          hops?: number | undefined;
+          minConfidence?: number | undefined;
+          rels?: string[] | undefined;
+      } | undefined;
+  }>;
+
+PostgresConfig
+  export type PostgresConfig = z.infer<typeof postgresConfigSchema>;
+
+postgresConfigSchema
+  export declare const postgresConfigSchema: z.ZodObject<{
+      type: z.ZodDefault<z.ZodLiteral<"postgres">>;
+      url: z.ZodOptional<z.ZodString>;
+      urlEnv: z.ZodOptional<z.ZodString>;
+      passwordEnv: z.ZodOptional<z.ZodString>;
+      schema: z.ZodDefault<z.ZodString>;
+      scope: z.ZodOptional<z.ZodString>;
+      language: z.ZodDefault<z.ZodString>;
+      trigram: z.ZodDefault<z.ZodBoolean>;
+      semantic: z.ZodOptional<z.ZodObject<{
+          provider: z.ZodDefault<z.ZodLiteral<"ollama">>;
+          url: z.ZodDefault<z.ZodString>;
+          model: z.ZodDefault<z.ZodString>;
+          dimensions: z.ZodDefault<z.ZodNumber>;
+          prefixes: z.ZodOptional<z.ZodObject<{
+              document: z.ZodString;
+              query: z.ZodString;
+          }, z.core.$strict>>;
+          batchSize: z.ZodDefault<z.ZodNumber>;
+          timeoutMs: z.ZodDefault<z.ZodNumber>;
+      }, z.core.$strict>>;
+      search: z.ZodOptional<z.ZodEnum<{
+          semantic: "semantic";
+          lexical: "lexical";
+          hybrid: "hybrid";
+      }>>;
+      traverse: z.ZodOptional<z.ZodObject<{
+          hops: z.ZodOptional<z.ZodNumber>;
+          minConfidence: z.ZodOptional<z.ZodNumber>;
+          rels: z.ZodOptional<z.ZodArray<z.ZodString>>;
+      }, z.core.$strict>>;
+  }, z.core.$strict>;
+
+PostgresProjectionDependencies
+  export interface PostgresProjectionDependencies {
+      embedder?: Embedder;
+      pool?: Pool;
+  }
+
+## ./adapters/sqlite (./dist/bundled/adapter-sqlite/dist/index.d.ts)
+
+createSqliteProjection
+  export declare function createSqliteProjection(config: SqliteConfig, stateRoot: string, dependencies?: SqliteProjectionDependencies): EntityProjection;
+
+default
+  declare const definition: import("../../contracts/dist/index.js").AdapterDefinition<{
+      type: "sqlite";
+      file?: string | undefined;
+      scope?: string | undefined;
+      semantic?: {
+          provider: "ollama";
+          url: string;
+          model: string;
+          dimensions: number;
+          batchSize: number;
+          timeoutMs: number;
+          prefixes?: {
+              document: string;
+              query: string;
+          } | undefined;
+      } | undefined;
+      search?: "semantic" | "lexical" | "hybrid" | undefined;
+      traverse?: {
+          hops?: number | undefined;
+          minConfidence?: number | undefined;
+          rels?: string[] | undefined;
+      } | undefined;
+  }>;
+
+SqliteConfig
+  export type SqliteConfig = z.infer<typeof sqliteConfigSchema>;
+
+sqliteConfigSchema
+  export declare const sqliteConfigSchema: z.ZodObject<{
+      type: z.ZodDefault<z.ZodLiteral<"sqlite">>;
+      file: z.ZodOptional<z.ZodString>;
+      scope: z.ZodOptional<z.ZodString>;
+      semantic: z.ZodOptional<z.ZodObject<{
+          provider: z.ZodDefault<z.ZodLiteral<"ollama">>;
+          url: z.ZodDefault<z.ZodString>;
+          model: z.ZodDefault<z.ZodString>;
+          dimensions: z.ZodDefault<z.ZodNumber>;
+          prefixes: z.ZodOptional<z.ZodObject<{
+              document: z.ZodString;
+              query: z.ZodString;
+          }, z.core.$strict>>;
+          batchSize: z.ZodDefault<z.ZodNumber>;
+          timeoutMs: z.ZodDefault<z.ZodNumber>;
+      }, z.core.$strict>>;
+      search: z.ZodOptional<z.ZodEnum<{
+          semantic: "semantic";
+          lexical: "lexical";
+          hybrid: "hybrid";
+      }>>;
+      traverse: z.ZodOptional<z.ZodObject<{
+          hops: z.ZodOptional<z.ZodNumber>;
+          minConfidence: z.ZodOptional<z.ZodNumber>;
+          rels: z.ZodOptional<z.ZodArray<z.ZodString>>;
+      }, z.core.$strict>>;
+  }, z.core.$strict>;
+
+SqliteProjectionDependencies
+  export interface SqliteProjectionDependencies {
+      embedder?: Embedder;
   }
 
 ## ./contracts (./dist/bundled/contracts/dist/index.d.ts)

@@ -2,7 +2,7 @@ import { basename } from 'node:path'
 
 import { Document } from 'yaml'
 
-import { COGNEE_ADAPTER_MODULE } from '../adapters/distribution.js'
+import { COGNEE_ADAPTER_MODULE, POSTGRES_ADAPTER_MODULE, SQLITE_ADAPTER_MODULE } from '../adapters/distribution.js'
 import { V1_PROJECTION_MODULES } from '../config/config.js'
 import type { DockerComposeRuntimeConfig, PullPolicy } from '../runtime/config.js'
 import { Answers, checkEnvName, checkNonBlank, checkPort, checkUrl, uniqueId } from './answers.js'
@@ -511,10 +511,100 @@ const cognee: AdapterProvider = {
   }
 }
 
+/** A Postgres schema name: what the adapter accepts, so it can be written into SQL unquoted. */
+const SQL_NAME = /^[a-z_][a-z0-9_]{0,62}$/
+
+/**
+ * The `semantic` section an embedding model asks for: nomic-embed-text's
+ * 768 dimensions are the adapters' default; another model's size is the
+ * developer's to set.
+ */
+const askSemantic = async (answers: Answers, needs: string): Promise<{ config: Record<string, unknown>; notes: string[] }> => {
+  const model = await answers.text({
+    flag: '--semantic-model',
+    question: `Ollama embedding model to search by meaning too, e.g. nomic-embed-text (empty: full-text only${needs})`,
+    optional: true,
+    check: checkNonBlank
+  })
+  if (model === undefined) return { config: {}, notes: [] }
+  return {
+    config: { semantic: { model } },
+    notes: [
+      `Each sync embeds what changed through Ollama's ${model} at http://localhost:11434 (set semantic.url to use another).`,
+      ...(/^nomic-embed-text(:|$)/.test(model)
+        ? []
+        : [`semantic.dimensions defaults to 768, nomic-embed-text's size: set it to ${model}'s in the entry.`])
+    ]
+  }
+}
+
+const postgres: AdapterProvider = {
+  name: 'postgres',
+  module: POSTGRES_ADAPTER_MODULE,
+  summary: 'Postgres 16+ tables: full-text and title trigram search, links read by recursive query, optional pgvector',
+  driver: 'pg',
+  defaultId: 'postgres',
+  async configure({ answers }) {
+    const urlEnv = await answers.text({
+      flag: '--url-env',
+      question: 'Environment variable holding the connection URL (postgres://user:password@host:5432/database)',
+      fallback: 'DOCKET_POSTGRES_URL',
+      check: checkEnvName
+    })
+    const schema = await answers.text({
+      flag: '--schema',
+      question: 'Schema to keep the index tables in (created when missing)',
+      fallback: 'docket_index',
+      check: (value) => (SQL_NAME.test(value) ? undefined : 'lowercase letters, digits and "_", starting with a letter or "_"')
+    })
+    const scope = await answers.text({
+      flag: '--scope',
+      question: 'Scope to file this checkout\'s rows under (empty: one unique to the checkout)',
+      optional: true,
+      check: checkNonBlank
+    })
+    const semantic = await askSemantic(answers, '; needs the pgvector extension')
+    return {
+      config: { urlEnv, ...unlessDefault('schema', schema, 'docket_index'), ...(scope ? { scope } : {}), ...semantic.config },
+      files: [],
+      env: [{ name: urlEnv, purpose: 'the Postgres connection URL, password included', secret: true, required: true }],
+      prerequisites: [
+        'Postgres 16 or later at that URL; docket never starts one (e.g. `docker run -d -p 127.0.0.1:5432:5432 -e POSTGRES_PASSWORD=... pgvector/pgvector:pg17`)',
+        ...(semantic.notes.length > 0 ? ['The pgvector extension in that database: `CREATE EXTENSION vector` as a superuser, or an image that has it'] : [])
+      ],
+      notes: semantic.notes
+    }
+  }
+}
+
+const sqlite: AdapterProvider = {
+  name: 'sqlite',
+  module: SQLITE_ADAPTER_MODULE,
+  summary: 'one SQLite file: FTS5 full-text search, links read by recursive query, optional embeddings; no server',
+  driver: 'better-sqlite3',
+  defaultId: 'sqlite',
+  async configure({ answers }) {
+    const file = await answers.text({
+      flag: '--file',
+      question: 'SQLite file, relative to .docket.yaml (empty: index.sqlite in the adapter\'s own state directory)',
+      optional: true,
+      check: checkNonBlank
+    })
+    const semantic = await askSemantic(answers, '')
+    return {
+      config: { ...(file ? { file } : {}), ...semantic.config },
+      files: [],
+      env: [],
+      prerequisites: [],
+      notes: semantic.notes
+    }
+  }
+}
+
 /**
  * Every provider `docket adapter add` knows, by name. A new adapter package
  * gets one here; a project-local module is configured by hand instead.
  */
-export const PROVIDERS: readonly AdapterProvider[] = [jsonl, neo4j, mem0, memvid, mempalace, cognee]
+export const PROVIDERS: readonly AdapterProvider[] = [jsonl, neo4j, mem0, memvid, mempalace, cognee, postgres, sqlite]
 
 export const findProvider = (name: string): AdapterProvider | undefined => PROVIDERS.find((provider) => provider.name === name)

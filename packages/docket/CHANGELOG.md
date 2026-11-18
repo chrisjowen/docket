@@ -3,6 +3,43 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.12.0
+
+### Postgres and SQLite adapters, opt-in
+
+Two new adapters ship bundled, for a team that wants ranked full-text search
+and graph answers without Neo4j, mem0 or Qdrant. Neither is a default:
+`jsonl` stays the only adapter a new docket has, and it needs no database.
+
+- **`docket adapter add postgres`** configures
+  [`@docket/adapter-postgres`](../adapter-postgres/README.md)
+  (`@chrisjowen/docket/adapters/postgres`): entities and their links in tables
+  of its own in Postgres 16 or later, in a schema it migrates itself
+  (`docket_index` by default), one scope per checkout. It searches by
+  full-text - `websearch_to_tsquery`, ranked by BM25 over the title, type and
+  tags, and body, weighted in that order, as Lucene ranks, with a pg_trgm lift
+  for a title
+  named or misspelt in the query - and, with `semantic` set, by Ollama
+  embeddings in pgvector too, fused by reciprocal rank. Its driver is `pg`, an
+  optional peer dependency.
+- **`docket adapter add sqlite`** configures
+  [`@docket/adapter-sqlite`](../adapter-sqlite/README.md)
+  (`@chrisjowen/docket/adapters/sqlite`): the same in one SQLite file, which
+  needs no server - FTS5's BM25 with Lucene's idf, and optional embeddings compared in the
+  adapter, with no SQLite extension. Its driver is `better-sqlite3`, an
+  optional peer dependency.
+
+Both answer a question with the matches and, from each, its best paths of up
+to two links, found by one recursive query over the links under the Neo4j
+adapter's ranking rules, so the same graph gives the same paths. adapter-kit
+now holds those rules (`pathsAnswer`, `matchesOf`, `describePath`) and a
+fixture graph with the paths Neo4j keeps (`GRAPH_PATH_FIXTURE` in its testing
+helpers), which all three adapters' suites are held to. It also gains the
+Ollama embedder, the `semantic` config section and reciprocal rank fusion the
+two adapters share. The search evaluation compares both with the other
+strategies when `DOCKET_EVAL_PG_URL` or `DOCKET_EVAL_SQLITE=1` is set; their
+READMEs record the numbers.
+
 ## 0.11.0
 
 ### The same MCP tools everywhere

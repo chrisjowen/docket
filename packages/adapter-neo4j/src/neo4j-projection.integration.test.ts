@@ -11,7 +11,7 @@ import {
   type TableBlock
 } from '@docket/contracts'
 import type { EntityProjection } from '@docket/adapter-kit'
-import { entityInput, entityLink } from '@docket/adapter-kit/testing'
+import { entityInput, entityLink, GRAPH_PATH_FIXTURE } from '@docket/adapter-kit/testing'
 
 import type { Neo4jConfig } from './config.js'
 import { createNeo4jProjection } from './neo4j-projection.js'
@@ -340,6 +340,16 @@ describe.skipIf(!URL)('neo4j projection', () => {
       })
       expect(answer?.interpretation.nativeQuery).toContain("db.index.fulltext.queryNodes('memory_text', $lucene)")
       expect(answer?.coverage).toEqual({ mode: 'top-k', truncated: false, scope: 'default' })
+    })
+
+    it('keeps the graph-path baseline other graph adapters are held to', async () => {
+      await fresh()
+      for (const entity of GRAPH_PATH_FIXTURE.entities) await projection.upsert(entity)
+      for (const { question, traverse, paths } of GRAPH_PATH_FIXTURE.cases) {
+        const answer = await (await open({ traverse })).answer?.(ask(question))
+        const facts = answer?.evidence.filter((item) => item.kind === 'derived-fact').map((item) => item.text.replace(/ \([^)]*\)/g, ''))
+        expect(facts, JSON.stringify(traverse)).toEqual(paths)
+      }
     })
 
     it('reaches as far as traverse allows', async () => {

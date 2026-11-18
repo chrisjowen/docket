@@ -9,13 +9,17 @@ import { findPackageDir, type AdapterDistribution } from './resolve-module.js'
 /** The cognee adapter, which docket ships though no v1 projection names it. */
 export const COGNEE_ADAPTER_MODULE = '@docket/adapter-cognee'
 
+/** The Postgres and SQLite adapters, which docket ships for `docket adapter add` to opt into; no v1 projection names them. */
+export const POSTGRES_ADAPTER_MODULE = '@docket/adapter-postgres'
+export const SQLITE_ADAPTER_MODULE = '@docket/adapter-sqlite'
+
 /** Where the build copies each distributed package: `dist/bundled/<name without scope>`. */
 const BUNDLED_ROOT = fileURLToPath(new URL('../bundled/', import.meta.url))
 
 /**
  * The adapter packages the standard `@chrisjowen/docket` distribution ships
- * with - the ones v1 `projections` entries name, the cognee adapter, and the
- * cloud adapter `docket cloud link` configures. Core never imports them: it
+ * with - the ones v1 `projections` entries name, the cognee, Postgres and
+ * SQLite adapters, and the cloud adapter `docket cloud link` configures. Core never imports them: it
  * loads them like any other adapter module, so a minimal core deployment can
  * leave any of them out, and a project can install its own copy instead.
  *
@@ -23,7 +27,13 @@ const BUNDLED_ROOT = fileURLToPath(new URL('../bundled/', import.meta.url))
  * workspace, it is the package installed alongside docket itself.
  */
 export const standardDistribution: AdapterDistribution = {
-  packages: [...Object.values(V1_PROJECTION_MODULES), COGNEE_ADAPTER_MODULE, CLOUD_ADAPTER_MODULE],
+  packages: [
+    ...Object.values(V1_PROJECTION_MODULES),
+    COGNEE_ADAPTER_MODULE,
+    POSTGRES_ADAPTER_MODULE,
+    SQLITE_ADAPTER_MODULE,
+    CLOUD_ADAPTER_MODULE
+  ],
   find(name) {
     if (!this.packages.includes(name)) return undefined
     const bundled = join(BUNDLED_ROOT, name.slice(name.indexOf('/') + 1))
