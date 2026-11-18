@@ -438,7 +438,7 @@ optionalText
   export declare function optionalText(value: unknown, at: string, max: number): string | undefined;
 
 Origin
-  export type Origin = 'repo' | 'cloud' | 'cli';
+  export type Origin = 'repo' | 'cloud' | 'cli' | 'local';
 
 parseAttributes
   export declare function parseAttributes(raw: unknown, at: string): Record<string, unknown> | undefined;
@@ -727,14 +727,14 @@ WRITE_SCHEMA
   export declare const WRITE_SCHEMA = "docket-write.v1";
 
 writeAnswer
-  export declare function writeAnswer(tool: string, id: string, viewer: string, result: WriteResult, dryRun: boolean): {
+  export declare function writeAnswer(tool: string, id: string, viewer: string | null, result: WriteResult, dryRun: boolean): {
       isError?: boolean | undefined;
       content: {
           type: "text";
           text: string;
       }[];
       structuredContent: {
-          viewer: string;
+          viewer: string | null;
           diagnostics: {
               severity: "error" | "warning";
               code: string;
@@ -1080,7 +1080,10 @@ SearchQuery
   }
 
 searchScope
-  export declare function searchScope(include: unknown, minConfidence: unknown): Pick<SearchQuery, 'include' | 'minConfidence'> | string;
+  export declare function searchScope(include: unknown, minConfidence: unknown): {
+      include?: SearchBackend[];
+      minConfidence?: number;
+  } | string;
 
 searchTool
   export declare function searchTool(context: ToolContext): ServerTool;
@@ -1145,14 +1148,14 @@ WRITE_TOOL_NAMES
   export declare const WRITE_TOOL_NAMES: readonly string[];
 
 writeAnswer
-  export declare function writeAnswer(tool: string, id: string, viewer: string, result: WriteResult, dryRun: boolean): {
+  export declare function writeAnswer(tool: string, id: string, viewer: string | null, result: WriteResult, dryRun: boolean): {
       isError?: boolean | undefined;
       content: {
           type: "text";
           text: string;
       }[];
       structuredContent: {
-          viewer: string;
+          viewer: string | null;
           diagnostics: {
               severity: "error" | "warning";
               code: string;

@@ -426,12 +426,33 @@ repository root it serves, the pages `--allow-origin` let in, and where its
 MCP server answers.
 
 `POST /mcp` is docket's MCP server, for programs on this machine. It speaks
-Streamable HTTP and has one tool, `docket_search`. The tool returns what a
-search finds as text, with an MCP app (`ui://docket/search.html`) that draws
-the matches and the subgraphs the projections returned on the casebook's
-evidence board, with the resources one link away as faded context.
-A host that draws MCP apps, such as Wheelhouse, shows that board.
-[docs/mcp.md](docs/mcp.md) is its contract.
+Streamable HTTP and offers Docket's MCP surface: the same tools, with the same
+names, input schemas and results, that a self-hosted Docket server and Docket
+Cloud offer, over the project's own files.
+
+| Tool | What it does |
+| --- | --- |
+| `docket_search` | Searches the projections, and draws what they found |
+| `docket_get` | One resource by id: frontmatter, body, links, evidence and the documents that declare it |
+| `docket_ask` | A question in words, answered as `docket ask` answers it |
+| `docket_ontology` | The ontology, with its version |
+| `docket_remember` | Writes a resource, with evidence |
+| `docket_update_notes` | Appends dated notes to a resource, with evidence |
+| `docket_add_evidence` | More evidence for a resource or a link |
+| `docket_retire` | Retires a resource, removing the documents that declare it |
+| `docket_supersede` | Marks a resource out of date, replaced by a newer one |
+| `docket_propose_ontology_change` | Checks a change to the ontology and saves it as a draft |
+| `docket_publish_ontology_change` | Publishes a change to the ontology, migrating documents it breaks |
+
+Every write is validated against the ontology before it touches a file, and
+carries evidence stamped as observed by you. Writes change the project's
+documents in place; supersessions, published ontology versions and drafts are
+kept beside them under `.docket/`, so git keeps their history.
+`docket_search` returns what a search finds as text, with an MCP app
+(`ui://docket/search.html`) that draws the matches and the subgraphs the
+projections returned on the casebook's evidence board, with the resources one
+link away as faded context. A host that draws MCP apps, such as Wheelhouse,
+shows that board. [docs/mcp.md](docs/mcp.md) is its contract.
 
 ![The docket_search app full screen in Wheelhouse: a search for "neo4j adapter" draws its 12 matches and the subgraphs the adapters returned on the evidence board, resources one link away faded as context, with the matches and the paths returned listed beside it](docs/assets/docket-search-app.png)
 
@@ -456,8 +477,9 @@ Docket**, which starts the project's viewer with `docket open --init`, so
 docket is added to the project's clone and opened in one click.
 
 The plugin also declares the viewer's `/mcp` as its MCP server, `docket`, so
-Wheelhouse can call `docket_search` for a project, naming it in the call's
-`project` argument, and draw its app ([docs/mcp.md](docs/mcp.md)).
+Wheelhouse can call docket's tools for a project and draw `docket_search`'s
+app; a search names the project in its `project` argument
+([docs/mcp.md](docs/mcp.md)).
 
 The plugin brings the docket it runs: the CLI built from the plugin's own
 commit, committed under `wheelhouse/docket/`, which Wheelhouse runs with its
@@ -1104,6 +1126,8 @@ in any release:
 | `@chrisjowen/docket/ontology/icons` | The icons an ontology type can name |
 | `@chrisjowen/docket/open/graph`, `/open/types` | The graph `docket open` browses, and the shapes its API returns |
 | `@chrisjowen/docket/mcp/search`, `/mcp/types` | What `docket_search` finds, as text and as its MCP app's graph |
+| `@chrisjowen/docket/mcp/surface` | Docket's MCP surface: every tool's definition, argument checks and answers, which every Docket MCP server offers |
+| `@chrisjowen/docket/workspace` | The workspace core the write tools write through: how a write becomes a document, evidence, supersession, and the ontology's change check and migrations |
 | `@chrisjowen/docket/query/ask`, `/query/snapshot`, `/query/synthesis`, `/query/legacy` | Asking: the coordinator, the snapshot it reads, the synthesis prompt and citations, and the search result shape |
 
 Everything the root exports from these modules is also exported there; a
@@ -1120,8 +1144,9 @@ purpose.
 built on, shared by Docket Cloud and a self-hosted, single-tenant server: the
 ports a deployment plugs its storage, sign-in and tenancy into, the scope
 and role vocabulary MCP calls are checked against, the ontology lifecycle,
-how a write becomes a document, the canonical store on Postgres
-(`@chrisjowen/docket-server/postgres`), the MCP tools and endpoint
+how a write becomes a document (docket's own workspace core), the canonical
+store on Postgres (`@chrisjowen/docket-server/postgres`), the MCP tools - the
+same surface docket's own MCP server offers - and endpoint
 (`@chrisjowen/docket-server/mcp`), and the reconcile and search loops
 (`@chrisjowen/docket-server/runtime`). It is published on its own,
 imports nothing of any one deployment, and records its API in

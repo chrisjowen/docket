@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket-server",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "The core a Docket server is built on: the ports a deployment plugs its storage, auth and tenancy into, the scope and role vocabulary MCP calls are checked against, the ontology lifecycle, how writes become documents, the canonical store on Postgres, the MCP tools and endpoint, and the reconcile and search loops.",
   "license": "Apache-2.0",
   "keywords": [
@@ -61,7 +61,7 @@
     "yaml": "^2.8.1"
   },
   "peerDependencies": {
-    "@chrisjowen/docket": "^0.10.0"
+    "@chrisjowen/docket": "^0.11.0"
   },
   "devDependencies": {
     "@chrisjowen/docket": "workspace:*",

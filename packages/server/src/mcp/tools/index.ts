@@ -46,15 +46,7 @@ export function serverTools(context: ToolContext): ServerTool[] {
 }
 
 /** The names of the write tools: a rate limit counts calls to them against its write limit as well. */
-export const WRITE_TOOL_NAMES: readonly string[] = [
-  'docket_remember',
-  'docket_update_notes',
-  'docket_add_evidence',
-  'docket_retire',
-  'docket_supersede',
-  'docket_propose_ontology_change',
-  'docket_publish_ontology_change'
-]
+export { WRITE_TOOL_NAMES } from '../../docket.js'
 
 /** The tools `scopes` allow, as docket's `createMcpServer` takes them. */
 export function registryFor(tools: readonly ServerTool[], scopes: readonly Scope[]): ToolRegistry {

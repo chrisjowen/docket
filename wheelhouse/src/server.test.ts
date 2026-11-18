@@ -569,7 +569,20 @@ describe('the viewer, started as Wheelhouse starts it', () => {
     })
     expect(init.protocolVersion).toBe('2025-11-25')
     const { tools } = (await mcp('tools/list')) as { tools: { name: string; _meta: { ui: { resourceUri: string } } }[] }
-    expect(tools.map((tool) => tool.name)).toEqual(['docket_search'])
+    // Docket's whole MCP surface, the same tools Docket Cloud offers, docket_search first.
+    expect(tools.map((tool) => tool.name)).toEqual([
+      'docket_search',
+      'docket_get',
+      'docket_ask',
+      'docket_ontology',
+      'docket_remember',
+      'docket_update_notes',
+      'docket_add_evidence',
+      'docket_retire',
+      'docket_supersede',
+      'docket_propose_ontology_change',
+      'docket_publish_ontology_change'
+    ])
     const { contents } = (await mcp('resources/read', { uri: tools[0]!._meta.ui.resourceUri })) as { contents: { mimeType: string; text: string }[] }
     expect(contents[0]!.mimeType).toBe('text/html;profile=mcp-app')
     expect(contents[0]!.text).toMatch(/^<!doctype html>/)

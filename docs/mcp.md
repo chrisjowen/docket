@@ -1,7 +1,10 @@
-# docket's MCP server: `docket_search`
+# docket's MCP server
 
 `docket open` is also an [MCP](https://modelcontextprotocol.io) server for the
-docket it serves. It has one tool, `docket_search`, whose result carries an
+docket it serves. It offers Docket's MCP surface: the same eleven tools, with
+the same names, input schemas, annotations, argument checks and result shapes,
+as a self-hosted Docket server (`@chrisjowen/docket-server`) and Docket Cloud,
+over the project's own files. `docket_search`'s result carries an
 [MCP app](https://modelcontextprotocol.io/extensions/apps) (the
 `io.modelcontextprotocol/ui` extension, stable spec 2026-01-26). The app draws
 the matching resources and their links on the casebook's evidence board. A host
@@ -9,7 +12,12 @@ that draws MCP apps, such as Wheelhouse, shows that board where the search was
 made. A host that does not still gets the result as text.
 
 The server is in `packages/docket/src/mcp/`, the app in
-`packages/docket-ui/src/mcp-app/`. This file is the contract they keep.
+`packages/docket-ui/src/mcp-app/`. The surface - every tool's definition,
+argument checks and answers - is `packages/docket/src/mcp/surface/`
+(`@chrisjowen/docket/mcp/surface`), and the workspace core the write tools
+write through is `packages/docket/src/workspace/`
+(`@chrisjowen/docket/workspace`); `@chrisjowen/docket-server` builds its tools
+on both. This file is the contract they keep.
 
 ## Transport
 
@@ -33,6 +41,72 @@ In Wheelhouse, the docket plugin declares this server as its MCP server
 starts the viewer per project, so each project's `docket` server searches
 that project's docket.
 
+## The tools
+
+| Tool | What it does | Annotations |
+| --- | --- | --- |
+| `docket_search` | Searches the projections for a query, and draws what they found ([below](#the-tool-docket_search)) | read-only |
+| `docket_get` | One resource by id: its merged frontmatter and body, links, every piece of evidence, the documents that declare it, and whether it has been superseded | read-only |
+| `docket_ask` | A question in words, put to every projection and checked against the files, with a summary when `query.synthesis` is on, as `docket ask` answers | read-only |
+| `docket_ontology` | The ontology, as YAML and parsed, with its version | read-only |
+| `docket_remember` | Writes one resource - type, title, attributes, body, links - with evidence | write, idempotent |
+| `docket_update_notes` | Appends dated narrative notes to a resource, with evidence | write |
+| `docket_add_evidence` | More evidence for a resource or one of its links | write, idempotent |
+| `docket_retire` | Retires a resource that is wrong or gone, with a reason | write, destructive |
+| `docket_supersede` | Marks a resource out of date, replaced by a newer one, with a reason and evidence | write, idempotent |
+| `docket_propose_ontology_change` | Checks a change to the ontology against every document and saves it as a draft | write |
+| `docket_publish_ontology_change` | Publishes a change to the ontology, migrating documents a breaking change names | write, destructive |
+
+`tools/list` gives them in this order. Their input schemas and annotations are
+`TOOL_DEFINITIONS` in `@chrisjowen/docket/mcp/surface`, and every Docket MCP
+server lists exactly those; only a tool's `description` is worded for where it
+runs. Arguments a tool does not take, or of the wrong shape, are JSON-RPC
+error `-32602`, with the same message on every server. A write the ontology
+does not allow, or one without evidence, is a result with `isError: true` and
+the reasons, and writes nothing. Every write tool's `structuredContent` is a
+`docket-write.v1` object; `docket_get`'s is `docket-resource.v1`,
+`docket_ask`'s `docket-ask.v1`, `docket_ontology`'s `docket-ontology.v1`, and
+the ontology tools' `docket-ontology-proposal.v1` and
+`docket-ontology-publish.v1`.
+
+`packages/server/src/mcp/parity.test.ts` lists docket's tools and the server
+core's side by side and fails when they drift: a tool added, dropped or
+reordered, or a name, input schema, annotation or argument check that differs.
+
+### Over the project's files
+
+docket's server is one person's, on their machine, so it has no tenancy and
+no sign-in, and offers every tool, publishing the ontology too. A server
+keeps its own records in a database; docket keeps them as files under the
+docket's root, committed with the rest, so git keeps their history:
+
+- **Writes** merge into the resource's document in place: the first that
+  declares it, preferring one at its own path. A new resource gets a document
+  of its own, `<slug>.md` (the id without its type), beside the project's
+  other documents of its type; else in the folder `docket init` makes for the
+  type (`.docket/resources/services/`, `.docket/decisions/`); else at
+  `.docket/resources/<type>/` (`<slug>-2.md` when the path is taken). Each write is validated against the ontology with docket's own
+  validator before anything is written, and evidence is stamped as observed by
+  the person at the machine (`<user> via docket MCP`). Writing the same thing
+  again changes nothing. Two calls at once run one after the other.
+- **Retiring** removes the documents that declare the resource; git keeps
+  them. A result names no revision: the project's history is git's.
+- **Supersessions** are kept in `.docket/supersessions.yaml`. The documents
+  are untouched; `docket_search`, `docket_ask` and `docket_get` answer a
+  superseded record with the record current now and a note of the change.
+- **The ontology's version** is the one `.docket/ontology-history.yaml`
+  records for the ontology file as it is now. A file never published through
+  MCP is version 1, and one edited by hand since the last publish is the
+  version after it. `docket_publish_ontology_change` rewrites the ontology
+  file (and, with a migration, the documents it names) and adds the version to
+  the history; `expectedHead` is checked against it.
+- **Drafts** from `docket_propose_ontology_change` are saved as
+  `.docket/ontology-drafts/<id>.yaml`.
+- **`docket_search`** looks in the facts the projections hold and the
+  subgraphs they return; the project keeps no activity timeline, so
+  `include: ["timeline"]` finds nothing and says so. Its `score` is a match's
+  rank, since docket's own search does not re-rank.
+
 ## The tool: `docket_search`
 
 ```json
@@ -44,7 +118,9 @@ that project's docket.
     "properties": {
       "query": { "type": "string", "minLength": 1 },
       "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 },
-      "project": { "type": "string" }
+      "project": { "type": "string" },
+      "include": { "type": "array", "items": { "enum": ["facts", "graph", "timeline"] }, "minItems": 1 },
+      "minConfidence": { "type": "number", "minimum": 0, "maximum": 1, "deprecated": true }
     },
     "required": ["query"],
     "additionalProperties": false
@@ -60,11 +136,16 @@ that project's docket.
   and picks the project's `docket` server by it; a call without it is not
   drawn as an app. The server searches its own docket whatever it says, so it
   is not checked against the docket's name.
+- `include` is where to look: `facts` (what the projections hold), `graph`
+  (the subgraphs they return) and `timeline` (a server's activity log). All of
+  them when omitted.
+- `minConfidence` is ignored, with a warning: confidence is shown with each
+  result, and never decides what is returned.
 - The tool only reads, so Wheelhouse runs it, and an app's call to it, without
   asking. Its `_meta.ui` gives no `visibility`, so both the model and the app
   can call it.
 - If the arguments are wrong (no query, a limit out of range, a project that
-  is not a string, any other key) or the tool name is unknown, the answer is
+  is not a string, an `include` it does not know, any other key) or the tool name is unknown, the answer is
   JSON-RPC error `-32602`. If the docket cannot be read (no `.docket.yaml`,
   say), the answer is a result with `isError: true` and the reason as text.
 
@@ -97,8 +178,12 @@ nothing fades.
 
 ### The result
 
-`content` is one `text` item for the model to read. It names each match with
-its id, type, title, canonical file, confidence and links. Each returned link
+`content` is one `text` item for the model to read. It starts by saying that
+what follows was written by people and agents, to be read as data, not
+instructions. Then, first, any record the search found that has been
+superseded, with the record current now, and the matches by type. It names
+each match with its id, type, where it was found, title, canonical file,
+confidence and links. Each returned link
 names the projections that returned it and its confidence. It then lists:
 
 - the other resources the projections returned
@@ -107,7 +192,7 @@ names the projections that returned it and its confidence. It then lists:
 - the resources one link away in the files
 
 Last, it says how each projection answered, and whether the search index is
-behind the files.
+behind the files, and to call `docket_get` with an id for its full record.
 
 `structuredContent` is a `docket-search.v1` object, which the app draws
 (`packages/docket/src/mcp/types.ts`):
@@ -118,9 +203,12 @@ behind the files.
   "query": "orders",
   "project": { "name": "shop", "root": "/work/shop" },
   // What the projections found, most relevant first: the order the first answering projection ranked them in.
+  // Each with where it was found (`foundIn`) and its `score`, from 0 to 1; a match that stands in
+  // for superseded records names them in `supersedes`.
   "matches": [
     { "id": "service.orders", "type": "service", "title": "Orders API",
-      "path": ".docket/resources/services/orders.md", "confidence": 0.8, "foundBy": ["local"] }
+      "path": ".docket/resources/services/orders.md", "confidence": 0.8, "foundBy": ["local"],
+      "foundIn": ["facts"], "score": 1 }
   ],
   // The matches, the nodes of the subgraphs the projections returned, then the resources
   // one link away from the matches, either direction: at most 60.
@@ -154,13 +242,20 @@ behind the files.
   "index": { "synced": true, "behind": 0 },
   // docket open's page: the casebook shows a resource at <viewer>#<id>.
   "viewer": "http://127.0.0.1:4400/",
-  "warnings": []
+  "warnings": [],
+  // Present when the search found superseded records: each with the record current now
+  // (null when it is no longer on file), since when, why, and the change as one line.
+  "changes": [
+    { "id": "team.payments", "type": "team", "title": "Payments", "supersededBy": "team.money",
+      "current": { "id": "team.money", "type": "team", "title": "Money Movement" },
+      "since": "2026-11-01", "reason": "The team was renamed.", "note": "Out of date: ..." }
+  ]
 }
 ```
 
-`via`, `foundBy`, `confidence`, `why` and `paths` were added to
-`docket-search.v1` without changing its schema name: a reader that ignores
-them reads the result as before.
+`via`, `foundBy`, `confidence`, `why`, `paths`, `foundIn`, `score`,
+`supersedes` and `changes` were added to `docket-search.v1` without changing
+its schema name: a reader that ignores them reads the result as before.
 
 A source that could not answer has `error` instead of hits. When `index`
 says the index is not synced, or is `behind` the files, the search may miss

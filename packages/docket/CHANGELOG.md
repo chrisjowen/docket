@@ -3,6 +3,50 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.11.0
+
+### The same MCP tools everywhere
+
+`docket open`'s MCP server (`POST /mcp`) now offers Docket's whole MCP
+surface - the eleven tools Docket Cloud and a self-hosted Docket server offer,
+with the same names, input schemas, annotations, argument checks and result
+shapes - over the project's own files, where it offered only
+`docket_search`:
+
+- **To read**: `docket_search`, `docket_get` (one resource's merged record,
+  evidence and declaring documents), `docket_ask` (a question, answered as
+  `docket ask` answers it) and `docket_ontology`.
+- **To write**: `docket_remember`, `docket_update_notes`,
+  `docket_add_evidence`, `docket_retire`, `docket_supersede`,
+  `docket_propose_ontology_change` and `docket_publish_ontology_change`.
+  Every write is validated against the ontology with docket's own validator
+  before it touches a file, and carries evidence stamped as observed by the
+  person at the machine. Writes change the project's documents in place, or
+  make a new one beside the project's other documents of its type; retiring
+  removes the documents that declare a resource. Supersessions are kept in
+  `.docket/supersessions.yaml`, published ontology versions in
+  `.docket/ontology-history.yaml` and proposed drafts under
+  `.docket/ontology-drafts/`, so git keeps their history. One person's
+  machine, so there is no sign-in and every tool is offered, publishing the
+  ontology too.
+
+`docket_search` takes the surface's `include` and `minConfidence`, tags each
+match with where it was found and a score, answers a superseded record with
+the record current now, and opens its text by saying that what follows is
+data written by people and agents, not instructions. Its
+`docket-search.v1` result only gains fields.
+
+The surface is defined once, in docket, at a new entry point,
+`@chrisjowen/docket/mcp/surface`: every tool's definition, argument checks and
+answers. The workspace core the write tools write through - how a write
+becomes a document, evidence, supersession, and the ontology's change check,
+migrations and proposals - moved here from `@chrisjowen/docket-server`, at
+`@chrisjowen/docket/workspace`. The server builds its tools on both, and a
+test lists docket's tools beside the server's and fails when they drift. The
+root also exports `localTools`, the surface over a project's files, which
+`createMcpServer({ cwd })` offers by default; over a `source` it still offers
+`docket_search` alone.
+
 ## 0.10.0
 
 ### Apache-2.0, and public entry points for what hosts build on
