@@ -453,8 +453,11 @@ kept beside them under `.docket/`, so git keeps their history.
 `docket_search` returns what a search finds as text, with an MCP app
 (`ui://docket/search.html`) that draws the matches and the subgraphs the
 projections returned on the casebook's evidence board, with the resources one
-link away as faded context. A host that draws MCP apps, such as Wheelhouse,
-shows that board. [docs/mcp.md](docs/mcp.md) is its contract.
+link away as faded context. `docket_get` carries the same app, which draws
+the one resource it read as its card: its title and type, confidence, notes,
+attributes, links and evidence. A host that draws MCP apps, such as
+Wheelhouse, shows that board or card. [docs/mcp.md](docs/mcp.md) is its
+contract.
 
 ![The docket_search app full screen in Wheelhouse: a search for "neo4j adapter" draws its 12 matches and the subgraphs the adapters returned on the evidence board, resources one link away faded as context, with the matches and the paths returned listed beside it](docs/assets/docket-search-app.png)
 

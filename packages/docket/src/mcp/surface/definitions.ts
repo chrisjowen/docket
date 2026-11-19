@@ -17,7 +17,10 @@ import { EVIDENCE_SCHEMA } from './write-args.js'
  * host's tests compare its tools with it.
  */
 
-/** `docket_search`'s app: the matches and their links on the casebook's evidence board. */
+/**
+ * Docket's MCP app: `docket_search`'s matches and their links on the
+ * casebook's evidence board, and `docket_get`'s one resource as its card.
+ */
 export const APP_URI = 'ui://docket/search.html'
 
 /** The most characters of a `docket_ask` question. */
@@ -85,14 +88,15 @@ export const GET_DEFINITION = {
     "Read one resource of this workspace's docket by its id (for example service.orders): its merged frontmatter and " +
     'body, its links, every piece of evidence with the confidence it supports, the documents that declare it, and ' +
     'their revision history, and whether it has gone out of date: the record that superseded it, since when and why. ' +
-    'Call docket_search first to find ids.',
+    'Draws it as a card. Call docket_search first to find ids.',
   inputSchema: {
     type: 'object',
     properties: { id: { type: 'string', minLength: 1, maxLength: 200, description: 'The resource id, as docket_search returns it.' } },
     required: ['id'],
     additionalProperties: false
   },
-  annotations: { title: 'Read one resource', readOnlyHint: true, idempotentHint: true, openWorldHint: false }
+  annotations: { title: 'Read one resource', readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  _meta: { ui: { resourceUri: APP_URI } }
 } satisfies ToolDefinition
 
 export const ASK_DEFINITION = {

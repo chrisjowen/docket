@@ -8,9 +8,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
 spec:
   podSelector:
     matchLabels:
@@ -35,9 +35,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
 data:
   # docket serve's configuration (docs/self-hosting.md). Secrets are not here:
   # the database URL, the codec key and the tokens come from Secrets.
@@ -66,9 +66,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
   annotations:
     # The docket itself: kept if the release is removed.
     helm.sh/resource-policy: keep
@@ -87,9 +87,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
     app.kubernetes.io/component: server
 spec:
   type: ClusterIP
@@ -109,9 +109,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
     app.kubernetes.io/component: server
 spec:
   # One server: it writes the docket on a ReadWriteOnce volume and keeps its state there.
@@ -129,9 +129,9 @@ spec:
       labels:
         app.kubernetes.io/name: docket
         app.kubernetes.io/instance: docket
-        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/version: "0.15.0"
         app.kubernetes.io/managed-by: Helm
-        helm.sh/chart: docket-0.14.0
+        helm.sh/chart: docket-0.15.0
         app.kubernetes.io/component: server
       annotations:
         checksum/config: afbe806c0590b2bcf967c9bb8bbf206d5c08f5581b10c57346094c142e0ac653
@@ -148,7 +148,7 @@ spec:
         # The docket's directory and the server's, on a new volume. Not from the
         # image's working directory, /data/docket: the runtime would make it, as root.
         - name: dirs
-          image: ghcr.io/chrisjowen/docket:0.14.0
+          image: ghcr.io/chrisjowen/docket:0.15.0
           imagePullPolicy: IfNotPresent
           workingDir: /data
           command: [/nodejs/bin/node, -e, "for (const dir of ['/data/docket', '/data/state']) require('fs').mkdirSync(dir, { recursive: true })"]
@@ -160,7 +160,7 @@ spec:
             capabilities: { drop: [ALL] }
         # Makes a docket on a new volume (`docket init`); leaves an existing one as it is.
         - name: init
-          image: ghcr.io/chrisjowen/docket:0.14.0
+          image: ghcr.io/chrisjowen/docket:0.15.0
           imagePullPolicy: IfNotPresent
           args: [init]
           workingDir: /data/docket
@@ -173,7 +173,7 @@ spec:
             capabilities: { drop: [ALL] }
       containers:
         - name: docket
-          image: ghcr.io/chrisjowen/docket:0.14.0
+          image: ghcr.io/chrisjowen/docket:0.15.0
           imagePullPolicy: IfNotPresent
           args: [serve]
           env:
@@ -240,9 +240,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
 spec:
   ingressClassName: nginx
   tls:

@@ -94,9 +94,11 @@ offers. `docket_search` (read-only, given a `query` and the Wheelhouse
 (`text/html;profile=mcp-app`, no network), draws them, the subgraphs the
 projections returned and the resources one link away on the casebook's
 evidence board. From the app you can search again,
-pick a resource to see its file and links, open it in docket's own page, or go
-full screen. The plugin draws the app in no slot of its own; it is there for
-whatever in Wheelhouse calls `docket_search` for a project. The viewer must be
+pick a resource to see its file and links or its card, open it in docket's own
+page, or go full screen. `docket_get` carries the same app, which draws the
+resource it read as its card. The plugin draws the app in no slot of its own;
+it is there for whatever in Wheelhouse calls `docket_search` or `docket_get`
+for a project. The viewer must be
 running, as for the tab. [`docs/mcp.md`](../docs/mcp.md) is the tools'
 contract.
 
@@ -168,7 +170,7 @@ after the project installs docket, or the global docket with the driver
 installed next to it. `bin` is one plugin-wide setting, so it applies to every
 project.
 
-The tab says which docket the viewer runs (`Runs docket 0.14.0, shipped with
+The tab says which docket the viewer runs (`Runs docket 0.15.0, shipped with
 this plugin.`) while the viewer is not open, and its problems name it too.
 
 ## Settings
