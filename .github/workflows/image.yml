@@ -9,7 +9,7 @@ name: Image
 # postgres profile) and the Helm chart on a kind cluster (the same two).
 # Nothing is pushed.
 #
-# On a `v<version>` tag - the tag publish.yml stages docket on npm from - it
+# On a `v<version>` tag - the tag publish.yml publishes docket to npm from - it
 # does the same, then builds linux/amd64 and linux/arm64 and pushes them to
 # GHCR as <version>, <major>.<minor> and latest. The tag must match
 # packages/docket/package.json, which the chart and Compose name too.

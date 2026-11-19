@@ -1355,13 +1355,10 @@ specification is [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Releasing
 
-[`.github/workflows/publish.yml`](.github/workflows/publish.yml) stages
-`@chrisjowen/docket` on npm, with provenance, when a `v<version>` tag is pushed
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) publishes
+`@chrisjowen/docket` to npm, with provenance, when a `v<version>` tag is pushed
 (or a GitHub release creates one). It builds, typechecks and tests first, and
-refuses a tag that does not match `packages/docket/package.json`. npm does not
-allow publishing from CI without 2FA, so the workflow runs `npm stage publish`:
-the version lands in npm's staging area and goes live only once a maintainer
-approves it.
+refuses a tag that does not match `packages/docket/package.json`.
 
 1. Bump `version` in `packages/docket/package.json`, `CLI_VERSION` in
    `packages/claude-plugin/scripts/cli.js` and `version` in
@@ -1369,13 +1366,12 @@ approves it.
    they agree), and merge it.
 2. Tag that commit `v<version>` and push the tag, or publish a GitHub release
    for it.
-3. Approve the staged version with 2FA: `npm stage approve <stage-id>`, or the
-   Staged Packages tab on npmjs.com.
 
-The workflow authenticates with the `NPM_TOKEN` repository secret (an npm token
-with publish rights to `@chrisjowen/docket`, already configured) and signs
-provenance through GitHub's OIDC token. The first stage of a new package also
-creates a public `0.0.0-stage` placeholder version on npm.
+The workflow authenticates with npm trusted publishing: on npmjs.com,
+`chrisjowen/docket` and `publish.yml` are `@chrisjowen/docket`'s trusted
+publisher, so GitHub's OIDC token both publishes and signs provenance, with no
+token or 2FA approval. The `NPM_TOKEN` repository secret is used only if
+trusted publishing is not configured.
 
 Check what a release will contain with `npm pack --dry-run` in
 `packages/docket`.
@@ -1385,8 +1381,8 @@ bump `version` in `packages/server/package.json` and add its notes to
 [`packages/server/CHANGELOG.md`](packages/server/CHANGELOG.md), merge, then tag
 that commit `docket-server-v<version>`.
 [`.github/workflows/publish-server.yml`](.github/workflows/publish-server.yml)
-stages it, and a maintainer approves it with 2FA. `NPM_TOKEN` needs publish
-rights to `@chrisjowen/docket-server` too.
+publishes it, with `publish-server.yml` as `@chrisjowen/docket-server`'s trusted
+publisher on npmjs.com.
 
 The same `v<version>` tag also has
 [`.github/workflows/image.yml`](.github/workflows/image.yml) build and push
