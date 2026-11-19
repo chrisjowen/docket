@@ -1,6 +1,6 @@
 {
   "name": "@chrisjowen/docket",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "description": "Capture and classify project knowledge as typed Markdown in your repository; indexes are disposable projections.",
   "license": "Apache-2.0",
   "keywords": [

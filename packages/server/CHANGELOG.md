@@ -2,6 +2,47 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.11.0
+
+Needs `@chrisjowen/docket` 0.16.0: confidence from policies about sources,
+people as sources, and supersede as a scored proposal, as its changelog
+describes.
+
+### People and who a token acts for
+
+- `docket-server.yaml` takes a `people:` directory - who each person is, the
+  names they go by, and the attributes (role, team, flags) the ontology's
+  person policies score them by - for every workspace, over files or Postgres.
+  A Postgres store takes it as `postgresStore({ people })`, and its canonical
+  source and writes read it from the store context.
+- A token acts for a person: `docket serve token create --acts-for <person>`,
+  or `actsFor` in the config. Its writes stamp that person on each piece of
+  evidence (`principal`), evidence it gives without a source is theirs, and a
+  `Principal` carries `actsFor`. A token that acts for no one must name a
+  source for every piece of evidence.
+
+### Supersede proposals
+
+- `supersedeResource` records a proposal scored by the workspace's policies:
+  accepted when its evidence clears `trust.accept`, otherwise pending, the
+  older record current. `addProposalEvidence`, `rejectProposal`,
+  `promoteProposals` (run after a publish), `openProposals` and
+  `pendingProposals` manage them; `liveSupersessions` returns accepted ones and
+  pending ones a policy or role now carries.
+- `docket_add_evidence` takes `supersession`; `docket_get`, search and ask
+  show pending proposals beside the records they touch.
+- Migration `core_0002_supersede_proposals` adds the proposal's status, score,
+  bar and decision. Every supersession recorded before stays accepted and is
+  marked `grandfathered`; a record holds at most one accepted and one pending
+  proposal.
+
+### The ontology change check
+
+A change that moves confidence and nothing else is `rescore`, published without
+`acceptNarrowing`; the check lists every resource and link it re-scores, and
+the supersede proposals it would decide differently. The starter templates
+carry the person source and its policies.
+
 ## 0.10.0
 
 ### `docket_get` draws a resource as its card

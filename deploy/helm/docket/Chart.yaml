@@ -3,8 +3,8 @@ name: docket
 description: docket serve, a self-hosted, single-tenant Docket server. Docket's MCP surface for several people and agents, writing one ontology and one set of documents. No database by default; Postgres and other stores opt in.
 type: application
 # The chart and the image release together, at docket's version.
-version: 0.15.1
-appVersion: "0.15.1"
+version: 0.16.0
+appVersion: "0.16.0"
 home: https://github.com/chrisjowen/docket/blob/main/docs/deploy.md
 sources:
   - https://github.com/chrisjowen/docket
