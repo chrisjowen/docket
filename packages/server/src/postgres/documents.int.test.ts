@@ -22,7 +22,10 @@ import {
 
 /** The fixture's ontology with `pod` removed and `depends_on` narrowed to services, so validation has findings. */
 function broken(ontology: string): string {
-  return ontology.replace(/ {2}pod:\n {4}description: A running instance of a service.\n {4}icon: box\n/, '').replace('to: [service, datasource]', 'to: [service]')
+  return ontology
+    .replace(/ {2}pod:\n {4}description: A running instance of a service.\n {4}icon: box\n/, '')
+    .replace(/ {4}- name: code evidence of pod\n.*\n.*\n/, '')
+    .replace('to: [service, datasource]', 'to: [service]')
 }
 
 describe.skipIf(!TEST_PG_URL).each(STORE_KINDS)('the canonical source over $name', (kind) => {

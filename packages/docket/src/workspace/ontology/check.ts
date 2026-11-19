@@ -1,3 +1,5 @@
+import { aggregate } from '../../evidence/aggregate.js'
+import { bandOf, confidenceModel } from '../../evidence/confidence.js'
 import { parseMemoryFile, parseOntology, validateDocuments, type Diagnostic, type MemoryDocument, type Ontology } from '../docket.js'
 import { writableHere, type Origin } from '../origin.js'
 import { diffOntologies, type Change } from './diff.js'
@@ -5,15 +7,42 @@ import { MigrationInvalid, OntologyInvalid, isBreaking } from './errors.js'
 import { describeMigration, migrationProblems, rewriteDocument, type Migration } from './migrations.js'
 import { lintOntology, sizeProblem } from './yaml-io.js'
 
+/** A resource or link whose confidence the draft changes. */
+export interface Rescored {
+  resourceId: string
+  /** Set when it is one of the resource's links that is rescored. */
+  link?: { rel: string; target: string }
+  before: number
+  after: number
+  bandBefore: Band
+  bandAfter: Band
+}
+
+type Band = ReturnType<typeof bandOf>
+
+/**
+ * `safe` changes nothing a document says or how far it is trusted; `rescore`
+ * changes confidence - a policy, a source, a threshold - and nothing else;
+ * `narrowing` gives documents new diagnostics; `breaking` leaves resources or
+ * links the ontology no longer knows.
+ */
+export type Classification = 'safe' | 'rescore' | 'narrowing' | 'breaking'
+
+/** Narrowing and breaking changes are published only when the publisher accepts them; a rescore is not. */
+export const needsAcceptance = (classification: Classification): boolean =>
+  classification === 'narrowing' || classification === 'breaking'
+
 /** What a draft would do to the workspace's documents. */
 export interface CheckResult {
-  classification: 'safe' | 'narrowing' | 'breaking'
+  classification: Classification
   /** Diagnostics the draft gives that the head does not. */
   introduced: Diagnostic[]
   /** Diagnostics the head gives that the draft clears. */
   resolved: Diagnostic[]
   /** The resources that gain a diagnostic, and where each came from. */
   affected: { resourceId: string; origin: Origin }[]
+  /** Every resource and link whose confidence changes, in id order. */
+  rescored: Rescored[]
 }
 
 /** A check as the editor shows it: the result, and what it was made of. */
@@ -104,9 +133,41 @@ function resolvedBy(step: Migration): string | null {
   return null
 }
 
-export function classify(introduced: readonly Diagnostic[]): CheckResult['classification'] {
+export function classify(introduced: readonly Diagnostic[], rescored: readonly Rescored[] = []): Classification {
   if (introduced.some(isBreaking)) return 'breaking'
-  return introduced.length ? 'narrowing' : 'safe'
+  if (introduced.length) return 'narrowing'
+  return rescored.length ? 'rescore' : 'safe'
+}
+
+/**
+ * The resources and links whose confidence differs between two ontologies.
+ * Confidence is computed when read, so this is everything publishing the
+ * draft re-scores; a resource or link that is only on one side is a
+ * diagnostic's business, not this.
+ */
+export function rescore(
+  before: { documents: readonly MemoryDocument[]; ontology: Ontology | null },
+  after: { documents: readonly MemoryDocument[]; ontology: Ontology }
+): Rescored[] {
+  if (!before.ontology) return []
+  const was = confidenceModel(before.ontology)
+  const now = confidenceModel(after.ontology)
+  const previous = new Map(aggregate(before.documents, was).entities.map((entity) => [entity.id, entity]))
+  const out: Rescored[] = []
+  const note = (resourceId: string, from: number, to: number, link?: Rescored['link']) => {
+    if (from === to) return
+    out.push({ resourceId, ...(link ? { link } : {}), before: from, after: to, bandBefore: bandOf(was, from), bandAfter: bandOf(now, to) })
+  }
+  for (const entity of aggregate(after.documents, now).entities) {
+    const then = previous.get(entity.id)
+    if (!then) continue
+    note(entity.id, then.confidence, entity.confidence)
+    for (const link of entity.links) {
+      const old = then.links.find((candidate) => candidate.rel === link.rel && candidate.target === link.target)
+      if (old) note(entity.id, old.confidence, link.confidence, { rel: link.rel, target: link.target })
+    }
+  }
+  return out.sort((a, b) => (a.resourceId < b.resourceId ? -1 : a.resourceId > b.resourceId ? 1 : 0))
 }
 
 /**
@@ -134,7 +195,8 @@ export function compare(
     affected.push({ resourceId, origin })
   }
   affected.sort((a, b) => (a.resourceId < b.resourceId ? -1 : a.resourceId > b.resourceId ? 1 : 0))
-  return { classification: classify(introduced), introduced, resolved, affected }
+  const rescored = rescore(before, after)
+  return { classification: classify(introduced, rescored), introduced, resolved, affected, rescored }
 }
 
 /** Parses a draft, or throws `OntologyInvalid` with its errors at their paths. */

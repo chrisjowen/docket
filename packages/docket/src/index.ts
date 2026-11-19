@@ -68,20 +68,44 @@ export {
   type ValidateOptions as ValidateDocumentsOptions
 } from './ontology/validator.js'
 export { aggregate, type AggregateResult } from './evidence/aggregate.js'
-export { confidenceModel, type ConfidenceModel } from './evidence/confidence.js'
+export {
+  TRUST_DEFAULTS,
+  assess,
+  bandOf,
+  confidenceModel,
+  explain,
+  scoreObservation,
+  type ConfidenceModel,
+  type ExplainedObservation,
+  type Explanation,
+  type ObservationScore,
+  type PolicyMatch,
+  type ResolvedSource,
+  type SourceRegistry,
+  type Subject
+} from './evidence/confidence.js'
+export { withTrustSettings } from './evidence/legacy.js'
+export { convertOntologyText, type ConvertedOntology } from './ontology/convert.js'
+export { formatWhy, why, type WhyLink, type WhyPart, type WhyResult } from './commands/why.js'
 export { memoryConfigSchema, type MemoryConfig, type ResolvedConfig } from './config/config.js'
 /** The starting ontologies `docket init --template` offers, by name: absolute paths to the bundled yaml. */
 export { ONTOLOGY_TEMPLATES } from './config/defaults.js'
 export {
+  ATTRIBUTE_SETTERS,
   ATTRIBUTE_TYPES,
   EVIDENCE_LOCATION_FIELDS,
+  SOURCE_KINDS,
   error,
   ontologySchema,
   warning,
   type Diagnostic as ValidationDiagnostic,
   type MemoryDocument,
   type MemoryEntity,
-  type Ontology
+  type MemoryEvidence,
+  type Ontology,
+  type SourceTypeDefinition,
+  type TrustPolicy,
+  type TrustSettings
 } from './model/index.js'
 export { FALLBACK_ICON, ICON_NAMES, iconFor, isIconName, type IconName } from './ontology/icons.js'
 /** The graph `docket open` browses, read from any canonical source. */

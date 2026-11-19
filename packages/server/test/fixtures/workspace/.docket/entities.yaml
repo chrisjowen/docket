@@ -40,17 +40,57 @@ relationships:
     from: [service]
     to: [api]
 
-evidence:
+# Sources and confidence policies, converted from legacy evidence settings by
+# `docket ontology convert`; they score exactly as those did.
+sources:
+  human:
+    description: Stated or confirmed by a person.
+
+  code:
+    description: Source code.
+    locator:
+      path: { required: true }
+
+  manifest:
+    description: A dependency or package manifest.
+    locator:
+      path: { required: true }
+
+trust:
   unevidenced: 0.5
-  sources:
-    human:
-      description: Stated or confirmed by a person.
-      confidence: 0.9
-    code:
-      description: Source code.
-      confidence: 0.6
-      requires: [path]
-    manifest:
-      description: A dependency or package manifest.
-      confidence: 0.9
-      requires: [path]
+  fallback: 0.5
+  cap: 1
+  policies:
+    - name: human evidence
+      when: { source: human }
+      score: 0.9
+    - name: code evidence
+      when: { source: code }
+      score: 0.6
+    - name: manifest evidence
+      when: { source: manifest }
+      score: 0.9
+    - name: code evidence of datasource
+      when: { about: datasource, source: code }
+      score: 0.5
+    - name: code evidence of team
+      when: { about: team, source: code }
+      score: 0.3
+    - name: code evidence of api
+      when: { about: api, source: code }
+      score: 0.75
+    - name: code evidence of pod
+      when: { about: pod, source: code }
+      score: 0.3
+    - name: manifest evidence of depends_on
+      when: { about: depends_on, source: manifest }
+      score: 0.95
+    - name: code evidence of depends_on
+      when: { about: depends_on, source: code }
+      score: 0.65
+    - name: code evidence of owned_by
+      when: { about: owned_by, source: code }
+      score: 0.3
+    - name: code evidence of exposes
+      when: { about: exposes, source: code }
+      score: 0.75

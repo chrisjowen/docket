@@ -1,5 +1,6 @@
-import { confidenceModel } from '../evidence/confidence.js';
-import { error, warning } from '../model/index.js';
+import { confidenceModel, locatorOf } from '../evidence/confidence.js';
+import { EVIDENCE_LOCATION_FIELDS, error, warning } from '../model/index.js';
+const LEGACY_LOCATOR_FIELDS = new Set(EVIDENCE_LOCATION_FIELDS);
 /** One predicate per attribute kind. Array kinds check every element. */
 const MATCHES = {
     string: (v) => typeof v === 'string',
@@ -46,9 +47,10 @@ const capturedByAgent = (document) => {
     return by !== undefined && by !== 'human';
 };
 /**
- * Evidence must name a registered source kind and give the location fields
- * that kind requires - `code` names a file, `api` an endpoint - so every
- * observation can be found again.
+ * Evidence must name a registered source and give the locator fields that
+ * source requires - `code` names a file, `api` an endpoint - so every
+ * observation can be found again. A locator field or claimed attribute the
+ * source does not declare is kept but warned about: most likely a typo.
  */
 const checkEvidence = (evidence, subject, model, where) => {
     const diagnostics = [];
@@ -59,13 +61,25 @@ const checkEvidence = (evidence, subject, model, where) => {
             diagnostics.push(error('unknown-evidence-source', `Evidence source "${observation.source}" on ${subject} is not registered; known sources: ${known}.`, where));
             continue;
         }
-        const missing = (source.requires ?? []).filter((field) => observation[field] === undefined);
+        const locator = locatorOf(observation);
+        const fields = source.locator ?? {};
+        const missing = Object.entries(fields)
+            .filter(([field, definition]) => definition.required && locator[field] === undefined)
+            .map(([field]) => field);
         if (missing.length > 0) {
             diagnostics.push(error('evidence-location-missing', `${observation.source} evidence on ${subject} must give ${missing.join(' and ')}.`, where));
         }
         const anyOf = source.requiresAny ?? [];
-        if (anyOf.length > 0 && !anyOf.some((field) => observation[field] !== undefined)) {
+        if (anyOf.length > 0 && !anyOf.some((field) => locator[field] !== undefined)) {
             diagnostics.push(error('evidence-location-missing', `${observation.source} evidence on ${subject} must give at least one of ${anyOf.join(', ')}.`, where));
+        }
+        const undeclared = Object.keys(observation.locator ?? {}).filter((field) => !(field in fields) && !LEGACY_LOCATOR_FIELDS.has(field));
+        if (undeclared.length > 0) {
+            diagnostics.push(warning('unknown-locator-field', `${observation.source} evidence on ${subject} gives ${undeclared.map((field) => `"${field}"`).join(', ')}, which ${observation.source} does not declare under locator.`, where));
+        }
+        const unclaimed = Object.keys(observation.attributes ?? {}).filter((name) => !(name in (source.attributes ?? {})));
+        if (unclaimed.length > 0) {
+            diagnostics.push(warning('unknown-source-attribute', `${observation.source} evidence on ${subject} claims ${unclaimed.map((name) => `"${name}"`).join(', ')}, which ${observation.source} does not have as an attribute.`, where));
         }
     }
     return diagnostics;

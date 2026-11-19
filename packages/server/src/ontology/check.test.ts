@@ -160,7 +160,11 @@ describe('checkDraft over a workspace of 12 documents', () => {
     expect(evaluation.rewrites.map((rewrite) => rewrite.evidence)).toEqual(
       Array(2).fill({ source: 'human', observedBy: 'publisher', note: 'ontology v7 migration: mapType pod -> container' })
     )
-    expect(evaluation.check.classification).toBe('safe')
+    // The pods become containers, which no policy names: their code evidence
+    // is worth the source's 0.6, not a pod's 0.3, and the migration's human
+    // evidence adds to it.
+    expect(evaluation.check.classification).toBe('rescore')
+    expect(evaluation.check.rescored.every((entry) => entry.after > entry.before)).toBe(true)
   })
 
   it('refuses a migration that names what the draft does not have, and a draft that is not an ontology', () => {
@@ -168,6 +172,36 @@ describe('checkDraft over a workspace of 12 documents', () => {
     const migration: Migration[] = [{ op: 'renameType', from: 'pod', to: 'container' }]
     expect(() => checkDraft(snapshot, stored, fixture.ontology, { migration })).toThrow(MigrationInvalid)
     expect(() => checkDraft(snapshot, stored, 'version: 1\nresourceTypes: [\n')).toThrow(OntologyInvalid)
+  })
+
+  it('a policy edit is a rescore: it lists every resource and link whose confidence moves, and needs no acceptance', () => {
+    const { snapshot, stored } = workspace(fixture)
+    // What a manifest says of any resource: 0.9 -> 0.7.
+    const draft = edit(fixture.ontology, (doc) => {
+      const at = (doc.getIn(['trust', 'policies']) as { items: { get: (key: string) => unknown }[] }).items.findIndex(
+        (policy) => policy.get('name') === 'manifest evidence'
+      )
+      doc.setIn(['trust', 'policies', at, 'score'], 0.7)
+    })
+    const check = checkDraft(snapshot, stored, draft)
+    expect(check.classification).toBe('rescore')
+    expect(check.introduced).toEqual([])
+    expect(check.changes).toEqual([{ op: '~', text: 'policy `manifest evidence`: score 0.9 → 0.7' }])
+    expect(check.rescored).toEqual([
+      expect.objectContaining({ before: 0.9, after: 0.7, bandBefore: 'established', bandAfter: 'probable' })
+    ])
+    expect(check.rescored[0]?.link).toBeUndefined()
+  })
+
+  it('rewriting the same policies in another order rescores nothing, and stays safe', () => {
+    const { snapshot, stored } = workspace(fixture)
+    const draft = edit(fixture.ontology, (doc) => {
+      const policies = doc.getIn(['trust', 'policies']) as { items: unknown[] }
+      policies.items.reverse()
+    })
+    const check = checkDraft(snapshot, stored, draft)
+    expect(check.classification).toBe('safe')
+    expect(check.rescored).toEqual([])
   })
 
   it('checks a first ontology against nothing published', () => {

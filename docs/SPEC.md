@@ -855,38 +855,121 @@ links:
         lines: 22
 ```
 
-`source` names a kind registered under `evidence.sources` in the ontology.
-Location fields are `repository`, `path`, `lines`, `symbol`, `key`, `method`,
-`endpoint`, `urls` and `commit`; a source kind declares which it `requires`
-(all) or `requiresAny` (one of), and validation rejects evidence without them.
-Unknown fields are warned about and dropped.
+`source` names a source type registered under `sources` in the ontology.
+Every source accepts the common location fields `repository`, `path`, `lines`,
+`symbol`, `key`, `method`, `endpoint`, `urls` and `commit`. A source type
+declares any others it points with under `locator`, and an observation gives
+those in a `locator` map:
+
+```yaml
+evidence:
+  - source: email
+    locator:
+      message_id: <CAF2x@mail.example.com>
+    sourceRef: mailbox:sales
+    attributes:
+      mailbox: shared
+```
+
+A locator field marked `required` must be given, and one of a source's
+`requiresAny` fields; validation rejects evidence without them. `sourceRef`
+names the source instance (a repository, a person, a document) when the
+source's `identifiedBy` locator fields do not. `attributes` are claims about
+the source; only those its source type lets the reporter set count (§20.2).
+Unknown fields are warned about and dropped, as are locator fields and
+claimed attributes the source type does not declare.
 
 Evidence is append-only: a new sighting adds an entry and never rewrites an
 earlier one. Agent-captured files (`capturedBy` other than `human`) are warned
 about when the resource or a link records no evidence.
 
-## 20.2 Confidence
+## 20.2 Sources and trust
 
-Confidence is computed, never written by hand. One observation is worth its
-source kind's `confidence`, unless the resource type or relationship declares a
-`confidence:` rule for that kind:
+Confidence is computed, never written by hand, from policies about sources.
+The ontology declares its source types and, under `trust`, its policies and
+thresholds. Nothing about a source is built in: a source can be a person, a
+system such as a codebase or GitHub, or content such as a document.
 
 ```yaml
-resourceTypes:
-  pod:
-    confidence:
-      code: 0.3
-      runtime: 0.9
+sources:
+  github:
+    kind: system                 # identity | system | content
+    identifiedBy: [repo]         # the locator fields naming one instance
+    attributes:
+      branch_protected: { type: boolean, setBy: connection }
+    locator:
+      repo: { required: true }
+  codebase:
+    kind: system
+    identifiedBy: [repository]
+    attributes:
+      branch: { type: string, enum: [default, other], setBy: reporter }
+    locator:
+      repository: { required: true }
+      path: { required: true }
+
+trust:
+  unevidenced: 0.5               # a resource with no evidence and no stated confidence
+  fallback: 0.4                  # an observation no score policy matches
+  cap: 0.99                      # nothing is certain
+  accept: { default: 0.75, decision: 0.8 }
+  bands: { established: 0.8, probable: 0.5 }
+  policies:
+    - name: Repository found in GitHub
+      when: { about: repository, source: github }
+      score: 0.9
+    - name: Repository found in a local codebase
+      when: { about: repository, source: codebase }
+      score: 0.7
+    - name: Protected branch
+      when: { source: github, branch_protected: true }
+      adjust: 0.05
+    - name: Only seen in tests
+      when: { source: codebase, "@path": { matches: "**/*_test.*" } }
+      adjust: -0.1
 ```
 
-Observations of one kind do not corroborate each other: the strongest counts.
-Independent kinds combine as `1 - Π(1 - c)`, rounded to two decimals. With no
-evidence, a resource or link takes the highest stated `provenance.confidence`
-of the files that declare it, or `evidence.unevidenced`.
+An attribute's `setBy` says who may set it: `directory` (the people
+directory), `connection` (an integration), `registry` (the source registry)
+or `reporter` (whoever files the observation). Policies only see attested
+values and the claims of `reporter` attributes.
 
-An ontology without `evidence.sources` uses docket's built-in kinds, and a
-type or relationship without a `confidence:` block uses docket's built-in rule
-for that name, if any. Both come from the default ontology.
+A policy applies to observations from its `source`, about its resource type
+or relationship (`about`, optional), when every other key of `when` holds: an
+attribute of the source, or a locator field written `@field`. A bare value
+means equals (or contains, for a list attribute); an object tests with `not`,
+`in`, `has`, `gt`, `lt`, `exists` or `matches` (a glob).
+
+One observation is priced by the most specific matching `score` policy -
+`about` counts one and each condition one - with a tie going to the lower
+score, or `fallback` when none matches. Every matching `adjust` policy then
+adds its amount, and the result is held to `[0, cap]`.
+
+Observations of one source instance do not corroborate each other: the
+strongest counts. Distinct instances combine as `1 - Π(1 - s)`, held to `cap`
+and rounded to two decimals. An observation that names no instance (no
+`sourceRef`, and not every `identifiedBy` field) counts with the others of its
+source type, as evidence written before source instances does. With no
+evidence, a resource or link takes the highest stated `provenance.confidence`
+of the files that declare it, or `trust.unevidenced`.
+
+`bands` name how far a confidence goes - established, probable, and below
+that unverified - and `accept` is the score a supersede proposal needs to
+replace a record, by the replaced record's type. `docket why <id>` shows the
+working: each observation, the policy that priced it, the ones it beat, the
+adjustments, and which observations count.
+
+### Legacy evidence settings
+
+An ontology written before sources and policies - an `evidence:` block of
+source kinds, each with a `confidence` and `requires` / `requiresAny`
+location fields, and `confidence:` rules on types and relationships - still
+loads, with a `legacy-evidence-settings` warning, and scores exactly as it
+did: each source kind is read as a source type with a base policy, and each
+rule as a policy about its type or relationship. An ontology that says
+nothing about evidence gets docket's built-in sources and the rules its types
+and relationships inherit by name. `docket ontology convert --write` rewrites
+the file in the current form, changing no score and no other line.
 
 ---
 
@@ -1458,7 +1541,7 @@ Validate:
 - relationship existence.
 - source resource allowed for relationship.
 - target type where target exists.
-- evidence source kinds and the locations they require (§20.1).
+- sources, the locations they require, and the trust policies (§20.1, §20.2).
 - relationship attributes.
 - confidence range.
 - unresolved references.

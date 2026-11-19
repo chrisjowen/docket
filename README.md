@@ -45,7 +45,7 @@ history.
 your-repo/
 ├── .docket.yaml               config: where the case file lives, which adapters to feed
 └── .docket/
-    ├── entities.yaml          the ontology: resource types, relationships, evidence sources
+    ├── entities.yaml          the ontology: resource types, relationships, sources and trust policies
     ├── resources/             exhibits, one Markdown file per thing
     │   ├── services/orders.md         id: service.orders
     │   ├── teams/platform-engineering.md
@@ -254,7 +254,9 @@ docket graph --json         # every exhibit and link, read from the files, as ve
 docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen)
 docket open --allow-origin http://127.0.0.1:4310  # also let another page on this machine use it, such as Wheelhouse
 docket open --init          # start a docket here first, as docket init does, when this directory has none
-docket ontology list        # resource types, relationships and evidence sources
+docket ontology list        # resource types, relationships, sources and policies
+docket ontology convert     # rewrite legacy evidence settings as sources and policies
+docket why <id>             # which policies priced a resource and its links
 docket ontology show service  # attributes, relationships and confidence by source
 docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid, mempalace, cognee, postgres or sqlite: asks, shows the plan, applies it once confirmed
 docket adapters list        # configured adapter instances and whether each can load
@@ -666,37 +668,60 @@ evidence:
 Links take an `evidence` list of their own. Evidence is append-only: seeing
 something again adds an entry and never rewrites an earlier one.
 
-Confidence is computed, never written. The ontology says what one observation
-from each source is worth, per resource type and relationship — a dependency
-declared in a manifest is close to certain, a pod or secret named in code is
-not much until something independent confirms it:
+Confidence is computed, never written, from policies about the sources
+evidence comes from. The ontology declares each source - a codebase, GitHub,
+a document, a person - with the fields its observations point with and the
+attributes policies can score it by, and one list of policies says what an
+observation is worth: a dependency declared in a manifest is close to
+certain, a pod or secret named in code is not much until something
+independent confirms it:
 
 ```yaml
 # .docket/entities.yaml
-evidence:
-  sources:
-    code: { confidence: 0.6, requires: [path] }
-    runtime: { confidence: 0.85, requiresAny: [urls, endpoint, symbol] }
+sources:
+  code:
+    locator: { path: { required: true } }
+  runtime:
+    locator: { urls: {}, endpoint: {}, symbol: {} }
+    requiresAny: [urls, endpoint, symbol]
 
-resourceTypes:
-  pod:
-    confidence: { code: 0.3, infrastructure: 0.7, runtime: 0.9 }
-
-relationships:
-  depends_on:
-    confidence: { manifest: 0.95, code: 0.65 }
+trust:
+  policies:
+    - name: code evidence
+      when: { source: code }
+      score: 0.6
+    - name: code evidence of pod
+      when: { about: pod, source: code }
+      score: 0.3
+    - name: runtime evidence of pod
+      when: { about: pod, source: runtime }
+      score: 0.9
+    - name: Only seen in tests
+      when: { source: code, "@path": { matches: "**/*_test.*" } }
+      adjust: -0.1
 ```
 
-Observations of one source kind do not corroborate each other — the strongest
-counts — while independent kinds combine as `1 - (1 - a)(1 - b)`: a pod read
-from code (0.3) and seen running (0.9) is 0.93. A resource with no evidence
-takes its `provenance.confidence`, or `evidence.unevidenced` (0.5). The
-default ontology ships the source kinds `code`, `manifest`, `config`,
-`infrastructure`, `api`, `runtime`, `docs`, `conversation` and `human`, and
-rules for the types where it matters; an ontology written before evidence
-existed gets the same defaults. `docket ontology show <type>` prints the
-confidence each source earns for that type, and `docket validate` rejects
-evidence that does not give the location its source requires.
+The most specific matching `score` policy prices an observation (a tie goes
+to the lower score), and every matching `adjust` policy moves it. Policies
+can also test a source's attributes - a person's role, whether a document is
+verified - where the directory, a connection or the source registry sets
+them; a writer's own claims count only for attributes the source lets them
+set. Observations of one source instance do not corroborate each other — the
+strongest counts — while independent ones combine as `1 - (1 - a)(1 - b)`: a
+pod read from code (0.3) and seen running (0.9) is 0.93, and nothing goes
+above `trust.cap` (0.99). A resource with no evidence takes its
+`provenance.confidence`, or `trust.unevidenced` (0.5). The default ontology
+ships the sources `code`, `manifest`, `config`, `infrastructure`, `api`,
+`runtime`, `docs`, `conversation` and `human`, and policies for the types
+where it matters. `docket why <id>` shows which policies priced a resource
+and its links, `docket ontology show <type>` prints the confidence each
+source earns for that type, and `docket validate` rejects evidence that does
+not give the location its source requires.
+
+An ontology written in the earlier form - an `evidence:` block of source kinds
+and `confidence:` rules on types - still loads and scores exactly as before,
+with a warning; `docket ontology convert --write` rewrites it as sources and
+policies without changing a score.
 
 Several files may declare the same `id` — two branches capturing the same
 service, say. They are one resource: projections receive a single merged

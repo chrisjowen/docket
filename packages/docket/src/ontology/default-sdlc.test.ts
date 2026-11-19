@@ -6,6 +6,8 @@ import { DEFAULT_TYPE_ICONS, isIconName } from './icons.js'
 import { ontologySchema } from '../model/ontology.js'
 import { parseMemoryFile } from '../source/parser.js'
 import { validateDocuments } from './validator.js'
+import { confidenceModel, observationConfidence } from '../evidence/confidence.js'
+import { parseOntology } from './loader.js'
 
 const load = async () =>
   ontologySchema.parse(parse(await readFile(DEFAULT_ONTOLOGY_PATH, 'utf8')))
@@ -147,32 +149,37 @@ describe('default-sdlc.yaml', () => {
 
   it('declares where evidence comes from, and what each source needs to point at', async () => {
     const ontology = await load()
-    const sources = ontology.evidence?.sources ?? {}
+    const sources = ontology.sources ?? {}
     expect(Object.keys(sources).sort()).toEqual(
       ['api', 'code', 'config', 'conversation', 'docs', 'human', 'infrastructure', 'manifest', 'runtime']
     )
-    expect(sources.code?.requires).toEqual(['path'])
-    expect(sources.api?.requires).toEqual(['endpoint'])
-    expect(ontology.evidence?.unevidenced).toBe(0.5)
+    expect(sources.code?.locator).toEqual({ path: { required: true } })
+    expect(sources.api?.locator).toEqual({ endpoint: { required: true } })
+    expect(sources.runtime?.requiresAny).toEqual(['urls', 'endpoint', 'symbol'])
+    expect(ontology.trust?.unevidenced).toBe(0.5)
+    expect(ontology.evidence).toBeUndefined()
   })
 
-  it('only writes confidence rules for registered sources', async () => {
+  it('only writes policies for registered sources and for the types and relationships it defines', async () => {
     const ontology = await load()
-    const sources = new Set(Object.keys(ontology.evidence?.sources ?? {}))
-    const definitions = { ...ontology.resourceTypes, ...ontology.relationships }
-    for (const [name, definition] of Object.entries(definitions)) {
-      for (const source of Object.keys(definition.confidence ?? {})) {
-        expect(sources, `${name} -> ${source}`).toContain(source)
-      }
+    const sources = new Set(Object.keys(ontology.sources ?? {}))
+    const subjects = new Set([...Object.keys(ontology.resourceTypes), ...Object.keys(ontology.relationships)])
+    for (const policy of ontology.trust?.policies ?? []) {
+      expect(sources, policy.name).toContain(policy.when.source)
+      if (policy.when.about !== undefined) expect(subjects, policy.name).toContain(policy.when.about)
     }
   })
 
   it('trusts a manifest dependency and doubts runtime things read from code', async () => {
-    const ontology = await load()
-    expect(ontology.relationships.depends_on?.confidence?.manifest).toBeGreaterThanOrEqual(0.9)
+    const model = confidenceModel(await load())
+    expect(observationConfidence(model, { kind: 'relationship', rel: 'depends_on' }, 'manifest')).toBeGreaterThanOrEqual(0.9)
     for (const type of ['pod', 'secret', 'cluster', 'container', 'infrastructure']) {
-      expect(ontology.resourceTypes[type]?.confidence?.code, type).toBeLessThan(0.5)
-      expect(ontology.resourceTypes[type]?.confidence?.runtime, type).toBeGreaterThanOrEqual(0.85)
+      expect(observationConfidence(model, { kind: 'resource', type }, 'code'), type).toBeLessThan(0.5)
+      expect(observationConfidence(model, { kind: 'resource', type }, 'runtime'), type).toBeGreaterThanOrEqual(0.85)
     }
+  })
+
+  it('loads without a diagnostic', async () => {
+    expect(parseOntology(await readFile(DEFAULT_ONTOLOGY_PATH, 'utf8'), DEFAULT_ONTOLOGY_PATH).diagnostics).toEqual([])
   })
 })

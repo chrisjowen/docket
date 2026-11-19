@@ -181,7 +181,7 @@ describe('sync: files that share an id', () => {
 
     const ontology = join(root, '.docket', 'entities.yaml')
     const registry = await readFile(ontology, 'utf8')
-    await writeFile(ontology, registry.replace(/(  pod:[\s\S]*?confidence:\n      code: )0\.3/, '$10.2'), 'utf8')
+    await writeFile(ontology, registry.replace(/(when: \{ about: pod, source: code \}\n {6}score: )0\.3/, '$10.2'), 'utf8')
 
     expect((await sync({ cwd: root })).upserted).toEqual(['pod.orders-api'])
     expect(await nodes()).toEqual([expect.objectContaining({ confidence: 0.2 })])

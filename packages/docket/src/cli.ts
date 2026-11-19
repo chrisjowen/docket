@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 
 import { Command, Option } from 'commander'
@@ -28,7 +28,10 @@ import { setup, type StepOutcome } from './commands/setup.js'
 import { failureOf, sync, SyncError, type SyncResult } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
+import { formatWhy, why } from './commands/why.js'
 import { ONTOLOGY_TEMPLATES } from './config/defaults.js'
+import { loadConfig } from './config/loader.js'
+import { convertOntologyText } from './ontology/convert.js'
 import { DEFAULT_ASK_RESULTS } from './query/ask.js'
 import { describePath } from './query/legacy.js'
 import { adaptersStatus } from './query/status.js'
@@ -896,20 +899,54 @@ ontologyCommand
 
     const model = confidenceModel(registry)
     const sources = Object.keys(model.sources).sort()
-    console.log(`\nEvidence sources (${sources.length})`)
+    console.log(`\nSources (${sources.length})`)
     const sourceWidth = widest(sources)
     for (const name of sources) {
       const source = model.sources[name]
       if (!source) continue
+      const fields = Object.entries(source.locator ?? {})
       const needs = [
-        ...(source.requires ?? []),
+        ...fields.filter(([, field]) => field.required).map(([field]) => field),
         ...(source.requiresAny?.length ? [`one of ${source.requiresAny.join('/')}`] : [])
       ]
+      const attributes = Object.keys(source.attributes ?? {})
       console.log(
-        `  ${pad(name, sourceWidth)}  ${source.confidence}${needs.length ? `  needs ${needs.join(', ')}` : ''}`
+        `  ${pad(name, sourceWidth)}  ${source.kind ?? ''}${needs.length ? `  needs ${needs.join(', ')}` : ''}${attributes.length ? `  attributes ${attributes.join(', ')}` : ''}`.trimEnd()
       )
     }
-    console.log(`  (no evidence: ${model.unevidenced})`)
+
+    console.log(`\nPolicies (${model.policies.length})`)
+    const policyWidth = widest(model.policies.map((policy) => policy.name))
+    for (const policy of model.policies) {
+      const effect = policy.score !== undefined ? `${policy.score}` : `${policy.adjust! < 0 ? '' : '+'}${policy.adjust}`
+      const when = Object.entries(policy.when)
+        .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+        .join(', ')
+      console.log(`  ${pad(policy.name, policyWidth)}  ${pad(effect, 5)}  when ${when}`)
+    }
+    console.log(
+      `  (no evidence: ${model.unevidenced}; no policy: ${model.fallback}; at most ${model.cap}; ` +
+        `established ≥ ${model.bands.established}, probable ≥ ${model.bands.probable})`
+    )
+  })
+
+ontologyCommand
+  .command('convert')
+  .description('Rewrite legacy evidence: and confidence: settings as sources: and trust: policies that score the same')
+  .option('--write', 'write the converted ontology back to its file instead of printing it')
+  .action(async (options: { write?: boolean }) => {
+    const resolved = await loadConfig(process.cwd())
+    const converted = convertOntologyText(readFileSync(resolved.ontologyPath, 'utf8'))
+    if (!converted.changed) {
+      console.error(`${resolved.ontologyPath} already gives sources: and trust:; nothing to convert.`)
+      return
+    }
+    if (!options.write) {
+      process.stdout.write(converted.yaml)
+      return
+    }
+    writeFileSync(resolved.ontologyPath, converted.yaml)
+    console.log(`✓ converted ${resolved.ontologyPath}; every score is unchanged`)
   })
 
 ontologyCommand
@@ -946,17 +983,30 @@ ontologyCommand
     const extraction = definition.extraction?.instructions
     if (extraction) console.log(`\n  extraction\n    ${extraction.trim()}`)
 
-    // What one observation of this type is worth, by where it was seen. A
-    // value the type sets itself is marked, so its rules stand out.
+    // What one observation of this type is worth, by where it was seen, with
+    // nothing more said about the source. A policy naming the type is marked.
     const model = confidenceModel(registry)
-    const rules = model.resourceTypes[type] ?? {}
+    const own = new Set(model.policies.filter((policy) => policy.when.about === type).map((policy) => policy.when.source))
     const sources = Object.keys(model.sources).sort()
     const sourceWidth = widest(sources)
-    console.log('\n  confidence by evidence source')
+    console.log('\n  confidence by source')
     for (const source of sources) {
       const value = observationConfidence(model, { kind: 'resource', type }, source)
-      console.log(`    ${pad(source, sourceWidth)}  ${value}${source in rules ? '  (this type)' : ''}`)
+      console.log(`    ${pad(source, sourceWidth)}  ${value}${own.has(source) ? '  (this type)' : ''}`)
     }
+  })
+
+program
+  .command('why')
+  .argument('<id>', 'the resource to explain')
+  .description('Explain a resource\'s confidence and its links\': each observation, the policies that priced it, and what counts')
+  .option('--json', 'print the explanation as JSON')
+  .action(async (id: string, options: { json?: boolean }) => {
+    const result = await why(id)
+    if (options.json) console.log(JSON.stringify(result, null, 2))
+    else console.log(formatWhy(result))
+    if (!result.resource) process.exitCode = 1
+    report(result.diagnostics)
   })
 
 const cloudCommand = program

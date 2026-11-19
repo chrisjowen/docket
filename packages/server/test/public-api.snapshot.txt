@@ -94,20 +94,21 @@ checkDraft
 
 CheckResult
   export interface CheckResult {
-      classification: 'safe' | 'narrowing' | 'breaking';
+      classification: Classification;
       introduced: Diagnostic[];
       resolved: Diagnostic[];
       affected: {
           resourceId: string;
           origin: Origin;
       }[];
+      rescored: Rescored[];
   }
 
 checkScope
   export declare function checkScope(effective: readonly Scope[], needed: Scope): Refusal | null;
 
 classify
-  export declare function classify(introduced: readonly Diagnostic[]): CheckResult['classification'];
+  export declare function classify(introduced: readonly Diagnostic[], rescored?: readonly Rescored[]): Classification;
 
 cloudDocumentPath
   export declare function cloudDocumentPath(document: {

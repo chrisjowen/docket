@@ -12,7 +12,7 @@ graphs are disposable projections rebuilt from them.
 
 ```text
 .docket.yaml                config: where the case file lives, which adapters to feed
-.docket/entities.yaml       the ontology: resource types, relationships, evidence sources
+.docket/entities.yaml       the ontology: resource types, relationships, sources and trust policies
 .docket/resources/...       exhibits, one Markdown file per service, team, datasource...
 .docket/decisions/          decisions and why
 .docket/constraints/        rules the system must obey

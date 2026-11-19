@@ -3,6 +3,49 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## Unreleased
+
+### Confidence comes from policies about sources
+
+The ontology now says where evidence comes from as `sources:` and how much it
+is worth as `trust:` policies, in one place, instead of a number on each
+evidence kind and `confidence:` rules scattered over types and relationships.
+
+- A source type declares its own `locator` fields - a message id, a URL, a
+  section - beside the common ones every source accepts (`repository`,
+  `path`, `lines`, `symbol`, `key`, `method`, `endpoint`, `urls`, `commit`),
+  and its `attributes`, each saying who may set it (`directory`,
+  `connection`, `registry`, or the `reporter` who files the observation).
+  Nothing SDLC-specific is built in.
+- A policy reads "when the source is X (about type T, with attributes Y), it
+  is worth S" or "…, adjust by ±d". The most specific matching `score` policy
+  wins, a tie goes to the lower score, and every matching adjustment applies.
+  Conditions test attributes and locator fields (`@path: { matches: … }`).
+- Observations of one source instance (`identifiedBy` locator fields, or a
+  `sourceRef`) count once; distinct instances add up. Evidence that names no
+  instance counts by source type, as before. A writer's claimed `attributes`
+  count only where the source type lets the reporter set them.
+- `trust` also holds `unevidenced`, `fallback` (0.4), `cap` (0.99), the
+  `accept` bar a supersede proposal will need (0.75, decisions 0.80) and the
+  confidence `bands` (established 0.80, probable 0.50).
+- `docket why <id>` explains a resource's confidence and its links': each
+  observation, the policy that priced it, the ones it beat, adjustments,
+  ignored claims, and which observations count.
+- The ontology change check has a new class, `rescore`, for a change that
+  moves confidence and nothing else, and lists every resource and link it
+  rescores with its band before and after. A rescore is published without
+  `acceptNarrowing`.
+
+### Existing ontologies score exactly as before
+
+An `evidence:` block and `confidence:` rules still load, with a
+`legacy-evidence-settings` warning, and are read as sources and policies that
+give every resource and link the same confidence - and the same projection
+hash, so nothing reprojects. `docket ontology convert --write` rewrites the
+file in the new form without changing a score or any other line. The bundled
+templates are now in the new form, with a 0.99 cap and a 0.40 fallback for an
+observation no policy prices.
+
 ## 0.15.1
 
 ### Ask answers with the current record when one has been superseded
