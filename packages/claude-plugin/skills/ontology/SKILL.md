@@ -98,48 +98,70 @@ Rules:
   `extraction.clues` and `extraction.doNotConfuseWith` where confusion is
   likely.
 
-## Evidence sources and confidence rules
+## Sources and trust policies
 
-Captured resources and links carry `evidence` naming a source kind - `code`,
-`manifest`, `infrastructure`, `runtime` and so on. Confidence is computed from
-that evidence, never written by hand, and the ontology says what each kind of
-evidence is worth:
+Captured resources and links carry `evidence` naming a source - `code`,
+`manifest`, `infrastructure`, `runtime`, a person, a document - and where it
+was seen. Confidence is computed from that evidence, never written by hand:
+the ontology declares its `sources` and, under `trust`, the policies that say
+what an observation is worth.
 
 ```yaml
-evidence:
-  unevidenced: 0.5          # no evidence and no stated provenance.confidence
-  sources:
-    code:
-      description: Source code. Record the file, lines and symbol.
-      confidence: 0.6       # one observation, unless a type says otherwise
-      requires: [path]      # location fields every observation must give
-    runtime:
-      confidence: 0.85
-      requiresAny: [urls, endpoint, symbol]
+sources:
+  code:
+    description: Source code. Record the file, lines and symbol.
+    locator:
+      path: { required: true }      # every observation must give it
+  runtime:
+    locator: { urls: {}, endpoint: {}, symbol: {} }
+    requiresAny: [urls, endpoint, symbol]
+  document:
+    kind: content
+    attributes:
+      status: { type: string, enum: [verified, draft], setBy: registry }
+    locator:
+      url: { required: true }       # observations give it under `locator:`
 
-resourceTypes:
-  secret:
-    confidence:             # what one observation is worth for this type
-      code: 0.3             # a name in code is not proof a secret exists
-      runtime: 0.85
-
-relationships:
-  depends_on:
-    confidence:
-      manifest: 0.95        # a declared dependency is close to certain
+trust:
+  unevidenced: 0.5                  # no evidence and no stated provenance.confidence
+  fallback: 0.4                     # no score policy matches
+  cap: 0.99
+  policies:
+    - name: code evidence
+      when: { source: code }
+      score: 0.6
+    - name: A secret named in code   # a name in code is not proof a secret exists
+      when: { about: secret, source: code }
+      score: 0.3
+    - name: A declared dependency
+      when: { about: depends_on, source: manifest }
+      score: 0.95
+    - name: Verified document
+      when: { source: document, status: verified }
+      score: 0.85
+    - name: Only seen in tests
+      when: { source: code, "@path": { matches: "**/*_test.*" } }
+      adjust: -0.1
 ```
 
-- Observations of one source kind do not corroborate each other; the strongest
-  counts. Independent kinds combine: `1 - (1 - a)(1 - b)`.
-- Add a type's `confidence:` block when evidence about it is notably stronger
-  or weaker than the source's default - typically for things code only refers
-  to by name (pods, secrets, clusters) or things a manifest declares outright.
-- `evidence.sources` replaces docket's built-in kinds when present. A type or
-  relationship without a `confidence:` block uses docket's built-in rule for
-  that name, if there is one. `docket ontology show <type>` prints the
-  effective value per source.
-- Location fields are `repository`, `path`, `lines`, `symbol`, `key`,
-  `method`, `endpoint`, `urls` and `commit`.
+- The most specific matching `score` policy prices an observation - `about`
+  counts one, each condition one - and a tie goes to the lower score. Every
+  matching `adjust` policy then moves it. Nothing goes above `cap`.
+- Observations of one source instance do not corroborate each other; the
+  strongest counts. Independent ones combine: `1 - (1 - a)(1 - b)`.
+- Add a policy `about` a type when evidence about it is notably stronger or
+  weaker than the source's default - typically for things code only refers to
+  by name (pods, secrets, clusters) or things a manifest declares outright.
+- An attribute's `setBy` says who may set it. Policies trust what the
+  `directory`, a `connection` or the `registry` says; a writer's claims count
+  only for `reporter` attributes.
+- Every source accepts the common location fields `repository`, `path`,
+  `lines`, `symbol`, `key`, `method`, `endpoint`, `urls` and `commit`;
+  declare any others under `locator`.
+- `docket ontology show <type>` prints the effective value per source, and
+  `docket why <id>` the policies that priced a resource. An ontology still in
+  the legacy `evidence:` form scores as it did; `docket ontology convert
+  --write` rewrites it.
 
 ## Never write indexes
 

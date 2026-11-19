@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { hashContent } from '../../source/hashing.js';
-import { checkDraft, evaluateDraft, parseDraft } from '../../workspace/ontology/check.js';
+import { checkDraft, evaluateDraft, needsAcceptance, parseDraft } from '../../workspace/ontology/check.js';
 import { OntologyBreakingChange, OntologyNarrowingChange, StaleDraft } from '../../workspace/ontology/errors.js';
 import { proposedText } from '../../workspace/ontology/propose.js';
 import { importYaml } from '../../workspace/ontology/yaml-io.js';
@@ -62,7 +62,7 @@ export async function publishOntologyChange(workspace, writer, change, options =
             throw new OntologyBreakingChange(check);
         disposed.push({ ...resource, disposition });
     }
-    if (check.classification !== 'safe' && !change.acceptNarrowing)
+    if (needsAcceptance(check.classification) && !change.acceptNarrowing)
         throw new OntologyNarrowingChange(check);
     for (const rewrite of rewrites)
         await writeText(absolute(workspace.resolved, rewrite.path), rewrite.raw);

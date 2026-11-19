@@ -35,11 +35,14 @@ export { MATTER_OPTIONS, parseMemoryFile } from './source/parser.js';
 export { hashContent } from './source/hashing.js';
 export { validateDocuments } from './ontology/validator.js';
 export { aggregate } from './evidence/aggregate.js';
-export { confidenceModel } from './evidence/confidence.js';
+export { TRUST_DEFAULTS, assess, bandOf, confidenceModel, explain, scoreObservation } from './evidence/confidence.js';
+export { withTrustSettings } from './evidence/legacy.js';
+export { convertOntologyText } from './ontology/convert.js';
+export { formatWhy, why } from './commands/why.js';
 export { memoryConfigSchema } from './config/config.js';
 /** The starting ontologies `docket init --template` offers, by name: absolute paths to the bundled yaml. */
 export { ONTOLOGY_TEMPLATES } from './config/defaults.js';
-export { ATTRIBUTE_TYPES, EVIDENCE_LOCATION_FIELDS, error, ontologySchema, warning } from './model/index.js';
+export { ATTRIBUTE_SETTERS, ATTRIBUTE_TYPES, EVIDENCE_LOCATION_FIELDS, SOURCE_KINDS, error, ontologySchema, warning } from './model/index.js';
 export { FALLBACK_ICON, ICON_NAMES, iconFor, isIconName } from './ontology/icons.js';
 /** The graph `docket open` browses, read from any canonical source. */
 export { readGraph } from './open/graph.js';

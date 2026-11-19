@@ -44,6 +44,8 @@ function attributeChanges(owner, before = {}, after = {}) {
         }
         if (was.description !== now.description)
             parts.push('description');
+        if (was.setBy !== now.setBy)
+            parts.push(`set by ${was.setBy ?? '-'} → ${now.setBy ?? '-'}`);
         out.push({ op: '~', text: `attribute ${code(`${owner}.${name}`)}: ${parts.join(', ')}` });
     }
     return out;
@@ -51,7 +53,64 @@ function attributeChanges(owner, before = {}, after = {}) {
 function fieldsChanged(before, after, fields) {
     return fields.filter((field) => !same(before[field], after[field]));
 }
-/** What changed from one ontology to the next, types first, then relationships, then evidence. */
+function sourceChanges(before, after) {
+    const out = [];
+    for (const name of Object.keys(after))
+        if (!(name in before))
+            out.push({ op: '+', text: `source ${code(name)}` });
+    for (const name of Object.keys(before))
+        if (!(name in after))
+            out.push({ op: '-', text: `source ${code(name)}` });
+    for (const [name, then] of Object.entries(before)) {
+        const now = after[name];
+        if (!now || same(then, now))
+            continue;
+        const parts = fieldsChanged(then, now, ['description', 'kind', 'identifiedBy', 'requiresAny']);
+        const { added, removed } = setDiff(Object.keys(then.locator ?? {}), Object.keys(now.locator ?? {}));
+        if (added.length)
+            parts.push(`locator += ${list(added)}`);
+        if (removed.length)
+            parts.push(`locator −= ${list(removed)}`);
+        const changed = Object.keys(then.locator ?? {}).filter((field) => field in (now.locator ?? {}) && !same(then.locator?.[field], now.locator?.[field]));
+        if (changed.length)
+            parts.push(`locator ~ ${list(changed)}`);
+        if (parts.length)
+            out.push({ op: '~', text: `source ${code(name)}: ${parts.join(', ')}` });
+        out.push(...attributeChanges(`sources.${name}`, then.attributes, now.attributes));
+    }
+    return out;
+}
+function trustChanges(before, after, fresh) {
+    const out = [];
+    for (const setting of ['unevidenced', 'fallback', 'cap']) {
+        const was = before[setting];
+        const now = after[setting];
+        if (fresh && now !== undefined)
+            out.push({ op: '+', text: `trust: ${setting} ${now}` });
+        else if (!fresh && was !== now)
+            out.push({ op: '~', text: `trust: ${setting} ${was ?? 'default'} → ${now ?? 'default'}` });
+    }
+    for (const setting of ['accept', 'bands']) {
+        if (!same(before[setting] ?? {}, after[setting] ?? {}))
+            out.push({ op: fresh ? '+' : '~', text: `trust: ${setting} ${JSON.stringify(after[setting] ?? {})}` });
+    }
+    const policiesBefore = new Map((before.policies ?? []).map((policy) => [policy.name, policy]));
+    const policiesAfter = new Map((after.policies ?? []).map((policy) => [policy.name, policy]));
+    for (const [name, policy] of policiesAfter) {
+        const was = policiesBefore.get(name);
+        if (!was)
+            out.push({ op: '+', text: `policy ${code(name)}` });
+        else if (!same(was, policy)) {
+            const parts = fieldsChanged(was, policy, ['when', 'score', 'adjust', 'description']).map((field) => field === 'score' || field === 'adjust' ? `${field} ${was[field] ?? '-'} → ${policy[field] ?? '-'}` : field);
+            out.push({ op: '~', text: `policy ${code(name)}: ${parts.join(', ')}` });
+        }
+    }
+    for (const name of policiesBefore.keys())
+        if (!policiesAfter.has(name))
+            out.push({ op: '-', text: `policy ${code(name)}` });
+    return out;
+}
+/** What changed from one ontology to the next: types, relationships, then sources and trust. */
 export function diffOntologies(before, after) {
     const was = before ?? { version: 1, resourceTypes: {}, relationships: {} };
     const out = [];
@@ -65,7 +124,7 @@ export function diffOntologies(before, after) {
         const now = after.resourceTypes[name];
         if (!now)
             continue;
-        const fields = fieldsChanged(then, now, ['description', 'icon', 'extraction', 'confidence']);
+        const fields = fieldsChanged(then, now, ['description', 'icon', 'extraction']);
         if (fields.length)
             out.push({ op: '~', text: `type ${code(name)}: ${fields.join(', ')}` });
         out.push(...attributeChanges(name, then.attributes, now.attributes));
@@ -83,45 +142,13 @@ export function diffOntologies(before, after) {
         const parts = [
             ...constraintChange('from', then.from, now.from),
             ...constraintChange('to', then.to, now.to),
-            ...fieldsChanged(then, now, ['description', 'confidence'])
+            ...fieldsChanged(then, now, ['description'])
         ];
         if (parts.length)
             out.push({ op: '~', text: `relationship ${code(name)}: ${parts.join(', ')}` });
         out.push(...attributeChanges(name, then.attributes, now.attributes));
     }
-    const sourcesBefore = was.evidence?.sources ?? {};
-    const sourcesAfter = after.evidence?.sources ?? {};
-    for (const name of Object.keys(sourcesAfter))
-        if (!(name in sourcesBefore))
-            out.push({ op: '+', text: `evidence source ${code(name)}` });
-    for (const name of Object.keys(sourcesBefore))
-        if (!(name in sourcesAfter))
-            out.push({ op: '-', text: `evidence source ${code(name)}` });
-    for (const [name, then] of Object.entries(sourcesBefore)) {
-        const now = sourcesAfter[name];
-        if (!now || same(then, now))
-            continue;
-        const parts = [];
-        if (then.confidence !== now.confidence)
-            parts.push(`confidence ${then.confidence} → ${now.confidence}`);
-        for (const field of ['requires', 'requiresAny']) {
-            const { added, removed } = setDiff(then[field] ?? [], now[field] ?? []);
-            if (added.length)
-                parts.push(`${field} += ${list(added)}`);
-            if (removed.length)
-                parts.push(`${field} −= ${list(removed)}`);
-        }
-        if (then.description !== now.description)
-            parts.push('description');
-        out.push({ op: '~', text: `evidence source ${code(name)}: ${parts.join(', ')}` });
-    }
-    const unevidencedBefore = was.evidence?.unevidenced;
-    const unevidencedAfter = after.evidence?.unevidenced;
-    if (!before && unevidencedAfter !== undefined) {
-        out.push({ op: '+', text: `evidence: unevidenced ${unevidencedAfter}` });
-    }
-    else if (unevidencedBefore !== unevidencedAfter) {
-        out.push({ op: '~', text: `evidence: unevidenced ${unevidencedBefore ?? 'default'} → ${unevidencedAfter ?? 'default'}` });
-    }
+    out.push(...sourceChanges(was.sources ?? {}, after.sources ?? {}));
+    out.push(...trustChanges(was.trust ?? {}, after.trust ?? {}, !before));
     return out;
 }

@@ -11,53 +11,93 @@
 
 version: 1
 
-# --- Evidence and confidence ---------------------------------------------------
+# --- Sources and trust ---------------------------------------------------------
 #
 # Every captured resource and link records where it was seen, as `evidence`
-# entries naming a source kind below and the exact location. Confidence is
-# computed from that evidence, never written by hand, and says how far the
-# record is supported - not how well it matches any question asked of it.
+# entries naming one of the sources below and the exact location - the
+# fields under a source's `locator`, or the common ones every source takes
+# (repository, path, lines, symbol, key, method, endpoint, urls, commit).
+# Confidence is computed from that evidence by the policies under `trust`,
+# never written by hand:
+#
+#   - A `score` policy prices an observation: "when the source is X (about
+#     type T, with attributes Y), it is worth S". The most specific matching
+#     policy wins - naming the type counts one, each condition one - and a tie
+#     goes to the lower score. With no match an observation is worth
+#     `fallback`.
+#   - An `adjust` policy moves that price up or down; every match applies.
+#   - Observations of one source instance do not corroborate each other: the
+#     strongest one counts. Independent sources combine, so a pod seen in code
+#     (0.3) and running in the cluster (0.9) is 1 - 0.7 * 0.1 = 0.93, and
+#     nothing goes above `cap`.
+#   - A memory with no evidence takes its `provenance.confidence`, or
+#     `unevidenced` when it has none.
+#   - `bands` name how far a confidence goes: established, probable, and below
+#     that unverified. `accept` is the score a supersede proposal needs before
+#     it replaces the record, by the replaced record's type.
+#
+# Run `docket why <id>` to see which policies priced a resource.
 
-evidence:
+sources:
+  human:
+    description: >
+      Stated or confirmed by a person - written by hand, or confirmed when asked.
+      Record who in observedBy.
+
+  conversation:
+    description: >
+      Established in an agent session - the user said so. Record the session and,
+      in note, what was said.
+
+  directory:
+    description: >
+      An HR system, staff directory, identity provider or org chart. Record the
+      record's URL or its key.
+    locator:
+      urls: {}
+      key: {}
+    requiresAny: [ urls, key ]
+
+  profile:
+    description: >
+      A public profile or web page - a company site, a professional profile, a
+      conference speaker page. Record the URL.
+    locator:
+      urls: { required: true }
+
+  docs:
+    description: |
+      A document, wiki page, email or meeting note. Record the file or the URL.
+    locator:
+      path: {}
+      urls: {}
+    requiresAny: [ path, urls ]
+
+trust:
   unevidenced: 0.5
-
-  sources:
-    human:
-      description: >
-        Stated or confirmed by a person - written by hand, or confirmed when
-        asked. Record who in observedBy.
-      confidence: 0.9
-
-    conversation:
-      description: >
-        Established in an agent session - the user said so. Record the session
-        and, in note, what was said.
-      confidence: 0.7
-
-    directory:
-      description: >
-        An HR system, staff directory, identity provider or org chart. Record
-        the record's URL or its key.
-      confidence: 0.85
-      requiresAny:
-        - urls
-        - key
-
-    profile:
-      description: >
-        A public profile or web page - a company site, a professional profile,
-        a conference speaker page. Record the URL.
-      confidence: 0.6
-      requires:
-        - urls
-
-    docs:
-      description: >
-        A document, wiki page, email or meeting note. Record the file or the URL.
-      confidence: 0.6
-      requiresAny:
-        - path
-        - urls
+  fallback: 0.4
+  cap: 0.99
+  accept: { default: 0.75 }
+  bands: { established: 0.8, probable: 0.5 }
+  policies:
+    - name: human evidence
+      when: { source: human }
+      score: 0.9
+    - name: conversation evidence
+      when: { source: conversation }
+      score: 0.7
+    - name: directory evidence
+      when: { source: directory }
+      score: 0.85
+    - name: profile evidence
+      when: { source: profile }
+      score: 0.6
+    - name: docs evidence
+      when: { source: docs }
+      score: 0.6
+    - name: docs evidence of team
+      when: { about: team, source: docs }
+      score: 0.7
 
 resourceTypes:
 

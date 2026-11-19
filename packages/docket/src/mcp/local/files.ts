@@ -13,7 +13,7 @@ import { parseOntology } from '../../ontology/loader.js'
 import { hashContent } from '../../source/hashing.js'
 import { parseMemoryFile } from '../../source/parser.js'
 import { cloudDocumentPath } from '../../workspace/documents.js'
-import type { Disposition, WorkspaceSnapshot } from '../../workspace/ontology/check.js'
+import type { Classification, Disposition, WorkspaceSnapshot } from '../../workspace/ontology/check.js'
 import type { Migration } from '../../workspace/ontology/migrations.js'
 import type { StampedEvidence } from '../../workspace/write/inputs.js'
 
@@ -216,7 +216,7 @@ export interface LocalVersion {
   publishedAt: string
   publishedBy: string
   message: string | null
-  classification: 'safe' | 'narrowing' | 'breaking'
+  classification: Classification
   migration?: Migration[]
   dispositions?: { resourceId: string; disposition: Disposition }[]
 }

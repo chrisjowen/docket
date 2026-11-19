@@ -2,11 +2,12 @@ import { readFile } from 'node:fs/promises'
 import { parse as parseYaml } from 'yaml'
 
 import type { ResolvedConfig } from '../config/config.js'
-import { confidenceModel } from '../evidence/confidence.js'
+import { builtinOntology, policyConditions } from '../evidence/confidence.js'
+import { hasLegacyTrust, usesTrustSettings, withTrustSettings } from '../evidence/legacy.js'
 import {
-  type ConfidenceRules,
   type Diagnostic,
   type Ontology,
+  EVIDENCE_LOCATION_FIELDS,
   error,
   ontologySchema,
   warning
@@ -85,34 +86,107 @@ export const parseOntology = (raw: string, path: string): LoadedOntology => {
     }
   }
 
+  const ontology = withTrustSettings(parsed.data, builtinOntology())
   return {
-    ontology: parsed.data,
-    diagnostics: [...checkConfidenceRules(parsed.data, path), ...checkIcons(parsed.data, path)]
+    ontology,
+    diagnostics: [...checkLegacyTrust(parsed.data, path), ...checkTrust(ontology, path), ...checkIcons(ontology, path)]
   }
 }
 
 /**
- * A `confidence:` rule for a source kind that is not registered can never
- * apply - most likely a typo, so it is worth a warning.
+ * Legacy evidence settings still score as they did, read as sources and
+ * policies; `docket ontology convert` writes them in that form.
  */
-const checkConfidenceRules = (ontology: Ontology, path: string): Diagnostic[] => {
-  const sources = confidenceModel(ontology).sources
-  const check = (section: string, definitions: Record<string, { confidence?: ConfidenceRules }>) =>
-    Object.entries(definitions).flatMap(([name, definition]) =>
-      Object.keys(definition.confidence ?? {})
-        .filter((source) => !(source in sources))
-        .map((source) =>
-          warning(
-            'unknown-evidence-source',
-            `${section}.${name}.confidence names source "${source}", which is not registered under evidence.sources.`,
-            { path }
-          )
+const checkLegacyTrust = (ontology: Ontology, path: string): Diagnostic[] => {
+  if (!hasLegacyTrust(ontology)) return []
+  return usesTrustSettings(ontology)
+    ? [
+        warning(
+          'legacy-evidence-ignored',
+          'The ontology gives sources: or trust:, so its legacy evidence: block and confidence: rules are not used; remove them.',
+          { path }
         )
-    )
-  return [
-    ...check('resourceTypes', ontology.resourceTypes),
-    ...check('relationships', ontology.relationships)
-  ]
+      ]
+    : [
+        warning(
+          'legacy-evidence-settings',
+          'evidence: and confidence: rules are the legacy form; they are read as sources: and trust: policies and score as before. Run `docket ontology convert` to rewrite them.',
+          { path }
+        )
+      ]
+}
+
+/** What a source type lets an observation point with: its own locator fields and the legacy ones. */
+const locatorFields = (definition: { locator?: Record<string, unknown> }): Set<string> =>
+  new Set([...EVIDENCE_LOCATION_FIELDS, ...Object.keys(definition.locator ?? {})])
+
+/**
+ * Sources and policies that cannot work as written: a policy naming a source,
+ * subject, attribute or locator field the ontology does not have never
+ * applies, and two policies with the same conditions and different scores
+ * tie - the lower one wins, which is likely not what was meant.
+ */
+const checkTrust = (ontology: Ontology, path: string): Diagnostic[] => {
+  const out: Diagnostic[] = []
+  const where = { path }
+  const sources = ontology.sources ?? {}
+
+  for (const [name, definition] of Object.entries(sources)) {
+    const fields = locatorFields(definition)
+    for (const [list, names] of [['identifiedBy', definition.identifiedBy], ['requiresAny', definition.requiresAny]] as const) {
+      for (const field of names ?? []) {
+        if (!fields.has(field)) {
+          out.push(warning('unknown-locator-field', `sources.${name}.${list} names "${field}", which is not one of its locator fields.`, where))
+        }
+      }
+    }
+  }
+
+  const subjects = new Set([...Object.keys(ontology.resourceTypes), ...Object.keys(ontology.relationships)])
+  const names = new Set<string>()
+  const scores = new Map<string, { name: string; score: number }>()
+  for (const policy of ontology.trust?.policies ?? []) {
+    const at = `trust.policies "${policy.name}"`
+    if (names.has(policy.name)) out.push(warning('duplicate-policy-name', `${at}: another policy has this name; give each its own.`, where))
+    names.add(policy.name)
+
+    const source = sources[policy.when.source]
+    if (!source) {
+      out.push(warning('unknown-evidence-source', `${at} names source "${policy.when.source}", which is not registered under sources.`, where))
+    }
+    if (policy.when.about !== undefined && !subjects.has(policy.when.about) && policy.when.about !== 'supersedes') {
+      out.push(warning('unknown-policy-subject', `${at} is about "${policy.when.about}", which is not a resource type or relationship.`, where))
+    }
+    if (source) {
+      const fields = locatorFields(source)
+      for (const [key] of policyConditions(policy)) {
+        const known = key.startsWith('@') ? fields.has(key.slice(1)) : key in (source.attributes ?? {})
+        if (!known) {
+          out.push(
+            warning(
+              'unknown-policy-condition',
+              `${at} tests "${key}", which is not ${key.startsWith('@') ? 'a locator field' : 'an attribute'} of source "${policy.when.source}".`,
+              where
+            )
+          )
+        }
+      }
+    }
+
+    if (policy.score === undefined) continue
+    const key = JSON.stringify(Object.entries(policy.when).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+    const twin = scores.get(key)
+    if (twin && twin.score !== policy.score) {
+      out.push(
+        warning(
+          'tied-policies',
+          `${at} and "${twin.name}" apply to the same observations with different scores; the lower, ${Math.min(twin.score, policy.score)}, wins.`,
+          where
+        )
+      )
+    } else if (!twin) scores.set(key, { name: policy.name, score: policy.score })
+  }
+  return out
 }
 
 /** An icon the UI does not bundle cannot be drawn, so the type falls back to a generic one. */

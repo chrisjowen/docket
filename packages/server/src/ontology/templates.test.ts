@@ -17,7 +17,7 @@ describe('starter templates', () => {
     for (const t of TEMPLATES) {
       const loaded = parseOntology(t.yaml)
       expect(loaded.diagnostics, t.id).toEqual([])
-      expect(loaded.ontology?.evidence?.sources).toHaveProperty('human')
+      expect(loaded.ontology?.sources).toHaveProperty('human')
     }
   })
 
@@ -34,12 +34,13 @@ describe('starter templates', () => {
     expect(Object.keys(sdlc?.resourceTypes ?? {}).length).toBeGreaterThan(40)
   })
 
-  it('blank has no types and the default evidence sources', () => {
+  it('blank has no types, the default sources, and only the policies about no type in particular', () => {
     const blank = parseOntology(template('blank').yaml).ontology
     const sdlc = parseOntology(template('sdlc').yaml).ontology
     expect(blank?.resourceTypes).toEqual({})
     expect(blank?.relationships).toEqual({})
-    expect(blank?.evidence).toEqual(sdlc?.evidence)
+    expect(blank?.sources).toEqual(sdlc?.sources)
+    expect(blank?.trust?.policies).toEqual(sdlc?.trust?.policies?.filter((policy) => policy.when.about === undefined))
   })
 
   it('are looked up by id', () => {

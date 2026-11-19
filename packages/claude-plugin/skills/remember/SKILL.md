@@ -37,8 +37,7 @@ this" is not required; it only makes the capture certain.
      `.docket/entities.yaml` conservatively, then write the file
 3. Run `docket ontology show <type>` for the type you are writing, so
    attributes and `links` match what it allows, and `docket ontology list` for
-   the evidence sources this repository registers and what each must point
-   at. Never assume a fixed ontology.
+   the sources this repository registers and what each must point at. Never assume a fixed ontology.
 4. Write the file in the format below, with `evidence` on the resource and on
    every link.
 5. Add relationships in `links` where meaningful - ownership, dependency, use,

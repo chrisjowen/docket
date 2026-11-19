@@ -281,6 +281,9 @@ askRequestSchema
 askWith
   export declare const askWith: (snapshot: RequestSnapshot, docket: Docket, input: AskInput) => Promise<AskOutcome>;
 
+assess
+  export declare const assess: (model: ConfidenceModel, subject: Subject, evidence: readonly MemoryEvidence[], stated?: number) => Assessment;
+
 Assessment
   export interface Assessment {
       confidence: number;
@@ -288,6 +291,14 @@ Assessment
       evidenceCount: number;
       sources: string[];
   }
+
+ATTRIBUTE_SETTERS
+  export declare const ATTRIBUTE_SETTERS: readonly [
+      "directory",
+      "connection",
+      "registry",
+      "reporter"
+  ];
 
 ATTRIBUTE_TYPES
   export declare const ATTRIBUTE_TYPES: readonly [
@@ -297,6 +308,9 @@ ATTRIBUTE_TYPES
       "string[]",
       "number[]"
   ];
+
+bandOf
+  export declare const bandOf: (model: Pick<ConfidenceModel, "bands">, confidence: number) => "established" | "probable" | "unverified";
 
 CanonicalDocument
   export interface CanonicalDocument {
@@ -383,14 +397,21 @@ ColumnType
   export type ColumnType = 'string' | 'number' | 'integer' | 'decimal' | 'boolean' | 'date' | 'datetime' | 'reference';
 
 confidenceModel
-  export declare const confidenceModel: (ontology: Ontology, defaults?: Ontology) => ConfidenceModel;
+  export declare const confidenceModel: (ontology: Ontology, options?: {
+      defaults?: Ontology;
+      registry?: SourceRegistry;
+  }) => ConfidenceModel;
 
 ConfidenceModel
   export interface ConfidenceModel {
-      sources: Record<string, EvidenceSourceDefinition>;
+      sources: Record<string, SourceTypeDefinition>;
+      policies: readonly TrustPolicy[];
       unevidenced: number;
-      resourceTypes: Record<string, ConfidenceRules>;
-      relationships: Record<string, ConfidenceRules>;
+      fallback: number;
+      cap: number;
+      accept: Readonly<Record<string, number>>;
+      bands: ConfidenceBands;
+      registry: SourceRegistry;
   }
 
 Connection
@@ -414,6 +435,15 @@ ConversationTurn
       role: 'user' | 'assistant';
       content: string;
   }
+
+ConvertedOntology
+  export interface ConvertedOntology {
+      yaml: string;
+      changed: boolean;
+  }
+
+convertOntologyText
+  export declare const convertOntologyText: (raw: string, defaults?: Ontology) => ConvertedOntology;
 
 CoordinatedAnswer
   export interface CoordinatedAnswer {
@@ -574,6 +604,19 @@ EvidenceResponse
       references: ResolvedReference[];
   }
 
+explain
+  export declare const explain: (model: ConfidenceModel, subject: Subject, evidence: readonly MemoryEvidence[], stated?: number) => Explanation;
+
+ExplainedObservation
+  export interface ExplainedObservation extends ObservationScore {
+      counts: boolean;
+  }
+
+Explanation
+  export interface Explanation extends Assessment {
+      observations: ExplainedObservation[];
+  }
+
 FactsBlock
   export interface FactsBlock extends BlockBase {
       kind: 'facts';
@@ -587,6 +630,9 @@ fileManifestStore
 
 filesystemSource
   export declare const filesystemSource: (resolved: ResolvedConfig) => CanonicalSource;
+
+formatWhy
+  export declare const formatWhy: (result: WhyResult) => string;
 
 FoundReference
   export interface FoundReference {
@@ -921,6 +967,28 @@ MemoryEntity
       links: EntityLink[];
   }
 
+MemoryEvidence
+  export interface MemoryEvidence {
+      source: string;
+      sourceRef?: string;
+      attributes?: Record<string, ConditionValue>;
+      repository?: string;
+      path?: string;
+      lines?: string;
+      symbol?: string;
+      key?: string;
+      method?: string;
+      endpoint?: string;
+      urls?: string[];
+      commit?: string;
+      locator?: Record<string, string | string[]>;
+      observedAt?: string;
+      observedBy?: string;
+      session?: string;
+      reportedBy?: string;
+      note?: string;
+  }
+
 MetricBlock
   export interface MetricBlock extends BlockBase {
       kind: 'metric';
@@ -951,6 +1019,15 @@ ObservationInput
       relationship?: ObservedRelationship;
   }
 
+ObservationScore
+  export interface ObservationScore {
+      source: ResolvedSource;
+      base?: PolicyMatch;
+      beaten: PolicyMatch[];
+      adjustments: PolicyMatch[];
+      score: number;
+  }
+
 ObservedRelationship
   export interface ObservedRelationship {
       source: string;
@@ -963,6 +1040,8 @@ Ontology
       version: number;
       resourceTypes: Record<string, ResourceTypeDefinition>;
       relationships: Record<string, RelationshipDefinition>;
+      sources?: Record<string, SourceTypeDefinition>;
+      trust?: TrustSettings;
       evidence?: EvidenceSettings;
   }
 
@@ -1022,6 +1101,93 @@ ontologySchema
           }, z.core.$strip>>>;
           confidence: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodNumber>>;
       }, z.core.$strip>>>;
+      sources: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+          description: z.ZodOptional<z.ZodString>;
+          kind: z.ZodOptional<z.ZodEnum<{
+              identity: "identity";
+              system: "system";
+              content: "content";
+          }>>;
+          identifiedBy: z.ZodOptional<z.ZodArray<z.ZodString>>;
+          attributes: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+              type: z.ZodEnum<{
+                  string: "string";
+                  number: "number";
+                  boolean: "boolean";
+                  "string[]": "string[]";
+                  "number[]": "number[]";
+              }>;
+              enum: z.ZodOptional<z.ZodArray<z.ZodUnion<readonly [
+                  z.ZodString,
+                  z.ZodNumber
+              ]>>>;
+              description: z.ZodOptional<z.ZodString>;
+              setBy: z.ZodEnum<{
+                  directory: "directory";
+                  connection: "connection";
+                  registry: "registry";
+                  reporter: "reporter";
+              }>;
+          }, z.core.$strip>>>;
+          locator: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodPipe<z.ZodNullable<z.ZodObject<{
+              description: z.ZodOptional<z.ZodString>;
+              required: z.ZodOptional<z.ZodBoolean>;
+          }, z.core.$strip>>, z.ZodTransform<{
+              description?: string | undefined;
+              required?: boolean | undefined;
+          }, {
+              description?: string | undefined;
+              required?: boolean | undefined;
+          } | null>>>>;
+          requiresAny: z.ZodOptional<z.ZodArray<z.ZodString>>;
+      }, z.core.$strip>>>;
+      trust: z.ZodOptional<z.ZodObject<{
+          unevidenced: z.ZodOptional<z.ZodNumber>;
+          fallback: z.ZodOptional<z.ZodNumber>;
+          cap: z.ZodOptional<z.ZodNumber>;
+          accept: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodNumber>>;
+          bands: z.ZodOptional<z.ZodObject<{
+              established: z.ZodOptional<z.ZodNumber>;
+              probable: z.ZodOptional<z.ZodNumber>;
+          }, z.core.$strip>>;
+          policies: z.ZodOptional<z.ZodArray<z.ZodObject<{
+              name: z.ZodString;
+              description: z.ZodOptional<z.ZodString>;
+              when: z.ZodObject<{
+                  about: z.ZodOptional<z.ZodString>;
+                  source: z.ZodString;
+              }, z.core.$catchall<z.ZodUnion<readonly [
+                  z.ZodUnion<readonly [
+                      z.ZodString,
+                      z.ZodNumber,
+                      z.ZodBoolean
+                  ]>,
+                  z.ZodObject<{
+                      not: z.ZodOptional<z.ZodUnion<readonly [
+                          z.ZodString,
+                          z.ZodNumber,
+                          z.ZodBoolean
+                      ]>>;
+                      in: z.ZodOptional<z.ZodArray<z.ZodUnion<readonly [
+                          z.ZodString,
+                          z.ZodNumber,
+                          z.ZodBoolean
+                      ]>>>;
+                      has: z.ZodOptional<z.ZodUnion<readonly [
+                          z.ZodString,
+                          z.ZodNumber,
+                          z.ZodBoolean
+                      ]>>;
+                      gt: z.ZodOptional<z.ZodNumber>;
+                      lt: z.ZodOptional<z.ZodNumber>;
+                      exists: z.ZodOptional<z.ZodBoolean>;
+                      matches: z.ZodOptional<z.ZodString>;
+                  }, z.core.$strict>
+              ]>>>;
+              score: z.ZodOptional<z.ZodNumber>;
+              adjust: z.ZodOptional<z.ZodNumber>;
+          }, z.core.$strip>>>;
+      }, z.core.$strip>>;
       evidence: z.ZodOptional<z.ZodObject<{
           sources: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
               description: z.ZodOptional<z.ZodString>;
@@ -1112,6 +1278,13 @@ PlannedChange
       owner: string;
   }
 
+PolicyMatch
+  export interface PolicyMatch {
+      policy: string;
+      score?: number;
+      adjust?: number;
+  }
+
 ProjectionBatch
   export interface ProjectionBatch {
       batchId: string;
@@ -1188,6 +1361,17 @@ ResolvedReference
       };
   }
 
+ResolvedSource
+  export interface ResolvedSource {
+      source: string;
+      instance: string;
+      attributes: Record<string, ConditionValue | ConditionValue[]>;
+      attested: string[];
+      claimed: string[];
+      ignored: string[];
+      locator: Record<string, string | string[]>;
+  }
+
 ResultBlock
   export type ResultBlock = EntitiesBlock | PassagesBlock | FactsBlock | GraphBlock | MetricBlock | TableBlock | TimelineBlock;
 
@@ -1226,6 +1410,9 @@ RetrievedEvidence
 
 retrievedEvidenceSchema
   export declare const retrievedEvidenceSchema: z.ZodType<RetrievedEvidence>;
+
+scoreObservation
+  export declare const scoreObservation: (model: ConfidenceModel, subject: Subject, observation: MemoryEvidence) => ObservationScore;
 
 SEARCH_SCHEMA
   export declare const SEARCH_SCHEMA = "docket-search.v1";
@@ -1296,12 +1483,43 @@ SecretResolver
 snapshotOf
   export declare const snapshotOf: (read: Pick<Awaited<ReturnType<typeof validate>>, "resolved" | "entities" | "documents" | "broken" | "diagnostics">, scope?: string) => RequestSnapshot;
 
+SOURCE_KINDS
+  export declare const SOURCE_KINDS: readonly [
+      "identity",
+      "system",
+      "content"
+  ];
+
 SourceLocation
   export interface SourceLocation {
       path: string;
       startLine?: number;
       endLine?: number;
   }
+
+SourceRegistry
+  export interface SourceRegistry {
+      attributes(source: string, instance: string): Readonly<Record<string, ConditionValue | ConditionValue[]>> | undefined;
+  }
+
+SourceTypeDefinition
+  export interface SourceTypeDefinition {
+      description?: string;
+      kind?: SourceKind;
+      identifiedBy?: string[];
+      attributes?: Record<string, SourceAttributeDefinition>;
+      locator?: Record<string, LocatorFieldDefinition>;
+      requiresAny?: string[];
+  }
+
+Subject
+  export type Subject = {
+      kind: 'resource';
+      type: string;
+  } | {
+      kind: 'relationship';
+      rel: string;
+  };
 
 sync
   export declare const syncSource: (source: CanonicalSource, manifests: ManifestStore, adapters: readonly SyncTarget[], options?: SyncSourceOptions) => Promise<SyncResult>;
@@ -1445,6 +1663,34 @@ ToolResult
 
 toSearchResult
   export declare const toSearchResult: ({ answer, snapshot, rejected }: AskOutcome) => SearchResult;
+
+TRUST_DEFAULTS
+  export declare const TRUST_DEFAULTS: {
+      readonly unevidenced: 0.5;
+      readonly fallback: 0.4;
+      readonly cap: 0.99;
+      readonly accept: Readonly<Record<string, number>>;
+      readonly bands: Readonly<ConfidenceBands>;
+  };
+
+TrustPolicy
+  export interface TrustPolicy {
+      name: string;
+      description?: string;
+      when: PolicyWhen;
+      score?: number;
+      adjust?: number;
+  }
+
+TrustSettings
+  export interface TrustSettings {
+      unevidenced?: number;
+      fallback?: number;
+      cap?: number;
+      accept?: Record<string, number>;
+      bands?: Partial<ConfidenceBands>;
+      policies?: TrustPolicy[];
+  }
 
 TypeScriptRunner
   export type TypeScriptRunner = (absolutePath: string) => Promise<unknown>;
@@ -1592,6 +1838,34 @@ warning
       path?: string;
       id?: string;
   }) => Diagnostic;
+
+why
+  export declare const why: (id: string, options?: Pick<ValidateOptions, "cwd" | "source">) => Promise<WhyResult>;
+
+WhyLink
+  export interface WhyLink extends WhyPart {
+      rel: string;
+      target: string;
+  }
+
+WhyPart
+  export interface WhyPart extends Explanation {
+      band: ReturnType<typeof bandOf>;
+  }
+
+WhyResult
+  export interface WhyResult {
+      id: string;
+      resource?: WhyPart & {
+          type: string;
+          title: string;
+      };
+      links: WhyLink[];
+      diagnostics: Diagnostic[];
+  }
+
+withTrustSettings
+  export declare const withTrustSettings: (ontology: Ontology, defaults?: Ontology) => Ontology;
 
 ## ./adapter-kit (./dist/bundled/adapter-kit/dist/index.d.ts)
 
@@ -5286,17 +5560,21 @@ checkoutProblem
 
 CheckResult
   export interface CheckResult {
-      classification: 'safe' | 'narrowing' | 'breaking';
+      classification: Classification;
       introduced: Diagnostic[];
       resolved: Diagnostic[];
       affected: {
           resourceId: string;
           origin: Origin;
       }[];
+      rescored: Rescored[];
   }
 
+Classification
+  export type Classification = 'safe' | 'rescore' | 'narrowing' | 'breaking';
+
 classify
-  export declare function classify(introduced: readonly Diagnostic[]): CheckResult['classification'];
+  export declare function classify(introduced: readonly Diagnostic[], rescored?: readonly Rescored[]): Classification;
 
 cloudDocumentPath
   export declare function cloudDocumentPath(document: {
@@ -5501,6 +5779,9 @@ migrationProblems
 migrationSteps
   export declare function migrationSteps(value: unknown): Migration[] | null;
 
+needsAcceptance
+  export declare const needsAcceptance: (classification: Classification) => boolean;
+
 ONTOLOGY_PATH
   export declare const ONTOLOGY_PATH = ".docket/entities.yaml";
 
@@ -5588,6 +5869,28 @@ RememberInput
 
 renderDocument
   export declare function renderDocument(frontmatter: Document | Record<string, unknown>, body: string): string;
+
+rescore
+  export declare function rescore(before: {
+      documents: readonly MemoryDocument[];
+      ontology: Ontology | null;
+  }, after: {
+      documents: readonly MemoryDocument[];
+      ontology: Ontology;
+  }): Rescored[];
+
+Rescored
+  export interface Rescored {
+      resourceId: string;
+      link?: {
+          rel: string;
+          target: string;
+      };
+      before: number;
+      after: number;
+      bandBefore: Band;
+      bandAfter: Band;
+  }
 
 ResourceChange
   export interface ResourceChange {

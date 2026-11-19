@@ -1,9 +1,13 @@
+import { aggregate } from '../../evidence/aggregate.js';
+import { bandOf, confidenceModel } from '../../evidence/confidence.js';
 import { parseMemoryFile, parseOntology, validateDocuments } from '../docket.js';
 import { writableHere } from '../origin.js';
 import { diffOntologies } from './diff.js';
 import { MigrationInvalid, OntologyInvalid, isBreaking } from './errors.js';
 import { describeMigration, migrationProblems, rewriteDocument } from './migrations.js';
 import { lintOntology, sizeProblem } from './yaml-io.js';
+/** Narrowing and breaking changes are published only when the publisher accepts them; a rescore is not. */
+export const needsAcceptance = (classification) => classification === 'narrowing' || classification === 'breaking';
 export const DISPOSITIONS = ['update-in-repo', 'accept-data-loss'];
 /**
  * Identifies a diagnostic across two ontologies: its code, file and resource,
@@ -47,10 +51,43 @@ function resolvedBy(step) {
         return `relationship ${step.from}`;
     return null;
 }
-export function classify(introduced) {
+export function classify(introduced, rescored = []) {
     if (introduced.some(isBreaking))
         return 'breaking';
-    return introduced.length ? 'narrowing' : 'safe';
+    if (introduced.length)
+        return 'narrowing';
+    return rescored.length ? 'rescore' : 'safe';
+}
+/**
+ * The resources and links whose confidence differs between two ontologies.
+ * Confidence is computed when read, so this is everything publishing the
+ * draft re-scores; a resource or link that is only on one side is a
+ * diagnostic's business, not this.
+ */
+export function rescore(before, after) {
+    if (!before.ontology)
+        return [];
+    const was = confidenceModel(before.ontology);
+    const now = confidenceModel(after.ontology);
+    const previous = new Map(aggregate(before.documents, was).entities.map((entity) => [entity.id, entity]));
+    const out = [];
+    const note = (resourceId, from, to, link) => {
+        if (from === to)
+            return;
+        out.push({ resourceId, ...(link ? { link } : {}), before: from, after: to, bandBefore: bandOf(was, from), bandAfter: bandOf(now, to) });
+    };
+    for (const entity of aggregate(after.documents, now).entities) {
+        const then = previous.get(entity.id);
+        if (!then)
+            continue;
+        note(entity.id, then.confidence, entity.confidence);
+        for (const link of entity.links) {
+            const old = then.links.find((candidate) => candidate.rel === link.rel && candidate.target === link.target);
+            if (old)
+                note(entity.id, old.confidence, link.confidence, { rel: link.rel, target: link.target });
+        }
+    }
+    return out.sort((a, b) => (a.resourceId < b.resourceId ? -1 : a.resourceId > b.resourceId ? 1 : 0));
 }
 /**
  * Validates documents against two ontologies with docket's validator and
@@ -74,7 +111,8 @@ export function compare(before, after, origins) {
         affected.push({ resourceId, origin });
     }
     affected.sort((a, b) => (a.resourceId < b.resourceId ? -1 : a.resourceId > b.resourceId ? 1 : 0));
-    return { classification: classify(introduced), introduced, resolved, affected };
+    const rescored = rescore(before, after);
+    return { classification: classify(introduced, rescored), introduced, resolved, affected, rescored };
 }
 /** Parses a draft, or throws `OntologyInvalid` with its errors at their paths. */
 export function parseDraft(yaml) {

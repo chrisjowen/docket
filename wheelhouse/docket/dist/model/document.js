@@ -1,8 +1,8 @@
 import { z } from '../vendor/zod.js';
 /**
- * Where a piece of evidence points. A source kind's ontology entry says which
- * of these it needs (`requires` / `requiresAny`), so `code` evidence names a
- * file while `api` evidence names an endpoint.
+ * The legacy locator fields: every source accepts them as top-level evidence
+ * fields. A source type declares any others it points with under `locator`
+ * in the ontology, and an observation gives those in its `locator` map.
  */
 export const EVIDENCE_LOCATION_FIELDS = [
     'repository',
@@ -58,9 +58,13 @@ const text = z.string().min(1);
  * Unknown keys are kept here so the parser can name them in a warning; they
  * never reach the normalized model.
  */
+const claimSchema = z.union([z.string(), z.number(), z.boolean()]);
+const locatorValueSchema = z.union([text, z.number().transform(String), z.array(text)]);
 export const memoryEvidenceSchema = z
     .object({
     source: text,
+    sourceRef: text.optional(),
+    attributes: z.record(z.string(), claimSchema).optional(),
     repository: text.optional(),
     path: text.optional(),
     lines: linesSchema.optional(),
@@ -70,6 +74,7 @@ export const memoryEvidenceSchema = z
     endpoint: text.optional(),
     urls: urlsSchema.optional(),
     commit: text.optional(),
+    locator: z.record(z.string(), locatorValueSchema).optional(),
     observedAt: observedAtSchema.optional(),
     observedBy: text.optional(),
     session: text.optional(),

@@ -1,9 +1,11 @@
 import { z } from 'zod'
 
+import type { ConditionValue } from './ontology.js'
+
 /**
- * Where a piece of evidence points. A source kind's ontology entry says which
- * of these it needs (`requires` / `requiresAny`), so `code` evidence names a
- * file while `api` evidence names an endpoint.
+ * The legacy locator fields: every source accepts them as top-level evidence
+ * fields. A source type declares any others it points with under `locator`
+ * in the ontology, and an observation gives those in its `locator` map.
  */
 export const EVIDENCE_LOCATION_FIELDS = [
   'repository',
@@ -25,8 +27,18 @@ export type EvidenceLocationField = (typeof EVIDENCE_LOCATION_FIELDS)[number]
  * rewrites an earlier one - and confidence is computed from it, never stated.
  */
 export interface MemoryEvidence {
-  /** Source kind, registered under `evidence.sources` in the ontology - e.g. `code`, `manifest`, `api`. */
+  /** Source type, registered under `sources` in the ontology - e.g. `code`, `manifest`, `person`. */
   source: string
+  /**
+   * The source instance - a repository, a person, a document URL - when the
+   * source type's `identifiedBy` fields do not already name it.
+   */
+  sourceRef?: string
+  /**
+   * Attributes of the source the writer claims. Only those the source type
+   * lets the reporter set count; the rest are kept but not scored.
+   */
+  attributes?: Record<string, ConditionValue>
   /** The repository the location is in, when it is not this one - a name or URL. */
   repository?: string
   /** Repo-relative file path. */
@@ -45,6 +57,8 @@ export interface MemoryEvidence {
   urls?: string[]
   /** Revision the location was read at. */
   commit?: string
+  /** Locator fields the source type declares beyond the legacy ones, such as a message id or a section. */
+  locator?: Record<string, string | string[]>
   /** `YYYY-MM-DD`, or a full ISO timestamp. */
   observedAt?: string
   /** Who observed it - `claude`, a person's name. */
@@ -204,9 +218,15 @@ const text = z.string().min(1)
  * Unknown keys are kept here so the parser can name them in a warning; they
  * never reach the normalized model.
  */
+const claimSchema = z.union([z.string(), z.number(), z.boolean()])
+
+const locatorValueSchema = z.union([text, z.number().transform(String), z.array(text)])
+
 export const memoryEvidenceSchema = z
   .object({
     source: text,
+    sourceRef: text.optional(),
+    attributes: z.record(z.string(), claimSchema).optional(),
     repository: text.optional(),
     path: text.optional(),
     lines: linesSchema.optional(),
@@ -216,6 +236,7 @@ export const memoryEvidenceSchema = z
     endpoint: text.optional(),
     urls: urlsSchema.optional(),
     commit: text.optional(),
+    locator: z.record(z.string(), locatorValueSchema).optional(),
     observedAt: observedAtSchema.optional(),
     observedBy: text.optional(),
     session: text.optional(),

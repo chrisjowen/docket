@@ -56,8 +56,9 @@ contradicts a hit, or shows something search did not find, record it with the
 ## Look up the ontology
 
 ```bash
-docket ontology list                # resource types, relationships, evidence sources
+docket ontology list                # resource types, relationships, sources, policies
 docket ontology show <type>         # one type: attributes, relationships, confidence by source
+docket why <id>                     # the policies that priced a resource and its links
 ```
 
 Run `show` before writing a resource of that type, so attributes and `links`

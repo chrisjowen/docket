@@ -31,7 +31,7 @@ function lean(sdlc) {
   doc.commentBefore = [
     " Lean service catalogue: the most-used part of docket's SDLC ontology -",
     ` ${LEAN_TYPES.join(', ')} - and the`,
-    ' relationships between them, with the SDLC evidence sources. Generated from',
+    ' relationships between them, with the SDLC sources and their policies. Generated from',
     " docket's default-sdlc.yaml by docket-server (packages/server/scripts/templates.mjs)."
   ].join('\n')
   const types = doc.get('resourceTypes')
@@ -51,20 +51,33 @@ function lean(sdlc) {
     }
     if (empty) relationships.delete(pair.key)
   }
-  return strip(doc).toString()
+  return strip(keepPolicies(doc)).toString()
 }
 
 /** No types and no relationships: only SDLC's evidence sources. */
 function blank(sdlc) {
   const doc = parseDocument(sdlc)
   doc.commentBefore = [
-    " Blank: no resource types or relationships yet, and docket's default evidence",
-    " sources. Generated from docket's default-sdlc.yaml by docket-server",
+    " Blank: no resource types or relationships yet, and docket's default sources",
+    " and their policies. Generated from docket's default-sdlc.yaml by docket-server",
     ' (packages/server/scripts/templates.mjs).'
   ].join('\n')
   doc.set('resourceTypes', doc.createNode({}))
   doc.set('relationships', doc.createNode({}))
-  return strip(doc).toString()
+  return strip(keepPolicies(doc)).toString()
+}
+
+/** Drops the trust policies about a type or relationship the template no longer has. */
+function keepPolicies(doc) {
+  const kept = new Set([...(doc.get('resourceTypes')?.items ?? []), ...(doc.get('relationships')?.items ?? [])].map((pair) => String(pair.key.value ?? pair.key)))
+  const policies = doc.getIn(['trust', 'policies'])
+  if (isSeq(policies)) {
+    policies.items = policies.items.filter((policy) => {
+      const about = isMap(policy) ? policy.getIn(['when', 'about']) : undefined
+      return about === undefined || kept.has(String(about))
+    })
+  }
+  return doc
 }
 
 /** Drops the section banners that describe types the template no longer has. */

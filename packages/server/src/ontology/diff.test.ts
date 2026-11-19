@@ -12,7 +12,7 @@ const load = (yaml: string): Ontology => {
 }
 
 describe('the structural diff', () => {
-  it('reads like the history: types, attributes, relationships, evidence', async () => {
+  it('reads like the history: types, attributes, relationships, policies', async () => {
     const { ontology } = await readFixture()
     const doc = parseDocument(ontology)
     doc.setIn(['resourceTypes', 'slo'], { description: 'An objective.' })
@@ -22,7 +22,7 @@ describe('the structural diff', () => {
     doc.setIn(['resourceTypes', 'team', 'icon'], 'users-round')
     doc.setIn(['relationships', 'depends_on', 'to'], ['service', 'datasource', 'api'])
     doc.setIn(['relationships', 'owned_by', 'from'], ['service'])
-    doc.setIn(['evidence', 'sources', 'code', 'confidence'], 0.5)
+    doc.setIn(['trust', 'policies', 1, 'score'], 0.5)
     expect(diffOntologies(load(ontology), load(doc.toString()))).toEqual([
       { op: '+', text: 'type `slo`' },
       { op: '-', text: 'type `pod`' },
@@ -31,7 +31,7 @@ describe('the structural diff', () => {
       { op: '~', text: 'type `team`: icon' },
       { op: '~', text: 'relationship `depends_on`: to += `api`' },
       { op: '~', text: 'relationship `owned_by`: from: * → [service]' },
-      { op: '~', text: 'evidence source `code`: confidence 0.6 → 0.5' }
+      { op: '~', text: 'policy `code evidence`: score 0.6 → 0.5' }
     ])
   })
 
@@ -42,6 +42,9 @@ describe('the structural diff', () => {
       ['service', 'datasource', 'team', 'api', 'pod'].map((t) => `type \`${t}\``)
     )
     expect(changes.every((c) => c.op === '+')).toBe(true)
-    expect(changes.at(-1)?.text).toBe('evidence: unevidenced 0.5')
+    expect(changes.map((c) => c.text)).toEqual(
+      expect.arrayContaining(['source `human`', 'trust: unevidenced 0.5', 'trust: cap 1', 'policy `code evidence`'])
+    )
+    expect(changes.at(-1)?.text).toBe('policy `code evidence of exposes`')
   })
 })

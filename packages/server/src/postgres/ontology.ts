@@ -1,5 +1,5 @@
 import { hashContent, parseOntology, readCanonical } from '../docket.js'
-import { checkDraft as checkSnapshot, evaluateDraft, parseDraft, type CheckResult, type Disposed, type Disposition, type DraftCheck, type Evaluation, type WorkspaceSnapshot } from '../ontology/check.js'
+import { checkDraft as checkSnapshot, evaluateDraft, needsAcceptance, parseDraft, type CheckResult, type Disposed, type Disposition, type DraftCheck, type Evaluation, type WorkspaceSnapshot } from '../ontology/check.js'
 import { OntologyBreakingChange, OntologyNarrowingChange, OntologyWriteDisabled, StaleDraft, VersionNotFound } from '../ontology/errors.js'
 import type { Migration } from '../ontology/migrations.js'
 import { proposedText, type Proposal } from '../ontology/propose.js'
@@ -264,7 +264,7 @@ export async function publish(ctx: StoreContext, workspaceId: string, draftId: s
     }
     disposed.push({ ...resource, disposition })
   }
-  if (check.classification !== 'safe' && !options.acceptNarrowing) throw new OntologyNarrowingChange(check)
+  if (needsAcceptance(check.classification) && !options.acceptNarrowing) throw new OntologyNarrowingChange(check)
 
   const rewritten: DocumentRecord[] = []
   for (const rewrite of rewrites) {

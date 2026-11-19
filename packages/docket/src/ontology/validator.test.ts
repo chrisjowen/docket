@@ -360,3 +360,61 @@ describe('validateDocuments: evidence', () => {
     expect(validateDocuments([partly], ontology)).toEqual([])
   })
 })
+
+describe('validateDocuments with sources that declare their own locator fields and attributes', () => {
+  const sourced: Ontology = {
+    ...ontology,
+    sources: {
+      email: {
+        kind: 'content',
+        identifiedBy: ['message_id'],
+        attributes: {
+          mailbox: { type: 'string', enum: ['shared', 'personal'], setBy: 'reporter' },
+          status: { type: 'string', setBy: 'registry' }
+        },
+        locator: { message_id: { required: true }, thread: {} }
+      },
+      ticket: { requiresAny: ['urls', 'ticket_key'], locator: { ticket_key: {} } }
+    },
+    trust: { policies: [] }
+  }
+  const seen = (evidence: MemoryEvidence[]): MemoryDocument => ({ ...doc('service.a', 'service'), evidence })
+
+  it('accepts the locator fields a source declares, in the observation\'s locator, beside the common ones', () => {
+    expect(
+      validateDocuments(
+        [
+          seen([
+            { source: 'email', locator: { message_id: '<a@b>', thread: 'Q3 renewal' }, attributes: { mailbox: 'shared' } },
+            { source: 'ticket', locator: { ticket_key: 'PAY-12' } },
+            { source: 'ticket', urls: ['https://tickets.example/PAY-12'], path: 'notes.md' }
+          ])
+        ],
+        sourced
+      )
+    ).toEqual([])
+  })
+
+  it('requires the locator fields a source marks required, and one of its requiresAny', () => {
+    const diagnostics = validateDocuments([seen([{ source: 'email', locator: { thread: 'Q3' } }, { source: 'ticket', note: 'x' }])], sourced)
+    expect(diagnostics.map((d) => d.message)).toEqual([
+      expect.stringMatching(/email evidence on service\.a must give message_id/),
+      expect.stringMatching(/ticket evidence on service\.a must give at least one of urls, ticket_key/)
+    ])
+  })
+
+  it('warns about a locator field or claimed attribute the source does not declare', () => {
+    const diagnostics = validateDocuments(
+      [seen([{ source: 'email', locator: { message_id: '<a@b>', folder: 'inbox' }, attributes: { mood: 'tense' } }])],
+      sourced
+    )
+    expect(diagnostics).toEqual([
+      expect.objectContaining({ severity: 'warning', code: 'unknown-locator-field', message: expect.stringContaining('"folder"') }),
+      expect.objectContaining({ severity: 'warning', code: 'unknown-source-attribute', message: expect.stringContaining('"mood"') })
+    ])
+  })
+
+  it('accepts a claim of an attribute only the registry sets: it is kept, and not scored', () => {
+    expect(validateDocuments([seen([{ source: 'email', locator: { message_id: '<a@b>' }, attributes: { status: 'verified' } }])], sourced)).toEqual([])
+  })
+})

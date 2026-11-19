@@ -11,61 +11,100 @@
 
 version: 1
 
-# --- Evidence and confidence ---------------------------------------------------
+# --- Sources and trust ---------------------------------------------------------
 #
 # Every captured resource and link records where it was seen, as `evidence`
-# entries naming a source kind below and the exact location. Confidence is
-# computed from that evidence, never written by hand, and says how far the
-# record is supported - not how well it matches any question asked of it.
+# entries naming one of the sources below and the exact location - the
+# fields under a source's `locator`, or the common ones every source takes
+# (repository, path, lines, symbol, key, method, endpoint, urls, commit).
+# Confidence is computed from that evidence by the policies under `trust`,
+# never written by hand:
+#
+#   - A `score` policy prices an observation: "when the source is X (about
+#     type T, with attributes Y), it is worth S". The most specific matching
+#     policy wins - naming the type counts one, each condition one - and a tie
+#     goes to the lower score. With no match an observation is worth
+#     `fallback`.
+#   - An `adjust` policy moves that price up or down; every match applies.
+#   - Observations of one source instance do not corroborate each other: the
+#     strongest one counts. Independent sources combine, so a pod seen in code
+#     (0.3) and running in the cluster (0.9) is 1 - 0.7 * 0.1 = 0.93, and
+#     nothing goes above `cap`.
+#   - A memory with no evidence takes its `provenance.confidence`, or
+#     `unevidenced` when it has none.
+#   - `bands` name how far a confidence goes: established, probable, and below
+#     that unverified. `accept` is the score a supersede proposal needs before
+#     it replaces the record, by the replaced record's type.
+#
+# Run `docket why <id>` to see which policies priced a resource.
 
-evidence:
+sources:
+  human:
+    description: >
+      Stated or confirmed by a person - a merchandiser, a buyer. Record who in
+      observedBy.
+
+  conversation:
+    description: >
+      Established in an agent session - the user said so. Record the session and,
+      in note, what was said.
+
+  catalogue_feed:
+    description: >
+      The product information system or a catalogue feed - PIM, ERP, a Shopify or
+      Merchant Center export. Record the feed URL or the record's key, such as the
+      SKU.
+    locator:
+      urls: {}
+      key: {}
+    requiresAny: [ urls, key ]
+
+  supplier_sheet:
+    description: |
+      A supplier's spec sheet or price list. Record the file or URL.
+    locator:
+      path: {}
+      urls: {}
+    requiresAny: [ path, urls ]
+
+  storefront:
+    description: |
+      The live product page. Record its URL.
+    locator:
+      urls: { required: true }
+
+  reviews:
+    description: >
+      Customer reviews or questions. Record the URL. A review says how a product
+      is used, not what it is - weigh it accordingly.
+    locator:
+      urls: { required: true }
+
+trust:
   unevidenced: 0.5
-
-  sources:
-    human:
-      description: >
-        Stated or confirmed by a person - a merchandiser, a buyer. Record who
-        in observedBy.
-      confidence: 0.9
-
-    conversation:
-      description: >
-        Established in an agent session - the user said so. Record the session
-        and, in note, what was said.
-      confidence: 0.7
-
-    catalogue_feed:
-      description: >
-        The product information system or a catalogue feed - PIM, ERP, a
-        Shopify or Merchant Center export. Record the feed URL or the record's
-        key, such as the SKU.
-      confidence: 0.85
-      requiresAny:
-        - urls
-        - key
-
-    supplier_sheet:
-      description: >
-        A supplier's spec sheet or price list. Record the file or URL.
-      confidence: 0.7
-      requiresAny:
-        - path
-        - urls
-
-    storefront:
-      description: >
-        The live product page. Record its URL.
-      confidence: 0.75
-      requires:
-        - urls
-
-    reviews:
-      description: >
-        Customer reviews or questions. Record the URL. A review says how a
-        product is used, not what it is - weigh it accordingly.
-      confidence: 0.4
-      requires:
-        - urls
+  fallback: 0.4
+  cap: 0.99
+  accept: { default: 0.75 }
+  bands: { established: 0.8, probable: 0.5 }
+  policies:
+    - name: human evidence
+      when: { source: human }
+      score: 0.9
+    - name: conversation evidence
+      when: { source: conversation }
+      score: 0.7
+    - name: catalogue_feed evidence
+      when: { source: catalogue_feed }
+      score: 0.85
+    - name: supplier_sheet evidence
+      when: { source: supplier_sheet }
+      score: 0.7
+    - name: storefront evidence
+      when: { source: storefront }
+      score: 0.75
+    - name: reviews evidence
+      when: { source: reviews }
+      score: 0.4
 
 resourceTypes:
 
