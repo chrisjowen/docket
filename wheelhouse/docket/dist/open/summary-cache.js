@@ -21,7 +21,8 @@ export const summaryKey = (question, model, inputs) => hashContent(stableStringi
     adapters: inputs.adapters ?? [],
     exhibits: [...inputs.exhibits].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     sources: inputs.sources ?? [],
-    paths: inputs.paths
+    paths: inputs.paths,
+    ...(inputs.changes ? { changes: inputs.changes } : {})
 }));
 /** Where answers are kept: inside the docket, disposable and gitignored like `.index`. */
 export const summaryCacheDir = (memoryRoot) => join(memoryRoot, '.cache', 'chat');

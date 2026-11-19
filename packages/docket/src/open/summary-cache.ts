@@ -45,6 +45,8 @@ export interface SummaryInputs {
   /** The canonical records the evidence points at, at the revisions the files hold them. */
   sources?: readonly unknown[]
   paths: readonly UiPath[]
+  /** The notes of the records found that have gone out of date. */
+  changes?: readonly string[]
 }
 
 /** Case and spacing do not make a different question. */
@@ -68,7 +70,8 @@ export const summaryKey = (question: string, model: { model: string; instruction
       adapters: inputs.adapters ?? [],
       exhibits: [...inputs.exhibits].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
       sources: inputs.sources ?? [],
-      paths: inputs.paths
+      paths: inputs.paths,
+      ...(inputs.changes ? { changes: inputs.changes } : {})
     })
   )
 

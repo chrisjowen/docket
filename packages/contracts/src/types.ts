@@ -158,6 +158,8 @@ export interface EvidenceRecord {
   observedAt?: string
   observedBy?: string
   session?: string
+  /** Who told the observer, when that was someone else. */
+  reportedBy?: string
   note?: string
 }
 

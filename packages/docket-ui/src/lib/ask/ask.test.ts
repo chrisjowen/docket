@@ -93,6 +93,21 @@ describe('showAnswer', () => {
     ])
   })
 
+  it('carries the records gone out of date, and none when the answer names none', () => {
+    const change = {
+      id: 'team.payments',
+      type: 'team',
+      title: 'Payments',
+      supersededBy: 'team.money',
+      current: { id: 'team.money', type: 'team', title: 'Money Movement' },
+      since: '2026-11-01',
+      reason: 'The team was renamed.',
+      note: 'Out of date: "Payments" (team.payments) is superseded by "Money Movement" (team.money) since 2026-11-01. The team was renamed.'
+    }
+    expect(showOutcome({ ...FIXTURE_ANSWER, changes: [change, { id: 'broken' }] }, 'coordinator').changes).toEqual([change])
+    expect(showOutcome(FIXTURE_ANSWER, 'coordinator').changes).toEqual([])
+  })
+
   it('indexes evidence across adapters by its namespaced id', () => {
     const index = evidenceIndex(showOutcome(FIXTURE_ANSWER, 'coordinator'))
     expect(index.get('enterprise-graph:ev-d2')?.adapter).toBe('enterprise-graph')

@@ -21,13 +21,13 @@ const clip = (text, width = 160) => {
 };
 const cell = (value) => value === null || value === undefined ? '' : typeof value === 'object' ? value.id : String(value);
 const cites = (ids) => (ids && ids.length > 0 ? `  [${ids.join(', ')}]` : '');
-const blockLines = (block, evidence, statuses) => {
+const blockLines = (block, evidence, statuses, outOfDate) => {
     const title = block.title ? ` - ${block.title}` : '';
     switch (block.kind) {
         case 'entities':
             return [
                 `  entities${title}`,
-                ...block.entities.map((item) => `    ${item.ref.id}${item.score === undefined ? '' : `  (${Number(item.score.toFixed(3))})`}${item.detail ? `  ${clip(item.detail, 100)}` : ''}`)
+                ...block.entities.map((item) => `    ${item.ref.id}${item.score === undefined ? '' : `  (${Number(item.score.toFixed(3))})`}${outOfDate.has(item.ref.id) ? '  out of date' : ''}${item.detail ? `  ${clip(item.detail, 100)}` : ''}`)
             ];
         case 'passages':
         case 'facts':
@@ -69,11 +69,18 @@ const blockLines = (block, evidence, statuses) => {
             return [`  ${block.kind} block (not shown)`];
     }
 };
-/** The answer as text: the summary, then each adapter's results as it gave them, then how they connect. */
+/**
+ * The answer as text: what has gone out of date, the summary, then each
+ * adapter's results as it gave them, then how they connect.
+ */
 export const formatAnswer = (answer) => {
     const lines = [`Q. ${answer.question}`];
     if (answer.context)
         lines.push(`   asked ${answer.context.now} (${answer.context.timezone}), scope "${answer.context.scope}"`);
+    const changes = answer.changes ?? [];
+    if (changes.length > 0)
+        lines.push('', 'Changed since recorded - never present these as current:', ...changes.map((change) => `  ${change.note}`));
+    const outOfDate = new Set(changes.map((change) => change.id));
     if (answer.synthesis) {
         lines.push('', `Summary - ${answer.synthesis.model}${answer.synthesis.cached ? ', from the cache' : ''}`, answer.synthesis.text);
     }
@@ -104,7 +111,7 @@ export const formatAnswer = (answer) => {
             lines.push('  nothing found');
         const evidence = new Map(result.answer.evidence.map((item) => [item.id, item]));
         for (const block of blocks)
-            lines.push(...blockLines(block, evidence, result.references ?? {}));
+            lines.push(...blockLines(block, evidence, result.references ?? {}, outOfDate));
     }
     if (answer.results.length === 0)
         lines.push('', 'No adapter was asked.');

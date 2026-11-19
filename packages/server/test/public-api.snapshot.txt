@@ -1031,20 +1031,7 @@ SearchBackend
   export type SearchBackend = (typeof SEARCH_BACKENDS)[number];
 
 SearchChange
-  export interface SearchChange {
-      id: string;
-      type: string;
-      title: string;
-      supersededBy: string;
-      current: {
-          id: string;
-          type: string;
-          title: string;
-      } | null;
-      since: string;
-      reason: string;
-      note: string;
-  }
+  export type SearchChange = OutOfDateRecord;
 
 SearchGraph
   export interface SearchGraph {

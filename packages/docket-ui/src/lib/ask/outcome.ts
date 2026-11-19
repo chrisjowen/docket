@@ -63,6 +63,8 @@ export interface AskOutcome {
   synthesis: Synthesis | null
   notice?: SynthesisNotice
   connections: NonNullable<CoordinatedAnswer['connections']>
+  /** Records found that have gone out of date, each with the record current now. */
+  changes: NonNullable<CoordinatedAnswer['changes']>
   diagnostics: CoordinatedAnswer['diagnostics']
   via: AnswerSource
 }
@@ -199,6 +201,7 @@ export const showOutcome = (value: unknown, via: AnswerSource): AskOutcome => {
     synthesis: isObject(answer.synthesis) && typeof answer.synthesis.text === 'string' ? answer.synthesis : null,
     ...(isObject(answer.notice) ? { notice: answer.notice } : {}),
     connections: Array.isArray(answer.connections) ? answer.connections : [],
+    changes: Array.isArray(answer.changes) ? answer.changes.filter((change) => isObject(change) && typeof change.note === 'string') : [],
     diagnostics: Array.isArray(answer.diagnostics) ? answer.diagnostics : [],
     via
   }

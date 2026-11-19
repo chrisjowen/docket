@@ -7,7 +7,7 @@ import type { Assessment, MemoryEntity } from '../model/index.js'
 import { readCachedSummary, summaryCacheDir, summaryKey, writeCachedSummary, type CachedExhibit } from '../open/summary-cache.js'
 import { hashContent } from '../source/hashing.js'
 import type { RequestSnapshot } from './snapshot.js'
-import type { AdapterResult, Connection, FoundReference, ReferenceStatus, Synthesis, SynthesisNotice } from './wire.js'
+import type { AdapterResult, Connection, FoundReference, OutOfDateRecord, ReferenceStatus, Synthesis, SynthesisNotice } from './wire.js'
 
 /** A fact recorded at less than this confidence is hedged in a summary, as an unevidenced one always is. */
 export const LOW_CONFIDENCE = 0.7
@@ -247,6 +247,8 @@ export interface SynthesisInput {
   results: readonly AdapterResult[]
   references: readonly FoundReference[]
   connections: readonly Connection[]
+  /** Records found that have gone out of date, each with the record current now. */
+  changes?: readonly OutOfDateRecord[] | undefined
   snapshot: RequestSnapshot
 }
 
@@ -278,6 +280,14 @@ export const synthesisPrompt = (input: SynthesisInput, budget = SYNTHESIS_BUDGET
     header.push(`Conversation so far:\n${input.conversation.map((turn) => `${turn.role}: ${turn.content}`).join('\n')}`)
   }
   const sections = [header.join('\n')]
+  if (input.changes && input.changes.length > 0) {
+    sections.push(
+      [
+        'Out of date - these records were superseded by newer ones. Never present them as current; answer with the current record and say what changed:',
+        ...input.changes.map((change) => `- ${change.note}`)
+      ].join('\n')
+    )
+  }
 
   let pool = new Budget(Math.floor(budget * 0.3))
   const results: string[] = []
@@ -485,7 +495,8 @@ export const synthesize = async (input: SynthesisInput, options: SynthesizeOptio
     ),
     exhibits,
     sources: input.references.map((reference) => ({ kind: reference.kind, id: reference.id, revision: reference.revision ?? null })),
-    paths: input.connections
+    paths: input.connections,
+    ...(input.changes && input.changes.length > 0 ? { changes: input.changes.map((change) => change.note) } : {})
   })
   const dir = summaryCacheDir(options.memoryRoot)
   const evidenceIds = new Set(built.evidence)

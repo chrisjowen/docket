@@ -1,4 +1,4 @@
-import type { CoordinatedAnswer } from '../../query/wire.js'
+import type { CoordinatedAnswer, OutOfDateRecord } from '../../query/wire.js'
 import type { SearchGraph, SearchMatch } from '../types.js'
 
 /*
@@ -47,20 +47,7 @@ export interface WorkspaceMatch extends SearchMatch {
  * A record the question found that has gone out of date: never a match
  * itself, it names the current record that stands in for it and what changed.
  */
-export interface SearchChange {
-  id: string
-  type: string
-  title: string
-  /** The record that replaced it. */
-  supersededBy: string
-  /** The record current now, at the end of the chain of replacements; null when it is no longer on file. */
-  current: { id: string; type: string; title: string } | null
-  /** Until when the older record held, YYYY-MM-DD. */
-  since: string
-  reason: string
-  /** The change in one line, e.g. 'Out of date: "Sophia" (agent.sophia) is superseded by "Captin" (agent.captin) since 2026-11-01. ...'. */
-  note: string
-}
+export type SearchChange = OutOfDateRecord
 
 /** `docket_search`'s board, its matches collapsed by entity and ranked by score. */
 export interface WorkspaceSearch extends SearchGraph {

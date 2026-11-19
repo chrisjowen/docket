@@ -11,13 +11,14 @@ export const refuse = (code, message, where = {}) => ({
 });
 export const hasErrors = (diagnostics) => diagnostics.some((d) => d.severity === 'error');
 /**
- * docket's diagnostics for a written document, less one: `reportedBy` is the
- * server's own evidence field, which docket's parser does not know and warns
- * about on every entry that carries one. That warning is not the writer's
- * mistake, so it is not reported back.
+ * docket's diagnostics for a written document, unchanged.
+ *
+ * @deprecated docket's parser now accepts `reportedBy`, so there is no warning
+ * about it left to drop. Kept for `@chrisjowen/docket-server`, which also
+ * runs with docket 0.15.0.
  */
 export function writeDiagnostics(diagnostics) {
-    return diagnostics.filter((d) => !(d.code === 'unknown-evidence-field' && /^[^"]*"reportedBy" ignored/.test(d.message.replace(/^[^:]*: /, ''))));
+    return [...diagnostics];
 }
 /** Stamps a client's evidence: the writer observed it, in this request, now unless the client said when. */
 export function stampEvidence(entry, writer, now) {

@@ -55,7 +55,7 @@ describe('write diagnostics', () => {
     expect(hasErrors([refuse('e', '')])).toBe(true)
   })
 
-  it('drop docket’s warning about the server’s own reportedBy field, and keep one that names other fields too', () => {
+  it('keep reportedBy, which docket accepts, and pass on a warning about a field docket does not know', () => {
     const raw = [
       '---',
       'id: service.x',
@@ -71,8 +71,8 @@ describe('write diagnostics', () => {
       '---',
       ''
     ].join('\n')
-    const { diagnostics } = parseMemoryFile(raw, '.docket/resources/service/x.md')
-    expect(diagnostics.filter((d) => d.code === 'unknown-evidence-field')).toHaveLength(2)
-    expect(writeDiagnostics(diagnostics).map((d) => d.message)).toEqual([expect.stringMatching(/^evidence\[1\]: "reportedBy", "whoKnows" ignored/)])
+    const { document, diagnostics } = parseMemoryFile(raw, '.docket/resources/service/x.md')
+    expect(document?.evidence.map((entry) => entry.reportedBy)).toEqual(['alice', 'alice'])
+    expect(writeDiagnostics(diagnostics).map((d) => d.message)).toEqual([expect.stringMatching(/^evidence\[1\]: "whoKnows" ignored/)])
   })
 })

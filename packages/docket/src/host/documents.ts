@@ -8,7 +8,7 @@ import { parseOntology } from '../ontology/loader.js'
 import { hashContent } from '../source/hashing.js'
 import { parseMemoryFile } from '../source/parser.js'
 import { DocumentError, checkDocument, checkoutProblem } from '../workspace/documents.js'
-import { hasErrors, writeDiagnostics } from '../workspace/write/evidence.js'
+import { hasErrors } from '../workspace/write/evidence.js'
 
 /*
  * The documents API `docket cloud push|pull|status` call, over a project's
@@ -166,11 +166,11 @@ export async function pushToProject(
           refuse('invalid-path', place, path)
           continue
         }
-        diagnostics.push(...writeDiagnostics(parseMemoryFile(raw, path).diagnostics).map((d) => toPush(d, path)))
+        diagnostics.push(...parseMemoryFile(raw, path).diagnostics.map((d) => toPush(d, path)))
         files.set(path, { raw, hash: hashContent(raw), document })
       } catch (caught) {
         if (!(caught instanceof DocumentError)) throw caught
-        const errors = writeDiagnostics(caught.diagnostics).filter((d) => d.severity === 'error')
+        const errors = caught.diagnostics.filter((d) => d.severity === 'error')
         if (errors.length) diagnostics.push(...errors.map((d) => toPush(d, path)))
         else refuse(caught.code === 'too-large' ? 'document-too-large' : 'invalid-document', caught.message, path)
       }
@@ -208,7 +208,7 @@ export async function pushToProject(
       const replaced = new Set([...files.keys(), ...removed])
       const beside = workspace.documents.flatMap((entry) => (entry.document && targets.has(entry.document.id) && !replaced.has(entry.path) ? [entry.document] : []))
       const validated = validateDocuments([...incoming, ...beside], ontology).filter((d) => d.path !== undefined && changed.has(d.path))
-      diagnostics.push(...writeDiagnostics(validated).map((d) => toPush(d, d.path as string)))
+      diagnostics.push(...validated.map((d) => toPush(d, d.path as string)))
     }
 
     if (hasErrors(diagnostics)) return { ok: false, dryRun, created: [], updated: [], unchanged: [], removed: [], diagnostics }

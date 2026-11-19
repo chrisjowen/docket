@@ -51,6 +51,8 @@ export interface MemoryEvidence {
   observedBy?: string
   /** The session the observation was made in. */
   session?: string
+  /** Who told the observer, when that was someone else - as a write through MCP records it. */
+  reportedBy?: string
   /** What was seen there, in a sentence. */
   note?: string
 }
@@ -217,6 +219,7 @@ export const memoryEvidenceSchema = z
     observedAt: observedAtSchema.optional(),
     observedBy: text.optional(),
     session: text.optional(),
+    reportedBy: text.optional(),
     note: text.optional()
   })
   .catchall(z.unknown())

@@ -115,7 +115,8 @@ source kinds that corroborate it. Docket computes it; files never store it.
 without a new version. The fields docket defines are `source` (the kind);
 where it was seen - `repository`, `path`, `lines`, `symbol`, `key`, `method`,
 `endpoint`, `urls`, `commit`; when and by whom - `observedAt` (a `YYYY-MM-DD`
-date or ISO 8601 timestamp) and `observedBy`; and `session` and `note`. Each is
+date or ISO 8601 timestamp), `observedBy`, and `reportedBy` (who told the
+observer, as a write through MCP records it); and `session` and `note`. Each is
 present only when the file records it. Dates are strings, as YAML dates become
 in JSON. An edge's `evidence` is an empty array when the link has none.
 

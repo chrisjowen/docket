@@ -228,6 +228,12 @@ export const synthesisPrompt = (input, budget = SYNTHESIS_BUDGET_CHARS) => {
         header.push(`Conversation so far:\n${input.conversation.map((turn) => `${turn.role}: ${turn.content}`).join('\n')}`);
     }
     const sections = [header.join('\n')];
+    if (input.changes && input.changes.length > 0) {
+        sections.push([
+            'Out of date - these records were superseded by newer ones. Never present them as current; answer with the current record and say what changed:',
+            ...input.changes.map((change) => `- ${change.note}`)
+        ].join('\n'));
+    }
     let pool = new Budget(Math.floor(budget * 0.3));
     const results = [];
     for (const result of input.results) {
@@ -408,7 +414,8 @@ export const synthesize = async (input, options) => {
             : { id: result.adapter, failed: result.error.code }),
         exhibits,
         sources: input.references.map((reference) => ({ kind: reference.kind, id: reference.id, revision: reference.revision ?? null })),
-        paths: input.connections
+        paths: input.connections,
+        ...(input.changes && input.changes.length > 0 ? { changes: input.changes.map((change) => change.note) } : {})
     });
     const dir = summaryCacheDir(options.memoryRoot);
     const evidenceIds = new Set(built.evidence);

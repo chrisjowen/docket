@@ -8,7 +8,7 @@
 export { ONTOLOGY_PATH, parseOntology as parseWorkspaceOntology } from './docket.js';
 export { DOCUMENT_BYTES, DocumentError, checkDocument, checkoutProblem, cloudDocumentPath, pathProblem } from './documents.js';
 export { writableHere } from './origin.js';
-export { changeNote, currentRecord, dayOf } from './supersession.js';
+export { changeNote, currentRecord, dayOf, recordChanges } from './supersession.js';
 export { DISPOSITIONS, breakingChange, checkDraft, classify, compare, diagnosticKey, evaluateDraft, parseDraft } from './ontology/check.js';
 export { diffOntologies } from './ontology/diff.js';
 export { BREAKING_CODES, MigrationInvalid, OntologyBreakingChange, OntologyInvalid, OntologyNarrowingChange, OntologyWriteDisabled, StaleDraft, VersionNotFound, isBreaking } from './ontology/errors.js';

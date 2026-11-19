@@ -171,6 +171,14 @@ describe('synthesisPrompt', () => {
     expect(prompt.user).not.toContain('unverified query')
   })
 
+  it('tells the model which records are out of date, and nothing of the kind when none are', () => {
+    const note = 'Out of date: "Ledger" (datasource.ledger) is superseded by "Ledger v2" (datasource.ledger-v2) since 2026-11-01.'
+    const change = { id: 'datasource.ledger', type: 'datasource', title: 'Ledger', supersededBy: 'datasource.ledger-v2', current: null, since: '2026-11-01', reason: '', note }
+    const { prompt: told } = synthesisPrompt(input({ changes: [change] }))
+    expect(told.user).toContain(`Never present them as current; answer with the current record and say what changed:\n- ${note}`)
+    expect(prompt.user).not.toContain('Out of date')
+  })
+
   it('sets conflicting counts side by side rather than choosing one', () => {
     expect(prompt.user).toContain(
       'Adapters disagree:\n- deployments: graph says 4 (every match in scope); mem0 says 2 (top matches only - a sample, not a count)'
