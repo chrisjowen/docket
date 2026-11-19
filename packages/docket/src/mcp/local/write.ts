@@ -6,7 +6,9 @@ import { validateDocuments } from '../../ontology/validator.js'
 import { DocumentError, checkDocument } from '../../workspace/documents.js'
 import { dayOf } from '../../workspace/supersession.js'
 import { appendedNotes, composeDocument, sameMeaning, type ResourceChange } from '../../workspace/write/document.js'
-import { evidenceProblems, hasErrors, refuse, stampAll, stampContext } from '../../workspace/write/evidence.js'
+import { evidenceKey, evidenceProblems, hasErrors, refuse, stampAll, stampContext } from '../../workspace/write/evidence.js'
+import { confidenceModel } from '../../evidence/confidence.js'
+import { scoreProposal, wouldCarry, type ProposalStatus } from '../../workspace/proposals.js'
 import {
   WRITE_LIMITS,
   type AddEvidenceInput,
@@ -21,6 +23,9 @@ import type { SupersedeInput } from '../surface/arguments.js'
 import {
   absolute,
   declaring,
+  describeResource,
+  isAccepted,
+  liveSupersessions,
   documentPathOf,
   freeDocumentPath,
   readSupersessions,
@@ -239,8 +244,20 @@ function untilOf(given: string | undefined, now: Date, id: string): Date | Diagn
   return at
 }
 
+/** A proposal as a write leaves it: its state, score and bar, and what would carry it while pending. */
+export interface ProposalOutcome {
+  id: string
+  status: ProposalStatus
+  score: number
+  threshold: number
+  /** For a pending proposal: the policies one more observation could clear the bar by. */
+  carry: { policy: string; source: string; reaches: number }[]
+}
+
 export interface SupersedeResult {
   supersession?: LocalSupersession
+  /** The proposal as it stands after the write. */
+  proposal?: ProposalOutcome
   /** False for a refusal, or when the record was already superseded by the same replacement. */
   changed: boolean
   /** The replacement this one took over from, when the record was superseded by another before. */
@@ -248,12 +265,50 @@ export interface SupersedeResult {
   diagnostics: Diagnostic[]
 }
 
+/** The workspace's confidence model, people included. */
+const modelOf = (workspace: LocalWorkspace) =>
+  confidenceModel(workspace.ontology?.ontology ?? { version: 1, resourceTypes: {}, relationships: {} }, { people: workspace.people })
+
 /**
- * `docket_supersede`: marks a record superseded by another, with why and the
- * evidence. Both must be declared and different, and the replacement current
- * itself. A record already superseded by the same replacement is left as it
- * is; one superseded by another is re-pointed, the earlier supersession kept,
- * lifted. The documents are untouched.
+ * Scores a proposal by its evidence now and accepts it when it clears its bar:
+ * an accepted one stays accepted, and accepting one lifts the record's earlier
+ * accepted supersession, as re-pointing always did. Returns the earlier
+ * replacement it took over from, if any.
+ */
+function decide(workspace: LocalWorkspace, records: LocalSupersession[], record: LocalSupersession, now: Date): { outcome: ProposalOutcome; replaced?: string } {
+  const model = modelOf(workspace)
+  const type = describeResource(workspace, record.resource)?.type
+  const score = scoreProposal(model, type, record.evidence)
+  record.score = score.score
+  record.threshold = score.threshold
+  let replaced: string | undefined
+  if (record.status === 'pending' && score.clears) {
+    record.status = 'accepted'
+    record.decidedAt = now.toISOString()
+    record.decidedBy = 'score'
+    for (const other of records) {
+      if (other !== record && other.resource === record.resource && other.liftedAt === undefined && isAccepted(other)) {
+        other.liftedAt = now.toISOString()
+        replaced = other.supersededBy
+      }
+    }
+  }
+  const status = record.status ?? 'accepted'
+  return {
+    outcome: { id: record.id, status, score: score.score, threshold: score.threshold, carry: status === 'pending' ? wouldCarry(model, type, score) : [] },
+    ...(replaced !== undefined ? { replaced } : {})
+  }
+}
+
+/**
+ * `docket_supersede`: proposes that a record is superseded by another, with
+ * why and the evidence, and returns at once. Both must be declared and
+ * different, and the replacement current itself. The proposal is scored by
+ * the ontology's policies: one whose evidence clears the bar is accepted and
+ * the record goes out of date - re-pointing an earlier supersession, kept
+ * lifted - and one that does not stays pending, the record current, until
+ * more evidence carries it. A repeated proposal adds its evidence to the
+ * pending one. The documents are untouched.
  */
 export async function supersedeResource(workspace: LocalWorkspace, writer: Writer, input: SupersedeInput, options: { now?: () => Date } = {}): Promise<SupersedeResult> {
   const now = (options.now ?? (() => new Date()))()
@@ -271,11 +326,10 @@ export async function supersedeResource(workspace: LocalWorkspace, writer: Write
   if (!(until instanceof Date)) diagnostics.push(until)
 
   const records = await readSupersessions(workspace)
-  let live: LocalSupersession | undefined
+  const live = await liveSupersessions(workspace, now)
   if (id && by && id !== by) {
     for (const each of [id, by]) if (!declaring(workspace, each).length) diagnostics.push(refuse('unknown-resource', `There is no resource ${each} in this docket.`, { id: each }))
-    live = records.find((record) => record.resource === id && record.liftedAt === undefined)
-    const replacement = records.find((record) => record.resource === by && record.liftedAt === undefined)
+    const replacement = live.get(by)
     if (replacement) {
       diagnostics.push(
         refuse(
@@ -289,16 +343,38 @@ export async function supersedeResource(workspace: LocalWorkspace, writer: Write
   const stamping = stampAll(input.evidence, writer, now, stampContextOf(workspace), { where: { id }, subject: `the supersession of ${id}` })
   diagnostics.push(...stamping.diagnostics)
   if (hasErrors(diagnostics)) return { changed: false, diagnostics }
-  if (live?.supersededBy === by) return { supersession: live, changed: false, diagnostics }
-  if (live) {
+
+  const accepted = records.find((record) => record.resource === id && record.liftedAt === undefined && isAccepted(record))
+  if (accepted?.supersededBy === by) {
+    const { outcome } = decide(workspace, records, accepted, now)
+    return { supersession: accepted, proposal: outcome, changed: false, diagnostics }
+  }
+
+  // The same proposal again: its evidence is added to the pending one.
+  const pending = records.find((record) => record.resource === id && record.liftedAt === undefined && record.status === 'pending')
+  if (pending?.supersededBy === by) {
+    const known = new Set(pending.evidence.map((entry) => evidenceKey(entry as unknown as Record<string, unknown>)))
+    const fresh = stamping.stamped.filter((entry) => !known.has(evidenceKey(entry as unknown as Record<string, unknown>)))
+    if (!fresh.length) {
+      const { outcome } = decide(workspace, records, pending, now)
+      return { supersession: pending, proposal: outcome, changed: false, diagnostics }
+    }
+    pending.evidence.push(...fresh)
+    pending.updatedAt = now.toISOString()
+    const decided = decide(workspace, records, pending, now)
+    await writeSupersessions(workspace, records)
+    return { supersession: pending, proposal: decided.outcome, changed: true, ...(decided.replaced ? { replaced: decided.replaced } : {}), diagnostics }
+  }
+  if (pending) {
     diagnostics.push({
       severity: 'warning',
       code: 'repointed',
-      message: `${id} was superseded by ${live.supersededBy}; it now points to ${by}, and the earlier supersession stays in its history.`,
+      message: `A pending proposal said ${id} was replaced by ${pending.supersededBy}; this one, to ${by}, takes its place, and the earlier one stays in its history.`,
       id
     })
-    live.liftedAt = now.toISOString()
+    pending.liftedAt = now.toISOString()
   }
+
   const supersession: LocalSupersession = {
     id: randomUUID(),
     resource: id,
@@ -308,8 +384,117 @@ export async function supersedeResource(workspace: LocalWorkspace, writer: Write
     recordedBy: writer.label,
     recordedAt: now.toISOString(),
     reason,
-    evidence: stamping.stamped
+    evidence: stamping.stamped,
+    status: 'pending',
+    updatedAt: now.toISOString()
   }
-  await writeSupersessions(workspace, [...records, supersession])
-  return { supersession, changed: true, ...(live ? { replaced: live.supersededBy } : {}), diagnostics }
+  records.push(supersession)
+  const decided = decide(workspace, records, supersession, now)
+  if (decided.replaced) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'repointed',
+      message: `${id} was superseded by ${decided.replaced}; it now points to ${by}, and the earlier supersession stays in its history.`,
+      id
+    })
+  }
+  await writeSupersessions(workspace, records)
+  return { supersession, proposal: decided.outcome, changed: true, ...(decided.replaced ? { replaced: decided.replaced } : {}), diagnostics }
+}
+
+export interface ProposalWriteResult {
+  proposal?: ProposalOutcome & { resource: string; supersededBy: string }
+  changed: boolean
+  evidenceAdded: number
+  diagnostics: Diagnostic[]
+}
+
+const findProposal = (records: readonly LocalSupersession[], proposal: string): LocalSupersession | undefined =>
+  records.find((record) => record.id === proposal) ?? records.find((record) => record.liftedAt === undefined && record.id.startsWith(proposal) && proposal.length >= 8)
+
+/**
+ * `docket_add_evidence` for a proposal: its evidence, appended, and the
+ * proposal scored again - accepted when it now clears the bar. A confirmation
+ * is evidence like any other: the person's own, cited by nothing.
+ */
+export async function addProposalEvidence(
+  workspace: LocalWorkspace,
+  writer: Writer,
+  input: { supersession: string; evidence: EvidenceInput[] },
+  options: { now?: () => Date } = {}
+): Promise<ProposalWriteResult> {
+  const now = (options.now ?? (() => new Date()))()
+  const records = await readSupersessions(workspace)
+  const record = findProposal(records, input.supersession)
+  const where = { id: record?.resource ?? input.supersession }
+  const diagnostics: Diagnostic[] = []
+  if (!record || record.liftedAt !== undefined) diagnostics.push(refuse('unknown-proposal', `There is no open supersede proposal ${input.supersession} in this docket.`, where))
+  else if (record.status === 'rejected') diagnostics.push(refuse('rejected-proposal', `Proposal ${record.id} was rejected; propose it again with docket_supersede.`, where))
+  if (input.evidence.length === 0) diagnostics.push(refuse('missing-evidence', 'Give at least one piece of evidence for the proposal.', where))
+  else if (input.evidence.length > WRITE_LIMITS.evidencePerCall) diagnostics.push(refuse('too-much-evidence', `A write carries at most ${WRITE_LIMITS.evidencePerCall} evidence entries.`, where))
+  const stamping = stampAll(input.evidence, writer, now, stampContextOf(workspace), { where, subject: `proposal ${input.supersession}` })
+  diagnostics.push(...stamping.diagnostics)
+  if (hasErrors(diagnostics) || !record) return { changed: false, evidenceAdded: 0, diagnostics }
+
+  const known = new Set(record.evidence.map((entry) => evidenceKey(entry as unknown as Record<string, unknown>)))
+  const fresh = stamping.stamped.filter((entry) => !known.has(evidenceKey(entry as unknown as Record<string, unknown>)))
+  record.evidence.push(...fresh)
+  if (fresh.length) record.updatedAt = now.toISOString()
+  const before = record.status
+  const decided = decide(workspace, records, record, now)
+  if (fresh.length || record.status !== before) await writeSupersessions(workspace, records)
+  return {
+    proposal: { ...decided.outcome, resource: record.resource, supersededBy: record.supersededBy },
+    changed: fresh.length > 0,
+    evidenceAdded: fresh.length,
+    diagnostics
+  }
+}
+
+/** Turns a pending proposal down, with why: the older record stays current, and both are kept. */
+export async function rejectProposal(
+  workspace: LocalWorkspace,
+  writer: Writer,
+  input: { supersession: string; reason: string },
+  options: { now?: () => Date } = {}
+): Promise<ProposalWriteResult> {
+  const now = (options.now ?? (() => new Date()))()
+  const records = await readSupersessions(workspace)
+  const record = findProposal(records, input.supersession)
+  const reason = input.reason.trim()
+  const where = { id: record?.resource ?? input.supersession }
+  const diagnostics: Diagnostic[] = []
+  if (!record || record.liftedAt !== undefined) diagnostics.push(refuse('unknown-proposal', `There is no open supersede proposal ${input.supersession} in this docket.`, where))
+  else if (record.status !== 'pending') diagnostics.push(refuse('decided-proposal', `Proposal ${record.id} is already ${record.status ?? 'accepted'}.`, where))
+  if (!reason) diagnostics.push(refuse('missing-reason', 'Say why the proposal is rejected.', where))
+  if (hasErrors(diagnostics) || !record) return { changed: false, evidenceAdded: 0, diagnostics }
+  record.status = 'rejected'
+  record.rejection = reason
+  record.decidedAt = now.toISOString()
+  record.decidedBy = writer.principal ?? writer.label
+  record.updatedAt = now.toISOString()
+  await writeSupersessions(workspace, records)
+  return {
+    proposal: { id: record.id, status: 'rejected', score: record.score ?? 0, threshold: record.threshold ?? 0, carry: [], resource: record.resource, supersededBy: record.supersededBy },
+    changed: true,
+    evidenceAdded: 0,
+    diagnostics
+  }
+}
+
+/**
+ * Scores every pending proposal again and records those that now clear their
+ * bar as accepted: after a policy is published, or a person's role changes.
+ * Returns the proposals accepted.
+ */
+export async function promoteProposals(workspace: LocalWorkspace, options: { now?: () => Date } = {}): Promise<LocalSupersession[]> {
+  const now = (options.now ?? (() => new Date()))()
+  const records = await readSupersessions(workspace)
+  const promoted: LocalSupersession[] = []
+  for (const record of records) {
+    if (record.liftedAt !== undefined || record.status !== 'pending') continue
+    if (decide(workspace, records, record, now).outcome.status === 'accepted') promoted.push(record)
+  }
+  if (promoted.length) await writeSupersessions(workspace, records)
+  return promoted
 }

@@ -32,6 +32,8 @@ export function searchScope(include, minConfidence) {
     }
     return { ...(include !== undefined ? { include: [...new Set(include)] } : {}), ...(minConfidence !== undefined ? { minConfidence } : {}) };
 }
+/** How pending proposals read beside an answer. */
+const pendingLines = (pending) => pending?.length ? ['Proposed, not yet fact - the older records are still current:', ...pending.map((each) => `- ${each.note}`)] : [];
 /** How `docket_ask` reads for the model: the summary, what changed, and what the projections found. */
 export function answerText(response) {
     const { answer } = response;
@@ -43,6 +45,8 @@ export function answerText(response) {
     if (response.changes?.length) {
         lines.push('', 'Changed since recorded - never present these as current:', ...response.changes.map((change) => `- ${change.note}`));
     }
+    if (response.pending?.length)
+        lines.push('', ...pendingLines(response.pending));
     const references = (answer.references ?? []).filter((reference) => reference.status !== 'unresolved');
     if (references.length > 0) {
         lines.push('', 'What the projections found:');
@@ -68,12 +72,13 @@ export function annotatedSearchText(found, text, lowConfidence = 0.5) {
         out = out.replace(`\n- ${match.id} (${match.type}) `, `\n- ${low ? '⚠ ' : ''}${match.id} (${match.type}) [${match.foundIn.join(', ')}]${replaces} `);
     }
     const changes = found.changes ?? [];
-    if (types.size === 0 && changes.length === 0)
+    if (types.size === 0 && changes.length === 0 && !found.pending?.length)
         return out;
     const [head, ...rest] = out.split('\n');
     return [
         head,
         ...(changes.length ? ['Changed since recorded - never present these as current:', ...changes.map((change) => `- ${change.note}`)] : []),
+        ...pendingLines(found.pending),
         ...(types.size ? [`By type: ${[...types].map(([type, count]) => `${count} ${type}`).join(', ')}.`] : []),
         ...rest
     ].join('\n');

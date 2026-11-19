@@ -158,11 +158,20 @@ describe("docket's local MCP tools", () => {
   })
 
   it('supersedes a record, and search and get answer with its replacement', async () => {
+    // A lead's word clears the bar at once: "A lead said so", 0.85 of 0.75.
+    await writeFile(join(root, '.docket/people.yaml'), 'me: dana\npeople:\n  dana:\n    role: lead\n', 'utf8')
     await call('docket_remember', { id: 'team.money', type: 'team', title: 'Money Movement', evidence: EVIDENCE })
     const refused = await call('docket_supersede', { id: 'team.payments', by: 'team.none', reason: 'Renamed.', evidence: EVIDENCE })
     expect(text(refused)).toMatch(/unknown-resource/)
     const answer = await call('docket_supersede', { id: 'team.payments', by: 'team.money', reason: 'The team was renamed.', validUntil: '2026-11-01', evidence: EVIDENCE })
-    expect(structured(answer)).toMatchObject({ ok: true, changed: true, supersededBy: 'team.money', validUntil: '2026-11-01T00:00:00.000Z' })
+    expect(structured(answer)).toMatchObject({
+      ok: true,
+      changed: true,
+      status: 'accepted',
+      proposal: { status: 'accepted', score: 0.85, threshold: 0.75 },
+      supersededBy: 'team.money',
+      validUntil: '2026-11-01T00:00:00.000Z'
+    })
     const kept = parse(await read('.docket/supersessions.yaml')) as { supersessions: { resource: string; supersededBy: string }[] }
     expect(kept.supersessions).toEqual([expect.objectContaining({ resource: 'team.payments', supersededBy: 'team.money' })])
     expect(structured(await call('docket_supersede', { id: 'team.payments', by: 'team.money', reason: 'Again.', evidence: EVIDENCE }))).toMatchObject({ changed: false })
@@ -181,6 +190,7 @@ describe("docket's local MCP tools", () => {
   })
 
   it('asks around a superseded record: its replacement ranked first, the change named', async () => {
+    await writeFile(join(root, '.docket/people.yaml'), 'me: dana\npeople:\n  dana:\n    role: lead\n', 'utf8')
     await call('docket_remember', { id: 'team.money', type: 'team', title: 'Money Movement', body: 'Formerly the payments team.', evidence: EVIDENCE })
     await call('docket_supersede', { id: 'team.payments', by: 'team.money', reason: 'The team was renamed.', validUntil: '2026-11-01', evidence: EVIDENCE })
     await sync({ cwd: root })
@@ -191,6 +201,46 @@ describe("docket's local MCP tools", () => {
     const ids = (response.answer.references ?? []).map((reference) => reference.id)
     expect(ids.indexOf('team.money')).toBeLessThan(ids.indexOf('team.payments'))
     expect(text(asked)).toContain('Changed since recorded - never present these as current:')
+  })
+
+  it('keeps a proposal its evidence does not carry pending, the record current, until more evidence does', async () => {
+    const people = (me: string) => writeFile(join(root, '.docket/people.yaml'), `me: ${me}\npeople:\n  dana:\n    role: lead\n  tom: {}\n`, 'utf8')
+    await people('tom')
+    await call('docket_remember', { id: 'team.money', type: 'team', title: 'Money Movement', evidence: EVIDENCE })
+    const proposed = structured(await call('docket_supersede', { id: 'team.payments', by: 'team.money', reason: 'The team was renamed.', evidence: [{ note: 'I heard so.' }] })) as {
+      ok: boolean
+      status: string
+      proposal: { id: string; score: number; threshold: number; carry: { policy: string }[] }
+    }
+    // Tom is a person the template prices at 0.70; the bar is 0.75.
+    expect(proposed).toMatchObject({ ok: true, changed: true, status: 'pending', proposal: { status: 'pending', score: 0.7, threshold: 0.75 } })
+    expect(proposed.proposal.carry.map((each) => each.policy)).toContain('A lead said so')
+
+    const old = await call('docket_get', { id: 'team.payments' })
+    expect(structured(old)).not.toHaveProperty('superseded')
+    expect(structured(old)).toMatchObject({ pendingReplacement: { proposal: proposed.proposal.id, by: 'team.money', score: 0.7, threshold: 0.75 } })
+    expect(text(old)).toContain(`A pending proposal (${proposed.proposal.id}, 0.70 of 0.75) says it is replaced by team.money`)
+    expect(structured(await call('docket_get', { id: 'team.money' }))).toMatchObject({ pendingReplaces: [{ id: 'team.payments', proposal: proposed.proposal.id }] })
+
+    await sync({ cwd: root })
+    const found = structured(await call('docket_search', { query: 'payments' })) as { matches: { id: string }[]; pending?: { id: string; by: string }[]; changes?: unknown }
+    expect(found.matches.map((match) => match.id)).toContain('team.payments')
+    expect(found.changes).toBeUndefined()
+    expect(found.pending).toEqual([expect.objectContaining({ proposal: proposed.proposal.id, id: 'team.payments', by: 'team.money' })])
+
+    // Dana, a lead, confirms it: her own word carries it over the bar.
+    await people('dana')
+    const confirmed = await call('docket_add_evidence', { supersession: proposed.proposal.id, evidence: [{ note: 'Yes, renamed in October.' }] })
+    expect(structured(confirmed)).toMatchObject({ ok: true, evidenceAdded: 1, status: 'accepted', id: 'team.payments', supersededBy: 'team.money' })
+    expect(structured(await call('docket_get', { id: 'team.payments' }))).toMatchObject({ superseded: { by: 'team.money' } })
+    const kept = parse(await read('.docket/supersessions.yaml')) as { supersessions: { status: string; decidedBy: string; evidence: unknown[] }[] }
+    expect(kept.supersessions).toEqual([expect.objectContaining({ status: 'accepted', decidedBy: 'score', evidence: [expect.anything(), expect.anything()] })])
+  })
+
+  it('refuses evidence for a proposal it does not have, and an id given with a supersession', async () => {
+    expect(text(await call('docket_add_evidence', { supersession: 'nope-nope', evidence: [{ note: 'x' }] }))).toMatch(/unknown-proposal/)
+    const both = await call('docket_add_evidence', { id: 'team.payments', supersession: 'x', evidence: [{ note: 'x' }] })
+    expect(both.error?.message).toMatch(/Give supersession alone/)
   })
 
   it('writes a reporter as reportedBy, which sync and validate accept without a warning', async () => {

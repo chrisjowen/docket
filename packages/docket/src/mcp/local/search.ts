@@ -3,7 +3,8 @@ import { recordChanges } from '../../workspace/supersession.js'
 import type { SearchArguments } from '../surface/arguments.js'
 import { MIN_CONFIDENCE_IGNORED, type SearchChange, type WorkspaceMatch, type WorkspaceSearch } from '../surface/results.js'
 import type { SearchGraph } from '../types.js'
-import { describeResource, liveSupersessions, readWorkspace, storeOf, type LocalSupersession, type LocalWorkspace } from './files.js'
+import { pendingChanges } from '../../workspace/proposals.js'
+import { describeResource, liveSupersessions, openProposals, readWorkspace, storeOf, type LocalSupersession, type LocalWorkspace } from './files.js'
 
 /*
  * docket's own search as `docket_search` answers it on every Docket MCP
@@ -50,6 +51,17 @@ export function changesOf(workspace: LocalWorkspace, live: ReadonlyMap<string, L
  * place, naming what it `supersedes`.
  */
 export async function withSupersessions(resolved: ResolvedConfig, found: WorkspaceSearch): Promise<WorkspaceSearch> {
+  const answered = await withAccepted(resolved, found)
+  // Proposals not yet fact about what it found: those records stay as they are, with a note.
+  const pending = pendingChanges(await openProposals(storeOf(resolved)), [
+    ...answered.matches.map((match) => match.id),
+    ...answered.matches.flatMap((match) => match.supersedes ?? [])
+  ])
+  return pending.length ? { ...answered, pending } : answered
+}
+
+/** The search with every match an accepted supersession has replaced answered by its current record. */
+async function withAccepted(resolved: ResolvedConfig, found: WorkspaceSearch): Promise<WorkspaceSearch> {
   const live = await liveSupersessions(storeOf(resolved))
   if (!found.matches.some((match) => live.has(match.id))) return found
   const workspace = await readWorkspace(resolved)

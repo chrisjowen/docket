@@ -257,6 +257,9 @@ docket open --init          # start a docket here first, as docket init does, wh
 docket ontology list        # resource types, relationships, sources and policies
 docket ontology convert     # rewrite legacy evidence settings as sources and policies
 docket why <id>             # which policies priced a resource and its links
+docket proposals            # pending supersede proposals: score, bar, and whether stale (--all for decided ones)
+docket confirm <proposal>   # confirm one as yourself: your own evidence, scored by who you are
+docket reject <proposal> --reason "..."  # turn one down; the older record stays current
 docket ontology show service  # attributes, relationships and confidence by source
 docket adapter add <provider>    # set up jsonl, neo4j, mem0, memvid, mempalace, cognee, postgres or sqlite: asks, shows the plan, applies it once confirmed
 docket adapters list        # configured adapter instances and whether each can load
@@ -442,9 +445,9 @@ Cloud offer, over the project's own files.
 | `docket_ontology` | The ontology, with its version |
 | `docket_remember` | Writes a resource, with evidence |
 | `docket_update_notes` | Appends dated notes to a resource, with evidence |
-| `docket_add_evidence` | More evidence for a resource or a link |
+| `docket_add_evidence` | More evidence for a resource, a link, or a pending supersede proposal |
 | `docket_retire` | Retires a resource, removing the documents that declare it |
-| `docket_supersede` | Marks a resource out of date, replaced by a newer one |
+| `docket_supersede` | Proposes that a newer resource replaces one; it becomes fact when its evidence clears the bar |
 | `docket_propose_ontology_change` | Checks a change to the ontology and saves it as a draft |
 | `docket_publish_ontology_change` | Publishes a change to the ontology, migrating documents it breaks |
 

@@ -10,6 +10,20 @@ export { DOCUMENT_BYTES, DocumentError, checkDocument, checkoutProblem, cloudDoc
 export { writableHere, type Origin } from './origin.js'
 export { changeNote, currentRecord, dayOf, recordChanges, type HeldSupersession } from './supersession.js'
 export {
+  STALE_AFTER_DAYS,
+  isStale,
+  pendingChanges,
+  pendingNote,
+  proposalNote,
+  proposalSubject,
+  scoreProposal,
+  thresholdFor,
+  wouldCarry,
+  type PendingChange,
+  type ProposalScore,
+  type ProposalStatus
+} from './proposals.js'
+export {
   DISPOSITIONS,
   breakingChange,
   checkDraft,
@@ -19,6 +33,7 @@ export {
   evaluateDraft,
   needsAcceptance,
   parseDraft,
+  proposalChanges,
   rescore,
   type CheckResult,
   type Classification,
@@ -26,7 +41,9 @@ export {
   type Disposition,
   type DraftCheck,
   type Evaluation,
+  type ProposalChange,
   type Rescored,
+  type SnapshotProposal,
   type Rewrite,
   type StoredDocument,
   type Unresolved,

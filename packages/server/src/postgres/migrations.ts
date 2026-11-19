@@ -229,8 +229,33 @@ CREATE UNIQUE INDEX supersessions_live ON {{schema}}.supersessions (workspace_id
 CREATE INDEX supersessions_by ON {{schema}}.supersessions (workspace_id, superseded_by) WHERE lifted_at IS NULL;
 `
 
+/**
+ * Supersede proposals: a supersession is scored by the workspace's policies
+ * and is `pending` until its evidence clears the bar, `accepted` after, or
+ * `rejected`. Every supersession recorded before is accepted, as it
+ * always was, and marked grandfathered. A record has at most one accepted
+ * and one pending supersession at a time; a rejected one stays for history.
+ */
+const CORE_0002 = `
+ALTER TABLE {{schema}}.supersessions
+  ADD COLUMN status text NOT NULL DEFAULT 'accepted' CHECK (status IN ('pending', 'accepted', 'rejected')),
+  ADD COLUMN score real CHECK (score BETWEEN 0 AND 1),
+  ADD COLUMN threshold real CHECK (threshold BETWEEN 0 AND 1),
+  ADD COLUMN updated_at timestamptz,
+  ADD COLUMN decided_at timestamptz,
+  ADD COLUMN decided_by text,
+  ADD COLUMN grandfathered boolean NOT NULL DEFAULT true;
+ALTER TABLE {{schema}}.supersessions ALTER COLUMN grandfathered SET DEFAULT false;
+DROP INDEX {{schema}}.supersessions_live;
+CREATE UNIQUE INDEX supersessions_live ON {{schema}}.supersessions (workspace_id, resource_id) WHERE lifted_at IS NULL AND status = 'accepted';
+CREATE UNIQUE INDEX supersessions_pending ON {{schema}}.supersessions (workspace_id, resource_id) WHERE lifted_at IS NULL AND status = 'pending';
+`
+
 /** The core store's migrations, in order. */
-export const CORE_MIGRATIONS: readonly Migration[] = [{ version: 1, name: 'core_0001_canonical_store', sql: CORE_0001 }]
+export const CORE_MIGRATIONS: readonly Migration[] = [
+  { version: 1, name: 'core_0001_canonical_store', sql: CORE_0001 },
+  { version: 2, name: 'core_0002_supersede_proposals', sql: CORE_0002 }
+]
 
 export class MigrationError extends Error {
   override name = 'MigrationError'

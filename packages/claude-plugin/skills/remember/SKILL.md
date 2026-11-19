@@ -193,7 +193,11 @@ made on another branch is not lost - but prefer one file per resource and
 update it.
 
 When a decision replaces an earlier one, keep both files and link the new one
-with `rel: supersedes`.
+with `rel: supersedes`. Through the docket MCP tools, `docket_supersede` files a
+proposal: it becomes fact only when its evidence clears the bar, and until then
+the older record is current. When it comes back pending, add the evidence that
+would carry it with `docket_add_evidence` and the proposal's id as
+`supersession`, or say who should confirm it.
 
 ## Judgement
 

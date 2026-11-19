@@ -18,8 +18,9 @@ import type { StoreContext, StoreRunner } from '../ports.js'
 import { indexStatus } from '../postgres/index-status.js'
 import { listIngests, type IngestEvent } from '../postgres/ingest.js'
 import { postgresSource } from '../postgres/source.js'
-import { liveSupersessions, type Supersession } from '../postgres/supersession.js'
+import { liveSupersessions, openProposals, type Supersession } from '../postgres/supersession.js'
 import { workspaceById } from '../postgres/workspaces.js'
+import { pendingChanges } from '../docket.js'
 import { changeNote, currentRecord, dayOf } from '../supersession.js'
 import type { Logger } from './outbox.js'
 import { CUT_MODEL, RETRIEVAL_CUT_MODEL } from './relevance-model.js'
@@ -156,6 +157,8 @@ export interface Asked {
   project: { name: string; root: string }
   /** The workspace's records gone out of date, by id: never answered as current. */
   supersessions?: ReadonlyMap<string, Pick<Supersession, 'supersededBy' | 'validUntil' | 'reason'>>
+  /** Its supersede proposals not yet fact: the records they would replace are still current. */
+  pending?: { proposal: string; id: string; by: string; reason: string; score: number; threshold: number; stale: boolean }[]
 }
 
 /**
@@ -186,12 +189,14 @@ export async function askProjections<S extends SearchQuery, A extends AskQuery>(
       const outcome = await askWith(snapshot, docket, { question, maxResults, synthesis: false, timezone: 'UTC' })
       const status = await indexStatus(ctx.tx, workspaceId, read, deps.instances)
       const supersessions = new Map((await liveSupersessions(ctx, workspaceId)).map((each) => [each.resourceId, each]))
+      const pending = await openProposals(ctx, workspaceId)
       return {
         outcome,
         read,
         index: { synced: status.synced, behind: status.behind },
         project: { name: workspace.name, root: workspace.slug },
-        supersessions
+        supersessions,
+        ...(pending.length ? { pending } : {})
       }
     })
   } finally {
@@ -298,7 +303,11 @@ export function queryService<S extends SearchQuery = SearchQuery, A extends AskQ
   async function summarise(models: Models | null, asked: Asked): Promise<AskResponse> {
     const changes = changesFound(asked)
     const reply = await summarised(models, asked, changes)
-    return changes.length ? { ...reply, changes } : reply
+    const pending = pendingChanges(
+      asked.pending ?? [],
+      toSearchResult(asked.outcome).sources.flatMap((source) => source.hits.map((hit) => hit.id))
+    )
+    return { ...reply, ...(changes.length ? { changes } : {}), ...(pending.length ? { pending } : {}) }
   }
 
   async function summarised(models: Models | null, asked: Asked, changes: readonly SearchChange[]): Promise<AskResponse> {
@@ -700,12 +709,14 @@ export function searchBoard(query: string, asked: Asked, ranked: Ranked, options
   // Only the changes a match answers for: what found an out-of-date record found its current one.
   const matched = new Set(matches.map((match) => match.id))
   const changes = changesOf(stale.filter((id) => matched.has(currentRecord(asked.supersessions ?? new Map(), id))), asked)
+  const pending = pendingChanges(asked.pending ?? [], [...matched, ...stale])
   return {
     schema: SEARCH_SCHEMA,
     query,
     project: asked.project,
     matches,
     ...(changes.length ? { changes } : {}),
+    ...(pending.length ? { pending } : {}),
     nodes: [...board.values()],
     links: [...links.values()],
     paths: [...paths.values()],

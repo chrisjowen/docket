@@ -1,6 +1,7 @@
 import { recordChanges } from '../../workspace/supersession.js';
 import { MIN_CONFIDENCE_IGNORED } from '../surface/results.js';
-import { describeResource, liveSupersessions, readWorkspace, storeOf } from './files.js';
+import { pendingChanges } from '../../workspace/proposals.js';
+import { describeResource, liveSupersessions, openProposals, readWorkspace, storeOf } from './files.js';
 /*
  * docket's own search as `docket_search` answers it on every Docket MCP
  * server: the board `searchGraph` draws, cut to where the call said to look,
@@ -45,6 +46,16 @@ export function changesOf(workspace, live, ids) {
  * place, naming what it `supersedes`.
  */
 export async function withSupersessions(resolved, found) {
+    const answered = await withAccepted(resolved, found);
+    // Proposals not yet fact about what it found: those records stay as they are, with a note.
+    const pending = pendingChanges(await openProposals(storeOf(resolved)), [
+        ...answered.matches.map((match) => match.id),
+        ...answered.matches.flatMap((match) => match.supersedes ?? [])
+    ]);
+    return pending.length ? { ...answered, pending } : answered;
+}
+/** The search with every match an accepted supersession has replaced answered by its current record. */
+async function withAccepted(resolved, found) {
     const live = await liveSupersessions(storeOf(resolved));
     if (!found.matches.some((match) => live.has(match.id)))
         return found;

@@ -83,8 +83,16 @@ export {
   type SyncTrigger
 } from './sync-runs.js'
 export {
+  addProposalEvidence,
   liveSupersessions,
+  openProposals,
+  pendingProposals,
+  promoteProposals,
+  rejectProposal,
   supersedeResource,
+  type PendingProposal,
+  type ProposalOutcome,
+  type ProposalWriteResult,
   type SupersedeInput,
   type SupersedeOptions,
   type SupersedeResult,

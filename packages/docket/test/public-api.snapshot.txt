@@ -1583,6 +1583,9 @@ Subject
   } | {
       kind: 'relationship';
       rel: string;
+  } | {
+      kind: 'supersession';
+      type: string;
   };
 
 sync
@@ -3838,6 +3841,12 @@ ADD_EVIDENCE_DEFINITION
                   maxLength: number;
                   description: string;
               };
+              supersession: {
+                  type: string;
+                  minLength: number;
+                  maxLength: number;
+                  description: string;
+              };
               link: {
                   type: string;
                   description: string;
@@ -3942,7 +3951,7 @@ ADD_EVIDENCE_DEFINITION
   };
 
 addEvidenceArguments
-  export declare function addEvidenceArguments(raw: unknown): AddEvidenceInput;
+  export declare function addEvidenceArguments(raw: unknown): AddEvidenceInput | ProposalEvidenceInput;
 
 annotatedSearchText
   export declare function annotatedSearchText(found: WorkspaceSearch, text: string, lowConfidence?: number): string;
@@ -4002,6 +4011,7 @@ AskResponse
       answer: CoordinatedAnswer;
       notice?: string;
       changes?: SearchChange[];
+      pending?: PendingChange[];
   }
 
 describedAs
@@ -4132,6 +4142,9 @@ getArguments
 isObject
   export declare const isObject: (value: unknown) => value is Record<string, unknown>;
 
+isProposalEvidence
+  export declare const isProposalEvidence: (input: AddEvidenceInput | ProposalEvidenceInput) => input is ProposalEvidenceInput;
+
 MAX_ASK_RESULTS
   export declare const MAX_ASK_RESULTS = 50;
 
@@ -4187,6 +4200,16 @@ parseAttributes
 parseEvidence
   export declare function parseEvidence(raw: unknown, at: string): EvidenceInput[];
 
+PendingView
+  export interface PendingView {
+      proposal: string;
+      by: string;
+      reason: string;
+      score: number;
+      threshold: number;
+      stale: boolean;
+  }
+
 PROPOSAL_SCHEMA
   export declare const PROPOSAL_SCHEMA = "docket-ontology-proposal.v1";
 
@@ -4196,8 +4219,40 @@ proposalAnswer
 proposalArguments
   export declare function proposalArguments(raw: unknown): Proposal;
 
+proposalEvidenceAnswer
+  export declare function proposalEvidenceAnswer(input: {
+      supersession: string;
+  }, viewer: string | null, result: {
+      proposal?: ProposalView & {
+          resource: string;
+          supersededBy: string;
+      };
+      changed: boolean;
+      evidenceAdded: number;
+      diagnostics: readonly Diagnostic[];
+  }): ToolResult;
+
+ProposalEvidenceInput
+  export interface ProposalEvidenceInput {
+      supersession: string;
+      evidence: EvidenceInput[];
+  }
+
 proposalRefusal
   export declare function proposalRefusal(caught: unknown): ToolResult | null;
+
+ProposalView
+  export interface ProposalView {
+      id: string;
+      status: ProposalStatus;
+      score: number;
+      threshold: number;
+      carry: readonly {
+          policy: string;
+          source: string;
+          reaches: number;
+      }[];
+  }
 
 PROPOSE_ONTOLOGY_DEFINITION
   export declare const PROPOSE_ONTOLOGY_DEFINITION: {
@@ -4615,6 +4670,10 @@ ResourceRead
           validUntil: Date | string;
           reason: string;
       }[];
+      pendingReplacement?: PendingView;
+      pendingReplaces?: (PendingView & {
+          id: string;
+      })[];
   }
 
 ResourceRevision
@@ -4900,6 +4959,7 @@ supersedeAnswer
           supersededBy: string;
           validUntil: Date | string;
       };
+      proposal?: ProposalView;
       replaced?: string;
       diagnostics: readonly Diagnostic[];
   }): ToolResult;
@@ -5068,6 +5128,7 @@ WorkspaceSearch
   export interface WorkspaceSearch extends SearchGraph {
       matches: WorkspaceMatch[];
       changes?: SearchChange[];
+      pending?: PendingChange[];
   }
 
 WRITE_SCHEMA
@@ -5849,13 +5910,14 @@ CheckResult
           origin: Origin;
       }[];
       rescored: Rescored[];
+      proposals: ProposalChange[];
   }
 
 Classification
   export type Classification = 'safe' | 'rescore' | 'narrowing' | 'breaking';
 
 classify
-  export declare function classify(introduced: readonly Diagnostic[], rescored?: readonly Rescored[]): Classification;
+  export declare function classify(introduced: readonly Diagnostic[], rescored?: readonly Rescored[], proposals?: readonly ProposalChange[]): Classification;
 
 cloudDocumentPath
   export declare function cloudDocumentPath(document: {
@@ -5870,7 +5932,7 @@ compare
   }, after: {
       documents: readonly MemoryDocument[];
       ontology: Ontology;
-  }, origins: ReadonlyMap<string, Origin>, people?: PeopleDirectory): CheckResult;
+  }, origins: ReadonlyMap<string, Origin>, people?: PeopleDirectory, proposals?: readonly SnapshotProposal[]): CheckResult;
 
 ComposedDocument
   export interface ComposedDocument {
@@ -6022,6 +6084,9 @@ importYaml
 isBreaking
   export declare const isBreaking: (diagnostic: Diagnostic) => boolean;
 
+isStale
+  export declare const isStale: (updatedAt: Date | string, now: Date) => boolean;
+
 LinkInput
   export interface LinkInput {
       rel: string;
@@ -6115,6 +6180,38 @@ parseWorkspaceOntology
 pathProblem
   export declare function pathProblem(path: string): string | null;
 
+PendingChange
+  export interface PendingChange {
+      proposal: string;
+      id: string;
+      by: string;
+      score: number;
+      threshold: number;
+      stale?: boolean;
+      note: string;
+  }
+
+pendingChanges
+  export declare const pendingChanges: (pending: readonly {
+      proposal: string;
+      id: string;
+      by: string;
+      reason: string;
+      score: number;
+      threshold: number;
+      stale: boolean;
+  }[], ids: readonly string[]) => PendingChange[];
+
+pendingNote
+  export declare const pendingNote: (proposal: {
+      id: string;
+      by: string;
+      reason: string;
+      score: number;
+      threshold: number;
+      stale?: boolean;
+  }, record?: string) => string;
+
 Proposal
   export type Proposal = {
       yaml: string;
@@ -6123,6 +6220,39 @@ Proposal
       patch: string;
       message?: string;
   };
+
+ProposalChange
+  export interface ProposalChange {
+      proposal: string;
+      resource: string;
+      status: 'pending' | 'accepted';
+      before: number;
+      after: number;
+      threshold: number;
+      change: 'would-accept' | 'would-no-longer-pass';
+  }
+
+proposalChanges
+  export declare function proposalChanges(proposals: readonly SnapshotProposal[], documents: readonly MemoryDocument[], before: Ontology | null, after: Ontology, people?: PeopleDirectory): ProposalChange[];
+
+proposalNote
+  export declare const proposalNote: (status: ProposalStatus, score: ProposalScore, carry: readonly {
+      policy: string;
+      reaches: number;
+  }[]) => string;
+
+ProposalScore
+  export interface ProposalScore {
+      score: number;
+      threshold: number;
+      clears: boolean;
+  }
+
+ProposalStatus
+  export type ProposalStatus = 'pending' | 'accepted' | 'rejected';
+
+proposalSubject
+  export declare const proposalSubject: (type: string) => Subject;
 
 proposedText
   export declare function proposedText(head: string | null, proposal: Proposal): string;
@@ -6211,14 +6341,28 @@ rewriteDocument
 sameMeaning
   export declare function sameMeaning(a: string, b: string, path: string): boolean;
 
+scoreProposal
+  export declare const scoreProposal: (model: ConfidenceModel, type: string | undefined, evidence: readonly MemoryEvidence[]) => ProposalScore;
+
 sizeProblem
   export declare function sizeProblem(text: string): Diagnostic | null;
+
+SnapshotProposal
+  export interface SnapshotProposal {
+      id: string;
+      resource: string;
+      status: 'pending' | 'accepted';
+      evidence: readonly MemoryEvidence[];
+  }
 
 splitDocument
   export declare function splitDocument(raw: string): {
       frontmatter: Document;
       body: string;
   } | null;
+
+STALE_AFTER_DAYS
+  export declare const STALE_AFTER_DAYS = 30;
 
 StaleDraft
   export declare class StaleDraft extends Error {
@@ -6272,6 +6416,9 @@ StoredDocument
 stripHeader
   export declare function stripHeader(text: string): string;
 
+thresholdFor
+  export declare const thresholdFor: (model: Pick<ConfidenceModel, "accept">, type: string | undefined) => number;
+
 Unresolved
   export interface Unresolved {
       resourceId: string;
@@ -6294,7 +6441,15 @@ WorkspaceSnapshot
           ontology: Ontology | null;
       } | null;
       people?: PeopleDirectory;
+      proposals?: readonly SnapshotProposal[];
   }
+
+wouldCarry
+  export declare const wouldCarry: (model: ConfidenceModel, type: string | undefined, current: ProposalScore) => {
+      policy: string;
+      source: string;
+      reaches: number;
+  }[];
 
 writableHere
   export declare const writableHere: (origin: Origin) => boolean;

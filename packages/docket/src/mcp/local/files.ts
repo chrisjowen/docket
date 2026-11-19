@@ -10,11 +10,13 @@ import { filesystemSource } from '../../canonical/source.js'
 import type { ResolvedConfig } from '../../config/config.js'
 import type { MemoryDocument, Ontology } from '../../model/index.js'
 import { parseOntology } from '../../ontology/loader.js'
+import { confidenceModel } from '../../evidence/confidence.js'
 import { loadPeople, type PeopleDirectory } from '../../people/directory.js'
+import { isStale, scoreProposal, type ProposalScore, type ProposalStatus } from '../../workspace/proposals.js'
 import { hashContent } from '../../source/hashing.js'
 import { parseMemoryFile } from '../../source/parser.js'
 import { cloudDocumentPath } from '../../workspace/documents.js'
-import type { Classification, Disposition, WorkspaceSnapshot } from '../../workspace/ontology/check.js'
+import type { Classification, Disposition, SnapshotProposal, WorkspaceSnapshot } from '../../workspace/ontology/check.js'
 import type { Migration } from '../../workspace/ontology/migrations.js'
 import type { StampedEvidence } from '../../workspace/write/inputs.js'
 
@@ -195,6 +197,49 @@ export interface LocalSupersession {
   evidence: StampedEvidence[]
   /** When it was replaced by a later supersession of the same record; absent while it holds. */
   liftedAt?: string
+  /**
+   * A proposal's state: `pending` until its evidence clears the bar,
+   * `accepted` after, `rejected` when a person turned it down. Absent: one
+   * recorded before proposals, accepted as it always was.
+   */
+  status?: ProposalStatus
+  /** Its score and bar when it was last decided or given evidence. */
+  score?: number
+  threshold?: number
+  /** When it last changed: recorded, given evidence, decided. */
+  updatedAt?: string
+  decidedAt?: string
+  decidedBy?: string
+  /** Why it was rejected. */
+  rejection?: string
+}
+
+/** A pending proposal as it scores now. */
+export interface PendingProposal {
+  record: LocalSupersession
+  /** The type of the record it would replace, when that is on file. */
+  type?: string
+  score: ProposalScore
+  stale: boolean
+}
+
+/** Accepted: a proposal decided so, or one recorded before proposals existed. */
+export const isAccepted = (record: LocalSupersession): boolean => record.status === undefined || record.status === 'accepted'
+
+/** Every pending proposal, scored now by the workspace's policies and people. */
+export function pendingProposals(workspace: LocalWorkspace, records: readonly LocalSupersession[], now: Date = new Date()): PendingProposal[] {
+  const pending = records.filter((record) => record.liftedAt === undefined && record.status === 'pending')
+  if (!pending.length) return []
+  const model = confidenceModel(workspace.ontology?.ontology ?? { version: 1, resourceTypes: {}, relationships: {} }, { people: workspace.people })
+  return pending.map((record) => {
+    const type = describeResource(workspace, record.resource)?.type
+    return {
+      record,
+      ...(type !== undefined ? { type } : {}),
+      score: scoreProposal(model, type, record.evidence),
+      stale: isStale(record.updatedAt ?? record.recordedAt, now)
+    }
+  })
 }
 
 export const SUPERSESSIONS_FILE = 'supersessions.yaml'
@@ -208,9 +253,41 @@ export const readSupersessions = (workspace: Store): Promise<LocalSupersession[]
 export const writeSupersessions = (workspace: LocalWorkspace, records: readonly LocalSupersession[]): Promise<void> =>
   writeRecords(workspace, SUPERSESSIONS_FILE, SUPERSESSIONS_HEADER, 'supersessions', records)
 
-/** The supersessions that hold now, one per superseded record, by its id. */
-export async function liveSupersessions(workspace: Store): Promise<Map<string, LocalSupersession>> {
-  return new Map((await readSupersessions(workspace)).filter((record) => record.liftedAt === undefined).map((record) => [record.resource, record]))
+/** The pending proposals not yet fact, as reads show them: the record each would replace, by what, and how far it scores. */
+export async function openProposals(
+  workspace: Store,
+  now: Date = new Date()
+): Promise<{ proposal: string; id: string; by: string; reason: string; score: number; threshold: number; stale: boolean }[]> {
+  const records = await readSupersessions(workspace)
+  if (!records.some((record) => record.liftedAt === undefined && record.status === 'pending')) return []
+  const read = 'documents' in workspace ? (workspace as LocalWorkspace) : await readWorkspace(workspace.resolved)
+  return pendingProposals(read, records, now)
+    .filter((each) => !each.score.clears)
+    .map((each) => ({
+      proposal: each.record.id,
+      id: each.record.resource,
+      by: each.record.supersededBy,
+      reason: each.record.reason,
+      score: each.score.score,
+      threshold: each.score.threshold,
+      stale: each.stale
+    }))
+}
+
+/**
+ * The supersessions that hold now, one per superseded record, by its id:
+ * every accepted one, and a pending one whose evidence clears its bar now -
+ * a policy or a person's role can carry it before anything is written. A
+ * write records it accepted.
+ */
+export async function liveSupersessions(workspace: Store, now: Date = new Date()): Promise<Map<string, LocalSupersession>> {
+  const records = (await readSupersessions(workspace)).filter((record) => record.liftedAt === undefined)
+  const live = new Map(records.filter(isAccepted).map((record) => [record.resource, record]))
+  if (records.some((record) => record.status === 'pending')) {
+    const read = 'documents' in workspace ? (workspace as LocalWorkspace) : await readWorkspace(workspace.resolved)
+    for (const { record, score } of pendingProposals(read, records, now)) if (score.clears) live.set(record.resource, record)
+  }
+  return live
 }
 
 /** A published version of the ontology as the project records it, in `<root>/ontology-history.yaml`. */
@@ -262,14 +339,22 @@ export async function headOf(workspace: LocalWorkspace): Promise<LocalHead | nul
 /** Where proposed drafts are kept, under the docket's root. */
 export const draftPath = (workspace: Store, id: string): string => recordFile(workspace, `ontology-drafts/${id}.yaml`)
 
+/** The open supersede proposals a change check decides again: pending ones, and accepted ones recorded since proposals. */
+export async function snapshotProposals(workspace: Store): Promise<SnapshotProposal[]> {
+  return (await readSupersessions(workspace))
+    .filter((record) => record.liftedAt === undefined && (record.status === 'pending' || record.status === 'accepted'))
+    .map((record) => ({ id: record.id, resource: record.resource, status: record.status as 'pending' | 'accepted', evidence: record.evidence }))
+}
+
 /** The workspace as a change check reads it: every document that parses, each the project's own, and the head. */
-export function snapshotOf(workspace: LocalWorkspace, head: LocalHead | null): WorkspaceSnapshot {
+export function snapshotOf(workspace: LocalWorkspace, head: LocalHead | null, proposals: readonly SnapshotProposal[] = []): WorkspaceSnapshot {
   const parsed = workspace.documents.flatMap((entry) => (entry.document ? [entry.document] : []))
   return {
     documents: parsed,
     origins: new Map(workspace.documents.map((entry) => [entry.path, 'local' as const])),
     head: head ? { number: head.version, ontology: head.ontology } : null,
-    people: workspace.people
+    people: workspace.people,
+    ...(proposals.length ? { proposals } : {})
   }
 }
 

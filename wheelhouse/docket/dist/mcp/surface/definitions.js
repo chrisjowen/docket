@@ -196,14 +196,22 @@ export const UPDATE_NOTES_DEFINITION = {
 };
 export const ADD_EVIDENCE_DEFINITION = {
     name: 'docket_add_evidence',
-    title: 'Add evidence to a resource or link',
+    title: 'Add evidence to a resource, link or supersede proposal',
     description: 'Record more evidence for a resource already in this workspace, or for one of its links: where else it was seen. ' +
         'Evidence is append-only and raises confidence when it comes from an independent source. To add a new link, use ' +
-        'docket_remember with the link and its evidence.',
+        'docket_remember with the link and its evidence. To support a pending supersede proposal, give its id as ' +
+        'supersession instead of id: the proposal is scored again and becomes fact once it clears its bar. Confirming one ' +
+        'yourself is evidence with no source.',
     inputSchema: {
         type: 'object',
         properties: {
-            id: { type: 'string', minLength: 1, maxLength: 200, description: 'The resource id, as docket_search returns it.' },
+            id: { type: 'string', minLength: 1, maxLength: 200, description: 'The resource id, as docket_search returns it. Omit it when giving supersession.' },
+            supersession: {
+                type: 'string',
+                minLength: 1,
+                maxLength: 100,
+                description: 'Add the evidence to this supersede proposal, by the id docket_supersede or docket_get gave, instead of to a resource.'
+            },
             link: {
                 type: 'object',
                 description: 'Add the evidence to this link of the resource instead of the resource itself.',
@@ -216,10 +224,10 @@ export const ADD_EVIDENCE_DEFINITION = {
             },
             evidence: { type: 'array', maxItems: WRITE_LIMITS.evidencePerCall, items: EVIDENCE_SCHEMA, description: 'At least one entry.' }
         },
-        required: ['id', 'evidence'],
+        required: ['evidence'],
         additionalProperties: false
     },
-    annotations: { title: 'Add evidence to a resource or link', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    annotations: { title: 'Add evidence to a resource, link or supersede proposal', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
 };
 export const RETIRE_DEFINITION = {
     name: 'docket_retire',
@@ -240,12 +248,14 @@ export const RETIRE_DEFINITION = {
 };
 export const SUPERSEDE_DEFINITION = {
     name: 'docket_supersede',
-    title: 'Mark a resource superseded by a newer one',
-    description: 'Mark a resource out of date because a newer resource replaces it - a renamed bot, a moved owner, a decision ' +
-        'reversed - with the reason and evidence of the change. Nothing is deleted: the older resource stays on file with ' +
-        'until when it held and a link to its replacement, and docket_search answers with the replacement and a note of ' +
-        'the change instead of presenting the older one as current. Write the newer resource first with docket_remember. ' +
-        'Use docket_retire instead for a resource that was simply wrong and has no replacement.',
+    title: 'Propose that a newer resource supersedes one',
+    description: 'Propose that a resource is out of date because a newer resource replaces it - a renamed bot, a moved owner, a ' +
+        'decision reversed - with the reason and evidence of the change. It returns at once with the proposal: its id, ' +
+        "status and score. The proposal is scored by the workspace's policies like any evidence and becomes fact when its " +
+        'score clears the bar: then the older resource goes out of date, stays on file with until when it held and a link ' +
+        'to its replacement, and docket_search answers with the replacement. Until then it is pending, the older resource ' +
+        'still current; support it with docket_add_evidence and the proposal id. Write the newer resource first with ' +
+        'docket_remember. Use docket_retire instead for a resource that was simply wrong and has no replacement.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -269,7 +279,7 @@ export const SUPERSEDE_DEFINITION = {
         required: ['id', 'by', 'reason', 'evidence'],
         additionalProperties: false
     },
-    annotations: { title: 'Mark a resource superseded by a newer one', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    annotations: { title: 'Propose that a newer resource supersedes one', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
 };
 const PATCH_DESCRIPTION = 'YAML merge patch onto the published ontology, for example "resourceTypes:\\n  queue:\\n    description: A message queue.\\n".';
 export const PROPOSE_ONTOLOGY_DEFINITION = {

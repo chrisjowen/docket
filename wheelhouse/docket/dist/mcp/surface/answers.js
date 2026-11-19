@@ -1,5 +1,6 @@
 import { MigrationInvalid, OntologyBreakingChange, OntologyInvalid, OntologyNarrowingChange, OntologyWriteDisabled, StaleDraft, isBreaking } from '../../workspace/ontology/errors.js';
 import { describeMigration } from '../../workspace/ontology/migrations.js';
+import { pendingNote, proposalNote } from '../../workspace/proposals.js';
 import { changeNote, dayOf } from '../../workspace/supersession.js';
 import { searchText } from '../search.js';
 import { ONTOLOGY_SCHEMA, PROPOSAL_SCHEMA, PUBLISH_SCHEMA, RESOURCE_SCHEMA, UNTRUSTED_NOTE, annotatedSearchText, failed } from './results.js';
@@ -20,7 +21,15 @@ export function searchAnswer(found, options = {}) {
 const isoOf = (at) => (typeof at === 'string' ? at : at.toISOString());
 /** `docket_get`'s answer. */
 export function resourceAnswer(read) {
-    const { id, entity, summary, documents, history, superseded, supersedes } = read;
+    const { id, entity, summary, documents, history, superseded, supersedes, pendingReplacement, pendingReplaces = [] } = read;
+    const pendingOf = (pending) => ({
+        proposal: pending.proposal,
+        by: pending.by,
+        reason: pending.reason,
+        score: pending.score,
+        threshold: pending.threshold,
+        ...(pending.stale ? { stale: true } : {})
+    });
     const diagnostics = brief(read.diagnostics);
     const structured = {
         schema: RESOURCE_SCHEMA,
@@ -63,6 +72,8 @@ export function resourceAnswer(read) {
             }
             : {}),
         ...(supersedes.length ? { supersedes: supersedes.map((each) => ({ id: each.id, validUntil: isoOf(each.validUntil), reason: each.reason })) } : {}),
+        ...(pendingReplacement ? { pendingReplacement: pendingOf(pendingReplacement) } : {}),
+        ...(pendingReplaces.length ? { pendingReplaces: pendingReplaces.map((each) => ({ id: each.id, ...pendingOf(each) })) } : {}),
         documents,
         history,
         diagnostics
@@ -73,6 +84,11 @@ export function resourceAnswer(read) {
     }
     if (supersedes.length) {
         lines.push(`Current record: it supersedes ${supersedes.map((each) => `${each.id} (since ${dayOf(each.validUntil)})`).join(', ')}.`, '');
+    }
+    if (pendingReplacement)
+        lines.push(pendingNote({ ...pendingReplacement, id: pendingReplacement.proposal }), '');
+    if (pendingReplaces.length) {
+        lines.push(`Pending replacement of ${pendingReplaces.map((each) => `${each.id} (proposal ${each.proposal}, ${each.score.toFixed(2)} of ${each.threshold.toFixed(2)})`).join(', ')}: not yet fact.`, '');
     }
     if (entity) {
         lines.push(`${entity.id} (${entity.type}) "${entity.title}": confidence ${entity.confidence} (${entity.basis}, ${entity.evidenceCount} evidence)`);
@@ -147,19 +163,62 @@ export function retireAnswer(id, result) {
         ...(errors.length ? { isError: true } : {})
     };
 }
-/** `docket_supersede`'s answer. */
+/** `docket_add_evidence`'s answer for a supersede proposal. */
+export function proposalEvidenceAnswer(input, viewer, result) {
+    const errors = result.diagnostics.filter((d) => d.severity === 'error');
+    const warnings = result.diagnostics.filter((d) => d.severity === 'warning');
+    const proposal = result.proposal;
+    const lines = errors.length || !proposal
+        ? ['Refused: nothing was added. Fix these and call docket_add_evidence again:', ...errors.map((d) => `- ${d.code}: ${d.message}`)]
+        : [
+            `${result.evidenceAdded ? `Added ${result.evidenceAdded} evidence to` : 'Nothing new for'} proposal ${proposal.id} (${proposal.supersededBy} supersedes ${proposal.resource}). ` +
+                proposalNote(proposal.status, { score: proposal.score, threshold: proposal.threshold, clears: proposal.status === 'accepted' }, proposal.carry)
+        ];
+    if (warnings.length)
+        lines.push('', ...warnings.map((d) => `- ${d.code}: ${d.message}`));
+    return {
+        content: [{ type: 'text', text: lines.join('\n') }],
+        structuredContent: {
+            schema: WRITE_SCHEMA,
+            tool: 'docket_add_evidence',
+            supersession: input.supersession,
+            ok: errors.length === 0,
+            changed: result.changed,
+            evidenceAdded: result.evidenceAdded,
+            ...(proposal ? { id: proposal.resource, supersededBy: proposal.supersededBy, status: proposal.status, proposal: proposalOf(proposal), viewer: viewerOf(viewer, proposal.resource) } : {}),
+            diagnostics: brief(result.diagnostics)
+        },
+        ...(errors.length ? { isError: true } : {})
+    };
+}
+const proposalOf = (proposal) => ({
+    id: proposal.id,
+    status: proposal.status,
+    score: proposal.score,
+    threshold: proposal.threshold,
+    ...(proposal.carry.length ? { carry: proposal.carry.map(({ policy, source, reaches }) => ({ policy, source, reaches })) } : {})
+});
 export function supersedeAnswer(input, viewer, result) {
     const errors = result.diagnostics.filter((d) => d.severity === 'error');
     const warnings = result.diagnostics.filter((d) => d.severity === 'warning');
     const held = result.supersession;
+    const proposal = result.proposal;
+    const pending = proposal?.status === 'pending';
     const lines = errors.length
         ? ['Refused: nothing was superseded. Fix these and call docket_supersede again:', ...errors.map((d) => `- ${d.code}: ${d.message}`)]
-        : !result.changed
-            ? [`Nothing new: ${input.id} is already superseded by ${input.by}.`]
-            : [
-                `${input.id} is now superseded by ${input.by} since ${held ? dayOf(held.validUntil) : 'now'}. It stays on file with its history; ` +
-                    'search answers with the replacement and a note of the change.'
-            ];
+        : pending && proposal
+            ? [
+                `${result.changed ? 'Proposed' : 'Already proposed'}: ${input.by} supersedes ${input.id} (proposal ${proposal.id}). ` +
+                    proposalNote('pending', { score: proposal.score, threshold: proposal.threshold, clears: false }, proposal.carry) +
+                    ` Until then ${input.id} is current.`
+            ]
+            : !result.changed
+                ? [`Nothing new: ${input.id} is already superseded by ${input.by}.`]
+                : [
+                    `${input.id} is now superseded by ${input.by} since ${held ? dayOf(held.validUntil) : 'now'}. It stays on file with its history; ` +
+                        'search answers with the replacement and a note of the change.' +
+                        (proposal ? ` ${proposalNote('accepted', { score: proposal.score, threshold: proposal.threshold, clears: true }, [])}` : '')
+                ];
     if (warnings.length)
         lines.push('', ...warnings.map((d) => `- ${d.code}: ${d.message}`));
     return {
@@ -171,6 +230,7 @@ export function supersedeAnswer(input, viewer, result) {
             ok: errors.length === 0,
             changed: result.changed,
             ...(held ? { supersededBy: held.supersededBy, validUntil: isoOf(held.validUntil) } : {}),
+            ...(proposal ? { status: proposal.status, proposal: proposalOf(proposal) } : {}),
             ...(result.replaced ? { replaced: result.replaced } : {}),
             viewer: viewerOf(viewer, input.id),
             diagnostics: brief(result.diagnostics)
@@ -190,6 +250,16 @@ export function proposalAnswer(draftId, check, next) {
     if (check.introduced.length) {
         lines.push('', 'It would give existing documents these diagnostics:', ...check.introduced.slice(0, 20).map((d) => `- ${d.code} ${d.id ?? d.path ?? ''}: ${d.message}`));
     }
+    if (check.rescored.length) {
+        lines.push('', `It would re-score ${check.rescored.length} resource(s) and link(s):`, ...check.rescored
+            .slice(0, 20)
+            .map((each) => `- ${each.resourceId}${each.link ? ` ${each.link.rel} -> ${each.link.target}` : ''}: ${each.before} -> ${each.after}${each.bandBefore !== each.bandAfter ? ` (${each.bandBefore} -> ${each.bandAfter})` : ''}`));
+    }
+    if (check.proposals.length) {
+        lines.push('', 'It would decide these supersede proposals differently:', ...check.proposals.map((each) => each.change === 'would-accept'
+            ? `- ${each.proposal} for ${each.resource}: would be accepted (${each.before.toFixed(2)} -> ${each.after.toFixed(2)} of ${each.threshold.toFixed(2)}).`
+            : `- ${each.proposal} for ${each.resource}: would no longer pass (${each.before.toFixed(2)} -> ${each.after.toFixed(2)} of ${each.threshold.toFixed(2)}); it stays accepted, flagged for a person to review.`));
+    }
     lines.push('', next);
     return {
         content: [{ type: 'text', text: lines.join('\n') }],
@@ -201,6 +271,8 @@ export function proposalAnswer(draftId, check, next) {
             changes: check.changes,
             introduced: check.introduced.map(({ severity, code, message, id, path }) => ({ severity, code, message, ...(id ? { id } : {}), ...(path ? { path } : {}) })),
             affected: check.affected,
+            ...(check.rescored.length ? { rescored: check.rescored } : {}),
+            ...(check.proposals.length ? { proposals: check.proposals } : {}),
             unresolved: check.unresolved,
             ontology: brief(check.ontology)
         }

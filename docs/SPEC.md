@@ -997,6 +997,40 @@ replace a record, by the replaced record's type. `docket why <id>` shows the
 working: each observation, the policy that priced it, the ones it beat, the
 adjustments, and which observations count.
 
+### Supersede proposals
+
+`docket_supersede` stays fire and forget: it records that a newer record
+replaces an older one at once, as a proposal, and answers with the proposal's
+id, status, score and bar. The proposal is scored by the same policies as any
+evidence - those `about: supersedes`, about the replaced record's type, or
+about nothing in particular - from its own evidence only: the replacement
+being true is not the same as it replacing the older record.
+
+- A proposal whose score clears `trust.accept` for the replaced record's type
+  (else `trust.accept.default`: 0.75, and 0.80 for decisions) is **accepted**:
+  the older record goes out of date and search, ask and get answer with the
+  replacement, as a supersession always did.
+- One that does not is **pending**: the older record stays current. `docket_get`
+  shows the proposal beside both records (`pendingReplacement`,
+  `pendingReplaces`), and search and ask list it under `pending`. The answer
+  says what would carry it: the policies one more observation could clear the
+  bar by.
+- More evidence (`docket_add_evidence` with `supersession: <id>`), a
+  confirmation (`docket confirm <id>`: the confirmer's own evidence, scored by
+  who they are), a published policy or a person's new role scores it again.
+  Reads see the new score at once; a write, a publish or `docket proposals`
+  records it accepted.
+- **Accepted stays accepted.** The ontology change check lists an accepted
+  proposal a draft would no longer pass, for a person to look at, and a
+  pending one it would carry; either makes the change a `rescore`.
+- A person can **reject** a pending proposal with a reason (`docket reject`):
+  both records are kept, the older one current. Nothing pending is dropped: a
+  proposal with no change in 30 days is flagged **stale**.
+
+Proposals live in `.docket/supersessions.yaml` (and, for a server, its
+`supersessions` table). One recorded before proposals has no status and is
+accepted, as it always was.
+
 ### Legacy evidence settings
 
 An ontology written before sources and policies - an `evidence:` block of

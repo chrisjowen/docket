@@ -122,8 +122,26 @@ export function updateNotesArguments(raw: unknown): { input: AppendNotesInput; d
   }
 }
 
-export function addEvidenceArguments(raw: unknown): AddEvidenceInput {
-  const args = argumentsOf('docket_add_evidence', raw, ['id', 'link', 'evidence'], '{ "id", "evidence": [...], "link"?: { "rel", "target" } }')
+/** `docket_add_evidence` for a supersede proposal rather than a resource. */
+export interface ProposalEvidenceInput {
+  supersession: string
+  evidence: EvidenceInput[]
+}
+
+/** Evidence for a supersede proposal, as `addEvidenceArguments` reads it when `supersession` is given. */
+export const isProposalEvidence = (input: AddEvidenceInput | ProposalEvidenceInput): input is ProposalEvidenceInput => 'supersession' in input
+
+export function addEvidenceArguments(raw: unknown): AddEvidenceInput | ProposalEvidenceInput {
+  const args = argumentsOf(
+    'docket_add_evidence',
+    raw,
+    ['id', 'link', 'supersession', 'evidence'],
+    '{ "id", "evidence": [...], "link"?: { "rel", "target" } } or { "supersession", "evidence": [...] }'
+  )
+  if (args.supersession !== undefined) {
+    if (args.id !== undefined || args.link !== undefined) throw new InvalidArgumentsError('Give supersession alone, or id (with link), not both.')
+    return { supersession: requiredText(args.supersession, 'supersession', 100), evidence: parseEvidence(args.evidence, 'evidence') }
+  }
   let link: AddEvidenceInput['link']
   if (args.link !== undefined) {
     if (!isObject(args.link) || Object.keys(args.link).some((key) => key !== 'rel' && key !== 'target')) {

@@ -14,6 +14,7 @@ import { parseOntology as docketParseOntology, type LoadedOntology } from '@chri
 export type {
   AdapterManifest,
   CanonicalSource,
+  ConfidenceModel,
   ManifestStore,
   MemoryDocument,
   Ontology,
@@ -23,6 +24,7 @@ export type {
 export {
   EMPTY_DIRECTORY,
   EVIDENCE_LOCATION_FIELDS,
+  confidenceModel,
   findPerson,
   peopleDirectorySchema,
   type PeopleDirectory,

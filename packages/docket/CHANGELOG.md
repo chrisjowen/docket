@@ -57,6 +57,27 @@ evidence kind and `confidence:` rules scattered over types and relationships.
 - The MCP evidence schema gains `sourceRef`, `attributes` (claims) and
   `locator` (a source's own fields), and `source` becomes optional.
 
+### Supersede is a scored proposal
+
+- `docket_supersede` records a proposal and returns at once with its id,
+  status, score and the bar it needs. It is scored by the same policies -
+  `about: supersedes`, or about the replaced record's type - and is accepted,
+  the older record going out of date as before, only when its score clears
+  `trust.accept` (0.75 by default, 0.80 for decisions). Until then it is
+  pending and the older record stays current; the answer names the policies
+  that would carry it.
+- `docket_add_evidence` takes `supersession: <id>` to support a pending
+  proposal; a new policy, a person's new role or a confirmation scores it
+  again, and reads see the new score at once.
+- `docket_get` shows `pendingReplacement` / `pendingReplaces`, and search and
+  ask list `pending` proposals beside the records they touch.
+- Acceptance is sticky: the ontology change check lists accepted proposals a
+  draft would no longer pass, and pending ones it would carry.
+- `docket proposals`, `docket confirm <id>` and `docket reject <id>`. A pending
+  proposal with no change in 30 days is flagged stale; nothing is dropped.
+- Supersessions recorded before are accepted, as they were (`docket serve`'s
+  Postgres store marks them grandfathered in migration `core_0002`).
+
 ### Existing ontologies score exactly as before
 
 An `evidence:` block and `confidence:` rules still load, with a

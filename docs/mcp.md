@@ -55,7 +55,7 @@ that project's docket.
 | `docket_update_notes` | Appends dated narrative notes to a resource, with evidence | write |
 | `docket_add_evidence` | More evidence for a resource or one of its links | write, idempotent |
 | `docket_retire` | Retires a resource that is wrong or gone, with a reason | write, destructive |
-| `docket_supersede` | Marks a resource out of date, replaced by a newer one, with a reason and evidence | write, idempotent |
+| `docket_supersede` | Proposes that a resource is out of date, replaced by a newer one, with a reason and evidence; it becomes fact when its evidence clears the bar | write, idempotent |
 | `docket_propose_ontology_change` | Checks a change to the ontology against every document and saves it as a draft | write |
 | `docket_publish_ontology_change` | Publishes a change to the ontology, migrating documents a breaking change names | write, destructive |
 
@@ -101,9 +101,15 @@ docket's root, committed with the rest, so git keeps their history:
   turn too.
 - **Retiring** removes the documents that declare the resource; git keeps
   them. A result names no revision: the project's history is git's.
-- **Supersessions** are kept in `.docket/supersessions.yaml`. The documents
-  are untouched; `docket_search`, `docket_ask` and `docket_get` answer a
-  superseded record with the record current now and a note of the change.
+- **Supersessions** are kept in `.docket/supersessions.yaml`, as proposals
+  scored by the ontology's policies (docs/SPEC.md, "Supersede proposals"). The
+  documents are untouched. Once a proposal is accepted, `docket_search`,
+  `docket_ask` and `docket_get` answer the superseded record with the record
+  current now and a note of the change; while it is pending, the older record
+  is current and they name the proposal beside it (`pending`,
+  `pendingReplacement`). `docket_add_evidence` with `supersession` supports a
+  pending one; `docket proposals`, `docket confirm` and `docket reject` list,
+  confirm and reject them.
 - **The ontology's version** is the one `.docket/ontology-history.yaml`
   records for the ontology file as it is now. A file never published through
   MCP is version 1, and one edited by hand since the last publish is the
@@ -263,8 +269,13 @@ behind the files, and to call `docket_get` with an id for its full record.
 }
 ```
 
+A search that finds a record a pending supersede proposal would replace, or
+the record that would replace it, lists the proposal under `pending`: its id,
+the record still current (`id`), the replacement (`by`), its `score` and the
+`threshold` it needs, and a `note`.
+
 `via`, `foundBy`, `confidence`, `why`, `paths`, `foundIn`, `score`,
-`supersedes` and `changes` were added to `docket-search.v1` without changing
+`supersedes`, `changes` and `pending` were added to `docket-search.v1` without changing
 its schema name: a reader that ignores them reads the result as before.
 
 A source that could not answer has `error` instead of hits. When `index`

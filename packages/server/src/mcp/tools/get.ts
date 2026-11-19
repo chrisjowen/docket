@@ -3,7 +3,7 @@ import { validate, type CanonicalSource, type Tool } from '@chrisjowen/docket'
 import { GET_DEFINITION, RESOURCE_SCHEMA, currentRecord, getArguments, resourceAnswer, splitDocument } from '../../docket.js'
 import { documentHistory, listDocuments, readDocument, type OpenedDocument } from '../../postgres/documents.js'
 import { publishedOntology, workspaceResolvedConfig } from '../../postgres/source.js'
-import { liveSupersessions } from '../../postgres/supersession.js'
+import { liveSupersessions, openProposals } from '../../postgres/supersession.js'
 import { describeResource } from '../../postgres/write.js'
 import type { StoreContext } from '../../ports.js'
 import { failed, type ServerTool, type ToolContext } from '../context.js'
@@ -73,11 +73,15 @@ export function getTool(context: ToolContext): ServerTool {
         const currentId = own ? currentRecord(supersessions, id) : null
         const current = currentId && !supersessions.has(currentId) ? await describeResource(ctx, context.workspaceId, currentId) : null
         const supersedes = [...supersessions.values()].filter((each) => each.supersededBy === id)
-        return { records, read, history: history.flat(), summary, own, current: current && currentId ? { id: currentId, ...current } : null, supersedes }
+        // Proposals not yet fact: this record is still current, or not yet a replacement.
+        const pending = await openProposals(ctx, context.workspaceId)
+        return { records, read, history: history.flat(), summary, own, current: current && currentId ? { id: currentId, ...current } : null, supersedes, pending }
       })
       if (!found) return failed(`There is no resource ${id} in this workspace. Call docket_search to find ids.`)
 
-      const { records, read, history, summary, own, current, supersedes } = found
+      const { records, read, history, summary, own, current, supersedes, pending } = found
+      const replacement = own ? undefined : pending.find((each) => each.id === id)
+      const replaces = pending.filter((each) => each.by === id)
       return resourceAnswer({
         id,
         viewer: context.viewer,
@@ -101,7 +105,9 @@ export function getTool(context: ToolContext): ServerTool {
               }
             }
           : {}),
-        supersedes: supersedes.map((each) => ({ id: each.resourceId, validUntil: each.validUntil, reason: each.reason }))
+        supersedes: supersedes.map((each) => ({ id: each.resourceId, validUntil: each.validUntil, reason: each.reason })),
+        ...(replacement ? { pendingReplacement: replacement } : {}),
+        ...(replaces.length ? { pendingReplaces: replaces.map((each) => ({ ...each, id: each.id })) } : {})
       })
     }
   }

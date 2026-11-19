@@ -194,12 +194,13 @@ export const conditionHolds = (condition, value) => {
 export const policyConditions = (policy) => Object.entries(policy.when).filter((entry) => entry[0] !== 'about' && entry[0] !== 'source' && entry[1] !== undefined);
 /** How specific a policy is: naming what it is about counts one, and so does each condition. */
 export const specificity = (policy) => (policy.when.about !== undefined ? 1 : 0) + policyConditions(policy).length;
-const subjectName = (subject) => (subject.kind === 'resource' ? subject.type : subject.rel);
+/** The names a policy's `about` can give for `subject`. */
+const subjectNames = (subject) => subject.kind === 'resource' ? [subject.type] : subject.kind === 'relationship' ? [subject.rel] : ['supersedes', subject.type];
 /** Whether a policy applies to an observation of `subject` from `source`. */
 export const policyMatches = (policy, subject, source) => {
     if (policy.when.source !== source.source)
         return false;
-    if (policy.when.about !== undefined && policy.when.about !== subjectName(subject))
+    if (policy.when.about !== undefined && !subjectNames(subject).includes(policy.when.about))
         return false;
     return policyConditions(policy).every(([key, condition]) => conditionHolds(condition, key.startsWith('@') ? source.locator[key.slice(1)] : source.attributes[key]));
 };
