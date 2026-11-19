@@ -134,7 +134,7 @@ spec:
         helm.sh/chart: docket-0.15.0
         app.kubernetes.io/component: server
       annotations:
-        checksum/config: afbe806c0590b2bcf967c9bb8bbf206d5c08f5581b10c57346094c142e0ac653
+        checksum/config: 21f8208eca76d6aa1f462fc41e4dee173449035eea9e7214bbcd7f88b0af0a60
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
