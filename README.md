@@ -711,12 +711,14 @@ strongest counts — while independent ones combine as `1 - (1 - a)(1 - b)`: a
 pod read from code (0.3) and seen running (0.9) is 0.93, and nothing goes
 above `trust.cap` (0.99). A resource with no evidence takes its
 `provenance.confidence`, or `trust.unevidenced` (0.5). The default ontology
-ships the sources `code`, `manifest`, `config`, `infrastructure`, `api`,
-`runtime`, `docs`, `conversation` and `human`, and policies for the types
-where it matters. `docket why <id>` shows which policies priced a resource
-and its links, `docket ontology show <type>` prints the confidence each
-source earns for that type, and `docket validate` rejects evidence that does
-not give the location its source requires.
+ships the sources `person`, `code`, `manifest`, `config`, `infrastructure`,
+`api`, `runtime`, `docs`, `conversation` and `human`, and policies for the
+types where it matters. Evidence naming no source is from the person the
+writer acts for, scored by the attributes a people directory
+(`.docket/people.yaml`) attests about them. `docket why <id>` shows which
+policies priced a resource and its links, `docket ontology show <type>`
+prints the confidence each source earns for that type, and `docket validate`
+rejects evidence that does not give the location its source requires.
 
 An ontology written in the earlier form - an `evidence:` block of source kinds
 and `confidence:` rules on types - still loads and scores exactly as before,

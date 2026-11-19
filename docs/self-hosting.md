@@ -163,7 +163,7 @@ workspaces:
 
 auth:
   tokensFile: ./state/tokens.yaml          # where `docket serve token` keeps hashes
-  tokens: []                               # or tokens given here, read-only: { name, sha256, role, scopes, workspaces }
+  tokens: []                               # or tokens given here, read-only: { name, sha256, role, scopes, workspaces, actsFor }
 
 ontology:
   mcpWriters: [owner]                      # roles whose tokens may publish the ontology over MCP
