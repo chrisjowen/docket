@@ -2,6 +2,15 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## 0.10.0
+
+### `docket_get` draws a resource as its card
+
+`docket_get` carries docket's MCP app, as `docket_search` does, so a host
+that draws MCP apps shows the resource it read as its card. The tool's
+definition and the app come from `@chrisjowen/docket`, so this needs
+`@chrisjowen/docket` 0.15.0.
+
 ## 0.9.0
 
 ### `docket serve` in containers

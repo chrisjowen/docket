@@ -5,12 +5,16 @@
 @import '../lib/styles/tokens.css';
 
 /*
- * docket_search's app, in the frame an MCP host draws it in: docket's own
+ * docket's MCP app, in the frame an MCP host draws it in: docket's own
  * tokens, which the host's style variables override where it gives them
  * (bridge.ts, HOST_TOKENS). Only the sources below are scanned for classes.
  */
 @source '../lib/components/card-graph.svelte';
 @source '../lib/components/docket-mark.svelte';
+@source '../lib/components/evidence-item.svelte';
+@source '../lib/components/notes.svelte';
+@source '../lib/components/value.svelte';
+@source '../lib/components/ui/badge';
 @source '../lib/components/ui/button';
 @source './';
 

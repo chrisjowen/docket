@@ -3679,6 +3679,11 @@ GET_DEFINITION
           idempotentHint: boolean;
           openWorldHint: boolean;
       };
+      _meta: {
+          ui: {
+              resourceUri: string;
+          };
+      };
   };
 
 getArguments

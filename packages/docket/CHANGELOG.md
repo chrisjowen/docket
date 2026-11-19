@@ -3,6 +3,28 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.15.0
+
+### `docket_get` draws a resource as its card
+
+`docket_get` now carries the MCP app too (`_meta.ui.resourceUri`
+`ui://docket/search.html`, the same page as `docket_search`'s board), so a
+host that draws MCP apps, such as Wheelhouse, shows one resource as its card
+where it was read: its type and title, its confidence and how it was reached,
+its tags, the opening of its notes (or its summary), its attributes, its links
+by relationship, the kinds of source its evidence comes from and the evidence
+itself, the documents that declare it, and whether it has gone out of date.
+
+- A link, a mention in its notes, its replacement or a record it replaced
+  opens that resource's card, through `docket_get`; **Back** returns to what
+  the app showed before.
+- On `docket_search`'s board, **Show card** on a picked resource opens its
+  card.
+- The card offers **Open in docket** and full screen where the host does.
+- Every Docket MCP server offers it: the definition is the shared surface's,
+  so `docket open`'s `/mcp` and `@chrisjowen/docket-server` list the same
+  `docket_get`, and the parity test still holds.
+
 ## 0.14.0
 
 ### `docket serve` as an image, with Docker Compose and a Helm chart

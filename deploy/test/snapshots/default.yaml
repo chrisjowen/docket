@@ -8,9 +8,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
 spec:
   podSelector:
     matchLabels:
@@ -31,9 +31,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
 data:
   # docket serve's configuration (docs/self-hosting.md). Secrets are not here:
   # the database URL, the codec key and the tokens come from Secrets.
@@ -59,9 +59,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
   annotations:
     # The docket itself: kept if the release is removed.
     helm.sh/resource-policy: keep
@@ -80,9 +80,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
     app.kubernetes.io/component: server
 spec:
   type: ClusterIP
@@ -102,9 +102,9 @@ metadata:
   labels:
     app.kubernetes.io/name: docket
     app.kubernetes.io/instance: docket
-    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/version: "0.15.0"
     app.kubernetes.io/managed-by: Helm
-    helm.sh/chart: docket-0.14.0
+    helm.sh/chart: docket-0.15.0
     app.kubernetes.io/component: server
 spec:
   # One server: it writes the docket on a ReadWriteOnce volume and keeps its state there.
@@ -122,12 +122,12 @@ spec:
       labels:
         app.kubernetes.io/name: docket
         app.kubernetes.io/instance: docket
-        app.kubernetes.io/version: "0.14.0"
+        app.kubernetes.io/version: "0.15.0"
         app.kubernetes.io/managed-by: Helm
-        helm.sh/chart: docket-0.14.0
+        helm.sh/chart: docket-0.15.0
         app.kubernetes.io/component: server
       annotations:
-        checksum/config: 3a56a7fd61de1cc8e9f200a3cf85b535b59e98d6d81025cfdc7402559fd6b139
+        checksum/config: f352d8ad3bd87f072f131ffe2a039017c1bbbdfdb5fc303c28b7e9752fcf9065
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -141,7 +141,7 @@ spec:
         # The docket's directory and the server's, on a new volume. Not from the
         # image's working directory, /data/docket: the runtime would make it, as root.
         - name: dirs
-          image: ghcr.io/chrisjowen/docket:0.14.0
+          image: ghcr.io/chrisjowen/docket:0.15.0
           imagePullPolicy: IfNotPresent
           workingDir: /data
           command: [/nodejs/bin/node, -e, "for (const dir of ['/data/docket', '/data/state']) require('fs').mkdirSync(dir, { recursive: true })"]
@@ -153,7 +153,7 @@ spec:
             capabilities: { drop: [ALL] }
         # Makes a docket on a new volume (`docket init`); leaves an existing one as it is.
         - name: init
-          image: ghcr.io/chrisjowen/docket:0.14.0
+          image: ghcr.io/chrisjowen/docket:0.15.0
           imagePullPolicy: IfNotPresent
           args: [init]
           workingDir: /data/docket
@@ -166,7 +166,7 @@ spec:
             capabilities: { drop: [ALL] }
       containers:
         - name: docket
-          image: ghcr.io/chrisjowen/docket:0.14.0
+          image: ghcr.io/chrisjowen/docket:0.15.0
           imagePullPolicy: IfNotPresent
           args: [serve]
           env:

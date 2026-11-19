@@ -19,12 +19,12 @@ export { APP_URI } from './surface/definitions.js'
 /*
  * docket's MCP server (docs/mcp.md): the tools of a registry - by default
  * every tool of Docket's MCP surface over the project's files (`localTools`),
- * the same tools Docket Cloud and a self-hosted server offer. The result of
- * `docket_search` an MCP Apps host (the `io.modelcontextprotocol/ui`
- * extension, stable spec 2026-01-26) draws with the app at
+ * the same tools Docket Cloud and a self-hosted server offer. An MCP Apps
+ * host (the `io.modelcontextprotocol/ui` extension, stable spec 2026-01-26)
+ * draws the results of `docket_search` and `docket_get` with the app at
  * `ui://docket/search.html`: the matching resources and their links on the
- * casebook's evidence board. Transport-free: `docket open` serves it over
- * Streamable HTTP at `/mcp`.
+ * casebook's evidence board, or one resource as its card. Transport-free:
+ * `docket open` serves it over Streamable HTTP at `/mcp`.
  */
 
 /** The protocol versions it speaks, newest first. */
@@ -88,7 +88,7 @@ const appResource = {
   uri: APP_URI,
   name: 'docket-search',
   title: 'Docket search',
-  description: 'The resources a docket search found, and their links, on the casebook\'s evidence board.',
+  description: 'The resources a docket search found, and their links, on the casebook\'s evidence board; or one resource as its card.',
   mimeType: APP_MIME
 } as const
 

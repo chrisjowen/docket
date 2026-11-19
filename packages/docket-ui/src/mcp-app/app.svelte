@@ -1,5 +1,6 @@
 <script lang="ts">
   import ExternalLink from '@lucide/svelte/icons/external-link'
+  import IdCard from '@lucide/svelte/icons/id-card'
   import Maximize2 from '@lucide/svelte/icons/maximize-2'
   import Minimize2 from '@lucide/svelte/icons/minimize-2'
   import Search from '@lucide/svelte/icons/search'
@@ -15,8 +16,9 @@
    * projections returned, and the resources a link away as faded context, on
    * the casebook's evidence board - case cards, in Docket Cloud's look - with
    * the matches and paths listed beside it.
-   * It searches again through the same tool, and opens a resource in docket
-   * open's casebook when the host lets it open links.
+   * It searches again through the same tool, shows a picked resource's card
+   * through docket_get, and opens a resource in docket open's casebook when
+   * the host lets it open links.
    */
   interface Props {
     bridge: AppBridge
@@ -29,9 +31,11 @@
     input: () => Record<string, unknown> | null
     onresult: (result: ToolResult) => void
     ondisplaymode: (mode: string) => void
+    /** Read a resource and show its card; rejects with why it could not. */
+    oncard: (id: string) => Promise<void>
   }
 
-  let { bridge, displayModes, displayMode, result, input, onresult, ondisplaymode }: Props = $props()
+  let { bridge, displayModes, displayMode, result, input, onresult, ondisplaymode, oncard }: Props = $props()
 
   const graph: SearchGraph | null = $derived(searchOf(result()?.structuredContent))
   const problem = $derived.by(() => {
@@ -100,6 +104,20 @@
       await bridge.request('ui/open-link', { url: `${graph.viewer}#${encodeURIComponent(id)}` })
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
+
+  let reading = $state(false)
+  async function card(id: string): Promise<void> {
+    if (reading) return
+    reading = true
+    error = null
+    try {
+      await oncard(id)
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause)
+    } finally {
+      reading = false
     }
   }
 
@@ -222,7 +240,10 @@
                 {/each}
               </ul>
             {/if}
-            <div class="mt-1 flex gap-1">
+            <div class="mt-1 flex flex-wrap gap-1">
+              {#if !picked.ghost}
+                <Button variant="outline" size="xs" disabled={reading} onclick={() => card(picked.id)}><IdCard />Show card</Button>
+              {/if}
               {#if graph.viewer && !picked.ghost}
                 <Button variant="outline" size="xs" onclick={() => open(picked.id)}><ExternalLink />Open in docket</Button>
               {/if}

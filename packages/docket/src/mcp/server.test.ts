@@ -120,6 +120,14 @@ describe('docket open /mcp', () => {
     })
   })
 
+  it('draws docket_get with the same app, as the resource\'s card', async () => {
+    const { result } = await rpc('tools/list')
+    const tools = result?.tools as Record<string, unknown>[]
+    expect(tools.find((tool) => tool.name === 'docket_get')).toMatchObject({ annotations: { readOnlyHint: true }, _meta: { ui: { resourceUri: APP_URI } } })
+    const { result: read } = await rpc('tools/call', { name: 'docket_get', arguments: { id: 'service.orders' } })
+    expect(read?.structuredContent).toMatchObject({ schema: 'docket-resource.v1', id: 'service.orders', resource: { type: 'service' } })
+  })
+
   it('serves the app as an MCP Apps resource that needs no network', async () => {
     const { result: listed } = await rpc('resources/list')
     expect(listed?.resources).toEqual([expect.objectContaining({ uri: APP_URI, mimeType: APP_MIME })])

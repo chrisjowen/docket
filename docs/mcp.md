@@ -5,12 +5,13 @@ docket it serves. It offers Docket's MCP surface: the same eleven tools, with
 the same names, input schemas, annotations, argument checks and result shapes,
 as a self-hosted Docket server (`docket serve`, on `@chrisjowen/docket-server`;
 see [self-hosting.md](self-hosting.md)) and Docket Cloud, over the project's
-own files. `docket_search`'s result carries an
+own files. `docket_search`'s and `docket_get`'s results carry an
 [MCP app](https://modelcontextprotocol.io/extensions/apps) (the
 `io.modelcontextprotocol/ui` extension, stable spec 2026-01-26). The app draws
-the matching resources and their links on the casebook's evidence board. A host
-that draws MCP apps, such as Wheelhouse, shows that board where the search was
-made. A host that does not still gets the result as text.
+the matching resources and their links on the casebook's evidence board, or
+the one resource `docket_get` read as its card. A host that draws MCP apps,
+such as Wheelhouse, shows that board or card where the call was made. A host
+that does not still gets the result as text.
 
 The server is in `packages/docket/src/mcp/`, the app in
 `packages/docket-ui/src/mcp-app/`. The surface - every tool's definition,
@@ -47,7 +48,7 @@ that project's docket.
 | Tool | What it does | Annotations |
 | --- | --- | --- |
 | `docket_search` | Searches the projections for a query, and draws what they found ([below](#the-tool-docket_search)) | read-only |
-| `docket_get` | One resource by id: its merged frontmatter and body, links, every piece of evidence, the documents that declare it, and whether it has been superseded | read-only |
+| `docket_get` | One resource by id: its merged frontmatter and body, links, every piece of evidence, the documents that declare it, and whether it has been superseded; drawn as its card ([below](#the-card-docket_get)) | read-only |
 | `docket_ask` | A question in words, put to every projection and checked against the files, with a summary when `query.synthesis` is on, as `docket ask` answers | read-only |
 | `docket_ontology` | The ontology, as YAML and parsed, with its version | read-only |
 | `docket_remember` | Writes one resource - type, title, attributes, body, links - with evidence | write, idempotent |
@@ -267,12 +268,37 @@ A source that could not answer has `error` instead of hits. When `index`
 says the index is not synced, or is `behind` the files, the search may miss
 what the files hold; `docket sync` catches it up.
 
+## The card: `docket_get`
+
+`docket_get` carries the same app as `docket_search`:
+`_meta: { "ui": { "resourceUri": "ui://docket/search.html" } }`. Its
+`structuredContent` is a `docket-resource.v1` object
+(`resourceAnswer` in `packages/docket/src/mcp/surface/answers.ts`), which the
+app draws as the resource's card:
+
+- its type, id and title, its tags, and its confidence with how it was
+  reached and how much evidence it has
+- whether it has gone out of date, with the reason and its replacement, or
+  the records it replaced
+- its summary when a document holds one, else the opening of its notes, with
+  the rest a click away; a first `# heading` that restates the title is left
+  out
+- its attributes, its links grouped by relationship with their confidence,
+  the kinds of source its evidence comes from, and the evidence itself
+- the documents that declare it
+
+A resource whose documents do not validate shows their diagnostics instead.
+A link, a mention in its notes, its replacement or a record it replaced opens
+that resource's card, through `tools/call` of `docket_get`; **Back** returns
+to what the app showed before. A result the host hands the app afresh starts
+over.
+
 ## The app: `ui://docket/search.html`
 
 `resources/read` of `ui://docket/search.html` returns one item: `mimeType`
 `text/html;profile=mcp-app`, the page as `text`, and
 `_meta.ui: { "prefersBorder": true }`. The page is a single HTML document of
-about 270 KB, with its script and styles inlined. It declares no CSP origins,
+about 400 KB, with its script and styles inlined. It declares no CSP origins,
 because it needs no network. It is built from docket-ui's own components: the
 casebook's graph view, type marks and buttons.
 
@@ -284,7 +310,8 @@ The app speaks the MCP Apps bridge:
   height changes.
 - It reads `ui/notifications/tool-input` (the query, for its search box),
   `ui/notifications/tool-result` (draws `structuredContent` when it is
-  `docket-search.v1`, else shows the result's text) and
+  `docket-search.v1` as the board, or `docket-resource.v1` as the card, else
+  shows the result's text) and
   `ui/notifications/tool-cancelled`. It answers `ui/resource-teardown`.
 - It follows `ui/notifications/host-context-changed`, and the `hostContext`
   from `ui/initialize`. It takes the light or dark `theme`, and keeps docket's
@@ -292,6 +319,8 @@ The app speaks the MCP Apps bridge:
   network of case cards - over the host's style variables.
 - It asks the host for:
   - `tools/call` of `docket_search`, from its search box.
+  - `tools/call` of `docket_get`, for a resource's card: **Show card** on a
+    picked resource, or a link on a card.
   - `ui/open-link` of `<viewer>#<id>`, through **Open in docket** on a picked
     resource.
   - `ui/request-display-mode`, for full screen when the host offers it.
@@ -303,7 +332,8 @@ canonical context (`via: "canonical"`) fades, and a note beside the board says
 what the faded part is. The list beside the board shows the matches, then the
 paths the projections returned, each with its why. Picking a resource, on the board or in either
 list, brings it and its neighbours forward. It also shows its file and its
-links, and for each returned link, who returned it, its confidence and why.
+links, and for each returned link, who returned it, its confidence and why,
+with **Show card** for its card.
 
 ## Building
 

@@ -14,7 +14,7 @@ runs as `nonroot` (uid 65532). It carries the drivers the opt-in stores load
 (`pg`, `better-sqlite3`, `neo4j-driver`, `mem0ai`). Its entrypoint is
 `docket` and its command `serve`, so `docker run … ghcr.io/chrisjowen/docket
 serve token create …` runs any docket command. It is published for
-linux/amd64 and linux/arm64 at each docket release (`0.14.0`, `0.14`,
+linux/amd64 and linux/arm64 at each docket release (`0.15.0`, `0.15`,
 `latest`). Build your own from a checkout with:
 
 ```bash
