@@ -5,6 +5,7 @@
   import Check from '@lucide/svelte/icons/check'
   import CircleAlert from '@lucide/svelte/icons/circle-alert'
   import Eye from '@lucide/svelte/icons/eye'
+  import History from '@lucide/svelte/icons/history'
   import LoaderCircle from '@lucide/svelte/icons/loader-circle'
   import Scale from '@lucide/svelte/icons/scale'
   import Search from '@lucide/svelte/icons/search'
@@ -208,6 +209,18 @@
             </p>
           {/each}
         </div>
+
+        {#if outcome.changes.length > 0}
+          <section class="flex flex-col gap-1.5 rounded-md border border-amber-500/50 bg-amber-500/5 p-3 text-sm" aria-label="Out of date">
+            <h3 class="flex items-center gap-1.5 font-medium"><History class="size-4" /> Changed since recorded</h3>
+            <p class="text-muted-foreground text-xs">These records were superseded by newer ones, so they are ranked after the current records below. Never present them as current.</p>
+            <ul class="flex flex-col gap-1">
+              {#each outcome.changes as change (change.id)}
+                <li class="break-words">{change.note}</li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
 
         <SynthesisCard {outcome} />
 

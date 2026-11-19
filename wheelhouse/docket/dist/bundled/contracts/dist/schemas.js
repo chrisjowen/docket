@@ -42,6 +42,7 @@ const evidenceRecordSchema = z.looseObject({
     observedAt: z.string().optional(),
     observedBy: z.string().optional(),
     session: z.string().optional(),
+    reportedBy: z.string().optional(),
     note: z.string().optional()
 });
 const assessmentShape = {

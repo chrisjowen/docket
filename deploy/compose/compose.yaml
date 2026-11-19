@@ -24,7 +24,7 @@ name: docket
 services:
   # Makes a docket on a new volume (`docket init`); leaves an existing one as it is.
   init:
-    image: ${DOCKET_IMAGE:-ghcr.io/chrisjowen/docket:0.15.0}
+    image: ${DOCKET_IMAGE:-ghcr.io/chrisjowen/docket:0.15.1}
     pull_policy: never
     command: [init]
     volumes:
@@ -32,7 +32,7 @@ services:
     restart: "no"
 
   docket:
-    image: ${DOCKET_IMAGE:-ghcr.io/chrisjowen/docket:0.15.0}
+    image: ${DOCKET_IMAGE:-ghcr.io/chrisjowen/docket:0.15.1}
     pull_policy: never
     restart: unless-stopped
     depends_on:

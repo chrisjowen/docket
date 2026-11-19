@@ -142,6 +142,27 @@ describe('POST /api/ask', () => {
     expect(answer.connections).toEqual([{ nodes: ['service.orders', 'team.payments'], steps: [{ rel: 'owned_by', forward: true }] }])
   })
 
+  it('ranks a superseded record after its replacement, naming the change, as the Ask workspace shows it', async () => {
+    await write(join(root, '.docket/resources/teams/money.md'), '---\nid: team.money\ntype: team\ntitle: Money Movement\n---\n\nFormerly the payments team.\n')
+    await write(
+      join(root, '.docket/supersessions.yaml'),
+      'supersessions:\n  - { id: s1, resource: team.payments, supersededBy: team.money, validUntil: "2026-11-01T00:00:00.000Z", source: agent, recordedBy: test, recordedAt: "2026-11-01T00:00:00.000Z", reason: The team was renamed., evidence: [{ source: human }] }\n'
+    )
+    await sync({ cwd: root })
+    const answer = await ask({ question: 'payments', adapters: ['local'] })
+    const local = answer.results[0]
+    if (local?.state !== 'answered') throw new Error('local did not answer')
+    const entities = local.answer.blocks.flatMap((block) => (block.kind === 'entities' ? block.entities.map((item) => item.ref.id) : []))
+    expect(entities.indexOf('team.money')).toBeLessThan(entities.indexOf('team.payments'))
+    expect(answer.changes).toEqual([
+      expect.objectContaining({
+        id: 'team.payments',
+        current: { id: 'team.money', type: 'team', title: 'Money Movement' },
+        note: 'Out of date: "Payments" (team.payments) is superseded by "Money Movement" (team.money) since 2026-11-01. The team was renamed.'
+      })
+    ])
+  })
+
   it('asks only the adapters named, and refuses one that is not configured for query', async () => {
     const answer = await ask({ question: 'checkout', adapters: ['graph'] })
     expect(answer.results.map((result) => result.adapter)).toEqual(['graph'])

@@ -73,6 +73,7 @@ export const memoryEvidenceSchema = z
     observedAt: observedAtSchema.optional(),
     observedBy: text.optional(),
     session: text.optional(),
+    reportedBy: text.optional(),
     note: text.optional()
 })
     .catchall(z.unknown());

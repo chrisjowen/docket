@@ -120,6 +120,7 @@ export {
  * synthesis prompt and citations `docket ask` uses.
  */
 export { AskCancelledError, AskRequestError, askWith, type AskInput, type AskOutcome } from './query/ask.js'
+export type { HeldSupersession } from './workspace/supersession.js'
 export { snapshotOf } from './query/snapshot.js'
 export { toSearchResult } from './query/legacy.js'
 export { citationsIn, LOW_CONFIDENCE, synthesisDiagnostics, synthesisPrompt } from './query/synthesis.js'

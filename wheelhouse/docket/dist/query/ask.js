@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { openDocket } from '../adapters/docket.js';
+import { liveSupersessions, storeOf } from '../mcp/local/files.js';
 import { connectingPaths } from '../open/paths.js';
+import { recordChanges } from '../workspace/supersession.js';
 import { askAdapters } from './coordinator.js';
 import { freshnessOf, freshnessWarning } from './freshness.js';
 import { checkAnswer, foundReferences } from './resolve.js';
@@ -55,6 +57,40 @@ const selectAdapters = (docket, named) => {
     const defaults = docket.resolved.config.query.defaultAdapters;
     return defaults === undefined ? queryable : queryable.filter((slot) => defaults.includes(slot.id));
 };
+/** Whether `outOfDate` holds every entity `refs` belong to: none current among them. */
+const allOutOfDate = (refs, snapshot, outOfDate) => refs.length > 0 && refs.every((ref) => {
+    const entity = ref.kind === 'entity' ? ref.id : snapshot.record(ref.kind, ref.id)?.owner;
+    return entity !== undefined && outOfDate.has(entity);
+});
+/** `items` in their order, but those `stale` says are out of date after the rest. */
+const currentFirst = (items, stale) => [
+    ...items.filter((item) => !stale(item)),
+    ...items.filter(stale)
+];
+/**
+ * Each answer ranked so the records gone out of date come after the current
+ * ones: an adapter's entity hits, and its passages and facts about nothing
+ * but out-of-date records. Nothing is dropped; the changes name them.
+ */
+const rankedDown = (results, references, snapshot, changes) => {
+    const outOfDate = new Set(changes.map((change) => change.id));
+    if (outOfDate.size === 0)
+        return { results: [...results], references: [...references] };
+    return {
+        results: results.map((result) => {
+            if (result.state !== 'answered')
+                return result;
+            const evidence = new Map(result.answer.evidence.map((item) => [item.id, item]));
+            const blocks = result.answer.blocks.map((block) => block.kind === 'entities'
+                ? { ...block, entities: currentFirst(block.entities, (item) => allOutOfDate([item.ref], snapshot, outOfDate)) }
+                : block.kind === 'passages' || block.kind === 'facts'
+                    ? { ...block, evidenceIds: currentFirst(block.evidenceIds, (id) => allOutOfDate(evidence.get(id)?.canonicalRefs ?? [], snapshot, outOfDate)) }
+                    : block);
+            return { ...result, answer: { ...result.answer, blocks } };
+        }),
+        references: currentFirst(references, (reference) => reference.entity !== undefined && outOfDate.has(reference.entity))
+    };
+};
 /**
  * Puts one question to the adapters through the shared coordinator
  * (docs/adapter-spec.md §10): establishes its scope, time and time zone,
@@ -63,8 +99,10 @@ const selectAdapters = (docket, named) => {
  * the question was asked, works out how far each instance lags them, and -
  * unless turned off - has a model summarise the results.
  *
- * Every adapter's answer is kept as it came, ids namespaced by instance; a
- * failure is that instance's alone. The canonical references across all of
+ * Every adapter's answer is kept as it came, ids namespaced by instance,
+ * except that records `supersessions` says have gone out of date are ranked
+ * after the current ones and named in `changes`, each with the record current
+ * now; a failure is that instance's alone. The canonical references across all of
  * them are listed once each, and the canonical paths joining the entities
  * they found are read from the files.
  */
@@ -112,7 +150,7 @@ export const askWith = async (snapshot, docket, input) => {
     });
     const rejected = new Map();
     const checked = [];
-    const results = outcomes.map((outcome) => {
+    const checkedResults = outcomes.map((outcome) => {
         if (outcome.state === 'failed')
             return outcome;
         const result = checkAnswer(outcome.adapter, outcome.answer, snapshot);
@@ -121,7 +159,7 @@ export const askWith = async (snapshot, docket, input) => {
             rejected.set(outcome.adapter, result.rejected);
         return { adapter: outcome.adapter, state: 'answered', answer: result.answer, durationMs: outcome.durationMs, references: result.references };
     });
-    const reported = new Map(results.flatMap((result) => (result.state === 'answered' ? [[result.adapter, result.answer.coverage.checkpoint]] : [])));
+    const reported = new Map(checkedResults.flatMap((result) => (result.state === 'answered' ? [[result.adapter, result.answer.coverage.checkpoint]] : [])));
     const freshness = await freshnessOf(docket, snapshot, slots, { inputs, reported });
     const diagnostics = [];
     if (slots.length === 0) {
@@ -131,7 +169,7 @@ export const askWith = async (snapshot, docket, input) => {
             message: 'No adapter is enabled for query, so nothing was asked. Give an adapter the query role in .docket.yaml.'
         });
     }
-    for (const result of results) {
+    for (const result of checkedResults) {
         const fresh = freshness.get(result.adapter);
         if (result.state === 'answered' && fresh)
             result.freshness = fresh;
@@ -139,10 +177,18 @@ export const askWith = async (snapshot, docket, input) => {
         if (warning)
             diagnostics.push({ severity: 'warning', code: 'adapter-behind', message: warning });
     }
-    const references = foundReferences(checked, snapshot);
-    const found = [
-        ...new Set(references.flatMap((reference) => reference.status === 'unresolved' ? [] : reference.kind === 'entity' ? [reference.id] : reference.entity ? [reference.entity] : []))
+    const foundRefs = foundReferences(checked, snapshot);
+    const entitiesOf = (refs) => [
+        ...new Set(refs.flatMap((reference) => reference.status === 'unresolved' ? [] : reference.kind === 'entity' ? [reference.id] : reference.entity ? [reference.entity] : []))
     ];
+    const changes = input.supersessions
+        ? recordChanges(input.supersessions, entitiesOf(foundRefs), (id) => {
+            const entity = snapshot.entity(id);
+            return entity ? { id, type: entity.type, title: entity.title } : null;
+        })
+        : [];
+    const { results, references } = rankedDown(checkedResults, foundRefs, snapshot, changes);
+    const found = entitiesOf(references);
     const edges = snapshot.entities.flatMap((entity) => entity.links.map((link) => ({ source: entity.id, rel: link.rel, target: link.target })));
     const connections = connectingPaths(edges, found);
     const answer = {
@@ -153,6 +199,7 @@ export const askWith = async (snapshot, docket, input) => {
         synthesis: null,
         references,
         connections,
+        ...(changes.length > 0 ? { changes } : {}),
         diagnostics
     };
     if (!(input.synthesis ?? query.synthesis)) {
@@ -161,7 +208,7 @@ export const askWith = async (snapshot, docket, input) => {
     else {
         if (input.signal?.aborted)
             throw new AskCancelledError('The question was cancelled.');
-        const outcome = await synthesize({ question, context, conversation, results, references, connections, snapshot }, {
+        const outcome = await synthesize({ question, context, conversation, results, references, connections, changes, snapshot }, {
             summarize,
             memoryRoot: snapshot.resolved.memoryRoot,
             adapters: new Map(slots.map((slot) => [slot.id, { fingerprint: slot.fingerprint, checkpoint: freshness.get(slot.id)?.checkpoint }])),
@@ -179,10 +226,12 @@ export const askWith = async (snapshot, docket, input) => {
 /**
  * `askWith` over a canonical source, or the project `.docket.yaml` at or above
  * the directory `from` is in: the documents are read once, and the adapters
- * read through that same snapshot.
+ * read through that same snapshot. The project's supersessions
+ * (`<root>/supersessions.yaml`) are applied unless the input gives its own.
  */
 export const askProject = async (from, input, options = {}) => {
     const snapshot = await takeSnapshot(from);
     const docket = await openDocket(snapshot.resolved, { ...options, canonical: options.canonical ?? snapshot.reader });
-    return askWith(snapshot, docket, input);
+    const supersessions = input.supersessions ?? (await liveSupersessions(storeOf(snapshot.resolved)));
+    return askWith(snapshot, docket, { ...input, supersessions });
 };

@@ -13,9 +13,9 @@ import { ADD_EVIDENCE_DEFINITION, ASK_DEFINITION, GET_DEFINITION, ONTOLOGY_DEFIN
 import { ASK_SCHEMA, answerText, failed } from '../surface/results.js';
 import { OntologyWriteDisabled } from '../../workspace/ontology/errors.js';
 import { writeAnswer } from '../surface/write-args.js';
-import { declaring, describeResource, headOf, historyPath, liveSupersessions, readWorkspace, storeOf, writeLock } from './files.js';
+import { declaring, describeResource, headOf, historyPath, liveSupersessions, readWorkspace, writeLock } from './files.js';
 import { proposeOntologyChange, publishOntologyChange } from './ontology.js';
-import { changesOf, scopedSearch, withSupersessions } from './search.js';
+import { scopedSearch, withSupersessions } from './search.js';
 import { addEvidence, appendNotes, retireResource, supersedeResource, writeResource } from './write.js';
 /** The person at this machine, as evidence names them. */
 const localWriter = () => {
@@ -170,16 +170,12 @@ export function localTools(options) {
                     return failed('docket_ask is off on this server: it has no model to answer with. Use docket_search, which needs none.');
                 let response;
                 try {
-                    const resolved = await loadConfig(cwd);
                     const { answer } = await askProject(cwd, {
                         question,
                         ...(maxResults !== undefined ? { maxResults } : {}),
                         ...(options.ask ? { summarize: options.ask.summarize, synthesis: true } : {})
                     });
-                    const live = await liveSupersessions(storeOf(resolved));
-                    const found = [...new Set((answer.references ?? []).flatMap((reference) => (reference.entity && live.has(reference.entity) ? [reference.entity] : [])))];
-                    const changes = found.length ? changesOf(await readWorkspace(resolved), live, found) : [];
-                    response = { answer, ...(changes.length ? { changes } : {}) };
+                    response = { answer, ...(answer.changes ? { changes: answer.changes } : {}) };
                 }
                 catch (cause) {
                     return failed(`The docket could not answer: ${errorText(cause)}`);

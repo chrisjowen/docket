@@ -7,6 +7,8 @@
  * change.
  */
 
+import type { OutOfDateRecord } from '../query/wire.js'
+
 /**
  * The record a superseded one points to now: its replacement's replacement,
  * and so on, to the first that is not superseded. A chain that loops ends
@@ -35,4 +37,28 @@ export function changeNote(
   const now = current ? `superseded by "${current.title}" (${current.id})` : 'superseded by a record no longer on file'
   const reason = supersession.reason.trim().replace(/\s+/g, ' ')
   return `Out of date: "${old.title}" (${old.id}) is ${now} since ${dayOf(supersession.validUntil)}.${reason ? ` ${reason.replace(/([^.!?])$/, '$1.')}` : ''}`
+}
+
+/** What a change is told from: the record that replaced one, until when it held, and why. */
+export type HeldSupersession = { supersededBy: string; validUntil: Date | string; reason: string }
+
+/**
+ * The out-of-date records among `ids`, in their order, each with the record
+ * current now. `describe` names a record on file, and null for one that is
+ * not; a superseded record no longer on file is left out.
+ */
+export function recordChanges(
+  supersessions: ReadonlyMap<string, HeldSupersession>,
+  ids: readonly string[],
+  describe: (id: string) => { id: string; type: string; title: string } | null
+): OutOfDateRecord[] {
+  return [...new Set(ids)].flatMap((id) => {
+    const own = supersessions.get(id)
+    const old = own ? describe(id) : null
+    if (!own || !old) return []
+    const currentId = currentRecord(supersessions, id)
+    const found = currentId !== id && !supersessions.has(currentId) ? describe(currentId) : null
+    const current = found ? { id: found.id, type: found.type, title: found.title } : null
+    return [{ id, type: old.type, title: old.title, supersededBy: own.supersededBy, current, since: dayOf(own.validUntil), reason: own.reason, note: changeNote(old, current, own) }]
+  })
 }

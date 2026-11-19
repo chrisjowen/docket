@@ -4,7 +4,7 @@ import { validateDocuments } from '../../ontology/validator.js';
 import { DocumentError, checkDocument } from '../../workspace/documents.js';
 import { dayOf } from '../../workspace/supersession.js';
 import { appendedNotes, composeDocument, sameMeaning } from '../../workspace/write/document.js';
-import { evidenceProblems, hasErrors, refuse, stampEvidence, writeDiagnostics } from '../../workspace/write/evidence.js';
+import { evidenceProblems, hasErrors, refuse, stampEvidence } from '../../workspace/write/evidence.js';
 import { WRITE_LIMITS } from '../../workspace/write/inputs.js';
 import { absolute, declaring, documentPathOf, freeDocumentPath, readSupersessions, removeFile, writeSupersessions, writeText } from './files.js';
 /** The document a write to `resource` changes: the one at its own path, else the first that declares it. */
@@ -38,10 +38,10 @@ async function applyChange(workspace, input, options) {
     catch (caught) {
         if (!(caught instanceof DocumentError))
             throw caught;
-        const errors = writeDiagnostics(caught.diagnostics).filter((d) => d.severity === 'error');
+        const errors = caught.diagnostics.filter((d) => d.severity === 'error');
         return refused(errors.length ? errors : [refuse(caught.code === 'too-large' ? 'document-too-large' : 'invalid-document', caught.message, where)]);
     }
-    const parseWarnings = writeDiagnostics(parseMemoryFile(merged.raw, path).diagnostics);
+    const parseWarnings = parseMemoryFile(merged.raw, path).diagnostics;
     if (parsed.links.length > WRITE_LIMITS.linksPerResource) {
         return refused([refuse('too-many-links', `A resource holds at most ${WRITE_LIMITS.linksPerResource} links in one document.`, where)]);
     }

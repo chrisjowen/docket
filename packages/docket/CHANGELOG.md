@@ -3,6 +3,33 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## 0.15.1
+
+### Ask answers with the current record when one has been superseded
+
+`docket ask`, Ask in `docket open` (and in Wheelhouse), and `docket_ask` now
+all apply the project's supersessions (`.docket/supersessions.yaml`, written
+by `docket_supersede`), as `docket_search` and `docket_get` already did. Before,
+only `docket_ask` named the change, and every adapter still ranked the
+superseded record where it found it.
+
+- A record gone out of date is ranked after the current ones in each adapter's
+  entity hits, its passages and facts, and the references. Nothing is dropped.
+- The answer names each one in `changes`, with the record current now and a
+  note of the change: `docket ask` prints them first and marks the record
+  `out of date` where an adapter lists it, and Ask shows them above the
+  summary.
+- A summary is told which records are out of date, so it answers with the
+  current one.
+
+### `reportedBy` is an evidence field
+
+Writes through the MCP tools keep who reported something, when that was not
+the writer, as `reportedBy` on its evidence. docket's parser now accepts that
+field, so `docket sync` and `docket validate` no longer warn
+`unknown-evidence-field: "reportedBy" ignored` for each entry, and the field
+reaches the graph with the rest of the evidence.
+
 ## 0.15.0
 
 ### `docket_get` draws a resource as its card

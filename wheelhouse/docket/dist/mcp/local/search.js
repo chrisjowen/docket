@@ -1,4 +1,4 @@
-import { changeNote, currentRecord, dayOf } from '../../workspace/supersession.js';
+import { recordChanges } from '../../workspace/supersession.js';
 import { MIN_CONFIDENCE_IGNORED } from '../surface/results.js';
 import { describeResource, liveSupersessions, readWorkspace, storeOf } from './files.js';
 /*
@@ -37,16 +37,7 @@ export function scopedSearch(found, args) {
 }
 /** The out-of-date records among `ids`, each with the record current now. */
 export function changesOf(workspace, live, ids) {
-    return ids.flatMap((id) => {
-        const own = live.get(id);
-        const old = describeResource(workspace, id);
-        if (!own || !old)
-            return [];
-        const currentId = currentRecord(live, id);
-        const found = currentId !== id && !live.has(currentId) ? describeResource(workspace, currentId) : null;
-        const current = found ? { id: found.id, type: found.type, title: found.title } : null;
-        return [{ id, type: old.type, title: old.title, supersededBy: own.supersededBy, current, since: dayOf(own.validUntil), reason: own.reason, note: changeNote(old, current, own) }];
-    });
+    return recordChanges(live, ids, (id) => describeResource(workspace, id));
 }
 /**
  * The search with every superseded match answered by its current record: the

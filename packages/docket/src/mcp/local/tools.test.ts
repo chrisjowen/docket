@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { init } from '../../commands/init.js'
 import { sync } from '../../commands/sync.js'
 import { validate } from '../../commands/validate.js'
+import type { CoordinatedAnswer } from '../../query/wire.js'
 import { createMcpServer } from '../server.js'
 import { localTools } from './tools.js'
 import { TOOL_NAMES } from '../surface/definitions.js'
@@ -176,6 +177,35 @@ describe("docket's local MCP tools", () => {
     expect(search.matches).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'team.money', supersedes: ['team.payments'] })]))
     expect(search.changes).toEqual([expect.objectContaining({ id: 'team.payments', current: expect.objectContaining({ id: 'team.money' }) })])
     expect(text(found)).toContain('Changed since recorded - never present these as current:')
+  })
+
+  it('asks around a superseded record: its replacement ranked first, the change named', async () => {
+    await call('docket_remember', { id: 'team.money', type: 'team', title: 'Money Movement', body: 'Formerly the payments team.', evidence: EVIDENCE })
+    await call('docket_supersede', { id: 'team.payments', by: 'team.money', reason: 'The team was renamed.', validUntil: '2026-11-01', evidence: EVIDENCE })
+    await sync({ cwd: root })
+    const asked = await call('docket_ask', { question: 'payments' })
+    const response = structured(asked) as { answer: CoordinatedAnswer; changes?: { id: string }[] }
+    expect(response.changes).toEqual([expect.objectContaining({ id: 'team.payments', current: expect.objectContaining({ id: 'team.money' }) })])
+    expect(response.answer.changes).toEqual(response.changes)
+    const ids = (response.answer.references ?? []).map((reference) => reference.id)
+    expect(ids.indexOf('team.money')).toBeLessThan(ids.indexOf('team.payments'))
+    expect(text(asked)).toContain('Changed since recorded - never present these as current:')
+  })
+
+  it('writes a reporter as reportedBy, which sync and validate accept without a warning', async () => {
+    const written = await call('docket_remember', {
+      id: 'service.billing',
+      type: 'service',
+      title: 'Billing',
+      evidence: [{ source: 'human', observedBy: 'alice', note: 'Said in planning.' }]
+    })
+    expect(structured(written)).toMatchObject({ ok: true, created: true, diagnostics: [] })
+    const raw = await read('.docket/resources/services/billing.md')
+    expect(raw).toContain('reportedBy: alice')
+    expect((await validate({ cwd: root })).diagnostics).toEqual([])
+    expect((await sync({ cwd: root })).diagnostics).toEqual([])
+    const got = structured(await call('docket_get', { id: 'service.billing' })) as { resource: { evidence: { reportedBy?: string }[] } }
+    expect(got.resource.evidence).toEqual([expect.objectContaining({ reportedBy: 'alice' })])
   })
 
   it('searches with the surface arguments, tagging each match with where it was found', async () => {

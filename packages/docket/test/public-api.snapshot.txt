@@ -241,6 +241,7 @@ AskInput
       timeoutMs?: number | undefined;
       maxConcurrentAdapters?: number | undefined;
       signal?: AbortSignal | undefined;
+      supersessions?: ReadonlyMap<string, HeldSupersession> | undefined;
   }
 
 AskOutcome
@@ -429,6 +430,7 @@ CoordinatedAnswer
       notice?: SynthesisNotice;
       references?: FoundReference[];
       connections?: Connection[];
+      changes?: OutOfDateRecord[];
       diagnostics: Diagnostic[];
   }
 
@@ -563,6 +565,7 @@ EvidenceRecord
       observedAt?: string;
       observedBy?: string;
       session?: string;
+      reportedBy?: string;
       note?: string;
   }
 
@@ -638,6 +641,13 @@ GraphNode
 
 hashContent
   export declare const hashContent: (raw: string) => string;
+
+HeldSupersession
+  export type HeldSupersession = {
+      supersededBy: string;
+      validUntil: Date | string;
+      reason: string;
+  };
 
 ICON_NAMES
   export declare const ICON_NAMES: readonly [
@@ -1055,6 +1065,22 @@ OpenDocketOptions
       distribution?: AdapterDistribution | undefined;
       models?: Readonly<Record<string, ModelClient>> | undefined;
       manifests?: ManifestStore | undefined;
+  }
+
+OutOfDateRecord
+  export interface OutOfDateRecord {
+      id: string;
+      type: string;
+      title: string;
+      supersededBy: string;
+      current: {
+          id: string;
+          type: string;
+          title: string;
+      } | null;
+      since: string;
+      reason: string;
+      note: string;
   }
 
 parseMemoryFile
@@ -2870,6 +2896,7 @@ EvidenceRecord
       observedAt?: string;
       observedBy?: string;
       session?: string;
+      reportedBy?: string;
       note?: string;
   }
 
@@ -4255,20 +4282,7 @@ SearchBackend
   export type SearchBackend = (typeof SEARCH_BACKENDS)[number];
 
 SearchChange
-  export interface SearchChange {
-      id: string;
-      type: string;
-      title: string;
-      supersededBy: string;
-      current: {
-          id: string;
-          type: string;
-          title: string;
-      } | null;
-      since: string;
-      reason: string;
-      note: string;
-  }
+  export type SearchChange = OutOfDateRecord;
 
 searchScope
   export declare function searchScope(include: unknown, minConfidence: unknown): {
@@ -4971,6 +4985,7 @@ AskInput
       timeoutMs?: number | undefined;
       maxConcurrentAdapters?: number | undefined;
       signal?: AbortSignal | undefined;
+      supersessions?: ReadonlyMap<string, HeldSupersession> | undefined;
   }
 
 AskOutcome
@@ -5130,6 +5145,7 @@ SynthesisInput
       results: readonly AdapterResult[];
       references: readonly FoundReference[];
       connections: readonly Connection[];
+      changes?: readonly OutOfDateRecord[] | undefined;
       snapshot: RequestSnapshot;
   }
 
@@ -5424,6 +5440,13 @@ exportYaml
 hasErrors
   export declare const hasErrors: (diagnostics: readonly Diagnostic[]) => boolean;
 
+HeldSupersession
+  export type HeldSupersession = {
+      supersededBy: string;
+      validUntil: Date | string;
+      reason: string;
+  };
+
 Imported
   export interface Imported {
       yaml: string;
@@ -5538,6 +5561,13 @@ Proposal
 
 proposedText
   export declare function proposedText(head: string | null, proposal: Proposal): string;
+
+recordChanges
+  export declare function recordChanges(supersessions: ReadonlyMap<string, HeldSupersession>, ids: readonly string[], describe: (id: string) => {
+      id: string;
+      type: string;
+      title: string;
+  } | null): OutOfDateRecord[];
 
 refuse
   export declare const refuse: (code: string, message: string, where?: {

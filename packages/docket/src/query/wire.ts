@@ -110,6 +110,26 @@ export interface FoundReference {
   foundBy: { adapter: string; blockIds: string[]; evidenceIds: string[] }[]
 }
 
+/**
+ * A record found that has gone out of date: superseded by a newer one, it is
+ * never presented as current. It names the record current now and what
+ * changed.
+ */
+export interface OutOfDateRecord {
+  id: string
+  type: string
+  title: string
+  /** The record that replaced it. */
+  supersededBy: string
+  /** The record current now, at the end of the chain of replacements; null when it is no longer on file. */
+  current: { id: string; type: string; title: string } | null
+  /** Until when the older record held, YYYY-MM-DD. */
+  since: string
+  reason: string
+  /** The change in one line, e.g. 'Out of date: "Sophia" (agent.sophia) is superseded by "Captin" (agent.captin) since 2026-11-01. ...'. */
+  note: string
+}
+
 /** A chain of canonical relationships joining two entities the adapters found. */
 export interface Connection {
   nodes: string[]
@@ -137,6 +157,12 @@ export interface CoordinatedAnswer {
    * the files by docket rather than any adapter.
    */
   connections?: Connection[]
+  /**
+   * The records found that have gone out of date, each with the record
+   * current now; absent when there are none. Wherever the adapters ranked
+   * them, they are ranked after the records that are current.
+   */
+  changes?: OutOfDateRecord[]
   diagnostics: Diagnostic[]
 }
 
