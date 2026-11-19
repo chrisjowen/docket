@@ -284,11 +284,13 @@ export async function snapshotProposals(ctx: StoreContext, workspaceId: string):
 /** Scores every pending proposal of the workspace again and accepts those that now clear their bar: after a policy is published. */
 export async function promoteProposals(ctx: StoreContext, workspaceId: string, now: Date = new Date()): Promise<Supersession[]> {
   const pending = await pendingProposals(ctx, workspaceId, now)
-  if (!pending.some((each) => each.score.clears)) return []
+  const clearing = pending
+    .filter((each) => each.score.clears)
+    .sort((a, b) => (a.supersession.resourceId < b.supersession.resourceId ? -1 : a.supersession.resourceId > b.supersession.resourceId ? 1 : 0))
+  if (!clearing.length) return []
   const model = await modelOf(ctx, workspaceId)
   const promoted: Supersession[] = []
-  for (const { supersession, score } of pending) {
-    if (!score.clears) continue
+  for (const { supersession } of clearing) {
     await lockResource(ctx, workspaceId, supersession.resourceId)
     const { rows } = await ctx.tx.query<Row>('SELECT * FROM supersessions WHERE id = $1', [supersession.id])
     const row = rows[0]
