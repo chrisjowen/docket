@@ -2,6 +2,7 @@ import { aggregate } from '../../evidence/aggregate.js';
 import { bandOf, confidenceModel } from '../../evidence/confidence.js';
 import { parseMemoryFile, parseOntology, validateDocuments } from '../docket.js';
 import { writableHere } from '../origin.js';
+import { scoreProposal } from '../proposals.js';
 import { diffOntologies } from './diff.js';
 import { MigrationInvalid, OntologyInvalid, isBreaking } from './errors.js';
 import { describeMigration, migrationProblems, rewriteDocument } from './migrations.js';
@@ -51,12 +52,37 @@ function resolvedBy(step) {
         return `relationship ${step.from}`;
     return null;
 }
-export function classify(introduced, rescored = []) {
+export function classify(introduced, rescored = [], proposals = []) {
     if (introduced.some(isBreaking))
         return 'breaking';
     if (introduced.length)
         return 'narrowing';
-    return rescored.length ? 'rescore' : 'safe';
+    return rescored.length || proposals.length ? 'rescore' : 'safe';
+}
+/**
+ * The supersede proposals two ontologies decide differently: scored as each
+ * would score them, against the bar each sets for the replaced record's type.
+ */
+export function proposalChanges(proposals, documents, before, after, people) {
+    if (!before || proposals.length === 0)
+        return [];
+    const was = confidenceModel(before, { people });
+    const now = confidenceModel(after, { people });
+    const types = new Map(documents.map((document) => [document.id, document.type]));
+    const out = [];
+    for (const proposal of proposals) {
+        const type = types.get(proposal.resource);
+        const then = scoreProposal(was, type, proposal.evidence);
+        const next = scoreProposal(now, type, proposal.evidence);
+        const change = proposal.status === 'pending' && !then.clears && next.clears
+            ? 'would-accept'
+            : proposal.status === 'accepted' && then.clears && !next.clears
+                ? 'would-no-longer-pass'
+                : null;
+        if (change)
+            out.push({ proposal: proposal.id, resource: proposal.resource, status: proposal.status, before: then.score, after: next.score, threshold: next.threshold, change });
+    }
+    return out.sort((a, b) => (a.resource < b.resource ? -1 : a.resource > b.resource ? 1 : 0));
 }
 /**
  * The resources and links whose confidence differs between two ontologies.
@@ -94,7 +120,7 @@ export function rescore(before, after, people) {
  * diffs the diagnostics. `after` may hold other documents than `before`: a
  * migration's rewritten ones.
  */
-export function compare(before, after, origins, people) {
+export function compare(before, after, origins, people, proposals = []) {
     const was = before.ontology ? validateDocuments([...before.documents], before.ontology) : [];
     const now = validateDocuments([...after.documents], after.ontology);
     const introduced = minus(now, was);
@@ -112,7 +138,8 @@ export function compare(before, after, origins, people) {
     }
     affected.sort((a, b) => (a.resourceId < b.resourceId ? -1 : a.resourceId > b.resourceId ? 1 : 0));
     const rescored = rescore(before, after, people);
-    return { classification: classify(introduced, rescored), introduced, resolved, affected, rescored };
+    const decided = proposalChanges(proposals, after.documents, before.ontology, after.ontology, people);
+    return { classification: classify(introduced, rescored, decided), introduced, resolved, affected, rescored, proposals: decided };
 }
 /** Parses a draft, or throws `OntologyInvalid` with its errors at their paths. */
 export function parseDraft(yaml) {
@@ -161,7 +188,7 @@ export function evaluateDraft(snapshot, stored, draft, options = {}) {
         }
         after = snapshot.documents.map((document) => migrated.get(document.path) ?? document);
     }
-    const check = compare(before, { documents: after, ontology: draft }, snapshot.origins, snapshot.people);
+    const check = compare(before, { documents: after, ontology: draft }, snapshot.origins, snapshot.people, snapshot.proposals);
     const named = new Set(migration.map(resolvedBy));
     const byResource = new Map();
     for (const d of check.introduced) {

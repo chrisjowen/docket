@@ -105,8 +105,15 @@ export function updateNotesArguments(raw) {
         dryRun
     };
 }
+/** Evidence for a supersede proposal, as `addEvidenceArguments` reads it when `supersession` is given. */
+export const isProposalEvidence = (input) => 'supersession' in input;
 export function addEvidenceArguments(raw) {
-    const args = argumentsOf('docket_add_evidence', raw, ['id', 'link', 'evidence'], '{ "id", "evidence": [...], "link"?: { "rel", "target" } }');
+    const args = argumentsOf('docket_add_evidence', raw, ['id', 'link', 'supersession', 'evidence'], '{ "id", "evidence": [...], "link"?: { "rel", "target" } } or { "supersession", "evidence": [...] }');
+    if (args.supersession !== undefined) {
+        if (args.id !== undefined || args.link !== undefined)
+            throw new InvalidArgumentsError('Give supersession alone, or id (with link), not both.');
+        return { supersession: requiredText(args.supersession, 'supersession', 100), evidence: parseEvidence(args.evidence, 'evidence') };
+    }
     let link;
     if (args.link !== undefined) {
         if (!isObject(args.link) || Object.keys(args.link).some((key) => key !== 'rel' && key !== 'target')) {

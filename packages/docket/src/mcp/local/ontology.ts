@@ -6,9 +6,10 @@ import { OntologyBreakingChange, OntologyNarrowingChange, StaleDraft } from '../
 import { proposedText, type Proposal } from '../../workspace/ontology/propose.js'
 import { importYaml } from '../../workspace/ontology/yaml-io.js'
 import type { Writer } from '../../workspace/write/inputs.js'
+import { promoteProposals } from './write.js'
 import type { DirectChange } from '../surface/arguments.js'
 import type { PublishedVersion } from '../surface/answers.js'
-import { absolute, draftPath, headOf, readHistory, snapshotOf, writeHistory, writeText, type LocalWorkspace } from './files.js'
+import { absolute, draftPath, headOf, readHistory, snapshotOf, snapshotProposals, writeHistory, writeText, type LocalWorkspace } from './files.js'
 
 /*
  * The ontology's lifecycle over a project's files, through the same change
@@ -32,7 +33,7 @@ function draftText(text: string): string {
 export async function proposeOntologyChange(workspace: LocalWorkspace, writer: Writer, proposal: Proposal): Promise<{ draftId: string; path: string; check: DraftCheck }> {
   const head = await headOf(workspace)
   const yaml = draftText(proposedText(head?.text ?? null, proposal))
-  const check = checkDraft(snapshotOf(workspace, head), [], yaml)
+  const check = checkDraft(snapshotOf(workspace, head, await snapshotProposals(workspace)), [], yaml)
   const draftId = randomUUID()
   const path = draftPath(workspace, draftId)
   const message = proposal.message?.trim() || `Proposed by ${writer.label}`
@@ -62,7 +63,11 @@ export async function publishOntologyChange(workspace: LocalWorkspace, writer: W
   const stored: StoredDocument[] = migration.length
     ? workspace.documents.flatMap((entry) => (entry.raw === undefined ? [] : [{ path: entry.path, origin: 'local' as const, raw: entry.raw }]))
     : []
-  const { check, rewrites, unresolved } = evaluateDraft(snapshotOf(workspace, head), stored, ontology, { migration, version, login: writer.label })
+  const { check, rewrites, unresolved } = evaluateDraft(snapshotOf(workspace, head, await snapshotProposals(workspace)), stored, ontology, {
+    migration,
+    version,
+    login: writer.label
+  })
   const disposed: Disposed[] = []
   for (const resource of unresolved) {
     const disposition = change.dispositions?.[resource.resourceId]
@@ -73,6 +78,8 @@ export async function publishOntologyChange(workspace: LocalWorkspace, writer: W
 
   for (const rewrite of rewrites) await writeText(absolute(workspace.resolved, rewrite.path), rewrite.raw)
   await writeText(workspace.resolved.ontologyPath, yaml)
+  // A published policy can carry a pending supersede proposal over its bar: record it accepted.
+  await promoteProposals({ ...workspace, ontology: { ...(workspace.ontology ?? { revision: '', changedAt: now }), text: yaml, ontology } }, { now: () => now })
   const dispositions = disposed.map(({ resourceId, disposition }) => ({ resourceId, disposition }))
   await writeHistory(workspace, [
     ...(await readHistory(workspace)),

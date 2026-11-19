@@ -1,4 +1,5 @@
 import type { CoordinatedAnswer, OutOfDateRecord } from '../../query/wire.js'
+import type { PendingChange } from '../../workspace/proposals.js'
 import type { SearchGraph, SearchMatch } from '../types.js'
 
 /*
@@ -54,6 +55,8 @@ export interface WorkspaceSearch extends SearchGraph {
   matches: WorkspaceMatch[]
   /** The out-of-date records the search found, each answered by its current record among the matches; absent when there are none. */
   changes?: SearchChange[]
+  /** Supersede proposals not yet fact about records it found: those records are still current. */
+  pending?: PendingChange[]
 }
 
 /** Why a search ignores `minConfidence`, told to whoever still passes it. */
@@ -77,7 +80,13 @@ export interface AskResponse {
   notice?: string
   /** Out-of-date records the projections found, and the current record for each; absent when there are none. */
   changes?: SearchChange[]
+  /** Supersede proposals not yet fact about records it found: those records are still current. */
+  pending?: PendingChange[]
 }
+
+/** How pending proposals read beside an answer. */
+const pendingLines = (pending: readonly PendingChange[] | undefined): string[] =>
+  pending?.length ? ['Proposed, not yet fact - the older records are still current:', ...pending.map((each) => `- ${each.note}`)] : []
 
 /** How `docket_ask` reads for the model: the summary, what changed, and what the projections found. */
 export function answerText(response: AskResponse): string {
@@ -88,6 +97,7 @@ export function answerText(response: AskResponse): string {
   if (response.changes?.length) {
     lines.push('', 'Changed since recorded - never present these as current:', ...response.changes.map((change) => `- ${change.note}`))
   }
+  if (response.pending?.length) lines.push('', ...pendingLines(response.pending))
   const references = (answer.references ?? []).filter((reference) => reference.status !== 'unresolved')
   if (references.length > 0) {
     lines.push('', 'What the projections found:')
@@ -115,11 +125,12 @@ export function annotatedSearchText(found: WorkspaceSearch, text: string, lowCon
     out = out.replace(`\n- ${match.id} (${match.type}) `, `\n- ${low ? '⚠ ' : ''}${match.id} (${match.type}) [${match.foundIn.join(', ')}]${replaces} `)
   }
   const changes = found.changes ?? []
-  if (types.size === 0 && changes.length === 0) return out
+  if (types.size === 0 && changes.length === 0 && !found.pending?.length) return out
   const [head, ...rest] = out.split('\n')
   return [
     head,
     ...(changes.length ? ['Changed since recorded - never present these as current:', ...changes.map((change) => `- ${change.note}`)] : []),
+    ...pendingLines(found.pending),
     ...(types.size ? [`By type: ${[...types].map(([type, count]) => `${count} ${type}`).join(', ')}.`] : []),
     ...rest
   ].join('\n')

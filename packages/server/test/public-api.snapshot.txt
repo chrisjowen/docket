@@ -102,13 +102,14 @@ CheckResult
           origin: Origin;
       }[];
       rescored: Rescored[];
+      proposals: ProposalChange[];
   }
 
 checkScope
   export declare function checkScope(effective: readonly Scope[], needed: Scope): Refusal | null;
 
 classify
-  export declare function classify(introduced: readonly Diagnostic[], rescored?: readonly Rescored[]): Classification;
+  export declare function classify(introduced: readonly Diagnostic[], rescored?: readonly Rescored[], proposals?: readonly ProposalChange[]): Classification;
 
 cloudDocumentPath
   export declare function cloudDocumentPath(document: {
@@ -128,7 +129,7 @@ compare
   }, after: {
       documents: readonly MemoryDocument[];
       ontology: Ontology;
-  }, origins: ReadonlyMap<string, Origin>, people?: PeopleDirectory): CheckResult;
+  }, origins: ReadonlyMap<string, Origin>, people?: PeopleDirectory, proposals?: readonly SnapshotProposal[]): CheckResult;
 
 ComposedDocument
   export interface ComposedDocument {
@@ -759,6 +760,7 @@ WorkspaceSnapshot
           ontology: Ontology | null;
       } | null;
       people?: PeopleDirectory;
+      proposals?: readonly SnapshotProposal[];
   }
 
 WRITE_LIMITS
@@ -855,6 +857,7 @@ AskResponse
       answer: CoordinatedAnswer;
       notice?: string;
       changes?: SearchChange[];
+      pending?: PendingChange[];
   }
 
 askTool
@@ -1211,6 +1214,7 @@ WorkspaceSearch
   export interface WorkspaceSearch extends SearchGraph {
       matches: WorkspaceMatch[];
       changes?: SearchChange[];
+      pending?: PendingChange[];
   }
 
 WRITE_SCHEMA
@@ -1254,6 +1258,14 @@ writeTools
 
 addEvidence
   export declare function addEvidence(ctx: StoreContext, writer: Writer, input: AddEvidenceInput, options?: WriteOptions): Promise<WriteResult>;
+
+addProposalEvidence
+  export declare function addProposalEvidence(ctx: StoreContext, writer: Writer, input: {
+      supersession: string;
+      evidence: EvidenceInput[];
+  }, options?: {
+      now?: () => Date;
+  }): Promise<ProposalWriteResult>;
 
 appendNotes
   export declare function appendNotes(ctx: StoreContext, writer: Writer, input: AppendNotesInput, options?: WriteOptions): Promise<WriteResult>;
@@ -1553,7 +1565,7 @@ listWorkspaces
   export declare function listWorkspaces(tx: Tx): Promise<Workspace[]>;
 
 liveSupersessions
-  export declare function liveSupersessions(ctx: StoreContext, workspaceId: string): Promise<Supersession[]>;
+  export declare function liveSupersessions(ctx: StoreContext, workspaceId: string, now?: Date): Promise<Supersession[]>;
 
 lockOntologyHead
   export declare function lockOntologyHead(ctx: Pick<StoreContext, 'tx'>, workspaceId: string, mode?: 'share' | 'update'): Promise<{
@@ -1655,6 +1667,17 @@ OpenedDocument
       error?: string;
   }
 
+openProposals
+  export declare function openProposals(ctx: StoreContext, workspaceId: string, now?: Date): Promise<{
+      proposal: string;
+      id: string;
+      by: string;
+      reason: string;
+      score: number;
+      threshold: number;
+      stale: boolean;
+  }[]>;
+
 openRow
   export declare function openRow(ctx: Pick<StoreContext, 'codec'>, row: {
       id: string;
@@ -1695,6 +1718,16 @@ PendingDeletion
 pendingDeletions
   export declare function pendingDeletions(tx: Tx, now: Date): Promise<PendingDeletion[]>;
 
+PendingProposal
+  export interface PendingProposal {
+      supersession: Supersession;
+      score: ProposalScore;
+      stale: boolean;
+  }
+
+pendingProposals
+  export declare function pendingProposals(ctx: StoreContext, workspaceId: string, now?: Date): Promise<PendingProposal[]>;
+
 Pool
   export interface Pool {
       connect(): Promise<PoolClient>;
@@ -1734,6 +1767,34 @@ ProjectionStanding
       attemptedAt: Date | null;
       syncedAt: Date | null;
       retryAt: Date | null;
+  }
+
+promoteProposals
+  export declare function promoteProposals(ctx: StoreContext, workspaceId: string, now?: Date): Promise<Supersession[]>;
+
+ProposalOutcome
+  export interface ProposalOutcome {
+      id: string;
+      status: ProposalStatus;
+      score: number;
+      threshold: number;
+      carry: {
+          policy: string;
+          source: string;
+          reaches: number;
+      }[];
+  }
+
+ProposalWriteResult
+  export interface ProposalWriteResult {
+      proposal?: ProposalOutcome & {
+          resource: string;
+          supersededBy: string;
+      };
+      changed: boolean;
+      evidenceAdded: number;
+      diagnostics: Diagnostic[];
+      ingestId?: string;
   }
 
 proposeOntologyChange
@@ -1846,6 +1907,14 @@ recordPurge
 recordSyncRun
   export declare function recordSyncRun(tx: Tx, run: SyncRunInput): Promise<void>;
 
+rejectProposal
+  export declare function rejectProposal(ctx: StoreContext, writer: Writer, input: {
+      supersession: string;
+      reason: string;
+  }, options?: {
+      now?: () => Date;
+  }): Promise<ProposalWriteResult>;
+
 requestRecheck
   export declare function requestRecheck(tx: Tx, workspaceId: string): Promise<void>;
 
@@ -1937,6 +2006,7 @@ supersedeResource
 SupersedeResult
   export interface SupersedeResult {
       supersession?: Supersession;
+      proposal?: ProposalOutcome;
       changed: boolean;
       replaced?: string;
       diagnostics: Diagnostic[];
@@ -1946,6 +2016,7 @@ SupersedeResult
 Supersession
   export interface Supersession {
       id: string;
+      workspaceId: string;
       resourceId: string;
       supersededBy: string;
       validUntil: Date;
@@ -1955,6 +2026,14 @@ Supersession
       reason: string;
       evidence: StampedEvidence[];
       recordedAt: Date;
+      status: ProposalStatus;
+      score: number | null;
+      threshold: number | null;
+      updatedAt: Date;
+      decidedAt: Date | null;
+      decidedBy: string | null;
+      grandfathered: boolean;
+      rejection?: string;
   }
 
 SupersessionSource
@@ -2081,6 +2160,15 @@ Asked
           root: string;
       };
       supersessions?: ReadonlyMap<string, Pick<Supersession, 'supersededBy' | 'validUntil' | 'reason'>>;
+      pending?: {
+          proposal: string;
+          id: string;
+          by: string;
+          reason: string;
+          score: number;
+          threshold: number;
+          stale: boolean;
+      }[];
   }
 
 askProjections

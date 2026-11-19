@@ -43,8 +43,35 @@ describe.skipIf(!TEST_PG_URL)('the store migrations', () => {
   it('apply nothing the second time, and run concurrently without applying anything twice', async () => {
     expect(await migrate(test.pool)).toBe(0)
     const applied = await Promise.all([migrate(test.pool, { schema: 'tenant_a' }), migrate(test.pool, { schema: 'tenant_a' }), migrate(test.pool, { schema: 'tenant_b' })])
-    expect(applied.sort()).toEqual([0, 1, 1])
+    expect(applied.sort()).toEqual([0, CORE_MIGRATIONS.length, CORE_MIGRATIONS.length])
     expect(await tables('tenant_a')).toEqual(CORE_TABLES)
+  })
+
+  it('keeps a supersession recorded before proposals accepted, and marks it grandfathered', async () => {
+    const schema = 'before_proposals'
+    await transaction(test.pool, (tx) => migrateSchema(tx, schema, CORE_MIGRATIONS.slice(0, 1)))
+    await transaction(test.pool, async (tx) => {
+      await tx.query(`INSERT INTO ${schema}.workspaces (id, slug, name, created_by) VALUES ('ws', 'ws', 'WS', 'user:a')`)
+      await tx.query(
+        `INSERT INTO ${schema}.supersessions (id, workspace_id, resource_id, superseded_by, valid_until, source, actor, actor_label, detail_ciphertext, detail_nonce, dek_version, request_id)
+         VALUES (gen_random_uuid(), 'ws', 'team.a', 'team.b', now(), 'agent', 'user:a', 'a', '\\x00', '\\x00', 0, 'r1')`
+      )
+    })
+    expect(await transaction(test.pool, (tx) => migrateSchema(tx, schema))).toBe(CORE_MIGRATIONS.length - 1)
+    const { rows } = await test.pool.query(`SELECT status, grandfathered, score FROM ${schema}.supersessions`)
+    expect(rows).toEqual([{ status: 'accepted', grandfathered: true, score: null }])
+    // A new one is not grandfathered, and a record holds one accepted and one pending at most.
+    await test.pool.query(
+      `INSERT INTO ${schema}.supersessions (id, workspace_id, resource_id, superseded_by, valid_until, source, actor, actor_label, detail_ciphertext, detail_nonce, dek_version, request_id, status)
+       VALUES (gen_random_uuid(), 'ws', 'team.a', 'team.c', now(), 'agent', 'user:a', 'a', '\\x00', '\\x00', 0, 'r2', 'pending')`
+    )
+    expect((await test.pool.query(`SELECT grandfathered FROM ${schema}.supersessions WHERE status = 'pending'`)).rows).toEqual([{ grandfathered: false }])
+    await expect(
+      test.pool.query(
+        `INSERT INTO ${schema}.supersessions (id, workspace_id, resource_id, superseded_by, valid_until, source, actor, actor_label, detail_ciphertext, detail_nonce, dek_version, request_id, status)
+         VALUES (gen_random_uuid(), 'ws', 'team.a', 'team.d', now(), 'agent', 'user:a', 'a', '\\x00', '\\x00', 0, 'r3', 'pending')`
+      )
+    ).rejects.toThrow(/supersessions_pending/)
   })
 
   it('keep each schema’s store apart: a store sees only its own schema’s rows', async () => {

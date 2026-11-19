@@ -12,6 +12,7 @@ import type { Writer } from '../write/inputs.js'
 import { listDocuments, putDocument, readDocuments, type DocumentRecord } from './documents.js'
 import { recordIngest } from './ingest.js'
 import { postgresSource, publishedOntology } from './source.js'
+import { promoteProposals, snapshotProposals } from './supersession.js'
 import { insertWorkspace, ontologyMcpRoles, workspaceById, enqueue, type Workspace } from './workspaces.js'
 import { lockOntologyHead } from './write.js'
 
@@ -175,11 +176,13 @@ export async function workspaceSnapshot(ctx: StoreContext, workspaceId: string):
   const read = await readCanonical(postgresSource(ctx, workspaceId))
   const records = await listDocuments(ctx.tx, workspaceId)
   const head = await publishedOntology(ctx, workspaceId)
+  const proposals = await snapshotProposals(ctx, workspaceId)
   return {
     documents: read.documents,
     origins: new Map(records.map((record) => [record.path, record.origin])),
     head: head ? { number: head.number, ontology: parseOntology(head.text).ontology } : null,
-    people: read.people
+    people: read.people,
+    ...(proposals.length ? { proposals } : {})
   }
 }
 
@@ -291,6 +294,8 @@ export async function publish(ctx: StoreContext, workspaceId: string, draftId: s
     ]
   )
   await enqueue(tx, workspaceId, 'ontology')
+  // A published policy can carry a pending supersede proposal over its bar: record it accepted.
+  await promoteProposals(ctx, workspaceId)
   await recordIngest(ctx, {
     workspaceId,
     channel: 'ontology',

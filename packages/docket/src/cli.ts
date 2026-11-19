@@ -29,6 +29,7 @@ import { failureOf, sync, SyncError, type SyncResult } from './commands/sync.js'
 import { validate } from './commands/validate.js'
 import { watch } from './commands/watch.js'
 import { formatWhy, why } from './commands/why.js'
+import { confirmProposal, listProposals, rejectProposalCommand } from './commands/proposals.js'
 import { ONTOLOGY_TEMPLATES } from './config/defaults.js'
 import { loadConfig } from './config/loader.js'
 import { convertOntologyText } from './ontology/convert.js'
@@ -996,6 +997,53 @@ ontologyCommand
       const value = observationConfidence(model, { kind: 'resource', type }, source)
       console.log(`    ${pad(source, sourceWidth)}  ${value}${own.has(source) ? '  (this type)' : ''}`)
     }
+  })
+
+program
+  .command('proposals')
+  .description('List supersede proposals: each pending one with its score, the bar it needs, and whether it has gone stale')
+  .option('--all', 'accepted and rejected ones too')
+  .option('--json', 'print them as JSON')
+  .action(async (options: { all?: boolean; json?: boolean }) => {
+    const proposals = await listProposals({ all: options.all })
+    if (options.json) {
+      console.log(JSON.stringify(proposals, null, 2))
+      return
+    }
+    if (proposals.length === 0) console.log(options.all ? 'no proposals' : 'no pending proposals')
+    for (const proposal of proposals) {
+      const scored = proposal.score !== undefined && proposal.threshold !== undefined ? `  ${proposal.score.toFixed(2)} of ${proposal.threshold.toFixed(2)}` : ''
+      console.log(`${proposal.id}  ${proposal.status}${scored}${proposal.stale ? '  stale' : ''}`)
+      console.log(`  ${proposal.supersededBy} supersedes ${proposal.resource}: ${proposal.reason}`)
+      console.log(`  ${proposal.evidence} evidence, proposed by ${proposal.recordedBy} on ${proposal.recordedAt.slice(0, 10)}`)
+    }
+  })
+
+program
+  .command('confirm')
+  .argument('<proposal>', 'the proposal id, or its first 8 or more characters')
+  .description('Confirm a supersede proposal as yourself: your own evidence, scored by who you are; it becomes fact if that clears its bar')
+  .option('--note <text>', 'what you confirm, in a sentence')
+  .action(async (proposal: string, options: { note?: string }) => {
+    const result = await confirmProposal(proposal, { note: options.note })
+    if (result.proposal) {
+      const { status, score, threshold, resource, supersededBy } = result.proposal
+      console.log(`${status === 'accepted' ? '✓ accepted' : '- still pending'}: ${supersededBy} supersedes ${resource} (${score.toFixed(2)} of ${threshold.toFixed(2)})`)
+    }
+    report(result.diagnostics)
+    if (!result.proposal) process.exitCode = 1
+  })
+
+program
+  .command('reject')
+  .argument('<proposal>', 'the proposal id, or its first 8 or more characters')
+  .description('Reject a pending supersede proposal: the older record stays current, and both are kept')
+  .requiredOption('--reason <text>', 'why it is rejected')
+  .action(async (proposal: string, options: { reason: string }) => {
+    const result = await rejectProposalCommand(proposal, options.reason)
+    if (result.proposal) console.log(`✓ rejected: ${result.proposal.resource} stays current`)
+    report(result.diagnostics)
+    if (!result.proposal) process.exitCode = 1
   })
 
 program

@@ -97,6 +97,31 @@ describe('the change check', () => {
     expect(withPeople.rescored).toEqual([{ resourceId: 'team.payments', before: 0.5, after: 0.9, bandBefore: 'probable', bandAfter: 'established' }])
   })
 
+  it('names the supersede proposals a draft would decide differently, and classifies that as a rescore', () => {
+    const proposals = [
+      { id: 'p-pending', resource: 'service.orders', status: 'pending' as const, evidence: [{ source: 'codebase', path: 'MIGRATION.md' }] },
+      { id: 'p-accepted', resource: 'team.payments', status: 'accepted' as const, evidence: [{ source: 'person' }] }
+    ]
+    // Code at 0.6 does not clear the 0.75 bar; at 0.8 it does. A person at 0.9 clears it; at 0.5 no longer.
+    const before = ontology(0.6)
+    const after = ontology(0.8, {
+      trust: {
+        policies: [
+          { name: 'Code', when: { source: 'codebase' }, score: 0.8 },
+          { name: 'A person', when: { source: 'person' }, score: 0.5 }
+        ]
+      }
+    })
+    const result = compare({ documents, ontology: before }, { documents, ontology: after }, new Map(), undefined, proposals)
+    expect(result.proposals).toEqual([
+      { proposal: 'p-pending', resource: 'service.orders', status: 'pending', before: 0.6, after: 0.8, threshold: 0.75, change: 'would-accept' },
+      { proposal: 'p-accepted', resource: 'team.payments', status: 'accepted', before: 0.9, after: 0.5, threshold: 0.75, change: 'would-no-longer-pass' }
+    ])
+    expect(result.classification).toBe('rescore')
+    // Proposals the draft decides the same way are not named.
+    expect(compare({ documents, ontology: before }, { documents, ontology: before }, new Map(), undefined, proposals).proposals).toEqual([])
+  })
+
   it('diffs sources, thresholds and policies', () => {
     const after = ontology(0.7, {
       sources: { codebase: { locator: { path: { required: true }, lines: {} } }, github: {} },

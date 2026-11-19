@@ -8,6 +8,7 @@ export { argumentsOf, isObject } from './args.js'
 export {
   addEvidenceArguments,
   askArguments,
+  isProposalEvidence,
   getArguments,
   ontologyArguments,
   proposalArguments,
@@ -18,12 +19,14 @@ export {
   supersedeArguments,
   updateNotesArguments,
   type DirectChange,
+  type ProposalEvidenceInput,
   type SearchArguments,
   type SupersedeInput
 } from './arguments.js'
 export {
   ontologyAnswer,
   proposalAnswer,
+  proposalEvidenceAnswer,
   proposalRefusal,
   publishAnswer,
   publishRefusal,
@@ -33,6 +36,8 @@ export {
   supersedeAnswer,
   viewerOf,
   type OntologyHead,
+  type PendingView,
+  type ProposalView,
   type PublishedVersion,
   type ResourceDocument,
   type ResourceRead,

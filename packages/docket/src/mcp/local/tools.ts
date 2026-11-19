@@ -7,6 +7,7 @@ import type { ResolvedConfig, SummarizeConfig } from '../../config/config.js'
 import { loadConfig } from '../../config/loader.js'
 import { findPerson, type PeopleDirectory } from '../../people/directory.js'
 import { askProject } from '../../query/ask.js'
+import { pendingChanges } from '../../workspace/proposals.js'
 import { currentRecord } from '../../workspace/supersession.js'
 import { splitDocument } from '../../workspace/write/document.js'
 import type { Writer } from '../../workspace/write/inputs.js'
@@ -14,6 +15,7 @@ import { searchGraph } from '../search.js'
 import type { Tool, ToolRegistry } from '../server.js'
 import {
   addEvidenceArguments,
+  isProposalEvidence,
   askArguments,
   getArguments,
   ontologyArguments,
@@ -34,6 +36,7 @@ import {
   resourceAnswer,
   retireAnswer,
   searchAnswer,
+  proposalEvidenceAnswer,
   supersedeAnswer
 } from '../surface/answers.js'
 import {
@@ -60,13 +63,18 @@ import {
   headOf,
   historyPath,
   liveSupersessions,
+  openProposals,
+  pendingProposals,
+  storeOf,
+  readSupersessions,
+  type PendingProposal,
   readWorkspace,
   writeLock,
   type LocalWorkspace
 } from './files.js'
 import { proposeOntologyChange, publishOntologyChange } from './ontology.js'
 import { scopedSearch, withSupersessions } from './search.js'
-import { addEvidence, appendNotes, retireResource, supersedeResource, writeResource } from './write.js'
+import { addEvidence, addProposalEvidence, appendNotes, retireResource, supersedeResource, writeResource } from './write.js'
 
 /*
  * Docket's MCP surface over a project's own files: the tools Docket Cloud and
@@ -104,7 +112,7 @@ export interface LocalToolsOptions {
 }
 
 /** The person at this machine, as evidence names them. */
-const localWriter = (): { actor: string; label: string } => {
+export const localWriter = (): { actor: string; label: string } => {
   let user = 'local'
   try {
     user = userInfo().username || user
@@ -115,7 +123,7 @@ const localWriter = (): { actor: string; label: string } => {
 }
 
 /** Who the person at this machine is in the people directory: its `me`, else the login's person, else the login. */
-const localPrincipal = (people: PeopleDirectory): string => {
+export const localPrincipal = (people: PeopleDirectory): string => {
   const user = localWriter().actor.replace(/^local:/, '')
   return people.me ?? findPerson(people, user) ?? user
 }
@@ -253,6 +261,18 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
         const live = await liveSupersessions(workspace)
         const own = live.get(id)
         const currentId = own ? currentRecord(live, id) : null
+        // Proposals not yet fact: this record is still current, or not yet a replacement.
+        const pending = pendingProposals(workspace, await readSupersessions(workspace)).filter((each) => !each.score.clears)
+        const pendingView = (each: PendingProposal) => ({
+          proposal: each.record.id,
+          by: each.record.supersededBy,
+          reason: each.record.reason,
+          score: each.score.score,
+          threshold: each.score.threshold,
+          stale: each.stale
+        })
+        const replacement = own ? undefined : pending.find((each) => each.record.resource === id)
+        const replaces = pending.filter((each) => each.record.supersededBy === id)
         const current = currentId && currentId !== id && !live.has(currentId) ? describeResource(workspace, currentId) : null
         return resourceAnswer({
           id,
@@ -274,7 +294,9 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
                 }
               }
             : {}),
-          supersedes: [...live.values()].filter((each) => each.supersededBy === id).map((each) => ({ id: each.resource, validUntil: each.validUntil, reason: each.reason }))
+          supersedes: [...live.values()].filter((each) => each.supersededBy === id).map((each) => ({ id: each.resource, validUntil: each.validUntil, reason: each.reason })),
+          ...(replacement ? { pendingReplacement: pendingView(replacement) } : {}),
+          ...(replaces.length ? { pendingReplaces: replaces.map((each) => ({ id: each.record.resource, ...pendingView(each) })) } : {})
         })
       }
     },
@@ -290,7 +312,9 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
             ...(maxResults !== undefined ? { maxResults } : {}),
             ...(options.ask ? { summarize: options.ask.summarize, synthesis: true } : {})
           })
-          response = { answer, ...(answer.changes ? { changes: answer.changes } : {}) }
+          const found = (answer.references ?? []).flatMap((reference) => [reference.id, ...(reference.entity ? [reference.entity] : [])])
+          const pending = pendingChanges(await openProposals(storeOf(await loadConfig(cwd))), found)
+          response = { answer, ...(answer.changes ? { changes: answer.changes } : {}), ...(pending.length ? { pending } : {}) }
         } catch (cause) {
           return failed(`The docket could not answer: ${errorText(cause)}`)
         }
@@ -327,6 +351,10 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
       definition: describe(ADD_EVIDENCE_DEFINITION),
       async call(raw, context) {
         const input = addEvidenceArguments(raw)
+        if (isProposalEvidence(input)) {
+          const result = await writing((workspace, writer) => addProposalEvidence(workspace, writer, input, { now }))
+          return proposalEvidenceAnswer(input, context.viewer, result)
+        }
         const result = await writing((workspace, writer) => addEvidence(workspace, writer, input, { now }))
         return writeAnswer('docket_add_evidence', input.id, context.viewer, result, false)
       }

@@ -2,7 +2,9 @@ import { aggregate } from '../../evidence/aggregate.js'
 import { bandOf, confidenceModel } from '../../evidence/confidence.js'
 import { parseMemoryFile, parseOntology, validateDocuments, type Diagnostic, type MemoryDocument, type Ontology } from '../docket.js'
 import { writableHere, type Origin } from '../origin.js'
+import type { MemoryEvidence } from '../../model/index.js'
 import type { PeopleDirectory } from '../../people/directory.js'
+import { scoreProposal } from '../proposals.js'
 import { diffOntologies, type Change } from './diff.js'
 import { MigrationInvalid, OntologyInvalid, isBreaking } from './errors.js'
 import { describeMigration, migrationProblems, rewriteDocument, type Migration } from './migrations.js'
@@ -44,6 +46,33 @@ export interface CheckResult {
   affected: { resourceId: string; origin: Origin }[]
   /** Every resource and link whose confidence changes, in id order. */
   rescored: Rescored[]
+  /**
+   * Supersede proposals the draft would decide differently: a pending one it
+   * would carry over its bar, and an accepted one that would no longer clear
+   * it - which stays accepted (acceptance is sticky), flagged for a person to
+   * look at.
+   */
+  proposals: ProposalChange[]
+}
+
+/** A supersede proposal as the change check sees it: open, and decided by its score. */
+export interface SnapshotProposal {
+  id: string
+  /** The record it replaces, or would. */
+  resource: string
+  status: 'pending' | 'accepted'
+  evidence: readonly MemoryEvidence[]
+}
+
+/** A supersede proposal a draft would decide differently. */
+export interface ProposalChange {
+  proposal: string
+  resource: string
+  status: 'pending' | 'accepted'
+  before: number
+  after: number
+  threshold: number
+  change: 'would-accept' | 'would-no-longer-pass'
 }
 
 /** A check as the editor shows it: the result, and what it was made of. */
@@ -134,10 +163,41 @@ function resolvedBy(step: Migration): string | null {
   return null
 }
 
-export function classify(introduced: readonly Diagnostic[], rescored: readonly Rescored[] = []): Classification {
+export function classify(introduced: readonly Diagnostic[], rescored: readonly Rescored[] = [], proposals: readonly ProposalChange[] = []): Classification {
   if (introduced.some(isBreaking)) return 'breaking'
   if (introduced.length) return 'narrowing'
-  return rescored.length ? 'rescore' : 'safe'
+  return rescored.length || proposals.length ? 'rescore' : 'safe'
+}
+
+/**
+ * The supersede proposals two ontologies decide differently: scored as each
+ * would score them, against the bar each sets for the replaced record's type.
+ */
+export function proposalChanges(
+  proposals: readonly SnapshotProposal[],
+  documents: readonly MemoryDocument[],
+  before: Ontology | null,
+  after: Ontology,
+  people?: PeopleDirectory
+): ProposalChange[] {
+  if (!before || proposals.length === 0) return []
+  const was = confidenceModel(before, { people })
+  const now = confidenceModel(after, { people })
+  const types = new Map(documents.map((document) => [document.id, document.type]))
+  const out: ProposalChange[] = []
+  for (const proposal of proposals) {
+    const type = types.get(proposal.resource)
+    const then = scoreProposal(was, type, proposal.evidence)
+    const next = scoreProposal(now, type, proposal.evidence)
+    const change =
+      proposal.status === 'pending' && !then.clears && next.clears
+        ? 'would-accept'
+        : proposal.status === 'accepted' && then.clears && !next.clears
+          ? 'would-no-longer-pass'
+          : null
+    if (change) out.push({ proposal: proposal.id, resource: proposal.resource, status: proposal.status, before: then.score, after: next.score, threshold: next.threshold, change })
+  }
+  return out.sort((a, b) => (a.resource < b.resource ? -1 : a.resource > b.resource ? 1 : 0))
 }
 
 /**
@@ -181,7 +241,8 @@ export function compare(
   before: { documents: readonly MemoryDocument[]; ontology: Ontology | null },
   after: { documents: readonly MemoryDocument[]; ontology: Ontology },
   origins: ReadonlyMap<string, Origin>,
-  people?: PeopleDirectory
+  people?: PeopleDirectory,
+  proposals: readonly SnapshotProposal[] = []
 ): CheckResult {
   const was = before.ontology ? validateDocuments([...before.documents], before.ontology) : []
   const now = validateDocuments([...after.documents], after.ontology)
@@ -199,7 +260,8 @@ export function compare(
   }
   affected.sort((a, b) => (a.resourceId < b.resourceId ? -1 : a.resourceId > b.resourceId ? 1 : 0))
   const rescored = rescore(before, after, people)
-  return { classification: classify(introduced, rescored), introduced, resolved, affected, rescored }
+  const decided = proposalChanges(proposals, after.documents, before.ontology, after.ontology, people)
+  return { classification: classify(introduced, rescored, decided), introduced, resolved, affected, rescored, proposals: decided }
 }
 
 /** Parses a draft, or throws `OntologyInvalid` with its errors at their paths. */
@@ -222,6 +284,8 @@ export interface WorkspaceSnapshot {
   head: { number: number; ontology: Ontology | null } | null
   /** The people directory person sources are scored by; absent scores them with `NO_REGISTRY`. */
   people?: PeopleDirectory
+  /** The open supersede proposals decided by their score: pending ones, and accepted ones not recorded before proposals. */
+  proposals?: readonly SnapshotProposal[]
 }
 
 /** A stored document as a migration reads it: its text, absent when it does not open. */
@@ -288,7 +352,7 @@ export function evaluateDraft(
     }
     after = snapshot.documents.map((document) => migrated.get(document.path) ?? document)
   }
-  const check = compare(before, { documents: after, ontology: draft }, snapshot.origins, snapshot.people)
+  const check = compare(before, { documents: after, ontology: draft }, snapshot.origins, snapshot.people, snapshot.proposals)
   const named = new Set(migration.map(resolvedBy))
   const byResource = new Map<string, Unresolved>()
   for (const d of check.introduced) {

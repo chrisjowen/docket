@@ -66,10 +66,15 @@ export interface ConfidenceModel {
   registry: SourceRegistry
 }
 
-/** What is being judged: a resource of some type, or a relationship. */
+/**
+ * What is being judged: a resource of some type, a relationship, or a
+ * supersede proposal replacing a record of some type - which policies about
+ * `supersedes` or about that type price.
+ */
 export type Subject =
   | { kind: 'resource'; type: string }
   | { kind: 'relationship'; rel: string }
+  | { kind: 'supersession'; type: string }
 
 let builtin: Ontology | undefined
 
@@ -282,12 +287,14 @@ export const policyConditions = (policy: TrustPolicy): [string, PolicyCondition]
 export const specificity = (policy: TrustPolicy): number =>
   (policy.when.about !== undefined ? 1 : 0) + policyConditions(policy).length
 
-const subjectName = (subject: Subject): string => (subject.kind === 'resource' ? subject.type : subject.rel)
+/** The names a policy's `about` can give for `subject`. */
+const subjectNames = (subject: Subject): string[] =>
+  subject.kind === 'resource' ? [subject.type] : subject.kind === 'relationship' ? [subject.rel] : ['supersedes', subject.type]
 
 /** Whether a policy applies to an observation of `subject` from `source`. */
 export const policyMatches = (policy: TrustPolicy, subject: Subject, source: ResolvedSource): boolean => {
   if (policy.when.source !== source.source) return false
-  if (policy.when.about !== undefined && policy.when.about !== subjectName(subject)) return false
+  if (policy.when.about !== undefined && !subjectNames(subject).includes(policy.when.about)) return false
   return policyConditions(policy).every(([key, condition]) =>
     conditionHolds(condition, key.startsWith('@') ? source.locator[key.slice(1)] : source.attributes[key])
   )
