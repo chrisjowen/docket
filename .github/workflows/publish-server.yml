@@ -1,16 +1,14 @@
 name: Publish docket-server
 
-# Stages @chrisjowen/docket-server on npm when a `docket-server-v<version>`
+# Publishes @chrisjowen/docket-server to npm when a `docket-server-v<version>`
 # tag is pushed - directly, or by publishing a GitHub release that creates
 # the tag. The tag must match the version in packages/server/package.json.
 #
-# As with @chrisjowen/docket (publish.yml), npm does not allow publishing
-# from CI without 2FA, so this runs `npm stage publish` and a maintainer
-# approves the staged version with 2FA via `npm stage approve <stage-id>` or
-# the Staged Packages tab on npmjs.com.
-#
-# Authentication is the NPM_TOKEN repository secret (an npm token with publish
-# rights); the OIDC token signs provenance.
+# As with @chrisjowen/docket (publish.yml), it authenticates with npm trusted
+# publishing (GitHub OIDC; this repository and workflow are the package's
+# trusted publisher on npmjs.com), so no token or 2FA approval is needed, and
+# the same OIDC token signs provenance. An NPM_TOKEN repository secret is the
+# fallback.
 
 on:
   push:
@@ -18,7 +16,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OIDC for provenance
+  id-token: write # npm trusted publishing and provenance
 
 jobs:
   publish:
@@ -59,11 +57,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
-      # Staged publishing needs npm 11.15.0 or later; Node 22 ships npm 10.
-      - run: npm install -g npm@^11.15.0
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - run: npm install -g npm@^11.5.1
 
-      - name: Stage
+      - name: Publish
         working-directory: packages/server
         env:
+          # Only used when trusted publishing is not configured for this repository.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm stage publish --provenance --access public
+        run: npm publish --provenance --access public
