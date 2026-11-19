@@ -89,7 +89,7 @@ describe('confidence', () => {
     it('keeps the built-in sources for an ontology written before evidence existed', () => {
       const repo = confidenceModel(own())
       expect(Object.keys(repo.sources).sort()).toEqual(
-        ['api', 'code', 'config', 'conversation', 'docs', 'human', 'infrastructure', 'manifest', 'runtime']
+        ['api', 'code', 'config', 'conversation', 'docs', 'human', 'infrastructure', 'manifest', 'person', 'runtime']
       )
       expect(repo.unevidenced).toBe(0.5)
     })
@@ -335,5 +335,82 @@ describe('confidence policies', () => {
     expect(Object.keys(assess(model, service, [{ source: 'codebase', repository: 'r', path: 'p' }])).sort()).toEqual(
       ['basis', 'confidence', 'evidenceCount', 'sources']
     )
+  })
+})
+
+describe('person sources', () => {
+  const service = { kind: 'resource', type: 'service' } as const
+  const ontology: Ontology = {
+    version: 1,
+    resourceTypes: { service: {} },
+    relationships: {},
+    sources: {
+      person: {
+        kind: 'identity',
+        attributes: {
+          role: { type: 'string', setBy: 'directory' },
+          flags: { type: 'string[]', setBy: 'directory' }
+        }
+      },
+      human: {},
+      codebase: { identifiedBy: ['repository'] }
+    },
+    trust: {
+      policies: [
+        { name: 'A person said so', when: { source: 'person' }, score: 0.6 },
+        { name: 'A lead said so', when: { source: 'person', role: 'lead' }, score: 0.9 },
+        { name: 'An intern said so', when: { source: 'person', role: 'intern' }, score: 0.4 },
+        { name: 'New starter', when: { source: 'person', flags: { has: 'new-starter' } }, adjust: -0.1 },
+        { name: 'Legacy human', when: { source: 'human' }, score: 0.9 }
+      ]
+    }
+  }
+  const people = {
+    people: {
+      dana: { aliases: ['dana@acme.com'], attributes: { role: 'lead' } },
+      tom: { attributes: { role: 'intern', flags: ['new-starter'] } }
+    }
+  }
+  const model = confidenceModel(ontology, { people })
+
+  it('takes evidence that names no one as said by the person the writer acts for, scored by their role', () => {
+    const scored = scoreObservation(model, service, { source: 'person', principal: 'tom' })
+    expect(scored.source).toMatchObject({ instance: 'person:tom', attested: ['role', 'flags'] })
+    expect(scored.base?.policy).toBe('An intern said so')
+    expect(scored.score).toBe(0.3)
+    expect(scoreObservation(model, service, { source: 'person', principal: 'dana@acme.com' }).score).toBe(0.9)
+  })
+
+  it('counts a person cited second-hand as the writer\'s person until they give evidence of their own', () => {
+    // Tom's agent says Dana said so: it counts as Tom.
+    const hearsay = { source: 'person', sourceRef: 'dana', principal: 'tom', note: 'Dana said so in stand-up.' }
+    const scored = scoreObservation(model, service, hearsay)
+    expect(scored.source).toMatchObject({ instance: 'person:tom', secondHand: 'dana' })
+    expect(scored.score).toBe(0.3)
+    expect(explain(model, service, [hearsay]).observations[0]?.confirmed).toBe(false)
+
+    // Dana confirms with evidence of her own: it counts as hers.
+    const confirmed = explain(model, service, [hearsay, { source: 'person', principal: 'dana' }])
+    expect(confirmed.observations.map((observation) => [observation.source.instance, observation.score, observation.confirmed])).toEqual([
+      ['person:tom', 0.3, true],
+      ['person:dana', 0.9, undefined]
+    ])
+    expect(confirmed.confidence).toBe(0.9)
+
+    // Naming yourself, by an alias, is first-hand.
+    expect(scoreObservation(model, service, { source: 'person', sourceRef: 'dana@acme.com', principal: 'dana' }).source.secondHand).toBeUndefined()
+  })
+
+  it('takes a named person at their word only when no one is known to have written it, as evidence before principals did', () => {
+    expect(scoreObservation(model, service, { source: 'person', sourceRef: 'dana' }).score).toBe(0.9)
+    // Several people add up; the same person, under two names, counts once.
+    expect(assess(model, service, [{ source: 'person', principal: 'dana' }, { source: 'person', principal: 'dana@acme.com' }]).confidence).toBe(0.9)
+    expect(assess(model, service, [{ source: 'person', principal: 'dana' }, { source: 'person', principal: 'tom' }]).confidence).toBe(0.93)
+  })
+
+  it('scores someone the directory does not know by the person policy alone, and leaves other sources alone', () => {
+    expect(scoreObservation(model, service, { source: 'person', principal: 'stranger' })).toMatchObject({ score: 0.6, source: { attested: [] } })
+    expect(scoreObservation(model, service, { source: 'human', principal: 'tom', observedBy: 'dana' }).score).toBe(0.9)
+    expect(scoreObservation(model, service, { source: 'codebase', repository: 'pay', principal: 'tom' }).source.instance).toBe('codebase:pay')
   })
 })

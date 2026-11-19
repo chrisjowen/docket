@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 
-import type { Diagnostic } from '../docket.js'
+import { parseOntology, type Diagnostic } from '../docket.js'
 import type { StoreContext } from '../ports.js'
 import { dayOf } from '../supersession.js'
-import { hasErrors, stampEvidence } from '../write/evidence.js'
+import { hasErrors, stampAll, stampContext } from '../write/evidence.js'
 import { WRITE_LIMITS, type EvidenceInput, type StampedEvidence, type Writer } from '../write/inputs.js'
 import { recordIngest } from './ingest.js'
 import { openText, sealText } from './sealing.js'
+import { publishedOntology } from './source.js'
 import { lockResource } from './write.js'
 
 /**
@@ -170,6 +171,13 @@ export async function supersedeResource(ctx: StoreContext, writer: Writer, input
     }
   }
 
+  const head = await publishedOntology(ctx, workspaceId)
+  const stamping = stampAll(input.evidence, writer, now, stampContext(head ? parseOntology(head.text).ontology : null, ctx.people), {
+    where: { id },
+    subject: `the supersession of ${id}`
+  })
+  diagnostics.push(...stamping.diagnostics)
+
   const source = options.source ?? 'agent'
   const logged = { workspaceId, channel: writer.channel, actor: writer.actor, actorLabel: writer.label, action: 'supersede' as const, requestId: writer.requestId }
   if (hasErrors(diagnostics)) {
@@ -196,7 +204,7 @@ export async function supersedeResource(ctx: StoreContext, writer: Writer, input
     await ctx.tx.query('UPDATE supersessions SET lifted_at = $2 WHERE id = $1', [live.id, now])
   }
 
-  const evidence = input.evidence.map((entry) => stampEvidence(entry, writer, now))
+  const evidence = stamping.stamped
   const rowId = randomUUID()
   const sealed = await sealText(ctx.codec, JSON.stringify({ reason, evidence } satisfies Sealed), refOf(workspaceId, rowId))
   const { rows } = await ctx.tx.query<Row>(

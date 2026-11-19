@@ -91,7 +91,10 @@ docket's root, committed with the rest, so git keeps their history:
   type (`.docket/resources/services/`, `.docket/decisions/`); else at
   `.docket/resources/<type>/` (`<slug>-2.md` when the path is taken). Each write is validated against the ontology with docket's own
   validator before anything is written, and evidence is stamped as observed by
-  the person at the machine (`<user> via docket MCP`). Writing the same thing
+  the person at the machine (`<user> via docket MCP`), acting for the people
+  directory's `me` (`.docket/people.yaml`), else the person their login names,
+  else the login (`principal`). Evidence without a `source` is that person's.
+  Writing the same thing
   again changes nothing. Two calls at once run one after the other, and a
   write holds the project's lock file (`.docket/.cache/write.lock`) so a write
   from another process - a second `docket open`, `docket serve` - waits its

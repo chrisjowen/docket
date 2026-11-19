@@ -143,6 +143,29 @@ describe("docket serve's tokens", () => {
     expect(await auth.authorizer.role(principal as never)).toBeNull()
   })
 
+  it('resolves a token that acts for a person to a principal that does, and keeps that in its record', async () => {
+    const config = await loadServeConfig({ cwd: project, env: {} })
+    const { token, record } = await createToken(config, { name: 'dana-agent', role: 'editor', actsFor: ' dana ' })
+    expect(record.actsFor).toBe('dana')
+    expect(await listTokens(config)).toEqual([expect.objectContaining({ name: 'dana-agent', actsFor: 'dana' })])
+    const slug = config.workspaces[0]?.slug as string
+    const principal = await tokenAuth(config).authenticator.resolve(token, { url: 'https://docket.test/mcp', workspaceId: slug, slug })
+    expect(principal).toMatchObject({ actor: 'token:dana-agent', actsFor: 'dana' })
+  })
+
+  it('reads a people directory from the config, and refuses one it cannot read', async () => {
+    const dir = join(project, 'people-conf')
+    await mkdir(dir)
+    const file = join(dir, 'docket-server.yaml')
+    await writeFile(file, `workspaces: [{ slug: platform, path: ${project} }]\npeople:\n  dana: { aliases: [druiz], role: lead, flags: [reviewer] }\n`)
+    expect((await loadServeConfig({ cwd: dir, env: {} })).people).toEqual({
+      people: { dana: { aliases: ['druiz'], attributes: { role: 'lead', flags: ['reviewer'] } } }
+    })
+    await writeFile(file, `workspaces: [{ slug: platform, path: ${project} }]\npeople:\n  dana: { aliases: druiz }\n`)
+    await expect(loadServeConfig({ cwd: dir, env: {} })).rejects.toThrow(/people\.dana\.aliases/)
+    expect((await loadServeConfig({ cwd: project, env: {} })).people).toBeNull()
+  })
+
   it('accepts tokens given in the config file, which the commands leave alone', async () => {
     const dir = join(project, 'conf')
     await mkdir(dir)

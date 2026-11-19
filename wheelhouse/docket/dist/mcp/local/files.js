@@ -6,6 +6,7 @@ import { dirname, join, posix as posixPath, relative, resolve, sep } from 'node:
 import { parse as parseYaml, stringify as stringifyYaml } from '../../vendor/yaml.js';
 import { filesystemSource } from '../../canonical/source.js';
 import { parseOntology } from '../../ontology/loader.js';
+import { loadPeople } from '../../people/directory.js';
 import { hashContent } from '../../source/hashing.js';
 import { parseMemoryFile } from '../../source/parser.js';
 import { cloudDocumentPath } from '../../workspace/documents.js';
@@ -15,7 +16,7 @@ export const absolute = (resolved, path) => resolve(resolved.projectRoot, path);
 /** The project's ontology file, relative to its root. */
 export const ontologyFile = (resolved) => posix(relative(resolved.projectRoot, resolved.ontologyPath));
 /** Reads the project's docket: every document under its source, parsed, and its ontology. */
-export async function readWorkspace(resolved) {
+export async function readWorkspace(resolved, options = {}) {
     const documents = [];
     for await (const entry of filesystemSource(resolved).documents()) {
         if ('error' in entry)
@@ -33,7 +34,8 @@ export async function readWorkspace(resolved) {
     catch {
         ontology = null;
     }
-    return { ...storeOf(resolved), documents, ontology };
+    const people = options.people ?? (await loadPeople(resolved)).directory;
+    return { ...storeOf(resolved), documents, ontology, people };
 }
 /** The documents that declare `id`, in path order. */
 export const declaring = (workspace, id) => workspace.documents.filter((entry) => entry.document?.id === id);
@@ -161,7 +163,8 @@ export function snapshotOf(workspace, head) {
     return {
         documents: parsed,
         origins: new Map(workspace.documents.map((entry) => [entry.path, 'local'])),
-        head: head ? { number: head.version, ontology: head.ontology } : null
+        head: head ? { number: head.version, ontology: head.ontology } : null,
+        people: workspace.people
     };
 }
 const queues = new Map();

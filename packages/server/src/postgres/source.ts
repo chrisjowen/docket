@@ -57,6 +57,9 @@ export function postgresSource(ctx: StoreContext, workspaceId: string, options: 
       if (!head) throw new NoPublishedOntology(workspaceId)
       return { text: head.text, revision: head.revision }
     },
+    async people() {
+      return ctx.people ?? null
+    },
     async *documents() {
       for (const document of await serial(() => readDocuments(ctx, workspaceId))) {
         if (document.raw === undefined) yield { path: document.path, error: document.error ?? 'unreadable' }

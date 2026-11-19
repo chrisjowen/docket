@@ -16,5 +16,5 @@ export { MIGRATION_OPS, describeMigration, migrationProblems, migrationSteps, re
 export { mergePatch, proposedText } from './ontology/propose.js';
 export { MAX_ONTOLOGY_BYTES, exportHeader, exportYaml, importYaml, lintOntology, sizeProblem, stripHeader } from './ontology/yaml-io.js';
 export { appendedNotes, composeDocument, renderDocument, sameMeaning, splitDocument } from './write/document.js';
-export { evidenceKey, evidenceProblems, hasErrors, orderedEvidence, refuse, stampEvidence, writeDiagnostics } from './write/evidence.js';
+export { evidenceKey, evidenceProblems, hasErrors, orderedEvidence, refuse, stampAll, stampContext, stampEvidence, writeDiagnostics } from './write/evidence.js';
 export { WRITE_LIMITS } from './write/inputs.js';

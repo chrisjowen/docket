@@ -10,6 +10,7 @@
 
 import type { Role } from './auth/roles.js'
 import type { Scope } from './auth/scopes.js'
+import type { PeopleDirectory } from './docket.js'
 
 /**
  * One SQL transaction, the slice of a Postgres client the core uses. A `pg`
@@ -58,6 +59,8 @@ export interface StoreContext {
   codec: DocumentCodec
   /** How much the store holds; unlimited where absent. */
   limits?: StoreLimits
+  /** The people directory its workspaces score person sources by: who each person is, and their role. None where absent. */
+  people?: PeopleDirectory
 }
 
 /** What a deployment holds a store to. Docket Cloud's beta holds each organisation to a few workspaces; a self-hosted server sets none. */
@@ -98,6 +101,12 @@ export interface Principal {
   scopes: Scope[]
   /** How the caller reads in the audit log, for example `token:<name>`. */
   actor: string
+  /**
+   * The person the caller acts for - the signed-in user, a token's owner - as
+   * the people directory names them. Evidence a write stamps names them, and
+   * evidence citing no source is theirs. Absent: the caller acts for no one.
+   */
+  actsFor?: string
   /** When the credential itself expires; absent when it does not. */
   expiresAt?: Date
 }

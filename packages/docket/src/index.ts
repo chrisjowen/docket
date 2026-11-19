@@ -85,6 +85,16 @@ export {
   type Subject
 } from './evidence/confidence.js'
 export { withTrustSettings } from './evidence/legacy.js'
+export {
+  EMPTY_DIRECTORY,
+  PEOPLE_FILE,
+  findPerson,
+  parsePeople,
+  peopleDirectorySchema,
+  type LoadedPeople,
+  type PeopleDirectory,
+  type Person
+} from './people/directory.js'
 export { convertOntologyText, type ConvertedOntology } from './ontology/convert.js'
 export { formatWhy, why, type WhyLink, type WhyPart, type WhyResult } from './commands/why.js'
 export { memoryConfigSchema, type MemoryConfig, type ResolvedConfig } from './config/config.js'

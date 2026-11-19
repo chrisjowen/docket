@@ -28,6 +28,8 @@ export interface ToolContext {
   actor: string
   /** The member the credential belongs to, whose questions a query trace files them under. */
   userId: string
+  /** The person the caller acts for, as the people directory names them; absent when they act for no one. */
+  actsFor?: string
   /** Who writes, as the write tools stamp evidence with and record in the activity log: looked up only when a write tool runs. */
   writer(): Promise<Writer>
   /** The caller's role now: `docket_publish_ontology_change` checks it against the workspace's setting. */

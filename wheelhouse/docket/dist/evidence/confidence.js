@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from '../vendor/yaml.js';
 import { DEFAULT_ONTOLOGY_PATH } from '../config/defaults.js';
 import { EVIDENCE_LOCATION_FIELDS, ontologySchema } from '../model/index.js';
+import { directoryAttributes, findPerson } from '../people/directory.js';
 import { usesTrustSettings, withTrustSettings } from './legacy.js';
 /** What an ontology in the current form gets for each threshold it leaves out. */
 export const TRUST_DEFAULTS = {
@@ -12,6 +13,14 @@ export const TRUST_DEFAULTS = {
     bands: { established: 0.8, probable: 0.5 }
 };
 const NO_REGISTRY = { attributes: () => undefined };
+/** The people directory as a registry for the ontology's identity sources: person instances and their directory attributes. */
+export const peopleRegistry = (directory, sources) => ({
+    attributes: (source, instance) => {
+        const definition = sources[source];
+        return definition?.kind === 'identity' ? directoryAttributes(directory, definition, instance) : undefined;
+    },
+    instance: (source, name) => (sources[source]?.kind === 'identity' ? findPerson(directory, name) : undefined)
+});
 let builtin;
 /**
  * The ontology `docket init` writes, in the current form. Its sources and
@@ -30,16 +39,27 @@ export const builtinOntology = () => {
 export const confidenceModel = (ontology, options = {}) => {
     const current = usesTrustSettings(ontology) ? ontology : withTrustSettings(ontology, options.defaults ?? builtinOntology());
     const trust = current.trust ?? {};
+    const sources = current.sources ?? {};
     return {
-        sources: current.sources ?? {},
+        sources,
         policies: trust.policies ?? [],
         unevidenced: trust.unevidenced ?? TRUST_DEFAULTS.unevidenced,
         fallback: trust.fallback ?? TRUST_DEFAULTS.fallback,
         cap: trust.cap ?? TRUST_DEFAULTS.cap,
         accept: { ...TRUST_DEFAULTS.accept, ...trust.accept },
         bands: { ...TRUST_DEFAULTS.bands, ...trust.bands },
-        registry: options.registry ?? NO_REGISTRY
+        registry: options.registry ?? (options.people ? peopleRegistry(options.people, sources) : NO_REGISTRY)
     };
+};
+/**
+ * The ontology's person source: the identity source named `person`, else its
+ * first identity source. Evidence that cites no source is from this one - the
+ * person the writer acts for - and legacy `human` evidence is written as it.
+ * Undefined for an ontology with none, such as a legacy one.
+ */
+export const personSource = (ontology) => {
+    const identities = Object.entries(ontology.sources ?? {}).filter(([, definition]) => definition.kind === 'identity');
+    return (identities.find(([name]) => name === 'person') ?? identities[0])?.[0];
 };
 /** The fields an observation points with: the legacy top-level ones and its `locator` map. */
 export const locatorOf = (observation) => {
@@ -70,7 +90,21 @@ const instanceOf = (observation, definition, locator) => {
 export const resolveSource = (model, observation) => {
     const definition = model.sources[observation.source];
     const locator = locatorOf(observation);
-    const instance = instanceOf(observation, definition, locator);
+    const canonical = (name) => name === undefined ? undefined : (model.registry.instance?.(observation.source, name) ?? name);
+    let instance = canonical(instanceOf(observation, definition, locator));
+    let secondHand;
+    if (definition?.kind === 'identity') {
+        // A person source is the person the writer acts for, unless it names
+        // someone else: then it counts as the writer's person until that one
+        // confirms, so citing a lead raises nothing on its own.
+        const principal = canonical(observation.principal);
+        if (instance === undefined)
+            instance = principal;
+        else if (principal !== undefined && instance !== principal) {
+            secondHand = instance;
+            instance = principal;
+        }
+    }
     const declared = definition?.attributes ?? {};
     const attributes = {};
     const attested = [];
@@ -97,7 +131,8 @@ export const resolveSource = (model, observation) => {
         attested,
         claimed,
         ignored,
-        locator
+        locator,
+        ...(secondHand !== undefined ? { secondHand } : {})
     };
 };
 // --- Matching policies --------------------------------------------------------
@@ -220,11 +255,20 @@ export const explain = (model, subject, evidence, stated) => {
             : { confidence: stated, basis: 'stated', evidenceCount: 0, sources: [], observations: [] };
     }
     const scored = evidence.map((observation) => scoreObservation(model, subject, observation));
+    const confirmedNamed = (source, named) => scored.some((candidate) => candidate.source.secondHand === undefined && candidate.source.instance === `${source}:${named}`);
+    /** The instance an observation's strength counts toward: the person it names, once confirmed, not the relayer. */
+    const groupOf = (observation) => {
+        const named = observation.source.secondHand;
+        if (named === undefined)
+            return observation.source.instance;
+        return confirmedNamed(observation.source.source, named) ? `${observation.source.source}:${named}` : observation.source.instance;
+    };
     const strongest = new Map();
-    scored.forEach(({ source, score }, index) => {
-        const best = strongest.get(source.instance);
-        if (best === undefined || score > scored[best].score)
-            strongest.set(source.instance, index);
+    scored.forEach((observation, index) => {
+        const group = groupOf(observation);
+        const best = strongest.get(group);
+        if (best === undefined || observation.score > scored[best].score)
+            strongest.set(group, index);
     });
     let doubt = 1;
     for (const index of strongest.values())
@@ -235,7 +279,11 @@ export const explain = (model, subject, evidence, stated) => {
         basis: 'evidence',
         evidenceCount: evidence.length,
         sources: [...new Set(scored.map(({ source }) => source.source))].sort(),
-        observations: scored.map((observation, index) => ({ ...observation, counts: counted.has(index) }))
+        observations: scored.map((observation, index) => {
+            const named = observation.source.secondHand;
+            const confirmed = named === undefined ? undefined : confirmedNamed(observation.source.source, named);
+            return { ...observation, counts: counted.has(index), ...(confirmed !== undefined ? { confirmed } : {}) };
+        })
     };
 };
 /** How far `subject` can be trusted on this evidence: `explain` without the working. */

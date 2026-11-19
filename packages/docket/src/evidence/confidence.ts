@@ -14,6 +14,7 @@ import {
   EVIDENCE_LOCATION_FIELDS,
   ontologySchema
 } from '../model/index.js'
+import { directoryAttributes, findPerson, type PeopleDirectory } from '../people/directory.js'
 import { usesTrustSettings, withTrustSettings } from './legacy.js'
 
 /** What an ontology in the current form gets for each threshold it leaves out. */
@@ -32,9 +33,23 @@ export const TRUST_DEFAULTS = {
  */
 export interface SourceRegistry {
   attributes(source: string, instance: string): Readonly<Record<string, ConditionValue | ConditionValue[]>> | undefined
+  /**
+   * The instance a name means, when the registry knows it by several - a
+   * person's login and email address are one person. Unknown names stand.
+   */
+  instance?(source: string, name: string): string | undefined
 }
 
 const NO_REGISTRY: SourceRegistry = { attributes: () => undefined }
+
+/** The people directory as a registry for the ontology's identity sources: person instances and their directory attributes. */
+export const peopleRegistry = (directory: PeopleDirectory, sources: Record<string, SourceTypeDefinition>): SourceRegistry => ({
+  attributes: (source, instance) => {
+    const definition = sources[source]
+    return definition?.kind === 'identity' ? directoryAttributes(directory, definition, instance) : undefined
+  },
+  instance: (source, name) => (sources[source]?.kind === 'identity' ? findPerson(directory, name) : undefined)
+})
 
 /** Everything needed to turn evidence into a confidence, resolved once per ontology. */
 export interface ConfidenceModel {
@@ -75,20 +90,32 @@ export const builtinOntology = (): Ontology => {
  */
 export const confidenceModel = (
   ontology: Ontology,
-  options: { defaults?: Ontology; registry?: SourceRegistry } = {}
+  options: { defaults?: Ontology; registry?: SourceRegistry; people?: PeopleDirectory } = {}
 ): ConfidenceModel => {
   const current = usesTrustSettings(ontology) ? ontology : withTrustSettings(ontology, options.defaults ?? builtinOntology())
   const trust = current.trust ?? {}
+  const sources = current.sources ?? {}
   return {
-    sources: current.sources ?? {},
+    sources,
     policies: trust.policies ?? [],
     unevidenced: trust.unevidenced ?? TRUST_DEFAULTS.unevidenced,
     fallback: trust.fallback ?? TRUST_DEFAULTS.fallback,
     cap: trust.cap ?? TRUST_DEFAULTS.cap,
     accept: { ...TRUST_DEFAULTS.accept, ...trust.accept },
     bands: { ...TRUST_DEFAULTS.bands, ...trust.bands },
-    registry: options.registry ?? NO_REGISTRY
+    registry: options.registry ?? (options.people ? peopleRegistry(options.people, sources) : NO_REGISTRY)
   }
+}
+
+/**
+ * The ontology's person source: the identity source named `person`, else its
+ * first identity source. Evidence that cites no source is from this one - the
+ * person the writer acts for - and legacy `human` evidence is written as it.
+ * Undefined for an ontology with none, such as a legacy one.
+ */
+export const personSource = (ontology: Pick<Ontology, 'sources'>): string | undefined => {
+  const identities = Object.entries(ontology.sources ?? {}).filter(([, definition]) => definition.kind === 'identity')
+  return (identities.find(([name]) => name === 'person') ?? identities[0])?.[0]
 }
 
 // --- Resolving a source -------------------------------------------------------
@@ -112,6 +139,11 @@ export interface ResolvedSource {
   ignored: string[]
   /** Every locator field the observation gives, the legacy ones included. */
   locator: Record<string, string | string[]>
+  /**
+   * For a person source naming someone other than the person the writer acts
+   * for: who it names. Until they confirm, it counts as the writer's person.
+   */
+  secondHand?: string
 }
 
 /** The fields an observation points with: the legacy top-level ones and its `locator` map. */
@@ -145,7 +177,21 @@ const instanceOf = (
 export const resolveSource = (model: ConfidenceModel, observation: MemoryEvidence): ResolvedSource => {
   const definition = model.sources[observation.source]
   const locator = locatorOf(observation)
-  const instance = instanceOf(observation, definition, locator)
+  const canonical = (name: string | undefined): string | undefined =>
+    name === undefined ? undefined : (model.registry.instance?.(observation.source, name) ?? name)
+  let instance = canonical(instanceOf(observation, definition, locator))
+  let secondHand: string | undefined
+  if (definition?.kind === 'identity') {
+    // A person source is the person the writer acts for, unless it names
+    // someone else: then it counts as the writer's person until that one
+    // confirms, so citing a lead raises nothing on its own.
+    const principal = canonical(observation.principal)
+    if (instance === undefined) instance = principal
+    else if (principal !== undefined && instance !== principal) {
+      secondHand = instance
+      instance = principal
+    }
+  }
   const declared = definition?.attributes ?? {}
 
   const attributes: ResolvedSource['attributes'] = {}
@@ -174,7 +220,8 @@ export const resolveSource = (model: ConfidenceModel, observation: MemoryEvidenc
     attested,
     claimed,
     ignored,
-    locator
+    locator,
+    ...(secondHand !== undefined ? { secondHand } : {})
   }
 }
 
@@ -313,6 +360,8 @@ export const observationConfidence = (model: ConfidenceModel, subject: Subject, 
 /** An observation's price, and whether it is the one its source instance counts. */
 export interface ExplainedObservation extends ObservationScore {
   counts: boolean
+  /** For a second-hand one: whether the person it names has given evidence of their own here. */
+  confirmed?: boolean
 }
 
 /** An assessment with the working shown: every observation, what priced it, and which count. */
@@ -345,10 +394,22 @@ export const explain = (
   }
 
   const scored = evidence.map((observation) => scoreObservation(model, subject, observation))
+
+  const confirmedNamed = (source: string, named: string): boolean =>
+    scored.some((candidate) => candidate.source.secondHand === undefined && candidate.source.instance === `${source}:${named}`)
+
+  /** The instance an observation's strength counts toward: the person it names, once confirmed, not the relayer. */
+  const groupOf = (observation: ObservationScore): string => {
+    const named = observation.source.secondHand
+    if (named === undefined) return observation.source.instance
+    return confirmedNamed(observation.source.source, named) ? `${observation.source.source}:${named}` : observation.source.instance
+  }
+
   const strongest = new Map<string, number>()
-  scored.forEach(({ source, score }, index) => {
-    const best = strongest.get(source.instance)
-    if (best === undefined || score > (scored[best] as ObservationScore).score) strongest.set(source.instance, index)
+  scored.forEach((observation, index) => {
+    const group = groupOf(observation)
+    const best = strongest.get(group)
+    if (best === undefined || observation.score > (scored[best] as ObservationScore).score) strongest.set(group, index)
   })
 
   let doubt = 1
@@ -360,7 +421,11 @@ export const explain = (
     basis: 'evidence',
     evidenceCount: evidence.length,
     sources: [...new Set(scored.map(({ source }) => source.source))].sort(),
-    observations: scored.map((observation, index) => ({ ...observation, counts: counted.has(index) }))
+    observations: scored.map((observation, index) => {
+      const named = observation.source.secondHand
+      const confirmed = named === undefined ? undefined : confirmedNamed(observation.source.source, named)
+      return { ...observation, counts: counted.has(index), ...(confirmed !== undefined ? { confirmed } : {}) }
+    })
   }
 }
 

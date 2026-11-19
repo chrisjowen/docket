@@ -4,9 +4,11 @@ import { validateDocuments } from '../../ontology/validator.js';
 import { DocumentError, checkDocument } from '../../workspace/documents.js';
 import { dayOf } from '../../workspace/supersession.js';
 import { appendedNotes, composeDocument, sameMeaning } from '../../workspace/write/document.js';
-import { evidenceProblems, hasErrors, refuse, stampEvidence } from '../../workspace/write/evidence.js';
+import { evidenceProblems, hasErrors, refuse, stampAll, stampContext } from '../../workspace/write/evidence.js';
 import { WRITE_LIMITS } from '../../workspace/write/inputs.js';
 import { absolute, declaring, documentPathOf, freeDocumentPath, readSupersessions, removeFile, writeSupersessions, writeText } from './files.js';
+/** Who evidence without a source is from, and who the people directory knows. */
+const stampContextOf = (workspace) => stampContext(workspace.ontology?.ontology, workspace.people);
 /** The document a write to `resource` changes: the one at its own path, else the first that declares it. */
 const ownOf = (workspace, existing, resource) => existing.find((entry) => entry.path === documentPathOf(workspace, resource)) ?? existing[0] ?? null;
 const tooMuchEvidence = (where) => refuse('too-much-evidence', `A write carries at most ${WRITE_LIMITS.evidencePerCall} evidence entries.`, where);
@@ -90,15 +92,25 @@ export async function writeResource(workspace, writer, input, options = {}) {
             continue;
         early.push(...evidenceProblems(link.evidence, `the new link ${link.rel} -> ${link.target}`, where));
     }
-    const stamp = (entries) => entries.map((entry) => stampEvidence(entry, writer, now));
+    const context = stampContextOf(workspace);
+    const stamp = (entries, subject) => {
+        const { stamped, diagnostics } = stampAll(entries, writer, now, context, { where, subject });
+        early.push(...diagnostics);
+        return stamped;
+    };
     const change = {
         id: input.id,
         type: input.type,
         title: input.title,
         ...(input.attributes ? { attributes: input.attributes } : {}),
         ...(input.body !== undefined ? { body: input.body } : {}),
-        evidence: stamp(input.evidence),
-        links: links.map((link) => ({ rel: link.rel, target: link.target, ...(link.attributes ? { attributes: link.attributes } : {}), evidence: stamp(link.evidence) }))
+        evidence: stamp(input.evidence, input.id),
+        links: links.map((link) => ({
+            rel: link.rel,
+            target: link.target,
+            ...(link.attributes ? { attributes: link.attributes } : {}),
+            evidence: stamp(link.evidence, `the link ${link.rel} -> ${link.target}`)
+        }))
     };
     return applyChange(workspace, { change, existing, own, early }, options);
 }
@@ -119,11 +131,13 @@ export async function appendNotes(workspace, writer, input, options = {}) {
     early.push(...evidenceProblems(input.evidence, `the new notes for ${input.id}`, where));
     if (input.evidence.length > WRITE_LIMITS.evidencePerCall)
         early.push(tooMuchEvidence(where));
+    const stamped = stampAll(input.evidence, writer, now, stampContextOf(workspace), { where, subject: input.id });
+    early.push(...stamped.diagnostics);
     const change = {
         id: input.id,
         type,
         body: appendedNotes(own?.raw, input.additionalNotes, now),
-        evidence: input.evidence.map((entry) => stampEvidence(entry, writer, now)),
+        evidence: stamped.stamped,
         links: []
     };
     return applyChange(workspace, { change, existing, own, early }, options);
@@ -148,7 +162,9 @@ export async function addEvidence(workspace, writer, input, options = {}) {
         if (!has)
             early.push(refuse('unknown-link', `${input.id} has no link ${rel} -> ${target}: add it with docket_remember, with its evidence.`, where));
     }
-    const stamped = hasErrors(early) ? [] : input.evidence.map((entry) => stampEvidence(entry, writer, now));
+    const stamping = stampAll(hasErrors(early) ? [] : input.evidence, writer, now, stampContextOf(workspace), { where, subject });
+    early.push(...stamping.diagnostics);
+    const stamped = stamping.stamped;
     const change = {
         id: input.id,
         type,
@@ -229,6 +245,8 @@ export async function supersedeResource(workspace, writer, input, options = {}) 
             diagnostics.push(refuse('replacement-superseded', `${by} is itself out of date: it was superseded by ${replacement.supersededBy} on ${dayOf(replacement.validUntil)}. Supersede ${id} with the current record.`, { id: by }));
         }
     }
+    const stamping = stampAll(input.evidence, writer, now, stampContextOf(workspace), { where: { id }, subject: `the supersession of ${id}` });
+    diagnostics.push(...stamping.diagnostics);
     if (hasErrors(diagnostics))
         return { changed: false, diagnostics };
     if (live?.supersededBy === by)
@@ -251,7 +269,7 @@ export async function supersedeResource(workspace, writer, input, options = {}) 
         recordedBy: writer.label,
         recordedAt: now.toISOString(),
         reason,
-        evidence: input.evidence.map((entry) => stampEvidence(entry, writer, now))
+        evidence: stamping.stamped
     };
     await writeSupersessions(workspace, [...records, supersession]);
     return { supersession, changed: true, ...(live ? { replaced: live.supersededBy } : {}), diagnostics };

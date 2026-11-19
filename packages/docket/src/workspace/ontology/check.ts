@@ -2,6 +2,7 @@ import { aggregate } from '../../evidence/aggregate.js'
 import { bandOf, confidenceModel } from '../../evidence/confidence.js'
 import { parseMemoryFile, parseOntology, validateDocuments, type Diagnostic, type MemoryDocument, type Ontology } from '../docket.js'
 import { writableHere, type Origin } from '../origin.js'
+import type { PeopleDirectory } from '../../people/directory.js'
 import { diffOntologies, type Change } from './diff.js'
 import { MigrationInvalid, OntologyInvalid, isBreaking } from './errors.js'
 import { describeMigration, migrationProblems, rewriteDocument, type Migration } from './migrations.js'
@@ -147,11 +148,12 @@ export function classify(introduced: readonly Diagnostic[], rescored: readonly R
  */
 export function rescore(
   before: { documents: readonly MemoryDocument[]; ontology: Ontology | null },
-  after: { documents: readonly MemoryDocument[]; ontology: Ontology }
+  after: { documents: readonly MemoryDocument[]; ontology: Ontology },
+  people?: PeopleDirectory
 ): Rescored[] {
   if (!before.ontology) return []
-  const was = confidenceModel(before.ontology)
-  const now = confidenceModel(after.ontology)
+  const was = confidenceModel(before.ontology, { people })
+  const now = confidenceModel(after.ontology, { people })
   const previous = new Map(aggregate(before.documents, was).entities.map((entity) => [entity.id, entity]))
   const out: Rescored[] = []
   const note = (resourceId: string, from: number, to: number, link?: Rescored['link']) => {
@@ -178,7 +180,8 @@ export function rescore(
 export function compare(
   before: { documents: readonly MemoryDocument[]; ontology: Ontology | null },
   after: { documents: readonly MemoryDocument[]; ontology: Ontology },
-  origins: ReadonlyMap<string, Origin>
+  origins: ReadonlyMap<string, Origin>,
+  people?: PeopleDirectory
 ): CheckResult {
   const was = before.ontology ? validateDocuments([...before.documents], before.ontology) : []
   const now = validateDocuments([...after.documents], after.ontology)
@@ -195,7 +198,7 @@ export function compare(
     affected.push({ resourceId, origin })
   }
   affected.sort((a, b) => (a.resourceId < b.resourceId ? -1 : a.resourceId > b.resourceId ? 1 : 0))
-  const rescored = rescore(before, after)
+  const rescored = rescore(before, after, people)
   return { classification: classify(introduced, rescored), introduced, resolved, affected, rescored }
 }
 
@@ -217,6 +220,8 @@ export interface WorkspaceSnapshot {
   documents: readonly MemoryDocument[]
   origins: ReadonlyMap<string, Origin>
   head: { number: number; ontology: Ontology | null } | null
+  /** The people directory person sources are scored by; absent scores them with `NO_REGISTRY`. */
+  people?: PeopleDirectory
 }
 
 /** A stored document as a migration reads it: its text, absent when it does not open. */
@@ -283,7 +288,7 @@ export function evaluateDraft(
     }
     after = snapshot.documents.map((document) => migrated.get(document.path) ?? document)
   }
-  const check = compare(before, { documents: after, ontology: draft }, snapshot.origins)
+  const check = compare(before, { documents: after, ontology: draft }, snapshot.origins, snapshot.people)
   const named = new Set(migration.map(resolvedBy))
   const byResource = new Map<string, Unresolved>()
   for (const d of check.introduced) {

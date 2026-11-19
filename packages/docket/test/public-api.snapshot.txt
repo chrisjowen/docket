@@ -331,6 +331,7 @@ CanonicalRead
       diagnostics: Diagnostic[];
       files: ReadonlyMap<string, string>;
       ontology: LoadedOntology;
+      people: PeopleDirectory;
   }
 
 CanonicalReader
@@ -358,6 +359,9 @@ CanonicalSource
           revision: string;
       }>;
       documents(): AsyncIterable<CanonicalDocument | UnreadableDocument>;
+      people?(): Promise<{
+          text: string;
+      } | PeopleDirectory | null>;
   }
 
 canonicalState
@@ -400,6 +404,7 @@ confidenceModel
   export declare const confidenceModel: (ontology: Ontology, options?: {
       defaults?: Ontology;
       registry?: SourceRegistry;
+      people?: PeopleDirectory;
   }) => ConfidenceModel;
 
 ConfidenceModel
@@ -503,6 +508,9 @@ DocumentInput
       source: SourceLocation;
       entityRefs: string[];
   }
+
+EMPTY_DIRECTORY
+  export declare const EMPTY_DIRECTORY: PeopleDirectory;
 
 emptyRecords
   export declare const emptyRecords: () => AdapterManifest["records"];
@@ -610,6 +618,7 @@ explain
 ExplainedObservation
   export interface ExplainedObservation extends ObservationScore {
       counts: boolean;
+      confirmed?: boolean;
   }
 
 Explanation
@@ -630,6 +639,9 @@ fileManifestStore
 
 filesystemSource
   export declare const filesystemSource: (resolved: ResolvedConfig) => CanonicalSource;
+
+findPerson
+  export declare const findPerson: (directory: PeopleDirectory, name: string) => string | undefined;
 
 formatWhy
   export declare const formatWhy: (result: WhyResult) => string;
@@ -824,6 +836,12 @@ LoadedOntology
       diagnostics: Diagnostic[];
   }
 
+LoadedPeople
+  export interface LoadedPeople {
+      directory: PeopleDirectory;
+      diagnostics: Diagnostic[];
+  }
+
 localTools
   export declare function localTools(options: LocalToolsOptions): ToolRegistry;
 
@@ -833,7 +851,9 @@ LocalToolsOptions
       writer?: {
           actor: string;
           label: string;
+          principal?: string | undefined;
       } | undefined;
+      people?: PeopleDirectory | undefined;
       now?: (() => Date) | undefined;
       ask?: {
           summarize: SummarizeConfig;
@@ -984,6 +1004,7 @@ MemoryEvidence
       locator?: Record<string, string | string[]>;
       observedAt?: string;
       observedBy?: string;
+      principal?: string;
       session?: string;
       reportedBy?: string;
       note?: string;
@@ -1255,6 +1276,9 @@ parseMemoryFile
 parseOntology
   export declare const parseOntology: (raw: string, path: string) => LoadedOntology;
 
+parsePeople
+  export declare const parsePeople: (raw: string, path: string) => LoadedPeople;
+
 ParseResult
   export interface ParseResult {
       document?: MemoryDocument;
@@ -1264,6 +1288,44 @@ ParseResult
 PassagesBlock
   export interface PassagesBlock extends BlockBase {
       kind: 'passages';
+  }
+
+PEOPLE_FILE
+  export declare const PEOPLE_FILE = "people.yaml";
+
+PeopleDirectory
+  export interface PeopleDirectory {
+      me?: string;
+      people: Record<string, Person>;
+  }
+
+peopleDirectorySchema
+  export declare const peopleDirectorySchema: z.ZodObject<{
+      me: z.ZodOptional<z.ZodString>;
+      people: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodPipe<z.ZodNullable<z.ZodPipe<z.ZodObject<{
+          name: z.ZodOptional<z.ZodString>;
+          aliases: z.ZodOptional<z.ZodArray<z.ZodString>>;
+      }, z.core.$catchall<z.ZodUnion<readonly [
+          z.ZodString,
+          z.ZodNumber,
+          z.ZodBoolean,
+          z.ZodArray<z.ZodUnion<readonly [
+              z.ZodString,
+              z.ZodNumber,
+              z.ZodBoolean
+          ]>>
+      ]>>>, z.ZodTransform<Person, {
+          [x: string]: string | number | boolean | (string | number | boolean)[];
+          name?: string | undefined;
+          aliases?: string[] | undefined;
+      }>>>, z.ZodTransform<Person, Person | null>>>>;
+  }, z.core.$strip>;
+
+Person
+  export interface Person {
+      name?: string;
+      aliases?: string[];
+      attributes: Record<string, ConditionValue | ConditionValue[]>;
   }
 
 plainJsonProblem
@@ -1370,6 +1432,7 @@ ResolvedSource
       claimed: string[];
       ignored: string[];
       locator: Record<string, string | string[]>;
+      secondHand?: string;
   }
 
 ResultBlock
@@ -1500,6 +1563,7 @@ SourceLocation
 SourceRegistry
   export interface SourceRegistry {
       attributes(source: string, instance: string): Readonly<Record<string, ConditionValue | ConditionValue[]>> | undefined;
+      instance?(source: string, name: string): string | undefined;
   }
 
 SourceTypeDefinition
@@ -1822,6 +1886,7 @@ ValidateResult
       broken: ReadonlySet<string>;
       diagnostics: Diagnostic[];
       files: ReadonlyMap<string, string>;
+      people: PeopleDirectory;
   }
 
 ValidationDiagnostic
@@ -3817,12 +3882,48 @@ ADD_EVIDENCE_DEFINITION
                               readonly type: "string";
                               readonly minLength: 1;
                               readonly maxLength: 60;
-                              readonly description: "The evidence source, for example code, manifest, api, human or conversation.";
+                              readonly description: "The source, for example code, manifest, api or conversation. Omit it for what the person you act for said.";
+                          };
+                          readonly sourceRef: {
+                              readonly type: "string";
+                              readonly minLength: 1;
+                              readonly maxLength: 200;
+                              readonly description: "Which instance of the source - a repository, a person, a document URL - when its locator fields do not already say.";
+                          };
+                          readonly attributes: {
+                              readonly type: "object";
+                              readonly description: "Attributes of the source you claim, such as a branch. Only those the source lets a writer set count.";
+                              readonly maxProperties: 20;
+                              readonly additionalProperties: {
+                                  readonly type: readonly [
+                                      "string",
+                                      "number",
+                                      "boolean"
+                                  ];
+                              };
+                          };
+                          readonly locator: {
+                              readonly type: "object";
+                              readonly description: "Locator fields the source declares beyond the common ones, such as a message id or a section.";
+                              readonly maxProperties: 20;
+                              readonly additionalProperties: {
+                                  readonly anyOf: readonly [
+                                      {
+                                          readonly type: "string";
+                                          readonly maxLength: 2000;
+                                      },
+                                      {
+                                          readonly type: "array";
+                                          readonly items: {
+                                              readonly type: "string";
+                                              readonly maxLength: 2000;
+                                          };
+                                          readonly maxItems: 10;
+                                      }
+                                  ];
+                              };
                           };
                       };
-                      readonly required: readonly [
-                          "source"
-                      ];
                       readonly additionalProperties: false;
                   };
                   description: string;
@@ -3938,12 +4039,48 @@ EVIDENCE_SCHEMA
               readonly type: "string";
               readonly minLength: 1;
               readonly maxLength: 60;
-              readonly description: "The evidence source, for example code, manifest, api, human or conversation.";
+              readonly description: "The source, for example code, manifest, api or conversation. Omit it for what the person you act for said.";
+          };
+          readonly sourceRef: {
+              readonly type: "string";
+              readonly minLength: 1;
+              readonly maxLength: 200;
+              readonly description: "Which instance of the source - a repository, a person, a document URL - when its locator fields do not already say.";
+          };
+          readonly attributes: {
+              readonly type: "object";
+              readonly description: "Attributes of the source you claim, such as a branch. Only those the source lets a writer set count.";
+              readonly maxProperties: 20;
+              readonly additionalProperties: {
+                  readonly type: readonly [
+                      "string",
+                      "number",
+                      "boolean"
+                  ];
+              };
+          };
+          readonly locator: {
+              readonly type: "object";
+              readonly description: "Locator fields the source declares beyond the common ones, such as a message id or a section.";
+              readonly maxProperties: 20;
+              readonly additionalProperties: {
+                  readonly anyOf: readonly [
+                      {
+                          readonly type: "string";
+                          readonly maxLength: 2000;
+                      },
+                      {
+                          readonly type: "array";
+                          readonly items: {
+                              readonly type: "string";
+                              readonly maxLength: 2000;
+                          };
+                          readonly maxItems: 10;
+                      }
+                  ];
+              };
           };
       };
-      readonly required: readonly [
-          "source"
-      ];
       readonly additionalProperties: false;
   };
 
@@ -4292,12 +4429,48 @@ REMEMBER_DEFINITION
                                           readonly type: "string";
                                           readonly minLength: 1;
                                           readonly maxLength: 60;
-                                          readonly description: "The evidence source, for example code, manifest, api, human or conversation.";
+                                          readonly description: "The source, for example code, manifest, api or conversation. Omit it for what the person you act for said.";
+                                      };
+                                      readonly sourceRef: {
+                                          readonly type: "string";
+                                          readonly minLength: 1;
+                                          readonly maxLength: 200;
+                                          readonly description: "Which instance of the source - a repository, a person, a document URL - when its locator fields do not already say.";
+                                      };
+                                      readonly attributes: {
+                                          readonly type: "object";
+                                          readonly description: "Attributes of the source you claim, such as a branch. Only those the source lets a writer set count.";
+                                          readonly maxProperties: 20;
+                                          readonly additionalProperties: {
+                                              readonly type: readonly [
+                                                  "string",
+                                                  "number",
+                                                  "boolean"
+                                              ];
+                                          };
+                                      };
+                                      readonly locator: {
+                                          readonly type: "object";
+                                          readonly description: "Locator fields the source declares beyond the common ones, such as a message id or a section.";
+                                          readonly maxProperties: 20;
+                                          readonly additionalProperties: {
+                                              readonly anyOf: readonly [
+                                                  {
+                                                      readonly type: "string";
+                                                      readonly maxLength: 2000;
+                                                  },
+                                                  {
+                                                      readonly type: "array";
+                                                      readonly items: {
+                                                          readonly type: "string";
+                                                          readonly maxLength: 2000;
+                                                      };
+                                                      readonly maxItems: 10;
+                                                  }
+                                              ];
+                                          };
                                       };
                                   };
-                                  readonly required: readonly [
-                                      "source"
-                                  ];
                                   readonly additionalProperties: false;
                               };
                           };
@@ -4332,12 +4505,48 @@ REMEMBER_DEFINITION
                               readonly type: "string";
                               readonly minLength: 1;
                               readonly maxLength: 60;
-                              readonly description: "The evidence source, for example code, manifest, api, human or conversation.";
+                              readonly description: "The source, for example code, manifest, api or conversation. Omit it for what the person you act for said.";
+                          };
+                          readonly sourceRef: {
+                              readonly type: "string";
+                              readonly minLength: 1;
+                              readonly maxLength: 200;
+                              readonly description: "Which instance of the source - a repository, a person, a document URL - when its locator fields do not already say.";
+                          };
+                          readonly attributes: {
+                              readonly type: "object";
+                              readonly description: "Attributes of the source you claim, such as a branch. Only those the source lets a writer set count.";
+                              readonly maxProperties: 20;
+                              readonly additionalProperties: {
+                                  readonly type: readonly [
+                                      "string",
+                                      "number",
+                                      "boolean"
+                                  ];
+                              };
+                          };
+                          readonly locator: {
+                              readonly type: "object";
+                              readonly description: "Locator fields the source declares beyond the common ones, such as a message id or a section.";
+                              readonly maxProperties: 20;
+                              readonly additionalProperties: {
+                                  readonly anyOf: readonly [
+                                      {
+                                          readonly type: "string";
+                                          readonly maxLength: 2000;
+                                      },
+                                      {
+                                          readonly type: "array";
+                                          readonly items: {
+                                              readonly type: "string";
+                                              readonly maxLength: 2000;
+                                          };
+                                          readonly maxItems: 10;
+                                      }
+                                  ];
+                              };
                           };
                       };
-                      readonly required: readonly [
-                          "source"
-                      ];
                       readonly additionalProperties: false;
                   };
                   description: string;
@@ -4622,12 +4831,48 @@ SUPERSEDE_DEFINITION
                               readonly type: "string";
                               readonly minLength: 1;
                               readonly maxLength: 60;
-                              readonly description: "The evidence source, for example code, manifest, api, human or conversation.";
+                              readonly description: "The source, for example code, manifest, api or conversation. Omit it for what the person you act for said.";
+                          };
+                          readonly sourceRef: {
+                              readonly type: "string";
+                              readonly minLength: 1;
+                              readonly maxLength: 200;
+                              readonly description: "Which instance of the source - a repository, a person, a document URL - when its locator fields do not already say.";
+                          };
+                          readonly attributes: {
+                              readonly type: "object";
+                              readonly description: "Attributes of the source you claim, such as a branch. Only those the source lets a writer set count.";
+                              readonly maxProperties: 20;
+                              readonly additionalProperties: {
+                                  readonly type: readonly [
+                                      "string",
+                                      "number",
+                                      "boolean"
+                                  ];
+                              };
+                          };
+                          readonly locator: {
+                              readonly type: "object";
+                              readonly description: "Locator fields the source declares beyond the common ones, such as a message id or a section.";
+                              readonly maxProperties: 20;
+                              readonly additionalProperties: {
+                                  readonly anyOf: readonly [
+                                      {
+                                          readonly type: "string";
+                                          readonly maxLength: 2000;
+                                      },
+                                      {
+                                          readonly type: "array";
+                                          readonly items: {
+                                              readonly type: "string";
+                                              readonly maxLength: 2000;
+                                          };
+                                          readonly maxItems: 10;
+                                      }
+                                  ];
+                              };
                           };
                       };
-                      readonly required: readonly [
-                          "source"
-                      ];
                       readonly additionalProperties: false;
                   };
                   description: string;
@@ -4740,12 +4985,48 @@ UPDATE_NOTES_DEFINITION
                               readonly type: "string";
                               readonly minLength: 1;
                               readonly maxLength: 60;
-                              readonly description: "The evidence source, for example code, manifest, api, human or conversation.";
+                              readonly description: "The source, for example code, manifest, api or conversation. Omit it for what the person you act for said.";
+                          };
+                          readonly sourceRef: {
+                              readonly type: "string";
+                              readonly minLength: 1;
+                              readonly maxLength: 200;
+                              readonly description: "Which instance of the source - a repository, a person, a document URL - when its locator fields do not already say.";
+                          };
+                          readonly attributes: {
+                              readonly type: "object";
+                              readonly description: "Attributes of the source you claim, such as a branch. Only those the source lets a writer set count.";
+                              readonly maxProperties: 20;
+                              readonly additionalProperties: {
+                                  readonly type: readonly [
+                                      "string",
+                                      "number",
+                                      "boolean"
+                                  ];
+                              };
+                          };
+                          readonly locator: {
+                              readonly type: "object";
+                              readonly description: "Locator fields the source declares beyond the common ones, such as a message id or a section.";
+                              readonly maxProperties: 20;
+                              readonly additionalProperties: {
+                                  readonly anyOf: readonly [
+                                      {
+                                          readonly type: "string";
+                                          readonly maxLength: 2000;
+                                      },
+                                      {
+                                          readonly type: "array";
+                                          readonly items: {
+                                              readonly type: "string";
+                                              readonly maxLength: 2000;
+                                          };
+                                          readonly maxItems: 10;
+                                      }
+                                  ];
+                              };
                           };
                       };
-                      readonly required: readonly [
-                          "source"
-                      ];
                       readonly additionalProperties: false;
                   };
                   description: string;
@@ -5589,7 +5870,7 @@ compare
   }, after: {
       documents: readonly MemoryDocument[];
       ontology: Ontology;
-  }, origins: ReadonlyMap<string, Origin>): CheckResult;
+  }, origins: ReadonlyMap<string, Origin>, people?: PeopleDirectory): CheckResult;
 
 ComposedDocument
   export interface ComposedDocument {
@@ -5674,7 +5955,10 @@ EvidenceGroup
 
 EvidenceInput
   export interface EvidenceInput {
-      source: string;
+      source?: string;
+      sourceRef?: string;
+      attributes?: Record<string, string | number | boolean>;
+      locator?: Record<string, string | string[]>;
       repository?: string;
       path?: string;
       lines?: string;
@@ -5877,7 +6161,7 @@ rescore
   }, after: {
       documents: readonly MemoryDocument[];
       ontology: Ontology;
-  }): Rescored[];
+  }, people?: PeopleDirectory): Rescored[];
 
 Rescored
   export interface Rescored {
@@ -5944,16 +6228,39 @@ StaleDraft
       constructor(expectedHead: number, head: number);
   }
 
+stampAll
+  export declare function stampAll(entries: readonly EvidenceInput[], writer: Pick<Writer, 'label' | 'requestId' | 'principal'>, now: Date, context: StampContext, at: {
+      where: {
+          path?: string;
+          id?: string;
+      };
+      subject: string;
+  }): {
+      stamped: StampedEvidence[];
+      diagnostics: Diagnostic[];
+  };
+
+stampContext
+  export declare const stampContext: (ontology: Ontology | null | undefined, people?: PeopleDirectory | null) => StampContext;
+
+StampContext
+  export interface StampContext {
+      person?: string | undefined;
+      people?: PeopleDirectory | undefined;
+  }
+
 StampedEvidence
-  export interface StampedEvidence extends Omit<EvidenceInput, 'observedBy'> {
+  export interface StampedEvidence extends Omit<EvidenceInput, 'observedBy' | 'source'> {
+      source: string;
       observedAt: string;
       observedBy: string;
+      principal?: string;
       session: string;
       reportedBy?: string;
   }
 
 stampEvidence
-  export declare function stampEvidence(entry: EvidenceInput, writer: Pick<Writer, 'label' | 'requestId'>, now: Date): StampedEvidence;
+  export declare function stampEvidence(entry: EvidenceInput, writer: Pick<Writer, 'label' | 'requestId' | 'principal'>, now: Date, context?: StampContext): StampedEvidence;
 
 StoredDocument
   export interface StoredDocument {
@@ -5986,6 +6293,7 @@ WorkspaceSnapshot
           number: number;
           ontology: Ontology | null;
       } | null;
+      people?: PeopleDirectory;
   }
 
 writableHere
@@ -6014,6 +6322,7 @@ Writer
       label: string;
       channel: Exclude<Channel, 'repo' | 'ontology'>;
       requestId: string;
+      principal?: string;
   }
 
 WriteResult

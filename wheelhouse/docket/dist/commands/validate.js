@@ -13,7 +13,7 @@ const errorPaths = (diagnostics) => diagnostics.flatMap((d) => (d.severity === '
  */
 export const validate = async (options = {}) => {
     const source = options.source ?? filesystemSource(await loadConfig(options.cwd ?? process.cwd()));
-    const { documents, diagnostics: read, files, ontology: loaded } = await readCanonical(source);
+    const { documents, diagnostics: read, files, ontology: loaded, people } = await readCanonical(source);
     const diagnostics = [...read, ...loaded.diagnostics];
     const result = {
         resolved: source.resolved,
@@ -22,7 +22,8 @@ export const validate = async (options = {}) => {
         entities: [],
         broken: new Set(errorPaths(diagnostics)),
         diagnostics,
-        files
+        files,
+        people
     };
     if (!loaded.ontology)
         return result;
@@ -30,7 +31,7 @@ export const validate = async (options = {}) => {
         strict: options.strict ?? false
     }));
     const broken = new Set(errorPaths(diagnostics));
-    const merged = aggregate(documents.filter((document) => !broken.has(document.path)), confidenceModel(loaded.ontology));
+    const merged = aggregate(documents.filter((document) => !broken.has(document.path)), confidenceModel(loaded.ontology, { people }));
     diagnostics.push(...merged.diagnostics);
     return {
         ...result,

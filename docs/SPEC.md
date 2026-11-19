@@ -879,6 +879,36 @@ the source; only those its source type lets the reporter set count (§20.2).
 Unknown fields are warned about and dropped, as are locator fields and
 claimed attributes the source type does not declare.
 
+A write stamps each entry with who wrote it (`observedBy`, kept for audit and
+never scored) and the person they act for (`principal`): the signed-in user an
+agent works for, a token's owner, the person at the machine. Evidence written
+without a `source` is from that person - the ontology's person source, its
+`identity` source named `person` (else its first) - and evidence naming the
+legacy `human` source is written as that person source too, naming whoever
+`observedBy` names when the people directory knows them. Without a person
+source, or a principal, evidence must name its source.
+
+### People
+
+The people directory says who each person is and what policies may trust
+about them. A project keeps it in `.docket/people.yaml`; `docket serve` in its
+config's `people:`; Docket Cloud in its members:
+
+```yaml
+me: dana                       # who this machine's docket MCP acts for
+people:
+  dana:
+    name: Dana Ruiz
+    aliases: [druiz, dana@acme.com]
+    role: lead
+    team: payments
+    flags: [trusted-reviewer]
+```
+
+Every key but `name` and `aliases` is an attribute, attested for the
+attributes the person source marks `setBy: directory`. A project's file is as
+trustworthy as write access to its repository.
+
 Evidence is append-only: a new sighting adds an entry and never rewrites an
 earlier one. Agent-captured files (`capturedBy` other than `human`) are warned
 about when the resource or a link records no evidence.
@@ -949,7 +979,15 @@ Observations of one source instance do not corroborate each other: the
 strongest counts. Distinct instances combine as `1 - Π(1 - s)`, held to `cap`
 and rounded to two decimals. An observation that names no instance (no
 `sourceRef`, and not every `identifiedBy` field) counts with the others of its
-source type, as evidence written before source instances does. With no
+source type, as evidence written before source instances does.
+
+A person source names its instance by `sourceRef`, and the people directory
+resolves aliases, so one person counts once under any of their names. Evidence
+naming no one is the writer's principal. Evidence naming someone other than
+the writer's principal is second-hand: it is scored as the principal until the
+person it names gives evidence of their own on the same resource or link -
+citing a lead raises nothing on its own - and the write that records it asks
+that person to confirm (`confirm-requested`). With no
 evidence, a resource or link takes the highest stated `provenance.confidence`
 of the files that declare it, or `trust.unevidenced`.
 

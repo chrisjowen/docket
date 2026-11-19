@@ -37,6 +37,7 @@ export { validateDocuments } from './ontology/validator.js';
 export { aggregate } from './evidence/aggregate.js';
 export { TRUST_DEFAULTS, assess, bandOf, confidenceModel, explain, scoreObservation } from './evidence/confidence.js';
 export { withTrustSettings } from './evidence/legacy.js';
+export { EMPTY_DIRECTORY, PEOPLE_FILE, findPerson, parsePeople, peopleDirectorySchema } from './people/directory.js';
 export { convertOntologyText } from './ontology/convert.js';
 export { formatWhy, why } from './commands/why.js';
 export { memoryConfigSchema } from './config/config.js';

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
+import type { PeopleDirectory } from '../docket.js'
 import type { DocumentCodec, StoreContext, StoreLimits, StoreRunner, Tx } from '../ports.js'
 
 /**
@@ -55,6 +56,8 @@ export interface PostgresStoreOptions {
   schema?: string
   codec: DocumentCodec
   limits?: StoreLimits
+  /** The people directory the store's workspaces score person sources by. */
+  people?: PeopleDirectory
 }
 
 /**
@@ -68,7 +71,7 @@ export function postgresStore(options: PostgresStoreOptions): StoreRunner {
     run<T>(fn: (ctx: StoreContext) => Promise<T>): Promise<T> {
       return transaction(options.pool, async (tx) => {
         await tx.query(`SET LOCAL search_path TO ${schema}, public`)
-        return fn({ tx, codec: options.codec, ...(options.limits ? { limits: options.limits } : {}) })
+        return fn({ tx, codec: options.codec, ...(options.limits ? { limits: options.limits } : {}), ...(options.people ? { people: options.people } : {}) })
       })
     }
   }

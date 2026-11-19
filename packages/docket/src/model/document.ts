@@ -61,8 +61,15 @@ export interface MemoryEvidence {
   locator?: Record<string, string | string[]>
   /** `YYYY-MM-DD`, or a full ISO timestamp. */
   observedAt?: string
-  /** Who observed it - `claude`, a person's name. */
+  /** Who observed it - `claude`, a person's name. Recorded for audit; never scored. */
   observedBy?: string
+  /**
+   * The person the writer acts for - the signed-in user an agent works for, a
+   * token's owner - as the write stamped it. A person source that names no one
+   * else is this person; one naming someone else counts as this person until
+   * that one confirms.
+   */
+  principal?: string
   /** The session the observation was made in. */
   session?: string
   /** Who told the observer, when that was someone else - as a write through MCP records it. */
@@ -239,6 +246,7 @@ export const memoryEvidenceSchema = z
     locator: z.record(z.string(), locatorValueSchema).optional(),
     observedAt: observedAtSchema.optional(),
     observedBy: text.optional(),
+    principal: text.optional(),
     session: text.optional(),
     reportedBy: text.optional(),
     note: text.optional()

@@ -42,10 +42,23 @@ version: 1
 # Run \`docket why <id>\` to see which policies priced a resource.
 
 sources:
+  person:
+    kind: identity
+    description: >
+      A person, as the people directory knows them: their role, team and
+      flags. Evidence that cites no source is from the person the writer acts
+      for; evidence naming someone else counts as the writer's person until
+      that one confirms it with evidence of their own.
+    attributes:
+      role: { type: string, setBy: directory }
+      team: { type: string, setBy: directory }
+      flags: { type: "string[]", setBy: directory }
+
   human:
     description: >
-      Stated or confirmed by a person - written by hand, or confirmed when asked.
-      Record who in observedBy.
+      Legacy: stated by a person, as whoever wrote it said. Kept so evidence
+      written before the person source scores as it did; a write that names
+      human is recorded as person, scored by who that person is.
 
   conversation:
     description: >
@@ -115,6 +128,12 @@ trust:
   accept: { default: 0.75, decision: 0.8 }
   bands: { established: 0.8, probable: 0.5 }
   policies:
+    - name: A person said so
+      when: { source: person }
+      score: 0.7
+    - name: A lead said so
+      when: { source: person, role: lead }
+      score: 0.85
     - name: human evidence
       when: { source: human }
       score: 0.9
@@ -2581,10 +2600,23 @@ version: 1
 # Run \`docket why <id>\` to see which policies priced a resource.
 
 sources:
+  person:
+    kind: identity
+    description: >
+      A person, as the people directory knows them: their role, team and flags.
+      Evidence that cites no source is from the person the writer acts for;
+      evidence naming someone else counts as the writer's person until that one
+      confirms it with evidence of their own.
+    attributes:
+      role: { type: string, setBy: directory }
+      team: { type: string, setBy: directory }
+      flags: { type: "string[]", setBy: directory }
+
   human:
     description: >
-      Stated or confirmed by a person - written by hand, or confirmed when
-      asked. Record who in observedBy.
+      Legacy: stated by a person, as whoever wrote it said. Kept so evidence
+      written before the person source scores as it did; a write that names
+      human is recorded as person, scored by who that person is.
 
   conversation:
     description: >
@@ -2654,6 +2686,12 @@ trust:
   accept: { default: 0.75, decision: 0.8 }
   bands: { established: 0.8, probable: 0.5 }
   policies:
+    - name: A person said so
+      when: { source: person }
+      score: 0.7
+    - name: A lead said so
+      when: { source: person, role: lead }
+      score: 0.85
     - name: human evidence
       when: { source: human }
       score: 0.9
@@ -3146,10 +3184,23 @@ version: 1
 # Run \`docket why <id>\` to see which policies priced a resource.
 
 sources:
+  person:
+    kind: identity
+    description: >
+      A person, as the people directory knows them: their role, team and flags.
+      Evidence that cites no source is from the person the writer acts for;
+      evidence naming someone else counts as the writer's person until that one
+      confirms it with evidence of their own.
+    attributes:
+      role: { type: string, setBy: directory }
+      team: { type: string, setBy: directory }
+      flags: { type: "string[]", setBy: directory }
+
   human:
     description: >
-      Stated or confirmed by a person - written by hand, or confirmed when
-      asked. Record who in observedBy.
+      Legacy: stated by a person, as whoever wrote it said. Kept so evidence
+      written before the person source scores as it did; a write that names
+      human is recorded as person, scored by who that person is.
 
   conversation:
     description: >
@@ -3219,6 +3270,12 @@ trust:
   accept: { default: 0.75, decision: 0.8 }
   bands: { established: 0.8, probable: 0.5 }
   policies:
+    - name: A person said so
+      when: { source: person }
+      score: 0.7
+    - name: A lead said so
+      when: { source: person, role: lead }
+      score: 0.85
     - name: human evidence
       when: { source: human }
       score: 0.9

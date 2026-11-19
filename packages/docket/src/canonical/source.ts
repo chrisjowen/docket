@@ -7,6 +7,19 @@ import { parseOntology, unreadableOntology, type LoadedOntology } from '../ontol
 import { hashContent } from '../source/hashing.js'
 import { parseMemoryFile } from '../source/parser.js'
 import { sourceFiles } from '../source/scanner.js'
+import { EMPTY_DIRECTORY, parsePeople, peoplePath, readPeopleText, type LoadedPeople, type PeopleDirectory } from '../people/directory.js'
+
+/** A source's people directory, parsed; a file that does not load is a diagnostic and no one. */
+const readPeople = async (source: CanonicalSource): Promise<LoadedPeople> => {
+  const path = peoplePath(source.resolved)
+  try {
+    const read = await source.people?.()
+    if (!read) return { directory: EMPTY_DIRECTORY, diagnostics: [] }
+    return 'text' in read ? parsePeople(read.text, path) : { directory: read, diagnostics: [] }
+  } catch (cause) {
+    return { directory: EMPTY_DIRECTORY, diagnostics: [error('people-unreadable', `Could not read ${path}: ${(cause as Error).message}`, { path })] }
+  }
+}
 
 /** One canonical document as its source holds it: its path, its raw text, and `hashContent` of that text. */
 export interface CanonicalDocument {
@@ -39,6 +52,12 @@ export interface CanonicalSource {
   ontology(): Promise<{ text: string; revision: string }>
   /** Every canonical document, in any order. */
   documents(): AsyncIterable<CanonicalDocument | UnreadableDocument>
+  /**
+   * The people directory policies score person sources by: the text of a
+   * project's `people.yaml`, or one a server already holds. Null or absent:
+   * no one is in it.
+   */
+  people?(): Promise<{ text: string } | PeopleDirectory | null>
 }
 
 /**
@@ -50,6 +69,10 @@ export const filesystemSource = (resolved: ResolvedConfig): CanonicalSource => (
   async ontology() {
     const text = await readFile(resolved.ontologyPath, 'utf8')
     return { text, revision: hashContent(text) }
+  },
+  async people() {
+    const text = await readPeopleText(resolved)
+    return text === null ? null : { text }
   },
   async *documents() {
     for (const { absolute, path } of await sourceFiles(resolved)) {
@@ -73,6 +96,8 @@ export interface CanonicalRead {
   /** Each document's raw text, by path. */
   files: ReadonlyMap<string, string>
   ontology: LoadedOntology
+  /** The people directory, empty when the source has none or it does not load. */
+  people: PeopleDirectory
 }
 
 /**
@@ -105,5 +130,7 @@ export const readCanonical = async (source: CanonicalSource): Promise<CanonicalR
     diagnostics.push(...result.diagnostics)
     if (result.document) documents.push(result.document)
   }
-  return { documents, diagnostics, files, ontology: await ontology }
+  const people = await readPeople(source)
+  diagnostics.push(...people.diagnostics)
+  return { documents, diagnostics, files, ontology: await ontology, people: people.directory }
 }

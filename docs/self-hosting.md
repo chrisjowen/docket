@@ -163,10 +163,14 @@ workspaces:
 
 auth:
   tokensFile: ./state/tokens.yaml          # where `docket serve token` keeps hashes
-  tokens: []                               # or tokens given here, read-only: { name, sha256, role, scopes, workspaces }
+  tokens: []                               # or tokens given here, read-only: { name, sha256, role, scopes, workspaces, actsFor }
 
 ontology:
   mcpWriters: [owner]                      # roles whose tokens may publish the ontology over MCP
+
+# people:                                  # who tokens act for, and what policies may trust about them
+#   dana: { name: Dana Ruiz, aliases: [dana@acme.com], role: lead, team: payments, flags: [reviewer] }
+#   tom: { role: intern }
 
 # ai: { provider: claude, model: haiku }   # or { provider: ollama, model: qwen2.5:7b, url: http://ollama:11434 }
 ui: true                                   # the page, behind a token sign-in
@@ -200,6 +204,7 @@ with a role:
 ```bash
 docket serve token create ada --role owner
 docket serve token create ci-bot --role editor --workspace platform --scopes docket:read,docket:write
+docket serve token create dana-agent --role editor --acts-for dana
 docket serve token list
 docket serve token revoke ci-bot
 ```
@@ -224,6 +229,18 @@ docket serve token revoke ci-bot
 - Tokens can also be given in the config file (`auth.tokens`, with their
   `sha256`), for a deployment that mounts its secrets. The token commands do
   not change those.
+- `--acts-for <person>` (`actsFor` in the config) names the person a token
+  acts for, as `people` names them. Its writes are stamped with that person
+  (`principal` on each piece of evidence), and evidence it gives without a
+  source is that person's, scored by their role, team and flags under the
+  ontology's person policies. A token that acts for no one must name a source
+  for every piece of evidence. Evidence that cites someone else counts as the
+  token's person until that one confirms it with evidence of their own.
+- `people` is the server's people directory, for every workspace: who each
+  person is, the other names they go by (`aliases`), and the attributes the
+  ontology's person source lets the directory set. It takes the place of a
+  files workspace's own `.docket/people.yaml`. Only whoever edits the server's
+  config can change it, which is what lets policies trust it.
 
 Every request that authenticates is recorded in `<dataDir>/audit.jsonl`: who,
 what, the outcome, the latency and the resource it named. Its arguments are

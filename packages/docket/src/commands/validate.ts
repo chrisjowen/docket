@@ -5,6 +5,7 @@ import { aggregate } from '../evidence/aggregate.js'
 import { confidenceModel } from '../evidence/confidence.js'
 import type { Diagnostic, MemoryDocument, MemoryEntity, Ontology } from '../model/index.js'
 import { validateDocuments } from '../ontology/validator.js'
+import type { PeopleDirectory } from '../people/directory.js'
 
 export interface ValidateOptions {
   /** Directory to resolve `.docket.yaml` from. Defaults to the working directory. */
@@ -31,6 +32,8 @@ export interface ValidateResult {
   diagnostics: Diagnostic[]
   /** Each document's raw text, by path, as it was read. */
   files: ReadonlyMap<string, string>
+  /** The people directory person sources were scored by. */
+  people: PeopleDirectory
 }
 
 const errorPaths = (diagnostics: readonly Diagnostic[]): string[] =>
@@ -47,7 +50,7 @@ export const validate = async (
   options: ValidateOptions = {}
 ): Promise<ValidateResult> => {
   const source = options.source ?? filesystemSource(await loadConfig(options.cwd ?? process.cwd()))
-  const { documents, diagnostics: read, files, ontology: loaded } = await readCanonical(source)
+  const { documents, diagnostics: read, files, ontology: loaded, people } = await readCanonical(source)
 
   const diagnostics = [...read, ...loaded.diagnostics]
   const result: ValidateResult = {
@@ -57,7 +60,8 @@ export const validate = async (
     entities: [],
     broken: new Set(errorPaths(diagnostics)),
     diagnostics,
-    files
+    files,
+    people
   }
   if (!loaded.ontology) return result
 
@@ -69,7 +73,7 @@ export const validate = async (
   const broken = new Set(errorPaths(diagnostics))
   const merged = aggregate(
     documents.filter((document) => !broken.has(document.path)),
-    confidenceModel(loaded.ontology)
+    confidenceModel(loaded.ontology, { people })
   )
   diagnostics.push(...merged.diagnostics)
 

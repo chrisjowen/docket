@@ -88,7 +88,7 @@ export async function postgresBackend(config: ServeConfig, options: { pool?: Poo
   if (!process.env.DOCKET_DATABASE_URL) process.env.DOCKET_DATABASE_URL = database.url
   const schema = database.schema
   await migrate(pool, { schema })
-  const store: StoreRunner = postgresStore({ pool, schema, codec: await codecOf(config) })
+  const store: StoreRunner = postgresStore({ pool, schema, codec: await codecOf(config), ...(config.people ? { people: config.people } : {}) })
   const scope: StoreScope = { id: 'docket-serve', store }
 
   // One workspace per configured slug, made on first start; the server's ontology.mcpWriters is each one's setting.

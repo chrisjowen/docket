@@ -64,11 +64,11 @@ export function classify(introduced, rescored = []) {
  * draft re-scores; a resource or link that is only on one side is a
  * diagnostic's business, not this.
  */
-export function rescore(before, after) {
+export function rescore(before, after, people) {
     if (!before.ontology)
         return [];
-    const was = confidenceModel(before.ontology);
-    const now = confidenceModel(after.ontology);
+    const was = confidenceModel(before.ontology, { people });
+    const now = confidenceModel(after.ontology, { people });
     const previous = new Map(aggregate(before.documents, was).entities.map((entity) => [entity.id, entity]));
     const out = [];
     const note = (resourceId, from, to, link) => {
@@ -94,7 +94,7 @@ export function rescore(before, after) {
  * diffs the diagnostics. `after` may hold other documents than `before`: a
  * migration's rewritten ones.
  */
-export function compare(before, after, origins) {
+export function compare(before, after, origins, people) {
     const was = before.ontology ? validateDocuments([...before.documents], before.ontology) : [];
     const now = validateDocuments([...after.documents], after.ontology);
     const introduced = minus(now, was);
@@ -111,7 +111,7 @@ export function compare(before, after, origins) {
         affected.push({ resourceId, origin });
     }
     affected.sort((a, b) => (a.resourceId < b.resourceId ? -1 : a.resourceId > b.resourceId ? 1 : 0));
-    const rescored = rescore(before, after);
+    const rescored = rescore(before, after, people);
     return { classification: classify(introduced, rescored), introduced, resolved, affected, rescored };
 }
 /** Parses a draft, or throws `OntologyInvalid` with its errors at their paths. */
@@ -161,7 +161,7 @@ export function evaluateDraft(snapshot, stored, draft, options = {}) {
         }
         after = snapshot.documents.map((document) => migrated.get(document.path) ?? document);
     }
-    const check = compare(before, { documents: after, ontology: draft }, snapshot.origins);
+    const check = compare(before, { documents: after, ontology: draft }, snapshot.origins, snapshot.people);
     const named = new Set(migration.map(resolvedBy));
     const byResource = new Map();
     for (const d of check.introduced) {

@@ -158,6 +158,10 @@ trust:
 - Every source accepts the common location fields `repository`, `path`,
   `lines`, `symbol`, `key`, `method`, `endpoint`, `urls` and `commit`;
   declare any others under `locator`.
+- A `kind: identity` source - the templates' `person` - is who said it: its
+  attributes (role, team, flags) come from the people directory,
+  `.docket/people.yaml`, and evidence citing no source is the writer's own
+  person. Write policies on `role` or `flags` to weigh people.
 - `docket ontology show <type>` prints the effective value per source, and
   `docket why <id>` the policies that priced a resource. An ontology still in
   the legacy `evidence:` form scores as it did; `docket ontology convert

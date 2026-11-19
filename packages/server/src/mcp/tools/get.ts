@@ -26,6 +26,9 @@ async function resourceSource(ctx: StoreContext, workspaceId: string, opened: re
       if (!head) throw new Error('This workspace has no published ontology yet.')
       return { text: head.text, revision: head.revision }
     },
+    async people() {
+      return ctx.people ?? null
+    },
     async *documents() {
       for (const document of opened) {
         if (!document) continue

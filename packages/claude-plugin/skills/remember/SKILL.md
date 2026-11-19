@@ -148,6 +148,11 @@ entry per observation:
 - Choose `source` by where you saw it, not by what it is: a pod read from a
   Helm chart is `infrastructure`, the same pod seen with kubectl is `runtime`,
   and something the user told you is `conversation`.
+- When the person you work for states it as their own decision or knowledge,
+  the docket MCP tools take evidence with no `source` as theirs: it is scored
+  by who they are in the people directory. If they relay what someone else
+  said, cite that person (`source: person`, `sourceRef: <who>`): it counts as
+  your person's until that one confirms it, and the write says so.
 - Be exact. `source: code` alone is not evidence; the file, lines and symbol
   are. `docket validate` rejects evidence missing the location its source
   requires.

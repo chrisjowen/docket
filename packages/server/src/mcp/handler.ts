@@ -155,6 +155,9 @@ function storeSource(store: StoreRunner, workspaceId: string): CanonicalSource {
       if (!head) throw new Error('This workspace has no published ontology yet.')
       return { text: head.text, revision: head.revision }
     },
+    async people() {
+      return store.run(async (ctx) => ctx.people ?? null)
+    },
     async *documents() {
       for (const document of await store.run((ctx) => readDocuments(ctx, workspaceId))) {
         if (document.raw === undefined) yield { path: document.path, error: document.error ?? 'unreadable' }
@@ -258,13 +261,15 @@ export async function handleMcp<P extends Principal, R extends McpResource>(requ
     beforeModelCall: async () => options.modelGate?.beforeModelCall(principal),
     actor: principal.actor,
     userId: principal.subject,
+    ...(principal.actsFor !== undefined ? { actsFor: principal.actsFor } : {}),
     writer: () =>
       (writer ??= (options.writerLabel ? options.writerLabel(principal) : Promise.resolve(principal.actor)).then((label) => ({
         workspaceId: principal.workspaceId,
         actor: principal.actor,
         label,
         channel: 'mcp' as const,
-        requestId: options.requestId
+        requestId: options.requestId,
+        ...(principal.actsFor !== undefined ? { principal: principal.actsFor } : {})
       }))),
     role: () => options.authorizer.role(principal),
     audited: async <T>(fn: (ctx: StoreContext) => Promise<{ value: T; outcome: AuditOutcome; target: string[] }>) => {
