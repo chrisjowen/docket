@@ -237,14 +237,33 @@ async function decide(
   const score = scoreProposal(model, type, supersession.evidence)
   const startStatus = supersession.status
   const status = startStatus === 'pending' && score.clears ? 'accepted' : startStatus
+  const promoting = startStatus === 'pending' && status === 'accepted'
+  // Promoting lifts the resource's earlier accepted supersession in the same statement as
+  // accepting this one, so supersessions_live's partial unique index never sees both rows
+  // live at once - two separate UPDATEs would violate it between statements.
   const { rows } = await ctx.tx.query<Row>(
-    `UPDATE supersessions SET score = $2, threshold = $3, status = $4,
-            decided_at = CASE WHEN status <> $4 THEN $5 ELSE decided_at END,
-            decided_by = CASE WHEN status <> $4 THEN 'score' ELSE decided_by END
-      WHERE id = $1 AND status = $6 AND lifted_at IS NULL RETURNING *`,
-    [supersession.id, score.score, score.threshold, status, now, startStatus]
+    promoting
+      ? `UPDATE supersessions SET
+              score = CASE WHEN id = $1 THEN $2 ELSE score END,
+              threshold = CASE WHEN id = $1 THEN $3 ELSE threshold END,
+              status = CASE WHEN id = $1 THEN $4 ELSE status END,
+              decided_at = CASE WHEN id = $1 THEN $5 ELSE decided_at END,
+              decided_by = CASE WHEN id = $1 THEN 'score' ELSE decided_by END,
+              lifted_at = CASE WHEN id <> $1 THEN $5 ELSE lifted_at END
+        WHERE workspace_id = $6 AND resource_id = $7 AND lifted_at IS NULL
+          AND (id = $1 OR status = 'accepted')
+          AND EXISTS (SELECT 1 FROM supersessions self WHERE self.id = $1 AND self.status = $8 AND self.lifted_at IS NULL)
+        RETURNING *`
+      : `UPDATE supersessions SET score = $2, threshold = $3, status = $4,
+              decided_at = CASE WHEN status <> $4 THEN $5 ELSE decided_at END,
+              decided_by = CASE WHEN status <> $4 THEN 'score' ELSE decided_by END
+        WHERE id = $1 AND status = $6 AND lifted_at IS NULL RETURNING *`,
+    promoting
+      ? [supersession.id, score.score, score.threshold, status, now, supersession.workspaceId, supersession.resourceId, startStatus]
+      : [supersession.id, score.score, score.threshold, status, now, startStatus]
   )
-  if (!rows.length) {
+  const selfRow = rows.find((row) => row.id === supersession.id)
+  if (!selfRow) {
     const { rows: fresh } = await ctx.tx.query<Row>('SELECT * FROM supersessions WHERE id = $1', [supersession.id])
     const row = fresh[0] as Row
     return {
@@ -252,18 +271,11 @@ async function decide(
       supersession: await open(ctx, row)
     }
   }
-  let replaced: string | undefined
-  if (startStatus === 'pending' && status === 'accepted') {
-    const { rows: earlier } = await ctx.tx.query<{ id: string; superseded_by: string }>(
-      "UPDATE supersessions SET lifted_at = $3 WHERE workspace_id = $1 AND resource_id = $2 AND id <> $4 AND lifted_at IS NULL AND status = 'accepted' RETURNING id, superseded_by",
-      [supersession.workspaceId, supersession.resourceId, now, supersession.id]
-    )
-    replaced = earlier[0]?.superseded_by
-  }
+  const replaced = promoting ? rows.find((row) => row.id !== supersession.id)?.superseded_by : undefined
   return {
     outcome: { id: supersession.id, status, score: score.score, threshold: score.threshold, carry: status === 'pending' ? wouldCarry(model, type, score) : [] },
     ...(replaced !== undefined ? { replaced } : {}),
-    supersession: await open(ctx, rows[0] as Row)
+    supersession: await open(ctx, selfRow)
   }
 }
 
