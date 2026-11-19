@@ -163,7 +163,8 @@ export function snapshotOf(workspace, head) {
     return {
         documents: parsed,
         origins: new Map(workspace.documents.map((entry) => [entry.path, 'local'])),
-        head: head ? { number: head.version, ontology: head.ontology } : null
+        head: head ? { number: head.version, ontology: head.ontology } : null,
+        people: workspace.people
     };
 }
 const queues = new Map();

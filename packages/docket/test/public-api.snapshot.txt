@@ -5870,7 +5870,7 @@ compare
   }, after: {
       documents: readonly MemoryDocument[];
       ontology: Ontology;
-  }, origins: ReadonlyMap<string, Origin>): CheckResult;
+  }, origins: ReadonlyMap<string, Origin>, people?: PeopleDirectory): CheckResult;
 
 ComposedDocument
   export interface ComposedDocument {
@@ -6161,7 +6161,7 @@ rescore
   }, after: {
       documents: readonly MemoryDocument[];
       ontology: Ontology;
-  }): Rescored[];
+  }, people?: PeopleDirectory): Rescored[];
 
 Rescored
   export interface Rescored {
@@ -6293,6 +6293,7 @@ WorkspaceSnapshot
           number: number;
           ontology: Ontology | null;
       } | null;
+      people?: PeopleDirectory;
   }
 
 writableHere

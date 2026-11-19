@@ -128,7 +128,7 @@ compare
   }, after: {
       documents: readonly MemoryDocument[];
       ontology: Ontology;
-  }, origins: ReadonlyMap<string, Origin>): CheckResult;
+  }, origins: ReadonlyMap<string, Origin>, people?: PeopleDirectory): CheckResult;
 
 ComposedDocument
   export interface ComposedDocument {
@@ -758,6 +758,7 @@ WorkspaceSnapshot
           number: number;
           ontology: Ontology | null;
       } | null;
+      people?: PeopleDirectory;
   }
 
 WRITE_LIMITS
