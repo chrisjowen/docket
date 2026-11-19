@@ -37,7 +37,7 @@ describe.skipIf(!TEST_PG_URL).each(STORE_KINDS)('supersede proposals over $name'
   beforeAll(async () => {
     org = await createTestStore(kind)
     workspaceId = await org.as((ctx) => seedWorkspace(ctx, { slug: 'platform', ontology: readFileSync(ONTOLOGY_TEMPLATES.sdlc as string, 'utf8') }))
-    for (const id of ['team.payments', 'team.money', 'team.ledger', 'team.books', 'team.ops', 'team.platform', 'team.alpha', 'team.beta']) {
+    for (const id of ['team.payments', 'team.money', 'team.ledger', 'team.books', 'team.ops', 'team.platform', 'team.alpha', 'team.beta', 'team.gamma', 'team.delta']) {
       await as((ctx) => writeResource(ctx, writer('tom'), { id, type: 'team', title: id, evidence: [{ source: 'code', path: 'CODEOWNERS' }] }, { now: () => NOW }))
     }
   })
@@ -108,6 +108,38 @@ describe.skipIf(!TEST_PG_URL).each(STORE_KINDS)('supersede proposals over $name'
     expect(rejected).toMatchObject({ changed: false })
     expect(rejected.diagnostics).toEqual([expect.objectContaining({ code: 'decided-proposal' })])
     expect((await as((ctx) => openProposals(ctx, workspaceId))).some((each) => each.proposal === id)).toBe(false)
+  })
+
+  it('does not let a promotion reinstate a proposal rejected while the promotion was still reading it', async () => {
+    const proposed = await propose('team.gamma', 'team.delta')
+    const id = proposed.proposal?.id as string
+    people = { people: { ...people.people, tom: { attributes: { role: 'lead' } } } }
+
+    let release = () => undefined as void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    let lockedAt = () => undefined as void
+    const acquired = new Promise<void>((resolve) => { lockedAt = resolve })
+
+    const racingReject = as(async (ctx) => {
+      await lockResource(ctx, workspaceId, 'team.gamma')
+      lockedAt()
+      await ctx.tx.query("UPDATE supersessions SET status = 'rejected' WHERE id = $1 AND status = 'pending' AND lifted_at IS NULL", [id])
+      await held
+    })
+
+    await acquired
+    const promotePromise = as((ctx) => promoteProposals(ctx, workspaceId, NOW))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    release()
+    await racingReject
+
+    const promoted = await promotePromise
+    expect(promoted.map((each) => each.id)).not.toContain(id)
+    const row = await as((ctx) => ctx.tx.query<{ status: string }>('SELECT status FROM supersessions WHERE id = $1', [id]).then((result) => result.rows[0]))
+    expect(row?.status).toBe('rejected')
+    expect((await as((ctx) => liveSupersessions(ctx, workspaceId))).some((each) => each.resourceId === 'team.gamma')).toBe(false)
+
+    people = { people: { ...people.people, tom: { attributes: {} } } }
   })
 
   it('accepts a pending proposal a person\'s new role carries, when read and when promoted, and keeps it accepted', async () => {

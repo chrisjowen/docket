@@ -235,23 +235,31 @@ async function decide(
 ): Promise<{ outcome: ProposalOutcome; replaced?: string; supersession: Supersession }> {
   const type = (await describeResource(ctx, supersession.workspaceId, supersession.resourceId))?.type
   const score = scoreProposal(model, type, supersession.evidence)
-  let replaced: string | undefined
-  let status = supersession.status
-  if (status === 'pending' && score.clears) {
-    const { rows: earlier } = await ctx.tx.query<{ id: string; superseded_by: string }>(
-      "UPDATE supersessions SET lifted_at = $3 WHERE workspace_id = $1 AND resource_id = $2 AND lifted_at IS NULL AND status = 'accepted' RETURNING id, superseded_by",
-      [supersession.workspaceId, supersession.resourceId, now]
-    )
-    replaced = earlier[0]?.superseded_by
-    status = 'accepted'
-  }
+  const startStatus = supersession.status
+  const status = startStatus === 'pending' && score.clears ? 'accepted' : startStatus
   const { rows } = await ctx.tx.query<Row>(
     `UPDATE supersessions SET score = $2, threshold = $3, status = $4,
             decided_at = CASE WHEN status <> $4 THEN $5 ELSE decided_at END,
             decided_by = CASE WHEN status <> $4 THEN 'score' ELSE decided_by END
-      WHERE id = $1 RETURNING *`,
-    [supersession.id, score.score, score.threshold, status, now]
+      WHERE id = $1 AND status = $6 AND lifted_at IS NULL RETURNING *`,
+    [supersession.id, score.score, score.threshold, status, now, startStatus]
   )
+  if (!rows.length) {
+    const { rows: fresh } = await ctx.tx.query<Row>('SELECT * FROM supersessions WHERE id = $1', [supersession.id])
+    const row = fresh[0] as Row
+    return {
+      outcome: { id: supersession.id, status: row.status, score: row.score ?? score.score, threshold: row.threshold ?? score.threshold, carry: [] },
+      supersession: await open(ctx, row)
+    }
+  }
+  let replaced: string | undefined
+  if (startStatus === 'pending' && status === 'accepted') {
+    const { rows: earlier } = await ctx.tx.query<{ id: string; superseded_by: string }>(
+      "UPDATE supersessions SET lifted_at = $3 WHERE workspace_id = $1 AND resource_id = $2 AND id <> $4 AND lifted_at IS NULL AND status = 'accepted' RETURNING id, superseded_by",
+      [supersession.workspaceId, supersession.resourceId, now, supersession.id]
+    )
+    replaced = earlier[0]?.superseded_by
+  }
   return {
     outcome: { id: supersession.id, status, score: score.score, threshold: score.threshold, carry: status === 'pending' ? wouldCarry(model, type, score) : [] },
     ...(replaced !== undefined ? { replaced } : {}),
@@ -281,7 +289,11 @@ export async function promoteProposals(ctx: StoreContext, workspaceId: string, n
   const promoted: Supersession[] = []
   for (const { supersession, score } of pending) {
     if (!score.clears) continue
-    promoted.push((await decide(ctx, model, supersession, now)).supersession)
+    await lockResource(ctx, workspaceId, supersession.resourceId)
+    const { rows } = await ctx.tx.query<Row>('SELECT * FROM supersessions WHERE id = $1', [supersession.id])
+    const row = rows[0]
+    if (!row || row.status !== 'pending' || row.lifted_at !== null) continue
+    promoted.push((await decide(ctx, model, await open(ctx, row), now)).supersession)
   }
   return promoted
 }
