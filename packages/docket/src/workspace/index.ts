@@ -57,7 +57,18 @@ export {
   type EvidenceGroup,
   type ResourceChange
 } from './write/document.js'
-export { evidenceKey, evidenceProblems, hasErrors, orderedEvidence, refuse, stampEvidence, writeDiagnostics } from './write/evidence.js'
+export {
+  evidenceKey,
+  evidenceProblems,
+  hasErrors,
+  orderedEvidence,
+  refuse,
+  stampAll,
+  stampContext,
+  stampEvidence,
+  writeDiagnostics,
+  type StampContext
+} from './write/evidence.js'
 export {
   WRITE_LIMITS,
   type AddEvidenceInput,

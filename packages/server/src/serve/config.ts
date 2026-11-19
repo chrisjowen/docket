@@ -7,6 +7,7 @@ import { parse } from 'yaml'
 
 import { isRole, type Role } from '../auth/roles.js'
 import { isScope, type Scope } from '../auth/scopes.js'
+import { peopleDirectorySchema, type PeopleDirectory } from '../docket.js'
 import { WORKSPACE_SLUG } from '../postgres/workspaces.js'
 
 /*
@@ -35,6 +36,8 @@ export interface TokenRecord {
   scopes: Scope[]
   /** The workspaces it opens, by slug; `*` for every one. */
   workspaces: string[]
+  /** The person it acts for, as `people` names them: its writes are theirs, and evidence citing no source is said by them. */
+  actsFor?: string
   createdAt?: string
 }
 
@@ -84,6 +87,13 @@ export interface ServeConfig {
   ai: SummarizeConfig | null
   /** Serve docket open's page and its reads, behind a sign-in with a token. */
   ui: boolean
+  /**
+   * The people directory every workspace scores person sources by - who each
+   * person is, with the role, team and flags policies test - in place of a
+   * files workspace's own `people.yaml`. Null: each project's own, and none
+   * for a Postgres store.
+   */
+  people: PeopleDirectory | null
 }
 
 export class ServeConfigError extends Error {
@@ -125,13 +135,14 @@ function roles(value: unknown, where: string): Role[] {
 
 function tokenRecord(value: unknown, where: string): TokenRecord {
   if (!isObject(value)) throw new ServeConfigError(`${where} is a token: { name, sha256, role, scopes, workspaces }.`)
-  const { name, sha256, prefix, role, scopes, workspaces, createdAt } = value
+  const { name, sha256, prefix, role, scopes, workspaces, actsFor, createdAt } = value
   if (typeof name !== 'string' || !/^[A-Za-z0-9._-]{1,64}$/.test(name)) throw new ServeConfigError(`${where}.name is 1-64 letters, digits, ".", "_" or "-".`)
   if (typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)) throw new ServeConfigError(`${where}.sha256 is the token's SHA-256, 64 hex digits.`)
   if (!isRole(role)) throw new ServeConfigError(`${where}.role is owner, admin, editor or viewer.`)
   if (!Array.isArray(scopes) || !scopes.every(isScope)) throw new ServeConfigError(`${where}.scopes is a list of docket's scopes.`)
   const opens = workspaces ?? ['*']
   if (!Array.isArray(opens) || !opens.every((slug) => typeof slug === 'string')) throw new ServeConfigError(`${where}.workspaces is a list of workspace slugs, or ["*"].`)
+  if (actsFor !== undefined && (typeof actsFor !== 'string' || !actsFor.trim())) throw new ServeConfigError(`${where}.actsFor is the person the token acts for.`)
   return {
     name,
     sha256,
@@ -139,6 +150,7 @@ function tokenRecord(value: unknown, where: string): TokenRecord {
     role,
     scopes: [...new Set(scopes)],
     workspaces: opens as string[],
+    ...(typeof actsFor === 'string' ? { actsFor: actsFor.trim() } : {}),
     ...(typeof createdAt === 'string' ? { createdAt } : {})
   }
 }
@@ -296,6 +308,16 @@ export async function loadServeConfig(options: LoadServeConfigOptions = {}): Pro
     ai = parsed.data
   }
 
+  let people: PeopleDirectory | null = null
+  if (raw.people !== undefined && raw.people !== null) {
+    const parsed = peopleDirectorySchema.safeParse({ people: raw.people })
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]
+      throw new ServeConfigError(`${where(['people', ...(issue?.path.slice(1) ?? [])].join('.'))}: ${issue?.message ?? 'is a map of person id to { name, aliases, and attributes such as role }'}.`)
+    }
+    people = parsed.data
+  }
+
   const ui = env.DOCKET_SERVE_UI !== undefined ? env.DOCKET_SERVE_UI !== 'false' && env.DOCKET_SERVE_UI !== '0' : raw.ui !== false
 
   return {
@@ -310,6 +332,7 @@ export async function loadServeConfig(options: LoadServeConfigOptions = {}): Pro
     auth: { tokensFile, tokens },
     ontology: { mcpWriters },
     ai,
-    ui
+    ui,
+    people
   }
 }

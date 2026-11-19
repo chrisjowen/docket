@@ -11,6 +11,7 @@ import { manifestEntry, planProjection } from '../manifest/plan.js'
 import { type Diagnostic, error, hasErrors } from '../model/diagnostic.js'
 import type { MemoryDocument, Ontology } from '../model/index.js'
 import { loadOntology } from '../ontology/loader.js'
+import { loadPeople } from '../people/directory.js'
 import { validateDocuments } from '../ontology/validator.js'
 import type { ProjectionManager } from '../projection/manager.js'
 import { hashContent } from '../source/hashing.js'
@@ -162,7 +163,10 @@ export const createReconciler = (
       else if (file.document && inScope(file.document.id)) documents.push(file.document)
     }
 
-    const merged = aggregate(documents, confidenceModel(ontology ?? NO_ONTOLOGY))
+    // Read on every pass: the people file is not a document, so no change to it is watched.
+    const people = await loadPeople(resolved)
+    reportAll(people.diagnostics)
+    const merged = aggregate(documents, confidenceModel(ontology ?? NO_ONTOLOGY, { people: people.directory }))
     reportAll(merged.diagnostics)
     for (const diagnostic of merged.diagnostics) {
       if (diagnostic.severity === 'error' && diagnostic.path !== undefined) broken.add(diagnostic.path)

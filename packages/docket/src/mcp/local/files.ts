@@ -10,6 +10,7 @@ import { filesystemSource } from '../../canonical/source.js'
 import type { ResolvedConfig } from '../../config/config.js'
 import type { MemoryDocument, Ontology } from '../../model/index.js'
 import { parseOntology } from '../../ontology/loader.js'
+import { loadPeople, type PeopleDirectory } from '../../people/directory.js'
 import { hashContent } from '../../source/hashing.js'
 import { parseMemoryFile } from '../../source/parser.js'
 import { cloudDocumentPath } from '../../workspace/documents.js'
@@ -54,6 +55,8 @@ export interface LocalWorkspace {
   documents: LocalDocument[]
   /** Null when there is no ontology file to read. */
   ontology: LocalOntology | null
+  /** The people directory: the project's `people.yaml`, or one the server running the tools holds. */
+  people: PeopleDirectory
 }
 
 const posix = (path: string): string => path.split(sep).join('/')
@@ -65,7 +68,7 @@ export const absolute = (resolved: ResolvedConfig, path: string): string => reso
 export const ontologyFile = (resolved: ResolvedConfig): string => posix(relative(resolved.projectRoot, resolved.ontologyPath))
 
 /** Reads the project's docket: every document under its source, parsed, and its ontology. */
-export async function readWorkspace(resolved: ResolvedConfig): Promise<LocalWorkspace> {
+export async function readWorkspace(resolved: ResolvedConfig, options: { people?: PeopleDirectory | undefined } = {}): Promise<LocalWorkspace> {
   const documents: LocalDocument[] = []
   for await (const entry of filesystemSource(resolved).documents()) {
     if ('error' in entry) documents.push({ path: entry.path, error: entry.error, document: null })
@@ -80,7 +83,8 @@ export async function readWorkspace(resolved: ResolvedConfig): Promise<LocalWork
   } catch {
     ontology = null
   }
-  return { ...storeOf(resolved), documents, ontology }
+  const people = options.people ?? (await loadPeople(resolved)).directory
+  return { ...storeOf(resolved), documents, ontology, people }
 }
 
 /** The documents that declare `id`, in path order. */

@@ -94,7 +94,7 @@ describe('convertLegacyTrust', () => {
   it('writes out docket\'s built-in sources, and the built-in rules a type of the same name inherited', () => {
     const converted = convertLegacyTrust({ version: 1, resourceTypes: { pod: {}, widget: {} }, relationships: {} }, builtinOntology())
     expect(Object.keys(converted.sources).sort()).toEqual(
-      ['api', 'code', 'config', 'conversation', 'docs', 'human', 'infrastructure', 'manifest', 'runtime']
+      ['api', 'code', 'config', 'conversation', 'docs', 'human', 'infrastructure', 'manifest', 'person', 'runtime']
     )
     expect(converted.trust.policies?.filter((policy) => policy.when.about !== undefined).map((policy) => policy.when)).toEqual(
       expect.arrayContaining([{ about: 'pod', source: 'code' }, { about: 'pod', source: 'runtime' }])

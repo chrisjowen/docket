@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { init } from '../../commands/init.js'
 import { sync } from '../../commands/sync.js'
 import { validate } from '../../commands/validate.js'
+import { why } from '../../commands/why.js'
 import type { CoordinatedAnswer } from '../../query/wire.js'
 import { createMcpServer } from '../server.js'
 import { localTools } from './tools.js'
@@ -206,6 +207,44 @@ describe("docket's local MCP tools", () => {
     expect((await sync({ cwd: root })).diagnostics).toEqual([])
     const got = structured(await call('docket_get', { id: 'service.billing' })) as { resource: { evidence: { reportedBy?: string }[] } }
     expect(got.resource.evidence).toEqual([expect.objectContaining({ reportedBy: 'alice' })])
+  })
+
+  it('stamps the person the writer acts for, and scores evidence citing no source by who they are', async () => {
+    await writeFile(join(root, '.docket/people.yaml'), 'me: dana\npeople:\n  dana:\n    role: lead\n', 'utf8')
+    const written = await call('docket_remember', { id: 'service.billing', type: 'service', title: 'Billing', evidence: [{ note: 'I own this decision.' }] })
+    expect(structured(written)).toMatchObject({ ok: true, created: true, diagnostics: [] })
+    const raw = await read('.docket/resources/services/billing.md')
+    expect(raw).toContain('source: person')
+    expect(raw).toContain('principal: dana')
+    expect((await validate({ cwd: root })).diagnostics).toEqual([])
+    const explained = await why('service.billing', { cwd: root })
+    expect(explained.resource).toMatchObject({ confidence: 0.85, observations: [expect.objectContaining({ base: { policy: 'A lead said so', score: 0.85 } })] })
+  })
+
+  it('counts a person cited second-hand as the writer until they confirm, and asks them to', async () => {
+    const people = (me: string) => writeFile(join(root, '.docket/people.yaml'), `me: ${me}\npeople:\n  dana:\n    role: lead\n  tom: {}\n`, 'utf8')
+    await people('tom')
+    const written = await call('docket_remember', {
+      id: 'service.billing',
+      type: 'service',
+      title: 'Billing',
+      evidence: [{ source: 'person', sourceRef: 'dana', note: 'Dana said so in stand-up.' }]
+    })
+    expect(structured(written)).toMatchObject({ ok: true, diagnostics: [expect.objectContaining({ code: 'confirm-requested' })] })
+    expect(text(written)).toContain('until dana confirms it')
+    expect((await why('service.billing', { cwd: root })).resource).toMatchObject({
+      confidence: 0.7,
+      observations: [expect.objectContaining({ source: expect.objectContaining({ instance: 'person:tom', secondHand: 'dana' }), confirmed: false })]
+    })
+
+    await people('dana')
+    expect(structured(await call('docket_add_evidence', { id: 'service.billing', evidence: [{ note: 'Yes, I said so.' }] }))).toMatchObject({ ok: true, diagnostics: [] })
+    const confirmed = await why('service.billing', { cwd: root })
+    expect(confirmed.resource?.observations.map((observation) => [observation.source.instance, observation.confirmed])).toEqual([
+      ['person:tom', true],
+      ['person:dana', undefined]
+    ])
+    expect(confirmed.resource?.confidence).toBeGreaterThan(0.85)
   })
 
   it('searches with the surface arguments, tagging each match with where it was found', async () => {

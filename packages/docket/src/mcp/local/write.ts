@@ -6,7 +6,7 @@ import { validateDocuments } from '../../ontology/validator.js'
 import { DocumentError, checkDocument } from '../../workspace/documents.js'
 import { dayOf } from '../../workspace/supersession.js'
 import { appendedNotes, composeDocument, sameMeaning, type ResourceChange } from '../../workspace/write/document.js'
-import { evidenceProblems, hasErrors, refuse, stampEvidence } from '../../workspace/write/evidence.js'
+import { evidenceProblems, hasErrors, refuse, stampAll, stampContext } from '../../workspace/write/evidence.js'
 import {
   WRITE_LIMITS,
   type AddEvidenceInput,
@@ -42,6 +42,9 @@ import {
  */
 
 type Declared = LocalDocument & { document: MemoryDocument }
+
+/** Who evidence without a source is from, and who the people directory knows. */
+const stampContextOf = (workspace: LocalWorkspace) => stampContext(workspace.ontology?.ontology, workspace.people)
 
 /** The document a write to `resource` changes: the one at its own path, else the first that declares it. */
 const ownOf = (workspace: LocalWorkspace, existing: readonly Declared[], resource: { id: string; type: string }): Declared | null =>
@@ -126,15 +129,25 @@ export async function writeResource(workspace: LocalWorkspace, writer: Writer, i
     early.push(...evidenceProblems(link.evidence, `the new link ${link.rel} -> ${link.target}`, where))
   }
 
-  const stamp = (entries: readonly EvidenceInput[]) => entries.map((entry) => stampEvidence(entry, writer, now))
+  const context = stampContextOf(workspace)
+  const stamp = (entries: readonly EvidenceInput[], subject: string) => {
+    const { stamped, diagnostics } = stampAll(entries, writer, now, context, { where, subject })
+    early.push(...diagnostics)
+    return stamped
+  }
   const change: ResourceChange = {
     id: input.id,
     type: input.type,
     title: input.title,
     ...(input.attributes ? { attributes: input.attributes } : {}),
     ...(input.body !== undefined ? { body: input.body } : {}),
-    evidence: stamp(input.evidence),
-    links: links.map((link) => ({ rel: link.rel, target: link.target, ...(link.attributes ? { attributes: link.attributes } : {}), evidence: stamp(link.evidence) }))
+    evidence: stamp(input.evidence, input.id),
+    links: links.map((link) => ({
+      rel: link.rel,
+      target: link.target,
+      ...(link.attributes ? { attributes: link.attributes } : {}),
+      evidence: stamp(link.evidence, `the link ${link.rel} -> ${link.target}`)
+    }))
   }
   return applyChange(workspace, { change, existing, own, early }, options)
 }
@@ -152,11 +165,13 @@ export async function appendNotes(workspace: LocalWorkspace, writer: Writer, inp
   if (input.additionalNotes.length > 60000) early.push(refuse('notes-too-long', 'Additional notes are at most 60000 characters.', where))
   early.push(...evidenceProblems(input.evidence, `the new notes for ${input.id}`, where))
   if (input.evidence.length > WRITE_LIMITS.evidencePerCall) early.push(tooMuchEvidence(where))
+  const stamped = stampAll(input.evidence, writer, now, stampContextOf(workspace), { where, subject: input.id })
+  early.push(...stamped.diagnostics)
   const change: ResourceChange = {
     id: input.id,
     type,
     body: appendedNotes(own?.raw, input.additionalNotes, now),
-    evidence: input.evidence.map((entry) => stampEvidence(entry, writer, now)),
+    evidence: stamped.stamped,
     links: []
   }
   return applyChange(workspace, { change, existing, own, early }, options)
@@ -180,7 +195,9 @@ export async function addEvidence(workspace: LocalWorkspace, writer: Writer, inp
     const has = existing.some((entry) => entry.document.links.some((link) => link.rel === rel && link.target === target))
     if (!has) early.push(refuse('unknown-link', `${input.id} has no link ${rel} -> ${target}: add it with docket_remember, with its evidence.`, where))
   }
-  const stamped = hasErrors(early) ? [] : input.evidence.map((entry) => stampEvidence(entry, writer, now))
+  const stamping = stampAll(hasErrors(early) ? [] : input.evidence, writer, now, stampContextOf(workspace), { where, subject })
+  early.push(...stamping.diagnostics)
+  const stamped = stamping.stamped
   const change: ResourceChange = {
     id: input.id,
     type,
@@ -269,6 +286,8 @@ export async function supersedeResource(workspace: LocalWorkspace, writer: Write
       )
     }
   }
+  const stamping = stampAll(input.evidence, writer, now, stampContextOf(workspace), { where: { id }, subject: `the supersession of ${id}` })
+  diagnostics.push(...stamping.diagnostics)
   if (hasErrors(diagnostics)) return { changed: false, diagnostics }
   if (live?.supersededBy === by) return { supersession: live, changed: false, diagnostics }
   if (live) {
@@ -289,7 +308,7 @@ export async function supersedeResource(workspace: LocalWorkspace, writer: Write
     recordedBy: writer.label,
     recordedAt: now.toISOString(),
     reason,
-    evidence: input.evidence.map((entry) => stampEvidence(entry, writer, now))
+    evidence: stamping.stamped
   }
   await writeSupersessions(workspace, [...records, supersession])
   return { supersession, changed: true, ...(live ? { replaced: live.supersededBy } : {}), diagnostics }

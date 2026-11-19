@@ -89,7 +89,8 @@ export async function filesBackend(config: ServeConfig, options: { syncIntervalM
         tools(context: ToolContext): ServerTool[] {
           const registry = localTools({
             cwd: workspace.path,
-            writer: { actor: context.actor, label: `${context.actor.replace(/^token:/, '')} via docket serve` },
+            writer: { actor: context.actor, label: `${context.actor.replace(/^token:/, '')} via docket serve`, principal: context.actsFor },
+            people: config.people ?? undefined,
             ask: config.ai ? { summarize: config.ai } : false,
             publisher: { role: () => context.role(), allowed: async (): Promise<readonly Role[]> => config.ontology.mcpWriters }
           })

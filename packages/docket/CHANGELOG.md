@@ -36,6 +36,27 @@ evidence kind and `confidence:` rules scattered over types and relationships.
   rescores with its band before and after. A rescore is published without
   `acceptNarrowing`.
 
+### People are sources, and agents act for them
+
+- Every write stamps its evidence with the person the writer acts for
+  (`principal`): the people directory's `me` or the login for the local MCP
+  server, a `docket serve` token's `--acts-for` person, an MCP principal's
+  `actsFor`. Who filed it (`observedBy`) is recorded for audit and never
+  scored.
+- Evidence may leave out `source`: it is then that person's, under the
+  ontology's person source (an `identity` source; the templates now ship
+  `person`, with role, team and flags set by the directory, and "A person said
+  so" / "A lead said so" policies). Legacy `human` evidence written through the
+  tools is recorded as `person`.
+- A person cited second-hand - an agent writing "Dana said so" for Tom - counts
+  as Tom until Dana gives evidence of her own; the write warns
+  `confirm-requested`, and `docket why` shows it.
+- The people directory: `.docket/people.yaml` for a project, `people:` in
+  `docket-server.yaml` for `docket serve`. Policies only trust the attributes
+  the person source lets the directory set, and aliases name one person.
+- The MCP evidence schema gains `sourceRef`, `attributes` (claims) and
+  `locator` (a source's own fields), and `source` becomes optional.
+
 ### Existing ontologies score exactly as before
 
 An `evidence:` block and `confidence:` rules still load, with a

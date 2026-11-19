@@ -20,9 +20,34 @@ const LOCATION_DESCRIPTIONS = {
 export const EVIDENCE_SCHEMA = {
     type: 'object',
     description: 'Where it was seen. source must be one the workspace ontology registers (docket_ontology lists them, with the location fields each requires). ' +
-        'The server records you as the observer and this request as the session.',
+        'Leave source out when it is what the person you act for said: that person is the source. A person source naming someone else ' +
+        'counts as said by the person you act for until they confirm it. The server records you as the observer, the person you act ' +
+        'for, and this request as the session.',
     properties: {
-        source: { type: 'string', minLength: 1, maxLength: 60, description: 'The evidence source, for example code, manifest, api, human or conversation.' },
+        source: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 60,
+            description: 'The source, for example code, manifest, api or conversation. Omit it for what the person you act for said.'
+        },
+        sourceRef: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 200,
+            description: 'Which instance of the source - a repository, a person, a document URL - when its locator fields do not already say.'
+        },
+        attributes: {
+            type: 'object',
+            description: 'Attributes of the source you claim, such as a branch. Only those the source lets a writer set count.',
+            maxProperties: 20,
+            additionalProperties: { type: ['string', 'number', 'boolean'] }
+        },
+        locator: {
+            type: 'object',
+            description: 'Locator fields the source declares beyond the common ones, such as a message id or a section.',
+            maxProperties: 20,
+            additionalProperties: { anyOf: [{ type: 'string', maxLength: 2000 }, { type: 'array', items: { type: 'string', maxLength: 2000 }, maxItems: 10 }] }
+        },
         ...Object.fromEntries(EVIDENCE_LOCATION_FIELDS.map((field) => [
             field,
             field === 'urls'
@@ -33,7 +58,6 @@ export const EVIDENCE_SCHEMA = {
         observedBy: { type: 'string', maxLength: 100, description: 'Who reported it, if not you: kept as reportedBy. You are recorded as the observer.' },
         note: { type: 'string', maxLength: 1000, description: 'What was seen there, in a sentence.' }
     },
-    required: ['source'],
     additionalProperties: false
 };
 const EVIDENCE_FIELDS = Object.keys(EVIDENCE_SCHEMA.properties);
@@ -53,6 +77,43 @@ export function requiredText(value, at, max) {
 export function optionalText(value, at, max) {
     return text(value, at, max);
 }
+/** Claimed source attributes: up to 20 names, each a string, number or boolean. */
+function claims(raw, at) {
+    if (!isObject(raw))
+        throw new InvalidArgumentsError(`${at} must be an object of attribute values.`);
+    const entries = Object.entries(raw);
+    if (entries.length > 20)
+        throw new InvalidArgumentsError(`${at} holds at most 20 attributes.`);
+    for (const [name, value] of entries) {
+        if (!['string', 'number', 'boolean'].includes(typeof value))
+            throw new InvalidArgumentsError(`${at}.${name} must be a string, number or boolean.`);
+        if (typeof value === 'string' && value.length > 500)
+            throw new InvalidArgumentsError(`${at}.${name} is at most 500 characters.`);
+    }
+    return raw;
+}
+/** A source's own locator fields: up to 20, each a string or up to 10 strings. */
+function locatorFields(raw, at) {
+    if (!isObject(raw))
+        throw new InvalidArgumentsError(`${at} must be an object of locator fields.`);
+    const entries = Object.entries(raw);
+    if (entries.length > 20)
+        throw new InvalidArgumentsError(`${at} holds at most 20 fields.`);
+    const out = {};
+    for (const [field, value] of entries) {
+        if (Array.isArray(value)) {
+            if (value.length > 10 || !value.every((item) => typeof item === 'string' && item.length > 0 && item.length <= 2000)) {
+                throw new InvalidArgumentsError(`${at}.${field} must be up to 10 non-empty strings.`);
+            }
+            out[field] = value;
+        }
+        else {
+            const given = typeof value === 'number' ? String(value) : value;
+            out[field] = requiredText(given, `${at}.${field}`, 2000);
+        }
+    }
+    return out;
+}
 /** Parses evidence entries: wrong shapes are invalid arguments; what they say is the write path's to judge. */
 export function parseEvidence(raw, at) {
     if (raw === undefined)
@@ -64,12 +125,20 @@ export function parseEvidence(raw, at) {
     return raw.map((entry, index) => {
         const where = `${at}[${index}]`;
         if (!isObject(entry))
-            throw new InvalidArgumentsError(`${where} must be an object with a source.`);
+            throw new InvalidArgumentsError(`${where} must be an object.`);
         const unknown = Object.keys(entry).filter((key) => !EVIDENCE_FIELDS.includes(key));
         if (unknown.length) {
             throw new InvalidArgumentsError(`${where} does not take ${unknown.map((key) => `"${key}"`).join(', ')}; evidence fields are ${EVIDENCE_FIELDS.join(', ')}.`);
         }
-        const out = { source: requiredText(entry.source, `${where}.source`, 60) };
+        const out = {};
+        if (entry.source !== undefined)
+            out.source = requiredText(entry.source, `${where}.source`, 60);
+        if (entry.sourceRef !== undefined)
+            out.sourceRef = requiredText(entry.sourceRef, `${where}.sourceRef`, 200);
+        if (entry.attributes !== undefined)
+            out.attributes = claims(entry.attributes, `${where}.attributes`);
+        if (entry.locator !== undefined)
+            out.locator = locatorFields(entry.locator, `${where}.locator`);
         for (const field of EVIDENCE_LOCATION_FIELDS) {
             const value = entry[field];
             if (value === undefined)

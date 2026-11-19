@@ -44,7 +44,7 @@ export const why = async (id: string, options: Pick<ValidateOptions, 'cwd' | 'so
   const diagnostics = result.diagnostics.filter((d) => d.severity === 'error' && (d.id === id || d.id === undefined))
   if (!entity || !result.ontology) return { id, links: [], diagnostics }
 
-  const model = confidenceModel(result.ontology)
+  const model = confidenceModel(result.ontology, { people: result.people })
   return {
     id,
     resource: { type: entity.type, title: entity.title, ...part(model, { kind: 'resource', type: entity.type }, entity) },
@@ -73,6 +73,13 @@ const observationLines = (observation: ExplainedObservation): string[] => {
     .map(([name, value]) => `${name}=${String(value)}${source.claimed.includes(name) ? ' (claimed)' : ''}`)
     .join(', ')
   if (attributes) lines.push(`      attributes: ${attributes}`)
+  if (source.secondHand !== undefined) {
+    lines.push(
+      observation.confirmed
+        ? `      cites ${source.secondHand}, who has given evidence of their own here`
+        : `      cites ${source.secondHand}: counts as the writer's person until ${source.secondHand} confirms`
+    )
+  }
   lines.push(
     observation.base
       ? `      ${figure(observation.base.score as number)}  "${observation.base.policy}"`

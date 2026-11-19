@@ -21,7 +21,11 @@ export type {
   ValidationDiagnostic as Diagnostic
 } from '@chrisjowen/docket'
 export {
+  EMPTY_DIRECTORY,
   EVIDENCE_LOCATION_FIELDS,
+  findPerson,
+  peopleDirectorySchema,
+  type PeopleDirectory,
   InvalidArgumentsError,
   hashContent,
   memoryConfigSchema,

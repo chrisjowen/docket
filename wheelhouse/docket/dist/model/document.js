@@ -77,6 +77,7 @@ export const memoryEvidenceSchema = z
     locator: z.record(z.string(), locatorValueSchema).optional(),
     observedAt: observedAtSchema.optional(),
     observedBy: text.optional(),
+    principal: text.optional(),
     session: text.optional(),
     reportedBy: text.optional(),
     note: text.optional()

@@ -151,8 +151,9 @@ describe('default-sdlc.yaml', () => {
     const ontology = await load()
     const sources = ontology.sources ?? {}
     expect(Object.keys(sources).sort()).toEqual(
-      ['api', 'code', 'config', 'conversation', 'docs', 'human', 'infrastructure', 'manifest', 'runtime']
+      ['api', 'code', 'config', 'conversation', 'docs', 'human', 'infrastructure', 'manifest', 'person', 'runtime']
     )
+    expect(sources.person?.kind).toBe('identity')
     expect(sources.code?.locator).toEqual({ path: { required: true } })
     expect(sources.api?.locator).toEqual({ endpoint: { required: true } })
     expect(sources.runtime?.requiresAny).toEqual(['urls', 'endpoint', 'symbol'])

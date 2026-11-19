@@ -450,6 +450,7 @@ serveTokenCommand
     .addOption(new Option('--role <role>', 'what it may do: owner, admin, editor (write, propose) or viewer (read)').choices([...SERVE_ROLES]).makeOptionMandatory())
     .option('--scopes <scopes>', 'narrow it further: comma-separated docket:read, docket:write, ontology:read, ontology:propose, ontology:write', collect, [])
     .option('--workspace <slug>', 'a workspace it opens (repeatable; default: every one)', collect, [])
+    .option('--acts-for <person>', 'the person it acts for, as the server config\'s people name them: its writes are theirs')
     .option('-c, --config <file>', 'the server config')
     .action(async (name, options) => {
     const { serve, config } = await serveConfigOf(options);
@@ -458,9 +459,10 @@ serveTokenCommand
         name,
         role: options.role,
         ...(scopes.length ? { scopes } : {}),
-        ...(options.workspace.length ? { workspaces: options.workspace } : {})
+        ...(options.workspace.length ? { workspaces: options.workspace } : {}),
+        ...(options.actsFor ? { actsFor: options.actsFor } : {})
     });
-    console.log(`✓ created ${record.name} (${record.role}) for ${record.workspaces.join(', ')}`);
+    console.log(`✓ created ${record.name} (${record.role}) for ${record.workspaces.join(', ')}${record.actsFor ? `, acting for ${record.actsFor}` : ''}`);
     console.log(`  scopes  ${record.scopes.join(' ')}`);
     console.log(`  kept in ${config.auth.tokensFile} as its SHA-256`);
     console.log('\nThe token - shown only now; send it as Authorization: Bearer <token>, never in a URL:');
@@ -478,7 +480,7 @@ serveTokenCommand
     const width = widest(tokens.map((token) => token.name));
     for (const token of tokens) {
         const where = token.inConfig ? '  (in the config file)' : '';
-        console.log(`  ${pad(token.name, width)}  ${token.prefix ? `${token.prefix}…` : ''}  ${token.role}  ${token.workspaces.join(',')}  ${token.scopes.join(' ')}${token.createdAt ? `  created ${token.createdAt}` : ''}${where}`);
+        console.log(`  ${pad(token.name, width)}  ${token.prefix ? `${token.prefix}…` : ''}  ${token.role}  ${token.workspaces.join(',')}  ${token.scopes.join(' ')}${token.actsFor ? `  acts for ${token.actsFor}` : ''}${token.createdAt ? `  created ${token.createdAt}` : ''}${where}`);
     }
 });
 serveTokenCommand

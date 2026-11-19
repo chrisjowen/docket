@@ -62,6 +62,8 @@ export interface CreateTokenInput {
   scopes?: readonly Scope[] | undefined
   /** Every workspace (`*`) when omitted. */
   workspaces?: readonly string[] | undefined
+  /** The person the token acts for. */
+  actsFor?: string | undefined
   now?: Date
 }
 
@@ -80,6 +82,7 @@ export async function createToken(config: Pick<ServeConfig, 'auth' | 'workspaces
     role: input.role,
     scopes: SCOPES.filter((scope) => (input.scopes ?? SCOPES).includes(scope)),
     workspaces,
+    ...(input.actsFor?.trim() ? { actsFor: input.actsFor.trim() } : {}),
     createdAt: (input.now ?? new Date()).toISOString()
   }
   // Validated as the file is read back, so a bad name is refused before it is written.
@@ -168,7 +171,15 @@ export function tokenAuth(config: Pick<ServeConfig, 'auth' | 'ontology'>): {
       async resolve(bearer, resource) {
         const record = await lookup(bearer)
         if (!record || !(record.workspaces.includes('*') || record.workspaces.includes(resource.slug))) return null
-        return { subject: `token:${record.name}`, workspaceId: resource.workspaceId, scopes: record.scopes, actor: `token:${record.name}`, token: record.name, slug: resource.slug }
+        return {
+          subject: `token:${record.name}`,
+          workspaceId: resource.workspaceId,
+          scopes: record.scopes,
+          actor: `token:${record.name}`,
+          ...(record.actsFor !== undefined ? { actsFor: record.actsFor } : {}),
+          token: record.name,
+          slug: resource.slug
+        }
       }
     },
     authorizer: {

@@ -19,6 +19,7 @@ export interface ServeTokenRecord {
   role: ServeRole
   scopes: string[]
   workspaces: string[]
+  actsFor?: string
   createdAt?: string
 }
 
@@ -45,7 +46,7 @@ export interface ServeModule {
   ): Promise<{ url: string; port: number; backend: { kind: 'files' | 'postgres'; workspaces: readonly { slug: string }[] }; close(): Promise<void> }>
   createToken(
     config: ServeConfigView,
-    input: { name: string; role: ServeRole; scopes?: readonly string[] | undefined; workspaces?: readonly string[] | undefined }
+    input: { name: string; role: ServeRole; scopes?: readonly string[] | undefined; workspaces?: readonly string[] | undefined; actsFor?: string | undefined }
   ): Promise<{ token: string; record: ServeTokenRecord }>
   listTokens(config: ServeConfigView): Promise<(ServeTokenRecord & { inConfig: boolean })[]>
   revokeToken(config: ServeConfigView, name: string): Promise<boolean>

@@ -36,6 +36,25 @@ describe('parseEvidence', () => {
     expect(parseEvidence(undefined, 'evidence')).toEqual([])
   })
 
+  it('reads evidence that cites no source, and the source instance, claims and locator fields a source takes', () => {
+    expect(
+      parseEvidence(
+        [
+          { note: 'I decided this.' },
+          { source: 'email', sourceRef: ' mailbox:sales ', attributes: { mailbox: 'shared', pinned: true }, locator: { message_id: '<a@b>', cc: ['x', 'y'], thread: 12 } }
+        ],
+        'evidence'
+      )
+    ).toEqual([
+      { note: 'I decided this.' },
+      { source: 'email', sourceRef: 'mailbox:sales', attributes: { mailbox: 'shared', pinned: true }, locator: { message_id: '<a@b>', cc: ['x', 'y'], thread: '12' } }
+    ])
+    expect(() => parseEvidence([{ attributes: { nested: { no: 1 } } }], 'evidence')).toThrow(new InvalidArgumentsError('evidence[0].attributes.nested must be a string, number or boolean.'))
+    expect(() => parseEvidence([{ locator: { cc: [] as string[], to: [''] } }], 'evidence')).toThrow(/evidence\[0\]\.locator\.to must be up to 10 non-empty strings/)
+    expect(() => parseEvidence([{ locator: 'x' }], 'evidence')).toThrow(/locator must be an object/)
+    expect(EVIDENCE_SCHEMA).not.toHaveProperty('required')
+  })
+
   it('refuses wrong shapes as invalid arguments, saying where', () => {
     const refused = (raw: unknown) => {
       try {
@@ -48,7 +67,7 @@ describe('parseEvidence', () => {
     }
     expect(refused('code')).toBe('evidence must be an array of evidence entries.')
     expect(refused(Array(WRITE_LIMITS.evidencePerCall + 1).fill({ source: 'human' }))).toBe('evidence holds at most 50 entries.')
-    expect(refused([null])).toBe('evidence[0] must be an object with a source.')
+    expect(refused([null])).toBe('evidence[0] must be an object.')
     expect(refused([{ source: 'code', session: 'mine' }])).toMatch(/^evidence\[0\] does not take "session"; evidence fields are source, /)
     expect(refused([{ source: '  ' }])).toBe('evidence[0].source must be a non-empty string.')
     expect(refused([{ source: 'code', path: 'x'.repeat(501) }])).toBe('evidence[0].path is at most 500 characters.')
@@ -56,8 +75,8 @@ describe('parseEvidence', () => {
     expect(refused([{ source: 'human', observedAt: 'yesterday' }])).toBe('evidence[0].observedAt must be YYYY-MM-DD or an ISO timestamp.')
   })
 
-  it('describes every location field docket knows in the schema', () => {
-    expect(Object.keys(EVIDENCE_SCHEMA.properties)).toEqual(['source', ...EVIDENCE_LOCATION_FIELDS, 'observedAt', 'observedBy', 'note'])
+  it('describes every location field docket knows in the schema, with the source instance, claims and other locator fields', () => {
+    expect(Object.keys(EVIDENCE_SCHEMA.properties)).toEqual(['source', 'sourceRef', 'attributes', 'locator', ...EVIDENCE_LOCATION_FIELDS, 'observedAt', 'observedBy', 'note'])
   })
 })
 

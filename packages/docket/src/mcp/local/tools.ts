@@ -5,6 +5,7 @@ import { filesystemSource, type CanonicalSource } from '../../canonical/source.j
 import { validate } from '../../commands/validate.js'
 import type { ResolvedConfig, SummarizeConfig } from '../../config/config.js'
 import { loadConfig } from '../../config/loader.js'
+import { findPerson, type PeopleDirectory } from '../../people/directory.js'
 import { askProject } from '../../query/ask.js'
 import { currentRecord } from '../../workspace/supersession.js'
 import { splitDocument } from '../../workspace/write/document.js'
@@ -78,8 +79,14 @@ import { addEvidence, appendNotes, retireResource, supersedeResource, writeResou
 export interface LocalToolsOptions {
   /** The docket's directory: `.docket.yaml` is resolved from it on each call. */
   cwd: string
-  /** Who writes, as evidence names them. Omitted: this machine's user, through docket's MCP server. */
-  writer?: { actor: string; label: string } | undefined
+  /**
+   * Who writes, as evidence names them, and the person they act for.
+   * Omitted: this machine's user, through docket's MCP server, acting for
+   * the people directory's `me`, else the person the user's login names.
+   */
+  writer?: { actor: string; label: string; principal?: string | undefined } | undefined
+  /** The people directory to score and stamp by, in place of the project's `people.yaml`: a server's. */
+  people?: PeopleDirectory | undefined
   /** The clock, for tests. */
   now?: (() => Date) | undefined
   /**
@@ -105,6 +112,12 @@ const localWriter = (): { actor: string; label: string } => {
     // No user database entry: the generic name will do.
   }
   return { actor: `local:${user}`, label: `${user} via docket MCP` }
+}
+
+/** Who the person at this machine is in the people directory: its `me`, else the login's person, else the login. */
+const localPrincipal = (people: PeopleDirectory): string => {
+  const user = localWriter().actor.replace(/^local:/, '')
+  return people.me ?? findPerson(people, user) ?? user
 }
 
 /** "this workspace" as the descriptions say it, for one project's docket. */
@@ -158,6 +171,9 @@ function resourceSource(workspace: LocalWorkspace, id: string): CanonicalSource 
       if (!ontology) throw new Error('This docket has no ontology file to read.')
       return { text: ontology.text, revision: ontology.revision }
     },
+    async people() {
+      return workspace.people
+    },
     async *documents() {
       for (const entry of declaring(workspace, id)) {
         if (entry.raw !== undefined && entry.hash !== undefined) yield { path: entry.path, raw: entry.raw, hash: entry.hash }
@@ -183,18 +199,31 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
   const { cwd } = options
   const now = options.now ?? (() => new Date())
   const identity = options.writer ?? localWriter()
-  const writerFor = (resolved: ResolvedConfig): Writer => ({
-    workspaceId: resolved.projectRoot,
-    actor: identity.actor,
-    label: identity.label,
-    channel: 'mcp',
-    requestId: `mcp:${randomUUID()}`
-  })
+  const writerFor = (workspace: LocalWorkspace): Writer => {
+    const principal = options.writer ? options.writer.principal : localPrincipal(workspace.people)
+    return {
+      workspaceId: workspace.resolved.projectRoot,
+      actor: identity.actor,
+      label: identity.label,
+      channel: 'mcp',
+      requestId: `mcp:${randomUUID()}`,
+      ...(principal !== undefined ? { principal } : {})
+    }
+  }
+  const openWorkspace = (resolved: ResolvedConfig) => readWorkspace(resolved, { people: options.people })
+  const sourceOf = (resolved: ResolvedConfig): CanonicalSource => {
+    const files = filesystemSource(resolved)
+    const people = options.people
+    return people ? { ...files, people: async () => people } : files
+  }
   const describe = <T extends Tool['definition']>(definition: T): T => describedAs(definition, DESCRIPTIONS[definition.name] ?? definition.description)
   /** Runs a write against the project's files as they are now, after any write already running here or in another process. */
   const writing = async <T>(fn: (workspace: LocalWorkspace, writer: Writer) => Promise<T>): Promise<T> => {
     const resolved = await loadConfig(cwd)
-    return writeLock(resolved, async () => fn(await readWorkspace(resolved), writerFor(resolved)))
+    return writeLock(resolved, async () => {
+      const workspace = await openWorkspace(resolved)
+      return fn(workspace, writerFor(workspace))
+    })
   }
 
   const tools: Tool[] = [
@@ -204,7 +233,7 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
         const args = searchArguments(raw)
         try {
           const resolved = await loadConfig(cwd)
-          const found = scopedSearch(await searchGraph({ source: filesystemSource(resolved), query: args.query, limit: args.limit, viewer: context.viewer }), args)
+          const found = scopedSearch(await searchGraph({ source: sourceOf(resolved), query: args.query, limit: args.limit, viewer: context.viewer }), args)
           return searchAnswer(await withSupersessions(resolved, found))
         } catch (cause) {
           // A docket that cannot be read is the tool's answer, for the model to read, not a protocol error.
@@ -217,7 +246,7 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
       async call(raw, context) {
         const { id } = getArguments(raw)
         const resolved = await loadConfig(cwd)
-        const workspace = await readWorkspace(resolved)
+        const workspace = await openWorkspace(resolved)
         const records = declaring(workspace, id)
         if (records.length === 0) return failed(`There is no resource ${id} in this docket. Call docket_search to find ids.`)
         const read = await validate({ source: resourceSource(workspace, id) })
@@ -272,7 +301,7 @@ export function localTools(options: LocalToolsOptions): ToolRegistry {
       definition: describe(ONTOLOGY_DEFINITION),
       async call(raw) {
         ontologyArguments(raw)
-        const workspace = await readWorkspace(await loadConfig(cwd))
+        const workspace = await openWorkspace(await loadConfig(cwd))
         const head = await headOf(workspace)
         if (!head) return failed('This docket has no ontology file yet: `docket init` writes one.')
         return ontologyAnswer({ ...head, yaml: head.text }, 'this docket')

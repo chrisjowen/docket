@@ -4,6 +4,20 @@ import { parseOntology, unreadableOntology } from '../ontology/loader.js';
 import { hashContent } from '../source/hashing.js';
 import { parseMemoryFile } from '../source/parser.js';
 import { sourceFiles } from '../source/scanner.js';
+import { EMPTY_DIRECTORY, parsePeople, peoplePath, readPeopleText } from '../people/directory.js';
+/** A source's people directory, parsed; a file that does not load is a diagnostic and no one. */
+const readPeople = async (source) => {
+    const path = peoplePath(source.resolved);
+    try {
+        const read = await source.people?.();
+        if (!read)
+            return { directory: EMPTY_DIRECTORY, diagnostics: [] };
+        return 'text' in read ? parsePeople(read.text, path) : { directory: read, diagnostics: [] };
+    }
+    catch (cause) {
+        return { directory: EMPTY_DIRECTORY, diagnostics: [error('people-unreadable', `Could not read ${path}: ${cause.message}`, { path })] };
+    }
+};
 /**
  * The project's own files: every file `source` includes under the memory
  * root, and the ontology at `ontologyPath`, read afresh on each call.
@@ -13,6 +27,10 @@ export const filesystemSource = (resolved) => ({
     async ontology() {
         const text = await readFile(resolved.ontologyPath, 'utf8');
         return { text, revision: hashContent(text) };
+    },
+    async people() {
+        const text = await readPeopleText(resolved);
+        return text === null ? null : { text };
     },
     async *documents() {
         for (const { absolute, path } of await sourceFiles(resolved)) {
@@ -55,5 +73,7 @@ export const readCanonical = async (source) => {
         if (result.document)
             documents.push(result.document);
     }
-    return { documents, diagnostics, files, ontology: await ontology };
+    const people = await readPeople(source);
+    diagnostics.push(...people.diagnostics);
+    return { documents, diagnostics, files, ontology: await ontology, people: people.directory };
 };

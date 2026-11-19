@@ -3,7 +3,7 @@ import { DocumentError, checkDocument, cloudDocumentPath, pathProblem } from '..
 import type { Origin } from '../origin.js'
 import type { StoreContext } from '../ports.js'
 import { appendedNotes, composeDocument, sameMeaning, type ResourceChange } from '../write/document.js'
-import { evidenceProblems, hasErrors, refuse, stampEvidence, writeDiagnostics } from '../write/evidence.js'
+import { evidenceProblems, hasErrors, refuse, stampAll, stampContext, writeDiagnostics } from '../write/evidence.js'
 import {
   WRITE_LIMITS,
   type AddEvidenceInput,
@@ -267,6 +267,16 @@ async function applyChange(
 }
 
 /** The published head, parsed, held `FOR SHARE` for the rest of the transaction. */
+/** Stamps a write's evidence for `subject` (`stampAll`), adding what stamping says to the write's early diagnostics. */
+function stamper(ctx: StoreContext, ontology: Ontology | null, writer: Writer, now: Date, where: { path: string; id: string }, early: Diagnostic[]) {
+  const context = stampContext(ontology, ctx.people)
+  return (entries: readonly EvidenceInput[], subject: string) => {
+    const { stamped, diagnostics } = stampAll(entries, writer, now, context, { where, subject })
+    early.push(...diagnostics)
+    return stamped
+  }
+}
+
 async function headOntology(ctx: StoreContext, workspaceId: string): Promise<Ontology | null> {
   const head = await lockOntologyHead(ctx, workspaceId)
   return head ? parseOntology(head.yaml).ontology : null
@@ -312,15 +322,20 @@ export async function writeResource(ctx: StoreContext, writer: Writer, input: Re
     early.push(...evidenceProblems(link.evidence, `the new link ${link.rel} -> ${link.target}`, where))
   }
 
-  const stamp = (entries: readonly EvidenceInput[]) => entries.map((entry) => stampEvidence(entry, writer, now))
+  const stamp = stamper(ctx, ontology, writer, now, where, early)
   const change: ResourceChange = {
     id: input.id,
     type: input.type,
     title: input.title,
     ...(input.attributes ? { attributes: input.attributes } : {}),
     ...(input.body !== undefined ? { body: input.body } : {}),
-    evidence: stamp(input.evidence),
-    links: links.map((link) => ({ rel: link.rel, target: link.target, ...(link.attributes ? { attributes: link.attributes } : {}), evidence: stamp(link.evidence) }))
+    evidence: stamp(input.evidence, input.id),
+    links: links.map((link) => ({
+      rel: link.rel,
+      target: link.target,
+      ...(link.attributes ? { attributes: link.attributes } : {}),
+      evidence: stamp(link.evidence, `the link ${link.rel} -> ${link.target}`)
+    }))
   }
   return applyChange(ctx, writer, workspaceId, { change, action: 'remember', ontology, existing, cloud, early }, options)
 }
@@ -351,7 +366,7 @@ export async function appendNotes(ctx: StoreContext, writer: Writer, input: Appe
     id: input.id,
     type,
     body: appendedNotes(cloud?.opened.raw, input.additionalNotes, now),
-    evidence: input.evidence.map((entry) => stampEvidence(entry, writer, now)),
+    evidence: stamper(ctx, ontology, writer, now, where, early)(input.evidence, input.id),
     links: []
   }
   return applyChange(ctx, writer, workspaceId, { change, action: 'remember', ontology, existing, cloud, early }, options)
@@ -391,7 +406,7 @@ export async function addEvidence(ctx: StoreContext, writer: Writer, input: AddE
     return applyChange(ctx, writer, workspaceId, { change, action: 'add-evidence', ontology, existing, cloud, early }, options)
   }
 
-  const stamped = input.evidence.map((entry) => stampEvidence(entry, writer, now))
+  const stamped = stamper(ctx, ontology, writer, now, where, early)(input.evidence, subject)
   const change: ResourceChange = {
     id: input.id,
     type,
@@ -438,13 +453,13 @@ export async function writeInference(ctx: StoreContext, writer: Writer, input: I
   if (evidenceCount > WRITE_LIMITS.evidencePerCall) early.push(tooMuchEvidence(where))
   for (const link of input.links) early.push(...evidenceProblems(link.evidence, `the inferred link ${link.rel} -> ${link.target}`, where))
 
-  const stamp = (entries: readonly EvidenceInput[]) => entries.map((entry) => stampEvidence(entry, writer, now))
+  const stamp = stamper(ctx, ontology, writer, now, where, early)
   const change: ResourceChange = {
     id: input.id,
     type: declared?.type ?? 'resource',
     ...(declared ? { title: declared.title } : {}),
     evidence: [],
-    links: input.links.map((link) => ({ rel: link.rel, target: link.target, ...(link.attributes ? { attributes: link.attributes } : {}), evidence: stamp(link.evidence) })),
+    links: input.links.map((link) => ({ rel: link.rel, target: link.target, ...(link.attributes ? { attributes: link.attributes } : {}), evidence: stamp(link.evidence, `the inferred link ${link.rel} -> ${link.target}`) })),
     provenance: { ...INFERRED_PROVENANCE }
   }
   return applyChange(ctx, writer, workspaceId, { change, action: 'infer', ontology, existing, cloud: own, early, path: input.path }, options)

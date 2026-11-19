@@ -3,6 +3,7 @@ import { userInfo } from 'node:os';
 import { filesystemSource } from '../../canonical/source.js';
 import { validate } from '../../commands/validate.js';
 import { loadConfig } from '../../config/loader.js';
+import { findPerson } from '../../people/directory.js';
 import { askProject } from '../../query/ask.js';
 import { currentRecord } from '../../workspace/supersession.js';
 import { splitDocument } from '../../workspace/write/document.js';
@@ -27,6 +28,11 @@ const localWriter = () => {
         // No user database entry: the generic name will do.
     }
     return { actor: `local:${user}`, label: `${user} via docket MCP` };
+};
+/** Who the person at this machine is in the people directory: its `me`, else the login's person, else the login. */
+const localPrincipal = (people) => {
+    const user = localWriter().actor.replace(/^local:/, '');
+    return people.me ?? findPerson(people, user) ?? user;
 };
 /** "this workspace" as the descriptions say it, for one project's docket. */
 const forProject = (text) => text.replaceAll("this workspace's", "this project's").replaceAll('this workspace', 'this project').replaceAll('the workspace', 'the project');
@@ -71,6 +77,9 @@ function resourceSource(workspace, id) {
                 throw new Error('This docket has no ontology file to read.');
             return { text: ontology.text, revision: ontology.revision };
         },
+        async people() {
+            return workspace.people;
+        },
         async *documents() {
             for (const entry of declaring(workspace, id)) {
                 if (entry.raw !== undefined && entry.hash !== undefined)
@@ -95,18 +104,31 @@ export function localTools(options) {
     const { cwd } = options;
     const now = options.now ?? (() => new Date());
     const identity = options.writer ?? localWriter();
-    const writerFor = (resolved) => ({
-        workspaceId: resolved.projectRoot,
-        actor: identity.actor,
-        label: identity.label,
-        channel: 'mcp',
-        requestId: `mcp:${randomUUID()}`
-    });
+    const writerFor = (workspace) => {
+        const principal = options.writer ? options.writer.principal : localPrincipal(workspace.people);
+        return {
+            workspaceId: workspace.resolved.projectRoot,
+            actor: identity.actor,
+            label: identity.label,
+            channel: 'mcp',
+            requestId: `mcp:${randomUUID()}`,
+            ...(principal !== undefined ? { principal } : {})
+        };
+    };
+    const openWorkspace = (resolved) => readWorkspace(resolved, { people: options.people });
+    const sourceOf = (resolved) => {
+        const files = filesystemSource(resolved);
+        const people = options.people;
+        return people ? { ...files, people: async () => people } : files;
+    };
     const describe = (definition) => describedAs(definition, DESCRIPTIONS[definition.name] ?? definition.description);
     /** Runs a write against the project's files as they are now, after any write already running here or in another process. */
     const writing = async (fn) => {
         const resolved = await loadConfig(cwd);
-        return writeLock(resolved, async () => fn(await readWorkspace(resolved), writerFor(resolved)));
+        return writeLock(resolved, async () => {
+            const workspace = await openWorkspace(resolved);
+            return fn(workspace, writerFor(workspace));
+        });
     };
     const tools = [
         {
@@ -115,7 +137,7 @@ export function localTools(options) {
                 const args = searchArguments(raw);
                 try {
                     const resolved = await loadConfig(cwd);
-                    const found = scopedSearch(await searchGraph({ source: filesystemSource(resolved), query: args.query, limit: args.limit, viewer: context.viewer }), args);
+                    const found = scopedSearch(await searchGraph({ source: sourceOf(resolved), query: args.query, limit: args.limit, viewer: context.viewer }), args);
                     return searchAnswer(await withSupersessions(resolved, found));
                 }
                 catch (cause) {
@@ -129,7 +151,7 @@ export function localTools(options) {
             async call(raw, context) {
                 const { id } = getArguments(raw);
                 const resolved = await loadConfig(cwd);
-                const workspace = await readWorkspace(resolved);
+                const workspace = await openWorkspace(resolved);
                 const records = declaring(workspace, id);
                 if (records.length === 0)
                     return failed(`There is no resource ${id} in this docket. Call docket_search to find ids.`);
@@ -187,7 +209,7 @@ export function localTools(options) {
             definition: describe(ONTOLOGY_DEFINITION),
             async call(raw) {
                 ontologyArguments(raw);
-                const workspace = await readWorkspace(await loadConfig(cwd));
+                const workspace = await openWorkspace(await loadConfig(cwd));
                 const head = await headOf(workspace);
                 if (!head)
                     return failed('This docket has no ontology file yet: `docket init` writes one.');

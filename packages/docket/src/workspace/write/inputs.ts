@@ -11,7 +11,14 @@ import type { Diagnostic } from '../docket.js'
 
 /** One piece of evidence as a client gives it. `session` is the server's to set. */
 export interface EvidenceInput {
-  source: string
+  /** The source it came from. Omitted: the person the writer acts for said so. */
+  source?: string
+  /** The source instance - a repository, a person, a document - when its locator fields do not name it. */
+  sourceRef?: string
+  /** Attributes of the source the writer claims; only those the source type lets a reporter set count. */
+  attributes?: Record<string, string | number | boolean>
+  /** Locator fields the source type declares beyond the common ones. */
+  locator?: Record<string, string | string[]>
   repository?: string
   path?: string
   lines?: string
@@ -28,10 +35,12 @@ export interface EvidenceInput {
   note?: string
 }
 
-/** Evidence as stored: stamped with the writer, the request and the time. */
-export interface StampedEvidence extends Omit<EvidenceInput, 'observedBy'> {
+/** Evidence as stored: stamped with its source, the writer, who they act for, the request and the time. */
+export interface StampedEvidence extends Omit<EvidenceInput, 'observedBy' | 'source'> {
+  source: string
   observedAt: string
   observedBy: string
+  principal?: string
   session: string
   reportedBy?: string
 }
@@ -84,6 +93,13 @@ export interface Writer {
   label: string
   channel: Exclude<Channel, 'repo' | 'ontology'>
   requestId: string
+  /**
+   * The person the writer acts for: the signed-in user an agent works for, a
+   * token's owner, the person at this machine. Evidence is stamped with it,
+   * and evidence that cites no source is theirs. Recorded for audit, the
+   * writer itself is never scored.
+   */
+  principal?: string
 }
 
 export interface WriteOptions {
