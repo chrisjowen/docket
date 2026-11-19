@@ -3,7 +3,7 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
-## Unreleased
+## 0.16.0
 
 ### Confidence comes from policies about sources
 
