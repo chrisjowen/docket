@@ -467,6 +467,7 @@ export async function rejectProposal(
   if (!record || record.liftedAt !== undefined) diagnostics.push(refuse('unknown-proposal', `There is no open supersede proposal ${input.supersession} in this docket.`, where))
   else if (record.status !== 'pending') diagnostics.push(refuse('decided-proposal', `Proposal ${record.id} is already ${record.status ?? 'accepted'}.`, where))
   if (!reason) diagnostics.push(refuse('missing-reason', 'Say why the proposal is rejected.', where))
+  else if (reason.length > WRITE_LIMITS.reasonLength) diagnostics.push(refuse('reason-too-long', `A reason is at most ${WRITE_LIMITS.reasonLength} characters.`, where))
   if (hasErrors(diagnostics) || !record) return { changed: false, evidenceAdded: 0, diagnostics }
   record.status = 'rejected'
   record.rejection = reason

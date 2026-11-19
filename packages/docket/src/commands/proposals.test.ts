@@ -75,4 +75,11 @@ describe('docket proposals', () => {
     expect((await rejectProposalCommand(id, 'Again.', { cwd: root })).diagnostics).toEqual([expect.objectContaining({ code: 'decided-proposal' })])
     expect((await confirmProposal(id, { cwd: root })).diagnostics).toEqual([expect.objectContaining({ code: 'rejected-proposal' })])
   })
+
+  it('refuses a reject whose reason is too long, leaving the proposal pending', async () => {
+    const id = await propose(new Date())
+    const rejected = await rejectProposalCommand(id, 'x'.repeat(501), { cwd: root })
+    expect(rejected.diagnostics).toEqual([expect.objectContaining({ code: 'reason-too-long' })])
+    expect(await listProposals({ cwd: root })).toEqual([expect.objectContaining({ id, status: 'pending' })])
+  })
 })

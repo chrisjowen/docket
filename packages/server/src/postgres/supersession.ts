@@ -556,6 +556,7 @@ export async function rejectProposal(
 ): Promise<ProposalWriteResult> {
   const now = (options.now ?? (() => new Date()))()
   const row = await proposalRow(ctx, writer.workspaceId, input.supersession)
+  if (row) await lockResource(ctx, writer.workspaceId, row.resource_id)
   const reason = input.reason.trim()
   const where = row?.resource_id ?? input.supersession
   const diagnostics: Diagnostic[] = []
@@ -566,10 +567,14 @@ export async function rejectProposal(
   if (hasErrors(diagnostics) || !row) return { changed: false, evidenceAdded: 0, diagnostics }
   const supersession = await open(ctx, row)
   const sealed = await sealText(ctx.codec, JSON.stringify({ reason: supersession.reason, evidence: supersession.evidence, rejection: reason } satisfies Sealed), refOf(row.workspace_id, row.id))
-  await ctx.tx.query(
-    "UPDATE supersessions SET status = 'rejected', decided_at = $2, decided_by = $3, updated_at = $2, detail_ciphertext = $4, detail_nonce = $5, dek_version = $6 WHERE id = $1",
+  const { rows: updated } = await ctx.tx.query<{ id: string }>(
+    "UPDATE supersessions SET status = 'rejected', decided_at = $2, decided_by = $3, updated_at = $2, detail_ciphertext = $4, detail_nonce = $5, dek_version = $6 WHERE id = $1 AND status = 'pending' AND lifted_at IS NULL RETURNING id",
     [row.id, now, (writer.principal ?? writer.label).slice(0, 200), sealed.ciphertext, sealed.nonce, sealed.keyVersion]
   )
+  if (!updated.length) {
+    diagnostics.push(refuse('decided-proposal', `Proposal ${row.id} is already decided.`, where))
+    return { changed: false, evidenceAdded: 0, diagnostics }
+  }
   return {
     proposal: { id: row.id, status: 'rejected', score: row.score ?? 0, threshold: row.threshold ?? 0, carry: [], resource: row.resource_id, supersededBy: row.superseded_by },
     changed: true,

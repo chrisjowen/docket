@@ -146,7 +146,11 @@ trust:
 
 - The most specific matching `score` policy prices an observation - `about`
   counts one, each condition one - and a tie goes to the lower score. Every
-  matching `adjust` policy then moves it. Nothing goes above `cap`.
+  matching `adjust` policy then moves it. Nothing goes above `cap`. A
+  `docket_supersede` proposal scores the same way: a policy `about: supersedes`
+  and one `about` the replaced record's type tie (both count one), so to give
+  one type a different supersede score, write that rule about the type alone
+  or about `supersedes` alone, not both.
 - Observations of one source instance do not corroborate each other; the
   strongest counts. Independent ones combine: `1 - (1 - a)(1 - b)`.
 - Add a policy `about` a type when evidence about it is notably stronger or

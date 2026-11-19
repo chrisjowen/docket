@@ -10,6 +10,7 @@ import type { Writer } from '../write/inputs.js'
 import {
   addProposalEvidence,
   liveSupersessions,
+  lockResource,
   openProposals,
   promoteProposals,
   rejectProposal,
@@ -36,7 +37,7 @@ describe.skipIf(!TEST_PG_URL).each(STORE_KINDS)('supersede proposals over $name'
   beforeAll(async () => {
     org = await createTestStore(kind)
     workspaceId = await org.as((ctx) => seedWorkspace(ctx, { slug: 'platform', ontology: readFileSync(ONTOLOGY_TEMPLATES.sdlc as string, 'utf8') }))
-    for (const id of ['team.payments', 'team.money', 'team.ledger', 'team.books', 'team.ops', 'team.platform']) {
+    for (const id of ['team.payments', 'team.money', 'team.ledger', 'team.books', 'team.ops', 'team.platform', 'team.alpha', 'team.beta']) {
       await as((ctx) => writeResource(ctx, writer('tom'), { id, type: 'team', title: id, evidence: [{ source: 'code', path: 'CODEOWNERS' }] }, { now: () => NOW }))
     }
   })
@@ -78,6 +79,34 @@ describe.skipIf(!TEST_PG_URL).each(STORE_KINDS)('supersede proposals over $name'
     expect(rejected).toMatchObject({ changed: true, proposal: { id, status: 'rejected' } })
     const more = await as((ctx) => addProposalEvidence(ctx, writer('dana'), { supersession: id, evidence: [{ note: 'x' }] }))
     expect(more.diagnostics).toEqual([expect.objectContaining({ code: 'rejected-proposal' })])
+    expect((await as((ctx) => openProposals(ctx, workspaceId))).some((each) => each.proposal === id)).toBe(false)
+  })
+
+  it('refuses a reject that races an acceptance under the same resource lock, leaving the acceptance to stand', async () => {
+    const proposed = await propose('team.alpha', 'team.beta')
+    const id = proposed.proposal?.id as string
+
+    let release = () => undefined as void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    let lockedAt = () => undefined as void
+    const acquired = new Promise<void>((resolve) => { lockedAt = resolve })
+
+    const racingAccept = as(async (ctx) => {
+      await lockResource(ctx, workspaceId, 'team.alpha')
+      lockedAt()
+      await ctx.tx.query("UPDATE supersessions SET status = 'accepted' WHERE id = $1", [id])
+      await held
+    })
+
+    await acquired
+    const rejectPromise = as((ctx) => rejectProposal(ctx, writer('dana'), { supersession: id, reason: 'Too late, already decided.' }, { now: () => NOW }))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    release()
+    await racingAccept
+
+    const rejected = await rejectPromise
+    expect(rejected).toMatchObject({ changed: false })
+    expect(rejected.diagnostics).toEqual([expect.objectContaining({ code: 'decided-proposal' })])
     expect((await as((ctx) => openProposals(ctx, workspaceId))).some((each) => each.proposal === id)).toBe(false)
   })
 

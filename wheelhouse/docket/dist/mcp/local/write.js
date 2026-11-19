@@ -394,6 +394,8 @@ export async function rejectProposal(workspace, writer, input, options = {}) {
         diagnostics.push(refuse('decided-proposal', `Proposal ${record.id} is already ${record.status ?? 'accepted'}.`, where));
     if (!reason)
         diagnostics.push(refuse('missing-reason', 'Say why the proposal is rejected.', where));
+    else if (reason.length > WRITE_LIMITS.reasonLength)
+        diagnostics.push(refuse('reason-too-long', `A reason is at most ${WRITE_LIMITS.reasonLength} characters.`, where));
     if (hasErrors(diagnostics) || !record)
         return { changed: false, evidenceAdded: 0, diagnostics };
     record.status = 'rejected';

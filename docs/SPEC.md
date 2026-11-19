@@ -1004,7 +1004,11 @@ replaces an older one at once, as a proposal, and answers with the proposal's
 id, status, score and bar. The proposal is scored by the same policies as any
 evidence - those `about: supersedes`, about the replaced record's type, or
 about nothing in particular - from its own evidence only: the replacement
-being true is not the same as it replacing the older record.
+being true is not the same as it replacing the older record. A policy
+`about: supersedes` and one `about` the replaced record's type are equally
+specific, so they tie and the lower score wins: to give one type a different
+supersede score, write that rule about the type alone or about `supersedes`
+alone, not both.
 
 - A proposal whose score clears `trust.accept` for the replaced record's type
   (else `trust.accept.default`: 0.75, and 0.80 for decisions) is **accepted**:
