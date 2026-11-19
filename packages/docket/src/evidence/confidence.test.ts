@@ -395,7 +395,7 @@ describe('person sources', () => {
       ['person:tom', 0.3, true],
       ['person:dana', 0.9, undefined]
     ])
-    expect(confirmed.confidence).toBe(0.93)
+    expect(confirmed.confidence).toBe(0.9)
 
     // Naming yourself, by an alias, is first-hand.
     expect(scoreObservation(model, service, { source: 'person', sourceRef: 'dana@acme.com', principal: 'dana' }).source.secondHand).toBeUndefined()

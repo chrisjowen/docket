@@ -244,7 +244,7 @@ describe("docket's local MCP tools", () => {
       ['person:tom', true],
       ['person:dana', undefined]
     ])
-    expect(confirmed.resource?.confidence).toBeGreaterThan(0.85)
+    expect(confirmed.resource?.confidence).toBe(0.85)
   })
 
   it('searches with the surface arguments, tagging each match with where it was found', async () => {

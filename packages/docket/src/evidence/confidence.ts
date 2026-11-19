@@ -394,10 +394,22 @@ export const explain = (
   }
 
   const scored = evidence.map((observation) => scoreObservation(model, subject, observation))
+
+  const confirmedNamed = (source: string, named: string): boolean =>
+    scored.some((candidate) => candidate.source.secondHand === undefined && candidate.source.instance === `${source}:${named}`)
+
+  /** The instance an observation's strength counts toward: the person it names, once confirmed, not the relayer. */
+  const groupOf = (observation: ObservationScore): string => {
+    const named = observation.source.secondHand
+    if (named === undefined) return observation.source.instance
+    return confirmedNamed(observation.source.source, named) ? `${observation.source.source}:${named}` : observation.source.instance
+  }
+
   const strongest = new Map<string, number>()
-  scored.forEach(({ source, score }, index) => {
-    const best = strongest.get(source.instance)
-    if (best === undefined || score > (scored[best] as ObservationScore).score) strongest.set(source.instance, index)
+  scored.forEach((observation, index) => {
+    const group = groupOf(observation)
+    const best = strongest.get(group)
+    if (best === undefined || observation.score > (scored[best] as ObservationScore).score) strongest.set(group, index)
   })
 
   let doubt = 1
@@ -411,10 +423,7 @@ export const explain = (
     sources: [...new Set(scored.map(({ source }) => source.source))].sort(),
     observations: scored.map((observation, index) => {
       const named = observation.source.secondHand
-      const confirmed =
-        named === undefined
-          ? undefined
-          : scored.some(({ source }) => source.secondHand === undefined && source.instance === `${observation.source.source}:${named}`)
+      const confirmed = named === undefined ? undefined : confirmedNamed(observation.source.source, named)
       return { ...observation, counts: counted.has(index), ...(confirmed !== undefined ? { confirmed } : {}) }
     })
   }
