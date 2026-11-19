@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { makeDocument } from '../../../test/entities.js'
 import type { MemoryDocument, Ontology } from '../../model/index.js'
+import type { PeopleDirectory } from '../../people/directory.js'
 import { classify, compare, needsAcceptance, rescore } from './check.js'
 import { diffOntologies } from './diff.js'
 
@@ -69,6 +70,31 @@ describe('the change check', () => {
 
   it('has nothing to rescore without a published head', () => {
     expect(rescore({ documents, ontology: null }, { documents, ontology: ontology(0.7) })).toEqual([])
+  })
+
+  it('scores a person source by the people directory, so a role-keyed policy change rescores it instead of staying safe', () => {
+    const base: Ontology = {
+      version: 1,
+      resourceTypes: { team: {} },
+      relationships: {},
+      sources: { person: { kind: 'identity', attributes: { role: { type: 'string', setBy: 'directory' } } } },
+      trust: { policies: [{ name: 'A person said so', when: { source: 'person' }, score: 0.5 }] }
+    }
+    const withLeadPolicy: Ontology = {
+      ...base,
+      trust: { policies: [...base.trust!.policies!, { name: 'A lead said so', when: { source: 'person', role: 'lead' }, score: 0.9 }] }
+    }
+    const docs: MemoryDocument[] = [makeDocument({ id: 'team.payments', evidence: [{ source: 'person', sourceRef: 'dana' }] })]
+    const people: PeopleDirectory = { people: { dana: { attributes: { role: 'lead' } } } }
+
+    expect(compare({ documents: docs, ontology: base }, { documents: docs, ontology: withLeadPolicy }, new Map())).toMatchObject({
+      classification: 'safe',
+      rescored: []
+    })
+
+    const withPeople = compare({ documents: docs, ontology: base }, { documents: docs, ontology: withLeadPolicy }, new Map(), people)
+    expect(withPeople.classification).toBe('rescore')
+    expect(withPeople.rescored).toEqual([{ resourceId: 'team.payments', before: 0.5, after: 0.9, bandBefore: 'probable', bandAfter: 'established' }])
   })
 
   it('diffs sources, thresholds and policies', () => {

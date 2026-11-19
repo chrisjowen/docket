@@ -268,7 +268,8 @@ export function snapshotOf(workspace: LocalWorkspace, head: LocalHead | null): W
   return {
     documents: parsed,
     origins: new Map(workspace.documents.map((entry) => [entry.path, 'local' as const])),
-    head: head ? { number: head.version, ontology: head.ontology } : null
+    head: head ? { number: head.version, ontology: head.ontology } : null,
+    people: workspace.people
   }
 }
 

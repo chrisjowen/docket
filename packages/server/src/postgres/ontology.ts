@@ -178,7 +178,8 @@ export async function workspaceSnapshot(ctx: StoreContext, workspaceId: string):
   return {
     documents: read.documents,
     origins: new Map(records.map((record) => [record.path, record.origin])),
-    head: head ? { number: head.number, ontology: parseOntology(head.text).ontology } : null
+    head: head ? { number: head.number, ontology: parseOntology(head.text).ontology } : null,
+    people: read.people
   }
 }
 
