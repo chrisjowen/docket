@@ -1,0 +1,152 @@
+# See docs/deploy.md for the matching config and secrets.
+name: docket-platform
+
+x-image: &image
+  image: ${DOCKET_IMAGE:-ghcr.io/chrisjowen/docket:0.16.0}
+  pull_policy: never
+
+x-postgres-env: &postgres-env
+  DOCKET_PG_URL: ${DOCKET_PG_URL:-postgres://docket_app:${DOCKET_PG_APP_PASSWORD:-}@postgres:5432/docket}
+  DOCKET_PG_MIGRATION_URL: ${DOCKET_PG_MIGRATION_URL:-postgres://docket:${POSTGRES_PASSWORD:-}@postgres:5432/docket}
+
+x-platform: &platform
+  <<: *image
+  restart: unless-stopped
+  environment: &platform-env
+    <<: *postgres-env
+    DOCKET_PUBLIC_URL: ${DOCKET_PUBLIC_URL:-http://127.0.0.1:${DOCKET_PORT:-4390}}
+    DOCKET_GITHUB_CLIENT_SECRET: ${DOCKET_GITHUB_CLIENT_SECRET:-}
+    NEO4J_PASSWORD: ${NEO4J_PASSWORD:-}
+    QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+  volumes:
+    - &config-file
+      type: bind
+      source: ${DOCKET_SERVER_CONFIG:-./docket-server.yaml}
+      target: /etc/docket/docket-server.yaml
+      read_only: true
+      bind: { create_host_path: false }
+    - &secret-directory
+      type: bind
+      source: ${DOCKET_SECRETS_DIR:-./secrets}
+      target: /etc/docket/secrets
+      read_only: true
+      bind: { create_host_path: false }
+
+services:
+  docket:
+    <<: *platform
+    command: [serve, --config, /etc/docket/docket-server.yaml]
+    ports:
+      - "${DOCKET_BIND:-127.0.0.1}:${DOCKET_PORT:-4390}:4390"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+        required: false
+    healthcheck:
+      test: [CMD, /nodejs/bin/node, -e, "fetch('http://127.0.0.1:4390/readyz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    <<: *platform
+    profiles: [split-worker]
+    command: [serve, worker, --config, /etc/docket/docket-server.yaml]
+    environment:
+      <<: *platform-env
+      DOCKET_PG_MIGRATION_URL: ""
+      DOCKET_QUERY_HOST: 0.0.0.0
+      DOCKET_QUERY_TLS_CERT: /etc/docket/query/worker.crt
+      DOCKET_QUERY_TLS_KEY: /etc/docket/query/worker.key
+    volumes:
+      - *config-file
+      - *secret-directory
+      - type: bind
+        source: ${DOCKET_WORKER_TLS_DIR:-./worker-tls}
+        target: /etc/docket/query
+        read_only: true
+        bind: { create_host_path: false }
+    depends_on:
+      docket:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, /nodejs/bin/node, -e, "fetch('http://127.0.0.1:8080/readyz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  bootstrap:
+    <<: *image
+    profiles: [postgres]
+    entrypoint: [/nodejs/bin/node, /opt/docket/bootstrap-postgres.mjs]
+    command: []
+    environment: *postgres-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  postgres:
+    profiles: [postgres]
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: docket
+      POSTGRES_DB: docket
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, docket, -d, docket]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  docket-neo4j:
+    profiles: [graph]
+    image: ${NEO4J_IMAGE:-neo4j:5.26-community}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-}
+      NEO4J_server_memory_heap_max__size: 256m
+      NEO4J_server_memory_pagecache_size: 256m
+    volumes:
+      - neo4j-data:/data
+
+  docket-qdrant:
+    profiles: [semantic]
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.18.3-unprivileged}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT__SERVICE__JWT_RBAC: "true"
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  docket-embedder:
+    profiles: [semantic]
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.40.14}
+    pull_policy: never
+    restart: unless-stopped
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        ollama serve & server=$$!
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        for model in $${EMBEDDER_MODELS}; do ollama pull "$$model"; done
+        wait "$$server"
+    environment:
+      EMBEDDER_MODELS: ${EMBEDDER_MODELS-nomic-embed-text}
+      OLLAMA_KEEP_ALIVE: 24h
+    volumes:
+      - embedder-models:/root/.ollama
+
+volumes:
+  postgres-data: {}
+  neo4j-data: {}
+  qdrant-data: {}
+  embedder-models: {}

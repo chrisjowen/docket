@@ -1,0 +1,14 @@
+# Pass deploy/compose/docket-server.example.yaml via --set-file multiTenant.config.
+multiTenant:
+  enabled: true
+publicUrl: http://127.0.0.1:4390
+postgres:
+  enabled: true
+  bundled:
+    enabled: true
+neo4j:
+  enabled: true
+qdrant:
+  enabled: true
+embedder:
+  enabled: true

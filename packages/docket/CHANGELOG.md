@@ -5,6 +5,10 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
 ## Unreleased
 
+- Deploy a multi-tenant server with Docker Compose or Helm using the same
+  `docket-server.yaml`. The image runs the worker inline or separately with
+  `docket serve worker --config`.
+
 ### The multi-tenant server from `docket serve` and `docket open`
 
 - `docket serve --config docket-server.yaml` runs the multi-tenant Docket

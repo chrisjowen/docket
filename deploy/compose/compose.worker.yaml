@@ -1,0 +1,13 @@
+# Use with compose.multi-tenant.yaml and --profile split-worker.
+services:
+  docket:
+    command: [serve, --config, /etc/docket/docket-server.yaml, --no-worker]
+    environment:
+      DOCKET_QUERY_URL: https://worker:8443
+      NODE_EXTRA_CA_CERTS: /etc/docket/query/ca.crt
+    volumes:
+      - type: bind
+        source: ${DOCKET_WORKER_TLS_DIR:-./worker-tls}/ca.crt
+        target: /etc/docket/query/ca.crt
+        read_only: true
+        bind: { create_host_path: false }

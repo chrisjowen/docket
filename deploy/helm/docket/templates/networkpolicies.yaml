@@ -21,11 +21,34 @@ spec:
       {{- end }}
 {{- /* Each store admits docket only, on its own port; the embedder admits cognee too. */}}
 {{- $stores := list }}
-{{- if and .Values.postgres.enabled .Values.postgres.bundled.enabled }}{{ $stores = append $stores (dict "component" "postgres" "port" "postgres" "clients" (list "server")) }}{{ end }}
-{{- if .Values.neo4j.enabled }}{{ $stores = append $stores (dict "component" "neo4j" "port" "bolt" "clients" (list "server")) }}{{ end }}
-{{- if .Values.qdrant.enabled }}{{ $stores = append $stores (dict "component" "qdrant" "port" "http" "clients" (list "server")) }}{{ end }}
-{{- if .Values.embedder.enabled }}{{ $stores = append $stores (dict "component" "embedder" "port" "http" "clients" (ternary (list "server" "cognee") (list "server") .Values.cognee.enabled)) }}{{ end }}
-{{- if .Values.cognee.enabled }}{{ $stores = append $stores (dict "component" "cognee" "port" "http" "clients" (list "server")) }}{{ end }}
+{{- $clients := list "server" }}
+{{- if and .Values.multiTenant.enabled .Values.multiTenant.worker.enabled }}
+{{- $clients = append $clients "worker" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "docket.storeName" (dict "root" . "store" "worker") }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" . "component" "worker") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { port: query }
+      from:
+        - podSelector:
+            matchLabels:
+              {{- include "docket.selector" (dict "root" . "component" "server") | nindent 14 }}
+{{- end }}
+{{- if and .Values.postgres.enabled .Values.postgres.bundled.enabled }}{{ $stores = append $stores (dict "component" "postgres" "port" "postgres" "clients" $clients) }}{{ end }}
+{{- if .Values.neo4j.enabled }}{{ $stores = append $stores (dict "component" "neo4j" "port" "bolt" "clients" $clients) }}{{ end }}
+{{- if .Values.qdrant.enabled }}{{ $stores = append $stores (dict "component" "qdrant" "port" "http" "clients" $clients) }}{{ end }}
+{{- if .Values.embedder.enabled }}{{ $stores = append $stores (dict "component" "embedder" "port" "http" "clients" (ternary (append $clients "cognee") $clients .Values.cognee.enabled)) }}{{ end }}
+{{- if .Values.cognee.enabled }}{{ $stores = append $stores (dict "component" "cognee" "port" "http" "clients" $clients) }}{{ end }}
 {{- range $stores }}
 ---
 apiVersion: networking.k8s.io/v1

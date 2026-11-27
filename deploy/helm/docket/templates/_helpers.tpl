@@ -66,6 +66,10 @@ data:
 {{- .Values.neo4j.existingSecret | default (include "docket.storeName" (dict "root" . "store" "neo4j")) -}}
 {{- end }}
 
+{{- define "docket.qdrantSecret" -}}
+{{- .Values.qdrant.existingSecret | default (include "docket.storeName" (dict "root" . "store" "qdrant")) -}}
+{{- end }}
+
 {{- define "docket.cogneeSecret" -}}
 {{- .Values.cognee.existingSecret | default (include "docket.storeName" (dict "root" . "store" "cognee")) -}}
 {{- end }}

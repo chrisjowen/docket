@@ -19,4 +19,8 @@ data:
   # docket serve's configuration (docs/self-hosting.md). Secrets are not here:
   # the database URL, the codec key and the tokens come from Secrets.
   docket-server.yaml: |
+    {{- if .Values.multiTenant.enabled }}
+    {{- required "multiTenant.config needs a docket-server.yaml (pass --set-file multiTenant.config=...)" .Values.multiTenant.config | trimSuffix "\n" | nindent 4 }}
+    {{- else }}
     {{- toYaml $config | nindent 4 }}
+    {{- end }}

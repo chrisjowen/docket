@@ -1,9 +1,15 @@
 {{- if .Values.qdrant.enabled }}
 {{- $q := .Values.qdrant -}}
 {{- $name := include "docket.storeName" (dict "root" . "store" "qdrant") -}}
+{{- if and .Values.multiTenant.enabled (not $q.existingSecret) }}
+{{ include "docket.generatedSecret" (dict "root" . "name" $name "keys" (list "apiKey")) }}
+---
+{{- end }}
+{{- if not .Values.multiTenant.enabled }}
 # Qdrant, mem0's vector store: http://{{ $name }}:6333. No key, since mem0's
 # config would hold it in the docket's .docket.yaml; its NetworkPolicy admits
 # only docket.
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -50,6 +56,11 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - { name: QDRANT__TELEMETRY_DISABLED, value: "true" }
+            {{- if .Values.multiTenant.enabled }}
+            - { name: QDRANT__SERVICE__JWT_RBAC, value: "true" }
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "docket.qdrantSecret" . }}, key: apiKey } }
+            {{- end }}
           ports:
             - { name: http, containerPort: 6333 }
           readinessProbe:

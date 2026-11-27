@@ -205,6 +205,8 @@ export interface LoadServerConfigOptions {
   port?: number | undefined
   ui?: boolean | undefined
   worker?: 'inline' | 'off' | undefined
+  /** A separate worker uses only the request role. */
+  workerOnly?: boolean | undefined
   /** The command running it, which sets the environment the file leaves out: production for serve (the default), development for open. */
   command?: 'serve' | 'open' | undefined
 }
@@ -273,18 +275,18 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
     }
     return fail(key, `is a URL (${protocols.join(', ')}).`)
   }
-  const secret = (value: unknown, key: string, { fileOnly = false } = {}): SecretRef => {
+  const secret = (value: unknown, key: string, { fileOnly = false, check = true } = {}): SecretRef => {
     if (typeof value === 'string') fail(key, `is a secret: { file: <path> }${fileOnly ? '' : ' or { env: <VARIABLE> }'}, never the value itself.`)
     if (!isObject(value)) fail(key, `is { file: <path> }${fileOnly ? '' : ' or { env: <VARIABLE> }'}.`)
     const ref = value as Record<string, unknown>
     if (typeof ref.file === 'string' && ref.env === undefined) {
       const path = from(ref.file)
-      if (!existsSync(path)) fail(`${key}.file`, `names ${path}, which does not exist.`)
+      if (check && !existsSync(path)) fail(`${key}.file`, `names ${path}, which does not exist.`)
       return { file: path }
     }
     if (!fileOnly && typeof ref.env === 'string' && ref.file === undefined) {
       if (!/^[A-Z_][A-Z0-9_]*$/.test(ref.env)) fail(`${key}.env`, 'is an environment variable name, like DOCKET_PG_URL.')
-      if (env[ref.env] === undefined) fail(`${key}.env`, `names ${ref.env}, which is not set.`)
+      if (check && env[ref.env] === undefined) fail(`${key}.env`, `names ${ref.env}, which is not set.`)
       return { env: ref.env }
     }
     return fail(key, fileOnly ? 'is { file: <path> }: this secret is read from a file only.' : 'is { file: <path> } or { env: <VARIABLE> }, one of them.')
@@ -373,7 +375,7 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
         type,
         provisioning: provisioning(source.provisioning, `${key}.provisioning`, ['external', 'bundled'] as const),
         url: secret(source.url, `${key}.url`),
-        migrationUrl: secret(source.migrationUrl, `${key}.migrationUrl`),
+        migrationUrl: secret(source.migrationUrl, `${key}.migrationUrl`, { check: !options.workerOnly }),
         tls,
         tlsCa: source.tlsCa === undefined ? null : (secret(source.tlsCa, `${key}.tlsCa`, { fileOnly: true }) as { file: string }).file,
         encryptionKey: { file: keyPath, id: keyRaw.id === undefined ? 'platform-v1' : string(keyRaw.id, `${key}.encryptionKey.id`), create }
@@ -616,6 +618,11 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
 
   const limitsRaw = raw.limits === undefined ? {} : isObject(raw.limits) ? raw.limits : fail('limits', 'is { accounts }.')
   known(limitsRaw, 'limits', ['accounts'])
+  const bundledGraph = stores.graph?.provisioning === 'bundled'
+  const accountLimit = limitsRaw.accounts === undefined ? null : positive(limitsRaw.accounts, 'limits.accounts')
+  if (bundledGraph && accountLimit !== null && accountLimit !== 1) {
+    fail('limits.accounts', 'must be 1 with a bundled Neo4j. Use a managed graph to serve multiple accounts.')
+  }
   const proxyRaw = raw.proxy === undefined ? {} : isObject(raw.proxy) ? raw.proxy : fail('proxy', 'is { addressHeader, xffDepth }.')
   known(proxyRaw, 'proxy', ['addressHeader', 'xffDepth'])
 
@@ -633,7 +640,7 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
     ai: { providers, primary, models },
     auth: { github, oidc, password, local, access: { allow, admins } },
     integrations: { githubApp },
-    limits: { accounts: limitsRaw.accounts === undefined ? null : positive(limitsRaw.accounts, 'limits.accounts') },
+    limits: { accounts: bundledGraph ? 1 : accountLimit },
     proxy: {
       addressHeader: proxyRaw.addressHeader === undefined ? null : string(proxyRaw.addressHeader, 'proxy.addressHeader'),
       xffDepth: proxyRaw.xffDepth === undefined ? null : positive(proxyRaw.xffDepth, 'proxy.xffDepth')

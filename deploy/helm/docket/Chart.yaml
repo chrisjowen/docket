@@ -1,6 +1,6 @@
 apiVersion: v2
 name: docket
-description: docket serve, a self-hosted, single-tenant Docket server. Docket's MCP surface for several people and agents, writing one ontology and one set of documents. No database by default; Postgres and other stores opt in.
+description: Self-hosted Docket over local files or Postgres, with an opt-in multi-tenant API, web UI and worker.
 type: application
 # The chart and the image release together, at docket's version.
 version: 0.16.0

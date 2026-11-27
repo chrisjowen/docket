@@ -12,6 +12,23 @@ imagePullSecrets: []
 
 # The workspace's name: its MCP endpoint is /mcp/<workspace> (and /mcp).
 workspace: docket
+
+multiTenant:
+  enabled: false
+  # The same docket-server.yaml passed to the CLI or mounted by Compose.
+  # Pass it with --set-file multiTenant.config=./docket-server.yaml.
+  config: ""
+  # Mounted whole at /etc/docket/secrets (the KEK, CAs, OAuth credentials).
+  existingSecret: ""
+  # For an external Postgres source using env refs. Secret keys: url and migrationUrl.
+  postgresSecret: ""
+  worker:
+    enabled: false
+    # A Secret with tls.crt, tls.key and ca.crt. The certificate must cover
+    # <release-fullname>-worker, the internal Service name used by the API.
+    tlsSecret: ""
+  # Enables a namespaced ServiceAccount and Role for the Kubernetes graph driver.
+  managedGraph: false
 # The URL clients reach docket at (https, behind the ingress). Links and the
 # MCP auth challenge use it.
 publicUrl: ""
@@ -88,6 +105,8 @@ neo4j:
 qdrant:
   enabled: false
   image: qdrant/qdrant:v1.18.3-unprivileged
+  # Multi-tenant only: a Secret holding apiKey. Empty generates one.
+  existingSecret: ""
   storage: { size: 5Gi, storageClass: "" }
   resources:
     requests: { cpu: 50m, memory: 256Mi }

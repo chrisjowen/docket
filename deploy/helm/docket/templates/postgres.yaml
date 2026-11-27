@@ -4,7 +4,9 @@
 # A single Postgres for evaluation: no replicas, backups or failover. Run your
 # own (postgres.external) for anything you would miss.
 {{- if not $pg.bundled.existingSecret }}
-{{ include "docket.generatedSecret" (dict "root" . "name" $name "keys" (list "password")) }}
+{{- $keys := list "password" }}
+{{- if .Values.multiTenant.enabled }}{{ $keys = append $keys "appPassword" }}{{ end }}
+{{ include "docket.generatedSecret" (dict "root" . "name" $name "keys" $keys) }}
 {{- end }}
 ---
 apiVersion: v1

@@ -139,7 +139,7 @@ export function neo4jPodProvisioner(options: Neo4jPodOptions): Neo4jPodProvision
       metadata: metadata(org, n.pvc),
       spec: {
         accessModes: ['ReadWriteOnce'],
-        storageClassName: options.storageClass,
+        ...(options.storageClass ? { storageClassName: options.storageClass } : {}),
         resources: { requests: { storage: options.storageSize } },
       },
     }

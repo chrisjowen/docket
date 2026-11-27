@@ -155,6 +155,22 @@ describe('the multi-tenant docket-server.yaml', () => {
     await refuses({ ...minimal(), listen: { host: '0.0.0.0' } }, /publicUrl is needed when the server listens beyond this machine/)
   })
 
+  it('allows only one account when Neo4j is bundled', async () => {
+    const config = minimal()
+    const sources = config.sources as Record<string, unknown>
+    sources.graph = { type: 'neo4j', provisioning: 'bundled', isolation: 'shared', url: 'bolt://graph:7687', password: { env: 'NEO4J_PASSWORD' } }
+    const options = { env: { ...env, NEO4J_PASSWORD: 'example' } }
+    expect((await load(config, options)).limits.accounts).toBe(1)
+    await refuses({ ...config, limits: { accounts: 2 } }, /limits.accounts must be 1 with a bundled Neo4j/, options)
+  })
+
+  it('does not need the migration credential in a split worker', async () => {
+    const requestOnly = { env: { PG_URL: env.PG_URL } }
+    await refuses(minimal(), /PG_ADMIN_URL, which is not set/, requestOnly)
+    const { stores } = await load(minimal(), { ...requestOnly, workerOnly: true })
+    expect(stores.records.migrationUrl).toEqual({ env: 'PG_ADMIN_URL' })
+  })
+
   it('picks the one source of a kind for its role, and asks which when there are several', async () => {
     const two = minimal()
     ;(two.sources as Record<string, unknown>).other = { ...(two.sources as Record<string, Record<string, unknown>>).pg }
