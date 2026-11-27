@@ -834,6 +834,15 @@ const INVITE_COLUMNS = `i.id, i.org_id, i.github_login, i.email, i.role_id, r.na
   i.owner, i.guest, i.invited_by, u.login AS invited_by_login, i.created_at, i.expires_at`
 const INVITE_FROM = 'platform.invites i JOIN platform.users u ON u.id = i.invited_by JOIN platform.roles r ON r.id = i.role_id'
 
+async function rolesCaps(tx: Tx, orgId: string, roleId: string): Promise<readonly Capability[] | null> {
+  const { rows: roles } = await tx.query<{ caps: string[] }>(
+    'SELECT caps FROM platform.roles WHERE id = $1 AND (org_id IS NULL OR org_id = $2)',
+    [roleId, orgId],
+  )
+  const builtin = BUILTIN_ROLES.find((role) => role.id === roleId)
+  return builtin?.caps ?? roles[0]?.caps.filter(isCapability) ?? null
+}
+
 /**
  * Invites someone by GitHub login or email (§8.1), to a role on a place: what
  * they get when they accept. Anyone who manages access on a place may invite
@@ -844,12 +853,7 @@ export async function createInvite(
   tx: Tx,
   input: { orgId: string; who: string; roleId: string; place: Place; guest?: boolean; actorId: string; actor: Access; now?: Date },
 ): Promise<Invite> {
-  const { rows: roles } = await tx.query<{ caps: string[] }>(
-    'SELECT caps FROM platform.roles WHERE id = $1 AND (org_id IS NULL OR org_id = $2)',
-    [input.roleId, input.orgId],
-  )
-  const builtin = BUILTIN_ROLES.find((role) => role.id === input.roleId)
-  const caps = builtin?.caps ?? roles[0]?.caps.filter(isCapability)
+  const caps = await rolesCaps(tx, input.orgId, input.roleId)
   if (!caps) throw new TenancyError('invalid', 'Choose a role.')
   if (!mayGrant(input.actor, input.place, caps, 'human')) {
     throw new TenancyError('forbidden', 'You can only invite someone to access you hold yourself, where you manage access.')
@@ -945,10 +949,18 @@ export async function openInvitesFor(
   return rows.map((row) => ({ ...toInvite(row), orgSlug: row.org_slug, orgName: row.org_name }))
 }
 
-/** Cancels an open invite. */
-export async function revokeInvite(tx: Tx, input: { orgId: string; inviteId: string }): Promise<Invite> {
+/** Cancels an open invite: whoever may give what it gives, where it gives it, may take it back. */
+export async function revokeInvite(tx: Tx, input: { orgId: string; inviteId: string; actor: Access }): Promise<Invite> {
   const invite = await inviteById(tx, input.inviteId)
   if (!invite || invite.orgId !== input.orgId) throw new TenancyError('not-found', 'No such invite.')
+  if (invite.owner) {
+    if (!input.actor.owner) throw new TenancyError('forbidden', 'Only an owner can cancel an invite to own the account.')
+  } else {
+    const caps = (await rolesCaps(tx, input.orgId, invite.roleId)) ?? []
+    if (!mayGrant(input.actor, invite.place, caps, 'human')) {
+      throw new TenancyError('forbidden', 'You can only cancel an invite where you manage access.')
+    }
+  }
   const { rowCount } = await tx.query(
     `UPDATE platform.invites SET revoked_at = now() WHERE id = $1 AND ${OPEN_INVITE}`,
     [input.inviteId],

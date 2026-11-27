@@ -15,6 +15,7 @@ import {
   membershipBySlug,
   openInvitesFor,
   removeMember,
+  revokeInvite,
   describeServiceAccount,
   listSystemAccounts,
   allowlist,
@@ -171,6 +172,32 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     await expect(
       router.withPlatform((tx) => answerInvite(tx, { inviteId: first.id, user: intruder, accept: true })),
     ).rejects.toMatchObject({ code: 'not-found' })
+  })
+
+  it('lets whoever manages access where an invite gives it cancel it, and no one else', async () => {
+    const owner = await human('owner11')
+    const acme = await org(owner)
+    const ownerAccess = await accessFor(acme.id, owner)
+    const docket = await human('docket-admin11')
+    const docketInvite = await router.withPlatform((tx) =>
+      createInvite(tx, { orgId: acme.id, who: 'docket-admin11', roleId: 'admin', place: docketPlace('ws11'), actorId: owner.id, actor: ownerAccess }),
+    )
+    await router.withPlatform((tx) => answerInvite(tx, { inviteId: docketInvite.id, user: docket, accept: true }))
+    const docketAdminAccess = await accessFor(acme.id, docket)
+
+    const accountInvite = await router.withPlatform((tx) =>
+      createInvite(tx, { orgId: acme.id, who: 'someone11', roleId: 'writer', place: ACCOUNT, actorId: owner.id, actor: ownerAccess }),
+    )
+    // A manager scoped to one docket cannot cancel an invite that gives access on the whole account.
+    await expect(
+      router.withPlatform((tx) => revokeInvite(tx, { orgId: acme.id, inviteId: accountInvite.id, actor: docketAdminAccess })),
+    ).rejects.toMatchObject({ code: 'forbidden' })
+
+    // The account's own admin can.
+    await router.withPlatform((tx) => revokeInvite(tx, { orgId: acme.id, inviteId: accountInvite.id, actor: ownerAccess }))
+    expect(await router.withPlatform((tx) => openInvitesFor(tx, { login: 'someone11', emails: [] }))).toEqual([])
+    // Frees its seat in the beta for the next test.
+    await db.admin.query("UPDATE platform.orgs SET status = 'deleted' WHERE id = $1", [acme.id])
   })
 
   it('keeps an owner, and keeps admins away from owners', async () => {

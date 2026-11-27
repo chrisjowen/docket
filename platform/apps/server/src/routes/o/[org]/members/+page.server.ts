@@ -124,8 +124,7 @@ export const actions: Actions = {
 
   revokeInvite: (event) =>
     changeAccess(event, async (tx, { access, form }) => {
-      if (!access.canAnywhere('access')) throw new TenancyError('forbidden', 'You cannot manage invites.')
-      const invite = await revokeInvite(tx, { orgId: access.org.id, inviteId: String(form.get('invite') ?? '') })
+      const invite = await revokeInvite(tx, { orgId: access.org.id, inviteId: String(form.get('invite') ?? ''), actor: access.principal })
       return {
         action: 'members.invite.revoke',
         target: [`invite:${invite.id}`],
