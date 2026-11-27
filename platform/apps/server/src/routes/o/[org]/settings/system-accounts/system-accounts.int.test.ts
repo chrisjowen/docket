@@ -147,4 +147,18 @@ describe.skipIf(!TEST_PG_URL)('Settings › System accounts', () => {
       (thrown: unknown) => isHttpError(thrown) && thrown.status === 403,
     )
   })
+
+  it('hides a system account from a manager whose docket it does not reach, and answers 404 for its page', async () => {
+    await member('outsider', 'admin', beta)
+    const at = await redirected(() => list.actions.create!(event('lead', {}, { name: 'alpha-reach', role: 'writer', place: `docket:${alpha}` }) as never))
+    const id = /system-accounts\/([^?]+)/.exec(at)?.[1] ?? ''
+
+    const asOutsider = (await list.load(event('outsider') as never)) as { accounts: { id: string }[] }
+    expect(asOutsider.accounts.map((account) => account.id)).not.toContain(id)
+    await expect(detail.load(event('outsider', { id }) as never)).rejects.toSatisfy((thrown: unknown) => isHttpError(thrown) && thrown.status === 404)
+
+    const asLead = (await list.load(event('lead') as never)) as { accounts: { id: string }[] }
+    expect(asLead.accounts.map((account) => account.id)).toContain(id)
+    await expect(detail.load(event('lead', { id }) as never)).resolves.toMatchObject({ account: { id } })
+  })
 })

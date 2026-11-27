@@ -28,7 +28,7 @@ import { error, fail, redirect } from '@sveltejs/kit'
 import { docketNames, grantActions, grantView, placesToGive, rolesFor } from '$lib/server/grants'
 import { orgAccess, recordStandalone, requireUser, type OrgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
-import { accessSummary, manage, mayManageSystemAccounts } from '$lib/server/system-accounts'
+import { accessSummary, manage, mayChangeAccount, mayManageSystemAccounts } from '$lib/server/system-accounts'
 import { accountDockets, tokenView, type DocketRef } from '$lib/server/tokens'
 
 import type { Actions, PageServerLoad } from './$types'
@@ -74,6 +74,7 @@ export const load: PageServerLoad = async (event) => {
     grants: await listGrants(tx, access.org.id, { userId: id }),
   }))
   const views = grants.map((grant) => grantView(grant, access.principal, names, access.org.name))
+  if (!mayChangeAccount(access, views)) error(404, 'No such system account.')
   const now = Date.now()
   return {
     created: event.url.searchParams.has('created'),
@@ -96,19 +97,6 @@ export const load: PageServerLoad = async (event) => {
     tokens: tokens.map((token) => tokenView(token, user.id, dockets, now)),
     notices: notices.map((notice) => ({ ...notice, expiresAt: notice.expiresAt.toISOString() })),
   }
-}
-
-/**
- * Whether the member may change a system account: they manage system accounts
- * (or access) on a place it reaches, or anywhere when it reaches nothing yet.
- */
-function mayChangeAccount(access: OrgAccess, grants: readonly { place: { key: string }; who: unknown }[]): boolean {
-  if (access.owner) return true
-  const manages = (key: string) => {
-    const caps = access.capsAt(key === 'account' ? { kind: 'account' } : docketPlace(key.slice(7)))
-    return caps.has('system') || caps.has('access')
-  }
-  return grants.length ? grants.some((grant) => manages(grant.place.key)) : mayManageSystemAccounts(access)
 }
 
 /** The system account named in the path, if this member may change it. */

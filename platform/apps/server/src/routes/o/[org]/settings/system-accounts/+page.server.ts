@@ -5,7 +5,7 @@ import { error, redirect } from '@sveltejs/kit'
 import { docketNames, giveChange, grantView, placesToGive, rolesFor } from '$lib/server/grants'
 import { orgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
-import { accessSummary, manage, mayManageSystemAccounts } from '$lib/server/system-accounts'
+import { accessSummary, manage, mayChangeAccount, mayManageSystemAccounts } from '$lib/server/system-accounts'
 
 import type { Actions, PageServerLoad } from './$types'
 
@@ -22,14 +22,16 @@ export const load: PageServerLoad = async (event) => {
   }))
   const grantsOf = (id: string) =>
     grants.filter((grant) => grant.who.kind === 'user' && grant.who.id === id).map((grant) => grantView(grant, access.principal, dockets, access.org.name))
+  const visible = accounts.map((account) => ({ account, views: grantsOf(account.id) })).filter(({ views }) => mayChangeAccount(access, views))
+  const visibleIds = new Set(visible.map(({ account }) => account.id))
   return {
     roles: await rolesFor(access.org.id),
     places: placesToGive(access, dockets, 'service'),
-    accounts: accounts.map((account) => ({
+    accounts: visible.map(({ account, views }) => ({
       id: account.id,
       name: account.name,
       description: account.description,
-      access: accessSummary(grantsOf(account.id)),
+      access: accessSummary(views),
       managed: account.managed,
       createdAt: iso(account.createdAt),
       createdBy: account.createdByLogin,
@@ -37,7 +39,7 @@ export const load: PageServerLoad = async (event) => {
       lastUsedAt: iso(account.lastUsedAt),
       nextExpiry: iso(account.nextExpiry),
     })),
-    notices: notices.map((notice) => ({ ...notice, expiresAt: notice.expiresAt.toISOString() })),
+    notices: notices.filter((notice) => visibleIds.has(notice.accountId)).map((notice) => ({ ...notice, expiresAt: notice.expiresAt.toISOString() })),
   }
 }
 
