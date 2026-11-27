@@ -42,11 +42,12 @@ export const actions: Actions = {
     const { password, router, limiter, secureCookies } = getRuntime()
     if (!password) return fail(404, { passwordProblem: 'There is no password sign-in here.', login: '' })
     const form = await event.request.formData()
-    const login = String(form.get('login') ?? '').trim().toLowerCase()
+    const rawLogin = String(form.get('login') ?? '')
+    const login = normaliseOtherLogin(rawLogin)
     const secret = String(form.get('password') ?? '')
-    if (!normaliseOtherLogin(login) || !secret) return fail(400, { passwordProblem: 'Enter your login and password.', login })
+    if (!login || !secret) return fail(400, { passwordProblem: 'Enter your login and password.', login: rawLogin })
     const decision = await limiter.check(passwordLimits(login))
-    if (!decision.allowed) return fail(429, { passwordProblem: `Too many attempts for this login. ${rateLimitMessage(decision)}`, login })
+    if (!decision.allowed) return fail(429, { passwordProblem: `Too many attempts for this login. ${rateLimitMessage(decision)}`, login: rawLogin })
     const session = await router.withPlatform(async (tx) => {
       const user = await passwordSignIn(tx, { login, password: secret })
       if (!user) {
@@ -58,7 +59,7 @@ export const actions: Actions = {
       return created
     })
     event.locals.audited = true
-    if (!session) return fail(403, { passwordProblem: 'That login and password do not match.', login })
+    if (!session) return fail(403, { passwordProblem: 'That login and password do not match.', login: rawLogin })
     event.cookies.set(SESSION_COOKIE, session.id, sessionCookieOptions({ secure: secureCookies, expiresAt: session.expiresAt }))
     redirect(303, safeNext(String(form.get('next') ?? '/')))
   },

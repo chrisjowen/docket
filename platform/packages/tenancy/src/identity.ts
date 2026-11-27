@@ -109,6 +109,7 @@ export async function identityUser(tx: Tx, key: { provider: IdentityProvider; is
 export async function resolveIdentity(tx: Tx, identity: ExternalIdentity): Promise<User> {
   if (identity.provider === 'github') return upsertGitHubUser(tx, identity.github)
   const key = keyOf(identity)
+  await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`docket:identity:${key.provider}:${key.issuer}:${key.subject}`])
   const emails = [...new Set(identity.emails.map((email) => normaliseEmail(email)).filter((email): email is string => email !== null))]
   const existing = await identityUser(tx, identity)
   if (existing) {
