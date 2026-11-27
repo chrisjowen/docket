@@ -55,14 +55,14 @@
 {/if}
 
 <section class="card table-wrap">
-  <table class="grid" aria-label="Members">
+  <table class="grid stackable" aria-label="Members">
     <thead>
       <tr><th>Member</th><th>GitHub</th><th>Role</th><th>Joined</th><th>Last active</th><th><span class="visually-hidden">Actions</span></th></tr>
     </thead>
     <tbody>
       {#each data.people as member (member.id)}
         <tr data-login={member.login}>
-          <td>
+          <td data-label="User">
             <div class="who">
               <Avatar login={member.login} name={member.name} />
               <div>
@@ -71,8 +71,8 @@
               </div>
             </div>
           </td>
-          <td class="mono">@{member.login}</td>
-          <td>
+          <td data-label="GitHub" class="mono">@{member.login}</td>
+          <td data-label="Role">
             {#if mayChange(member.role) && member.login !== data.me}
               <form method="POST" action="?/changeRole" class="inline">
                 <Csrf token={data.csrf} />
@@ -89,8 +89,8 @@
               <span class="badge" class:owner={member.role === 'owner'} data-testid="role">{member.role}</span>
             {/if}
           </td>
-          <td>{day(member.joinedAt)}</td>
-          <td>{day(member.lastSeenAt)}</td>
+          <td data-label="Joined">{day(member.joinedAt)}</td>
+          <td data-label="Last active">{day(member.lastSeenAt)}</td>
           <td>
             {#if mayChange(member.role) && member.login !== data.me}
               <form method="POST" action="?/remove">

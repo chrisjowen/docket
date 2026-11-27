@@ -87,10 +87,10 @@ describe.skipIf(!TEST_PG_URL)('Settings › System accounts', () => {
     const { rows } = await org.db.admin.query('SELECT kind, accountable_user_id, created_by FROM platform.users WHERE id = $1', [id])
     expect(rows).toEqual([{ kind: 'service', accountable_user_id: null, created_by: users.admin!.id }])
 
-    const shown = (await detail.load(event('admin', { id }) as never)) as { account: { name: string; access: string }; dockets: { id: string }[]; mayChange: boolean }
+    const shown = (await detail.load(event('admin', { id }) as never)) as { account: { name: string; access: string }; reachable: { id: string }[]; mayChange: boolean }
     expect(shown.account).toMatchObject({ name: 'github-sync', access: 'Writer: reads and writes every docket' })
     expect(shown.mayChange).toBe(true)
-    expect(shown.dockets.map((docket) => docket.id).sort()).toEqual([alpha, beta].sort())
+    expect(shown.reachable.map((docket) => docket.id).sort()).toEqual([alpha, beta].sort())
 
     const minted = (await detail.actions.createToken!(event('admin', { id }, { name: 'actions', days: '10', readOnly: 'on', reach: 'chosen', docket: [alpha] }) as never)) as {
       created?: { token: string; prefix: string }

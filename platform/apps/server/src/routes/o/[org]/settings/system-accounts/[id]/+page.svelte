@@ -85,7 +85,7 @@
   {#if data.mayChange}
     <TokenForm
       csrf={data.csrf}
-      dockets={data.dockets}
+      dockets={data.reachable}
       expiryChoices={data.expiryChoices}
       defaultDays={data.defaultDays}
       owner={data.account.name}

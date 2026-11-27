@@ -93,7 +93,7 @@ export const load: PageServerLoad = async (event) => {
     roles: assignableRoles(access.role)
       .filter((role) => role !== 'owner')
       .map((role) => ({ role, label: ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role })),
-    dockets: reach,
+    reachable: reach,
     expiryChoices: EXPIRY_CHOICES,
     defaultDays: DEFAULT_SYSTEM_TOKEN_DAYS,
     tokens: tokens.map((token) => tokenView(token, user.id, dockets, now)),

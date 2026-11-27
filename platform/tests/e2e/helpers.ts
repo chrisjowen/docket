@@ -82,7 +82,7 @@ export async function createToken(page: Page, org: string, ws: string, options: 
   await page.goto(`/o/${org}/w/${ws}/mcp`)
   await page.getByLabel('Name', { exact: true }).fill(options.description ?? 'e2e')
   const writes = (options.scopes ?? ['docket:read']).some((scope) => scope !== 'docket:read' && scope !== 'ontology:read')
-  const readOnly = page.getByLabel(/^Read-only/)
+  const readOnly = page.getByRole('checkbox', { name: /Read-only/ })
   if (await readOnly.isEnabled()) await readOnly.setChecked(!writes)
   await page.getByRole('button', { name: 'Create token' }).click()
   const token = await page.getByTestId('token-value').innerText()

@@ -56,7 +56,7 @@ export const load: PageServerLoad = async (event) => {
     csrf: event.locals.csrf,
     expiryChoices: EXPIRY_CHOICES,
     defaultDays: DEFAULT_TOKEN_DAYS,
-    dockets: reachable(access, dockets),
+    reachable: reachable(access, dockets),
     tokens: tokens.map((token) => tokenView(token, user.id, dockets, now)),
     connections: connections.map((connection) => connectionView(connection, user.id, dockets, logins)),
   }

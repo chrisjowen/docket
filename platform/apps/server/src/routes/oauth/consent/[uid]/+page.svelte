@@ -97,7 +97,7 @@
         <label>
           Name this connection
           <input name="name" value={data.suggestedName} maxlength="80" required autocomplete="off" data-testid="connection-name" />
-          <span class="muted small">How it shows on Your tokens & connections and in each docket's activity: “{data.target.workspaceName}: you via ‘…’”.</span>
+          <span class="muted small">How it shows on Your tokens & connections, and in each docket's activity as you “via” this name.</span>
         </label>
         <fieldset>
           <legend>It may use</legend>

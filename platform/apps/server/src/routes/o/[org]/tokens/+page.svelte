@@ -84,7 +84,7 @@
 <section class="block">
   <h2><KeyRound size={18} aria-hidden="true" /> Personal tokens</h2>
   <p class="muted small">For scripts and headless agents that act as you. A token lasts at most 90 days.</p>
-  <TokenForm csrf={data.csrf} dockets={data.dockets} expiryChoices={data.expiryChoices} defaultDays={data.defaultDays} owner="you" />
+  <TokenForm csrf={data.csrf} dockets={data.reachable} expiryChoices={data.expiryChoices} defaultDays={data.defaultDays} owner="you" />
 
   <div class="card table-wrap">
     <table class="grid stackable" aria-label="Personal tokens">
