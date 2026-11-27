@@ -341,6 +341,7 @@ docket serve --config docket-server.yaml          # an install: production unles
 docket open  --config docket-server.yaml          # a local preview: development, and opens the browser
 docket serve --config docket-server.yaml --no-ui  # headless: the API, MCP, OAuth and sign-in, no product pages
 docket serve --config docket-server.yaml --no-worker  # the API without the worker in this process
+docket serve worker --config docket-server.yaml   # the worker alone, as a separate process
 ```
 
 One process serves the API, MCP (`/mcp/{account}/{docket}`), OAuth, sign-in
@@ -551,8 +552,6 @@ rebuilds from Postgres.
 
 ### Not yet
 
-- **Installers.** The image, Compose stack and Helm chart above run the
-  single-tenant server. Their multi-tenant profiles are next.
 - **The UI as its own deployment.** `--no-ui` turns the product's pages off,
   but they are still served by the same app; a separately deployed UI follows
   once the public API covers every page.
