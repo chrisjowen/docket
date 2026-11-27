@@ -21,10 +21,10 @@ carries an `SPDX-License-Identifier` header.
   users the Corresponding Source of your version. Running it unmodified, or
   privately, adds no obligation beyond the licence's usual terms.
 - **Combined distributions.** A build that bundles the platform with Apache
-  packages (an image or archive that runs `docket serve` in tenant mode)
-  carries both licences: the AGPL for the platform and the Apache-2.0 licence
-  and notices for the rest. Apache-2.0 code can be combined into an
-  AGPL-3.0 work; the Apache notices stay with it.
+  packages (an image or archive that runs `docket serve --config` in
+  multi-tenant mode) carries both licences: the AGPL for the platform and the
+  Apache-2.0 licence and notices for the rest. Apache-2.0 code can be
+  combined into an AGPL-3.0 work; the Apache notices stay with it.
 - **Third-party code** keeps its own licence. Neo4j, Qdrant, Cognee and the
   model files the platform can use run as separate services or downloads,
   under their own terms.

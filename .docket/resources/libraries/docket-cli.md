@@ -200,6 +200,10 @@ only when serving, from beside itself or the project, since that package
 peer-depends on docket. What it hosts a project with - the config, the
 cross-process write lock, the indexer, the documents API over files and
 `docket open`'s read views - is `src/host` (`@chrisjowen/docket/host`).
+`docket serve --config` and `docket open --config` instead load
+`@docket/server-platform` for a `mode: multi-tenant` `docket-server.yaml`
+(see [The multi-tenant
+server](../../../docs/self-hosting.md#the-multi-tenant-server)).
 
 Its private workspace dependencies are not published: `scripts/bundle-packages.mjs`
 copies contracts, adapter-kit and the jsonl, neo4j, mem0, cognee, postgres, sqlite and cloud adapters into
