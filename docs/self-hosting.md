@@ -322,12 +322,149 @@ signed in on the server), or an Ollama model
   sync in hand (or, over Postgres, the workspace being projected), then
   exits.
 
-## What stays in Docket Cloud
+## The multi-tenant server
 
-The self-hosted server is the shared core: the MCP surface, ontology writes
-with the change check and migrations, search, the documents API, and a choice
-of store. Docket Cloud adds what a hosted, multi-tenant service needs:
-organisations and members, sign-in with GitHub and OAuth for MCP clients, SSO,
-per-organisation encryption keys, the hash-chained audit log, rate limits and
-AI budgets, enrichment and consolidation, repository connections, the Cloud
-web app, and hosted operations.
+Everything above is the single-tenant server. The same two commands also run
+the multi-tenant Docket server, the one the hosted Docket Cloud runs: accounts
+with their dockets and members, GitHub sign-in, Docket's own OAuth for MCP
+clients and the CLI's device sign-in, per-account encryption keys, the
+hash-chained audit log, rate limits and AI budgets, enrichment and
+consolidation, repository sync, and the web app. Its source is in
+[`platform/`](../platform), licensed AGPL-3.0-only (see
+[`LICENSING.md`](../LICENSING.md)).
+
+A `docket-server.yaml` with `version: 1` and `mode: multi-tenant` selects it:
+
+```bash
+docket serve --config docket-server.yaml          # an install: production unless the file says otherwise
+docket open  --config docket-server.yaml          # a local preview: development, and opens the browser
+docket serve --config docket-server.yaml --no-ui  # headless: the API, MCP, OAuth and sign-in, no product pages
+docket serve --config docket-server.yaml --no-worker  # the API without the worker in this process
+```
+
+One process serves the API, MCP (`/mcp/{account}/{docket}`), OAuth, sign-in
+and the web app on one port, and runs the worker beside them, which projects
+every docket into the graph and vector stores and answers `docket_search` and
+`docket_ask`. A file without `mode` is the single-tenant server, unchanged;
+`docket open` without `--config` is unchanged too.
+
+### Its configuration
+
+Every source is named and typed, and every secret is a reference to a mounted
+file (`{ file: <path> }`) or a named environment variable
+(`{ env: <NAME> }`), never the value itself. The file is checked whole before
+anything starts: an unknown setting, a missing file or variable, or a
+combination this release does not support is an error that says what to
+change.
+
+```yaml
+version: 1
+mode: multi-tenant
+# environment: production         # the default for docket serve; docket open defaults to development
+listen: { host: 0.0.0.0, port: 4390 }
+publicUrl: https://docket.example.com   # needed beyond loopback: the origin behind your TLS proxy
+ui: { enabled: true }              # false, or --no-ui: headless
+worker: { mode: inline }           # or off: the API alone
+
+sources:
+  pg:
+    type: postgres
+    provisioning: external         # an operator-run Postgres (bundled: one the installer runs)
+    url: { file: /run/secrets/docket/pg-app-url }          # the request role
+    migrationUrl: { file: /run/secrets/docket/pg-admin-url } # the role that migrates and makes each account's role
+    tlsCa: { file: /run/secrets/docket/pg-ca }
+    encryptionKey: { file: /run/secrets/docket/kek }      # 32 random bytes, base64; back it up with the database
+  graph:
+    type: neo4j
+    provisioning: managed          # a Neo4j pod per account, through the Kubernetes API
+    driver: kubernetes
+    kubernetes: { namespace: docket, storageClass: standard, issuer: docket-internal-ca }
+  vectors: { type: qdrant, provisioning: bundled, url: https://qdrant:6333, apiKey: { file: /run/secrets/docket/qdrant-key } }
+  embed: { type: embedder, provider: ollama, url: https://embedder:11434, model: nomic-embed-text, dimensions: 768 }
+  # rank: { type: reranker, url: https://reranker:8443 }
+  # cognee: { type: cognee, url: https://cognee:8443, apiKey: { file: … }, gatewayKey: { file: … } }
+
+defaults:
+  stores: { records: pg, graph: graph, search: vectors, embedder: embed }  # optional with one source of each type
+
+ai:
+  providers:
+    primary: { kind: openrouter, apiKey: { file: /run/secrets/docket/openrouter-key } }  # or provisioningKey: a key per account
+
+auth:
+  github: { clientId: Iv1.example, clientSecret: { file: /run/secrets/docket/github-client-secret } }
+  access: { allow: [ada, grace], admins: [ada] }   # who may sign in besides members and invitees; platform admins
+
+integrations:
+  github:
+    app: { id: 123456, slug: docket-example, privateKey: { file: /run/secrets/docket/github-app.pem }, webhookSecret: { file: /run/secrets/docket/github-webhook } }
+
+# limits: { accounts: 100 }
+# proxy: { addressHeader: x-forwarded-for, xffDepth: 1 }
+```
+
+| Setting | What it is |
+| --- | --- |
+| `sources.<name>` | `postgres` (required: every account lives in it), `neo4j`, `qdrant`, `embedder`, `reranker`, `cognee`. `provisioning` says who runs it: `external` (you), `bundled` (your installer, beside the server) or `managed` (the server makes one per account: Neo4j on Kubernetes). |
+| `defaults.stores` | Which source each role uses: `records`, `graph`, `search`, `embedder`, `reranker`, `cognee`. Needed only when there are two sources of a type. |
+| `worker.mode` | `inline` needs a graph, a search and an embedder source. `off` runs the API alone; search, Ask and projections wait for a worker. |
+| `ai.providers` | `openrouter`, with a shared `apiKey` and/or a `provisioningKey` that gives each account a key capped at its budget. Without one, AI is off and search still works. Other providers are planned. |
+| `auth.github` | Sign-in with a GitHub OAuth App of your own, called back at `<publicUrl>/auth/github/callback`. |
+| `auth.local` | `{ login }`: one-click sign-in as that login, with no provider: on loopback and outside production only, for a local preview. |
+| `auth.access` | `allow`: GitHub logins that may sign in; members and anyone invited may too. `admins`: platform administrators. |
+| `integrations.github.app` | The GitHub App repository sync and export pull requests run as; separate from sign-in. |
+
+The documented deployment keys `DOCKET_SERVE_CONFIG`, `DOCKET_SERVE_HOST`,
+`DOCKET_SERVE_PORT`, `DOCKET_PUBLIC_URL` and `DOCKET_SERVE_UI` override the
+file, and the command line overrides both.
+
+**Production** refuses plaintext Postgres, a shared Neo4j and the local
+sign-in. For a local preview, a Postgres container, one Neo4j and Qdrant
+(`isolation: shared`), `tls: false` and `auth.local` are fine under
+`docket open --config`, or with `environment: development`:
+
+```yaml
+version: 1
+mode: multi-tenant
+worker: { mode: off }     # or inline, with graph, vectors and embed sources as above
+sources:
+  pg:
+    type: postgres
+    url: { env: DOCKET_PG_URL }
+    migrationUrl: { env: DOCKET_PG_ADMIN_URL }
+    tls: false
+    encryptionKey: { file: ./kek, create: true }   # made on first start
+  # graph: { type: neo4j, isolation: shared, url: bolt://127.0.0.1:7687, password: { file: ./neo4j-password } }
+auth:
+  local: { login: ada }
+```
+
+### Its database
+
+The server migrates its own schema and makes each account's schema, role and
+data key. It needs a database and two roles before it starts: one that owns
+the database and may create roles (`migrationUrl`), and one it runs every
+request as (`url`):
+
+```sql
+CREATE ROLE docket_owner LOGIN CREATEROLE PASSWORD '…';
+CREATE ROLE docket_app LOGIN PASSWORD '…';
+CREATE DATABASE docket OWNER docket_owner;
+```
+
+Back up the database and the platform key together: the documents cannot be
+read without it. The graph and vector stores are projections the worker
+rebuilds from Postgres.
+
+### Not yet
+
+- **Installers.** The image, Compose stack and Helm chart above run the
+  single-tenant server. Their multi-tenant profiles are next.
+- **The UI as its own deployment.** `--no-ui` turns the product's pages off,
+  but they are still served by the same app; a separately deployed UI follows
+  once the public API covers every page.
+- **Sign-in** is GitHub (or the local one); OIDC and passwords are planned.
+  Who may sign in is the allow list, members and invitees: there is no open
+  registration yet.
+- **Model providers** are OpenRouter only; local and other hosted providers
+  are planned.

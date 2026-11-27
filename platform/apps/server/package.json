@@ -27,6 +27,7 @@
     "@docket/platform-ontology-service": "workspace:*",
     "@docket/platform-provisioner": "workspace:*",
     "@docket/platform-tenancy": "workspace:*",
+    "@docket/server-worker": "workspace:*",
     "@openuidev/svelte-lang": "0.4.2",
     "@prometheus-io/client": "^0.16.1",
     "oidc-provider": "9.13.3",
@@ -58,5 +59,9 @@
     "typescript": "^5.9.3",
     "vite": "^7.0.0",
     "vitest": "^3.2.4"
+  },
+  "exports": {
+    "./runtime": "./runtime.js",
+    "./package.json": "./package.json"
   }
 }

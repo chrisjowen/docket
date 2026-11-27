@@ -2,11 +2,12 @@
   "name": "@docket/platform-e2e",
   "version": "0.0.0",
   "private": true,
-  "description": "The Docket server platform's end-to-end suite (Playwright, against a real Postgres and the fake GitHub) and its shared TypeScript settings.",
+  "description": "The Docket server platform's end-to-end suite (Playwright, against a real Postgres and the fake GitHub), its smoke test of docket serve --config, and its shared TypeScript settings.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:integration": "vitest run --passWithNoTests --testTimeout 120000 --hookTimeout 60000 tests/smoke"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
@@ -14,6 +15,7 @@
     "@types/pg": "^8.15.6",
     "neo4j-driver": "^6.3.0",
     "pg": "^8.23.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

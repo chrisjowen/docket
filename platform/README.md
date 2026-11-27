@@ -44,6 +44,21 @@ The product's pages still live in `apps/server` beside the routes that serve
 them. They move to `packages/docket-ui` as clients of the public API as that
 API grows to cover them.
 
+## Run it
+
+`docket serve --config docket-server.yaml` runs it from a `version: 1`,
+`mode: multi-tenant` config, and `docket open --config` runs the same file as
+a local preview: the API, MCP, OAuth, sign-in and the product's pages on one
+port, with the worker in the same process (`apps/server/runtime.js`, which
+`docket` loads only for such a file). `--no-ui` runs it headless and
+`--no-worker` runs the API alone. The config, its sources and secrets, and
+the database it needs are in
+[The multi-tenant server](../docs/self-hosting.md#the-multi-tenant-server).
+
+A container can also run the two processes on their own, configured by
+environment: `apps/server/server.js` (the API) and `apps/worker/dist/main.js`
+(the worker), with the variables those files and `tests/e2e/serve.mjs` set.
+
 ## Develop
 
 ```sh

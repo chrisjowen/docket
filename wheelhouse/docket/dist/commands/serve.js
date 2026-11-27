@@ -38,4 +38,35 @@ export const loadServeModule = async (cwd = process.cwd()) => {
         throw cause;
     }
 };
+/** The package a multi-tenant `docket serve` runs on: the Docket server platform (AGPL-3.0-only). */
+export const PLATFORM_PACKAGE = '@docket/server-platform';
+/**
+ * `@docket/server-platform/runtime`: installed beside docket (as in this repository's
+ * workspace), else in the project at or above `cwd`; or an error saying what
+ * is missing. docket loads it only for a multi-tenant config, so every other command runs without it.
+ */
+export const loadPlatformModule = async (cwd = process.cwd()) => {
+    const specifier = `${PLATFORM_PACKAGE}/runtime`;
+    try {
+        return (await import(specifier));
+    }
+    catch (cause) {
+        const code = cause.code;
+        if ((code === 'ERR_MODULE_NOT_FOUND' || code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') && String(cause.message).includes(PLATFORM_PACKAGE)) {
+            let local;
+            try {
+                const resolved = resolveAdapterModule(specifier, { id: 'platform', projectRoot: cwd });
+                local = resolved.kind === 'package' ? resolved.url : undefined;
+            }
+            catch {
+                local = undefined;
+            }
+            if (local)
+                return (await import(local));
+            throw new Error(`A multi-tenant docket-server.yaml runs on ${PLATFORM_PACKAGE}, the Docket server platform, which is not installed beside docket. ` +
+                'It is built in the docket repository (platform/): run docket from a checkout there, after pnpm install and pnpm build.');
+        }
+        throw cause;
+    }
+};
 export const SERVE_ROLES = ['owner', 'admin', 'editor', 'viewer'];

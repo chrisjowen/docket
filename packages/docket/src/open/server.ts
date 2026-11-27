@@ -46,6 +46,8 @@ export interface UiServerOptions {
   allowOrigins?: readonly string[] | undefined
   /** docket's search app for `/mcp`. Omitted: the one the build puts in `dist/mcp-app`. */
   mcpAppFile?: string | undefined
+  /** False serves the API and MCP alone: every page and asset of the UI is a 404. Default true. */
+  ui?: boolean | undefined
 }
 
 export interface UiServer {
@@ -329,6 +331,8 @@ interface Context {
   /** Other pages on this machine allowed to use the API. */
   allowOrigins: ReadonlySet<string>
   uiDir: string
+  /** Serve the UI's pages and assets; false: the API and MCP alone. */
+  ui: boolean
   inFlight: InFlight
   sync: SyncRunner
   /** Made at launch; the page sends it back with every change. */
@@ -559,6 +563,11 @@ const handle = async (
   }
 
   const head = request.method === 'HEAD'
+  if (!options.ui) {
+    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+    response.end(head ? undefined : 'Not found: docket open runs without its UI (--no-ui); the API is at /api and MCP at /mcp.')
+    return
+  }
   const file = await staticFile(options.uiDir, url.pathname)
   if (file) {
     serveFile(response, file, head)
@@ -619,6 +628,7 @@ export const startUiServer = async (options: UiServerOptions): Promise<UiServer>
     cwd: options.cwd,
     allowOrigins: new Set(origins),
     uiDir: resolve(options.uiDir),
+    ui: options.ui !== false,
     inFlight: new Map<string, AbortController>(),
     sync: new SyncRunner(options.cwd, options.runSync),
     token: randomUUID(),
@@ -696,6 +706,7 @@ export const readViews = (options: ReadViewsOptions): ((request: IncomingMessage
     summarize: options.summarize,
     allowOrigins: new Set(),
     uiDir: resolve(options.uiDir ?? defaultUiDir()),
+    ui: true,
     inFlight: new Map<string, AbortController>(),
     sync: options.sync ?? new SyncRunner(options.cwd),
     token: '',

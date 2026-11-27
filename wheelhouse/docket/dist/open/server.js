@@ -479,6 +479,11 @@ const handle = async (request, response, options) => {
         return;
     }
     const head = request.method === 'HEAD';
+    if (!options.ui) {
+        response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        response.end(head ? undefined : 'Not found: docket open runs without its UI (--no-ui); the API is at /api and MCP at /mcp.');
+        return;
+    }
     const file = await staticFile(options.uiDir, url.pathname);
     if (file) {
         serveFile(response, file, head);
@@ -537,6 +542,7 @@ export const startUiServer = async (options) => {
         cwd: options.cwd,
         allowOrigins: new Set(origins),
         uiDir: resolve(options.uiDir),
+        ui: options.ui !== false,
         inFlight: new Map(),
         sync: new SyncRunner(options.cwd, options.runSync),
         token: randomUUID(),
@@ -602,6 +608,7 @@ export const readViews = (options) => {
         summarize: options.summarize,
         allowOrigins: new Set(),
         uiDir: resolve(options.uiDir ?? defaultUiDir()),
+        ui: true,
         inFlight: new Map(),
         sync: options.sync ?? new SyncRunner(options.cwd),
         token: '',

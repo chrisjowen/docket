@@ -273,6 +273,20 @@ describe('docket open', () => {
     }
   })
 
+  it('runs without its UI when asked: the API and MCP answer, every page and asset is a 404, and no build is needed', async () => {
+    const headless = await open({ cwd: root, uiDir: join(root, 'nowhere'), port: 0, ui: false })
+    try {
+      for (const path of ['/', '/entity/service.orders', '/_app/immutable/app.js']) {
+        const page = await fetch(new URL(path, headless.url))
+        expect(page.status, path).toBe(404)
+        expect(await page.text()).toContain('--no-ui')
+      }
+      expect((await fetch(new URL('/api/graph', headless.url))).status).toBe(200)
+    } finally {
+      await headless.close()
+    }
+  })
+
   it('fails on an explicit port that is taken', async () => {
     await expect(open({ cwd: root, uiDir, port: server?.port })).rejects.toThrow(/EADDRINUSE/)
   })

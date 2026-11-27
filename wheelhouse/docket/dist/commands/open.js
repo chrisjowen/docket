@@ -18,7 +18,8 @@ export const open = async (options = {}) => {
     // Fail before listening when there is nothing to show.
     const resolved = await loadConfig(cwd);
     const uiDir = options.uiDir ?? defaultUiDir();
-    if (!existsSync(join(uiDir, 'index.html'))) {
+    const ui = options.ui !== false;
+    if (ui && !existsSync(join(uiDir, 'index.html'))) {
         throw new Error(`The web UI is missing from ${uiDir}: this docket build was made without it. ` +
             'Build the workspace with `pnpm build` at the repository root.');
     }
@@ -27,7 +28,8 @@ export const open = async (options = {}) => {
         uiDir,
         port: options.port,
         host: options.host,
-        allowOrigins: options.allowOrigins
+        allowOrigins: options.allowOrigins,
+        ui
     });
     return { ...server, resolved, initialized };
 };

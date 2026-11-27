@@ -2642,6 +2642,13 @@ workspaceScope
 
 ## ./serve (./dist/serve/index.d.ts)
 
+AiProvider
+  export interface AiProvider {
+      kind: 'openrouter';
+      apiKey: SecretRef | null;
+      provisioningKey: SecretRef | null;
+  }
+
 ASK_OFF
   export declare const ASK_OFF = "docket_ask is off on this server: it has no model to answer with. Use docket_search, which needs none.";
 
@@ -2658,6 +2665,15 @@ AuditLine
       ip: string | null;
       userAgent: string | null;
       argsSha256?: string;
+  }
+
+CogneeSource
+  export interface CogneeSource {
+      type: 'cognee';
+      provisioning: 'external' | 'bundled';
+      url: string;
+      apiKey: SecretRef;
+      gatewayKey: SecretRef;
   }
 
 CONFIG_FILE
@@ -2685,6 +2701,16 @@ DEFAULT_HOST
 DEFAULT_PORT
   export declare const DEFAULT_PORT = 4390;
 
+EmbedderSource
+  export interface EmbedderSource {
+      type: 'embedder';
+      provisioning: 'external' | 'bundled';
+      provider: 'ollama';
+      url: string;
+      model: string;
+      dimensions: number;
+  }
+
 fileAuditLog
   export declare function fileAuditLog(file: string, slugOf: (workspaceId: string) => string | null): AuditSink & {
       line(line: AuditLine): Promise<void>;
@@ -2700,6 +2726,9 @@ listTokens
       inConfig: boolean;
   })[]>;
 
+loadPlatformConfig
+  export declare function loadPlatformConfig(options?: LoadServerConfigOptions): Promise<PlatformConfig>;
+
 loadServeConfig
   export declare function loadServeConfig(options?: LoadServeConfigOptions): Promise<ServeConfig>;
 
@@ -2712,8 +2741,103 @@ LoadServeConfigOptions
       port?: number | undefined;
   }
 
+LoadServerConfigOptions
+  export interface LoadServerConfigOptions {
+      file?: string | undefined;
+      cwd?: string | undefined;
+      env?: NodeJS.ProcessEnv | undefined;
+      host?: string | undefined;
+      port?: number | undefined;
+      ui?: boolean | undefined;
+      worker?: 'inline' | 'off' | undefined;
+      command?: 'serve' | 'open' | undefined;
+  }
+
+Neo4jSource
+  export interface Neo4jSource {
+      type: 'neo4j';
+      provisioning: Provisioning;
+      isolation: 'shared' | 'per-account';
+      url: string | null;
+      password: SecretRef | null;
+      kubernetes: {
+          namespace: string;
+          image: string | null;
+          storageClass: string | null;
+          storageSize: string | null;
+          issuer: string | null;
+          labelDomain: string | null;
+      } | null;
+  }
+
 newToken
   export declare const newToken: () => string;
+
+PlatformConfig
+  export interface PlatformConfig {
+      file: string;
+      version: typeof SERVER_CONFIG_VERSION;
+      mode: 'multi-tenant';
+      listen: {
+          host: string;
+          port: number;
+      };
+      publicUrl: string | null;
+      environment: 'production' | 'development';
+      ui: boolean;
+      worker: {
+          mode: 'inline' | 'off';
+      };
+      sources: Record<string, Source>;
+      stores: {
+          records: PostgresSource;
+          graph: Neo4jSource | null;
+          search: QdrantSource | null;
+          embedder: EmbedderSource | null;
+          reranker: RerankerSource | null;
+          cognee: CogneeSource | null;
+      };
+      ai: {
+          providers: Record<string, AiProvider>;
+          primary: AiProvider | null;
+      };
+      auth: {
+          github: {
+              clientId: string;
+              clientSecret: SecretRef;
+              oauthUrl: string | null;
+              apiUrl: string | null;
+          } | null;
+          local: {
+              login: string;
+          } | null;
+          access: {
+              allow: string[];
+              admins: string[];
+          };
+      };
+      integrations: {
+          githubApp: {
+              id: string;
+              slug: string;
+              privateKey: SecretRef;
+              webhookSecret: SecretRef;
+              apiUrl: string | null;
+          } | null;
+      };
+      limits: {
+          accounts: number | null;
+      };
+      proxy: {
+          addressHeader: string | null;
+          xffDepth: number | null;
+      };
+  }
+
+platformConfigOf
+  export declare function platformConfigOf(raw: Record<string, unknown>, options: LoadServerConfigOptions & {
+      file: string;
+  }): PlatformConfig;
 
 postgresBackend
   export declare function postgresBackend(config: ServeConfig, options?: {
@@ -2722,6 +2846,21 @@ postgresBackend
       };
       loopIntervalMs?: number;
   }): Promise<ServeBackend>;
+
+PostgresSource
+  export interface PostgresSource {
+      type: 'postgres';
+      provisioning: 'external' | 'bundled';
+      url: SecretRef;
+      migrationUrl: SecretRef;
+      tlsCa: string | null;
+      tls: boolean;
+      encryptionKey: {
+          file: string;
+          id: string;
+          create: boolean;
+      };
+  }
 
 PROJECTION_PRESETS
   export declare const PROJECTION_PRESETS: Record<string, (database: string | null) => ProjectionConfig>;
@@ -2733,8 +2872,33 @@ ProjectionConfig
       config: Record<string, unknown>;
   }
 
+Provisioning
+  export type Provisioning = 'external' | 'bundled' | 'managed';
+
+QdrantSource
+  export interface QdrantSource {
+      type: 'qdrant';
+      provisioning: 'external' | 'bundled';
+      url: string;
+      apiKey: SecretRef;
+  }
+
+readServerConfigFile
+  export declare function readServerConfigFile(options?: LoadServerConfigOptions): Promise<{
+      file: string | null;
+      raw: Record<string, unknown>;
+      mode: ServerMode;
+  }>;
+
 readTokensFile
   export declare function readTokensFile(file: string): Promise<TokenRecord[]>;
+
+RerankerSource
+  export interface RerankerSource {
+      type: 'reranker';
+      provisioning: 'external' | 'bundled';
+      url: string;
+  }
 
 revokeToken
   export declare function revokeToken(config: Pick<ServeConfig, 'auth'>, name: string): Promise<boolean>;
@@ -2746,6 +2910,13 @@ RunningServe
       backend: ServeBackend;
       close(): Promise<void>;
   }
+
+SecretRef
+  export type SecretRef = {
+      file: string;
+  } | {
+      env: string;
+  };
 
 ServeBackend
   export interface ServeBackend {
@@ -2824,10 +2995,19 @@ ServeHandlerOptions
       baseUrl: string;
   }
 
+SERVER_CONFIG_VERSION
+  export declare const SERVER_CONFIG_VERSION = 1;
+
 ServeResource
   export interface ServeResource extends McpResource {
       slug: string;
   }
+
+serverMode
+  export declare function serverMode(raw: Record<string, unknown>, file: string): ServerMode;
+
+ServerMode
+  export type ServerMode = 'single' | 'multi-tenant';
 
 SERVICE
   export declare const SERVICE = "docket-serve";
@@ -2837,6 +3017,12 @@ SESSION_COOKIE
 
 slugOf
   export declare function slugOf(directory: string): string;
+
+Source
+  export type Source = PostgresSource | Neo4jSource | QdrantSource | EmbedderSource | RerankerSource | CogneeSource;
+
+SourceType
+  export type SourceType = Source['type'];
 
 startServe
   export declare function startServe(config: ServeConfig, options?: StartServeOptions): Promise<RunningServe>;

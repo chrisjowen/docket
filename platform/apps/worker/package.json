@@ -5,6 +5,10 @@
   "description": "The worker: repo sync and export PRs from GitHub (§14), and reconciliation of canonical documents to each org's Neo4j and mem0 (§6.2).",
   "license": "AGPL-3.0-only",
   "type": "module",
+  "exports": {
+    "./run": "./dist/run.js",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "build": "vite build",
     "start": "node dist/main.js",

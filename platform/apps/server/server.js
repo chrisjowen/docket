@@ -1,44 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The API process (§3): SvelteKit's request handler (adapter-node's build/handler.js),
-// with the OAuth authorization server's endpoints in front of it.
-//
-// MCP clients post to /oauth/token and /oauth/revoke as forms without an Origin header,
-// which SvelteKit refuses as a cross-site form submission before any hook runs, so
-// those endpoints (oidc-provider, made by the app's runtime at start) answer here.
-// Everything else - the consent page included - is SvelteKit's.
+// with the OAuth authorization server's endpoints in front of it (front.js).
 //
 //   PORT, HOST     where to listen (default 0.0.0.0:3000)
 //   ORIGIN         the public origin; oidc-provider builds its URLs from it, never from
 //                  a request's Host or X-Forwarded-* headers
 //   DOCKET_MCP_APP the MCP app's page, docket_search's `ui://docket/search.html` (default:
 //                  build/mcp-app/search.html beside this file, which the web build writes)
+//   DOCKET_SERVE_UI false (or 0) serves the API, MCP, OAuth and sign-in without the product's pages
+//
+// `docket serve --config` and `docket open --config` run the same app from a docket-server.yaml
+// instead (runtime.js), with the worker in the same process.
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 
 import { handler } from './build/handler.js'
+import { frontListener } from './front.js'
 
-const OAUTH_HANDLER = Symbol.for('docket-cloud.oauth')
-const origin = new URL(process.env.ORIGIN ?? 'http://127.0.0.1:3000')
+const origin = process.env.ORIGIN ?? 'http://127.0.0.1:3000'
 const port = Number(process.env.PORT ?? 3000)
 process.env.DOCKET_MCP_APP ??= fileURLToPath(new URL('./build/mcp-app/search.html', import.meta.url))
 const host = process.env.HOST ?? '0.0.0.0'
+const ui = process.env.DOCKET_SERVE_UI !== 'false' && process.env.DOCKET_SERVE_UI !== '0'
 
-const server = createServer((req, res) => {
-  const pathname = (req.url ?? '/').split('?')[0]
-  const oauth = globalThis[OAUTH_HANDLER]
-  if (oauth?.handles(pathname)) {
-    // The provider trusts these (proxy mode): set them from ORIGIN, whatever the client sent.
-    req.headers.host = origin.host
-    req.headers['x-forwarded-proto'] = origin.protocol.replace(/:$/, '')
-    delete req.headers['x-forwarded-host']
-    delete req.headers['x-forwarded-port']
-    oauth.callback(req, res)
-    return
-  }
-  handler(req, res, () => {
-    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found')
-  })
-})
+const server = createServer(frontListener({ handler, origin, ui }))
 
 server.listen(port, host, () => console.log(`Listening on http://${host}:${port}`))
 
