@@ -307,7 +307,7 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
         port: Number(env.DOCKET_COGNIFY_GATEWAY_PORT ?? 8445),
         host: env.DOCKET_QUERY_HOST ?? (tls ? '0.0.0.0' : '127.0.0.1'),
         tls,
-        production: env.NODE_ENV === 'production',
+        production: env.NODE_ENV === 'production' && options.healthPort !== null,
         log,
       })
     : null

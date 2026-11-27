@@ -102,6 +102,27 @@ describe('the multi-tenant docket-server.yaml', () => {
     expect(config.integrations.githubApp).toMatchObject({ id: '42', slug: 'docket-example', privateKey: { file: join(dir, 'app.pem') } })
   })
 
+  it('needs an explicit StorageClass for a managed graph in production, but not for evaluation', async () => {
+    await writeFile(join(dir, 'gh-secret'), 'x')
+    const withManagedGraph = (storageClass?: string) => ({
+      ...minimal(),
+      environment: 'production',
+      sources: {
+        pg: { type: 'postgres', url: { env: 'PG_URL' }, migrationUrl: { env: 'PG_ADMIN_URL' }, encryptionKey: { file: './kek' } },
+        graph: { type: 'neo4j', provisioning: 'managed', driver: 'kubernetes', kubernetes: { namespace: 'docket', ...(storageClass ? { storageClass } : {}) } }
+      },
+      auth: { github: { clientId: 'Iv1.example', clientSecret: { file: './gh-secret' } } }
+    })
+    await refuses(
+      withManagedGraph(),
+      /sources\.graph\.kubernetes\.storageClass is not set, required in production .*: name the cluster's StorageClass/
+    )
+    const config = await load(withManagedGraph('fast'))
+    expect(config.stores.graph).toMatchObject({ kubernetes: { storageClass: 'fast' } })
+    const evaluation = await load({ ...withManagedGraph(), environment: 'development' })
+    expect(evaluation.stores.graph).toMatchObject({ kubernetes: { storageClass: null } })
+  })
+
   it('takes the deployment keys from the environment over the file, and the command line over both', async () => {
     const fromEnv = await load(minimal(), { env: { ...env, DOCKET_SERVE_PORT: '9000', DOCKET_SERVE_UI: 'false', DOCKET_PUBLIC_URL: 'http://localhost:9000' } })
     expect(fromEnv).toMatchObject({ listen: { port: 9000 }, ui: false, publicUrl: 'http://localhost:9000' })

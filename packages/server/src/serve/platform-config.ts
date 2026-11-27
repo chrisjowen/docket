@@ -471,6 +471,9 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
     }
   }
   if (environment === 'production' && stores.graph?.isolation === 'shared') fail(`sources.${nameOf(stores.graph)}.isolation`, `is shared, refused ${inProduction}: use provisioning: managed, a Neo4j per account.`)
+  if (environment === 'production' && stores.graph?.provisioning === 'managed' && stores.graph.kubernetes?.storageClass == null) {
+    fail(`sources.${nameOf(stores.graph)}.kubernetes.storageClass`, `is not set, required ${inProduction}: name the cluster's StorageClass each account's encrypted Neo4j volume should provision from (no default is assumed, since the cluster may have none by that name).`)
+  }
 
   // Model providers.
   const aiRaw = raw.ai === undefined ? {} : isObject(raw.ai) ? raw.ai : fail('ai', 'is { providers, primary, models }.')
