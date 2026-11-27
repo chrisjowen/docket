@@ -8,10 +8,12 @@ import {
   listGrants,
   listMembers,
   listSystemAccounts,
+  mayGrant,
   openInvitesOf,
   removeMember,
   revokeInvite,
   setOwner,
+  type Invite,
 } from '@docket/platform-tenancy'
 import { error } from '@sveltejs/kit'
 
@@ -49,6 +51,9 @@ export const load: PageServerLoad = async (event) => {
   const iso = (date: Date | null) => (date ? date.toISOString() : null)
   const view = (grant: (typeof grants)[number]) => grantView(grant, access.principal, dockets, access.org.name)
   const roleList = await rolesFor(access.org.id)
+  const roleCaps = new Map(roleList.map((role) => [role.id, role.caps]))
+  const mayManageInvite = (invite: Invite) =>
+    invite.owner ? access.owner : mayGrant(access.principal, invite.place, roleCaps.get(invite.roleId) ?? [], 'human')
   return {
     me: event.locals.user?.login ?? null,
     manage: managesAnywhere,
@@ -69,7 +74,7 @@ export const load: PageServerLoad = async (event) => {
           id: member.id,
           login: member.login,
           name: member.name,
-          email: managesAnywhere ? member.email : null,
+          email: managesAccount ? member.email : null,
           owner: member.owner,
           guest: member.guest,
           role: roles.get(member.id) ?? '',
@@ -80,7 +85,7 @@ export const load: PageServerLoad = async (event) => {
           lastSeenAt: iso(member.lastSeenAt),
         }
       }),
-    invites: invites.map((invite) => ({
+    invites: invites.filter(mayManageInvite).map((invite) => ({
       id: invite.id,
       githubLogin: invite.githubLogin,
       email: invite.email,
