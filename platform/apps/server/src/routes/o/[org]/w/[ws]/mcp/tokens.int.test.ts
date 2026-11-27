@@ -15,7 +15,7 @@ vi.mock('$lib/server/runtime', () => ({ getRuntime: () => runtime }))
 const { load, actions } = await import('./+page.server')
 
 // Real Postgres roles, migrations and account roles; only the process runtime is injected.
-describe.skipIf(!TEST_PG_URL)('service accounts on a docket\'s MCP page', () => {
+describe.skipIf(!TEST_PG_URL)("tokens on a docket's MCP page", () => {
   let org: TestOrg
   let slug: string
   const wsSlug = 'alpha'
@@ -37,7 +37,7 @@ describe.skipIf(!TEST_PG_URL)('service accounts on a docket\'s MCP page', () => 
     )
 
   function event(name: string, form?: FormData): RequestEvent {
-    const url = new URL(`https://docket.example/o/${slug}/w/${wsSlug}`)
+    const url = new URL(`https://docket.example/o/${slug}/w/${wsSlug}/mcp`)
     return {
       params: { org: slug, ws: wsSlug },
       locals: { user: { ...users[name]!, name: null, avatarUrl: null, emails: [], allowlisted: false }, startedAt: performance.now(), requestId: randomUUID() },
@@ -47,12 +47,11 @@ describe.skipIf(!TEST_PG_URL)('service accounts on a docket\'s MCP page', () => 
     } as unknown as RequestEvent
   }
 
-  function createTokenForm(owner: string) {
+  function createTokenForm(extra: Record<string, string> = {}) {
     const form = new FormData()
-    form.set('owner', owner)
-    form.set('scope', 'docket:read')
     form.set('days', '7')
-    form.set('description', 'test')
+    form.set('name', 'test')
+    for (const [key, value] of Object.entries(extra)) form.set(key, value)
     return form
   }
 
@@ -66,9 +65,9 @@ describe.skipIf(!TEST_PG_URL)('service accounts on a docket\'s MCP page', () => 
       origin: 'https://docket.example',
       limiter: { check: async () => ({ allowed: true, remaining: 1, resetAt: new Date() }) },
     } as unknown as Runtime
-    // A developer promoted to admin of just this one docket, via creatorGrant.
+    // A developer made admin of just this one docket, and a read-only member.
     await member('developer', 'editor')
-    await member('accountadmin', 'admin')
+    await member('reader', 'viewer')
     wsId = (await org.withOrg((ctx) => insertWorkspace(ctx.tx, { name: 'Alpha', slug: wsSlug, createdBy: org.userId }))).id
     await grant('developer', wsId, 'admin')
     const service = await org.router.withPlatform((tx) =>
@@ -78,19 +77,35 @@ describe.skipIf(!TEST_PG_URL)('service accounts on a docket\'s MCP page', () => 
   })
   afterAll(() => org?.drop())
 
-  it('keeps the account-wide service-account roster and others\' tokens from a namespace-only admin', async () => {
-    const data = (await load(event('developer') as never)) as { serviceAccounts: unknown[] }
-    expect(data.serviceAccounts).toEqual([])
+  const tokenOf = async (prefix: string) =>
+    (await org.db.admin.query<{ owner_id: string; read_only: boolean; dockets: string[] | null }>('SELECT owner_id, read_only, dockets FROM platform.api_tokens WHERE prefix = $1', [prefix])).rows[0]
 
-    const result = (await actions.createToken!(event('developer', createTokenForm(serviceAccountId)) as never)) as { status?: number }
-    expect(result?.status).toBe(403)
+  it('makes a personal token for this docket alone, whatever owner a form names', async () => {
+    const result = (await actions.createToken!(event('developer', createTokenForm({ owner: serviceAccountId })) as never)) as { created?: { token: string; prefix: string } }
+    expect(result.created?.token).toMatch(/^dkt_pat_/)
+    expect(await tokenOf(result.created!.prefix)).toEqual({ owner_id: users.developer!.id, read_only: false, dockets: [wsId] })
   })
 
-  it('shows the roster and lets an account owner or admin mint a token for a service account', async () => {
-    const data = (await load(event('accountadmin') as never)) as { serviceAccounts: { id: string; name: string }[] }
-    expect(data.serviceAccounts).toEqual([{ id: serviceAccountId, name: 'ci-bot', role: 'viewer' }])
+  it("makes a read-only member's token read-only, and one asked for read-only", async () => {
+    const reader = (await actions.createToken!(event('reader', createTokenForm()) as never)) as { created?: { prefix: string } }
+    expect(await tokenOf(reader.created!.prefix)).toMatchObject({ owner_id: users.reader!.id, read_only: true })
+    const narrowed = (await actions.createToken!(event('developer', createTokenForm({ readOnly: 'on' })) as never)) as { created?: { prefix: string } }
+    expect(await tokenOf(narrowed.created!.prefix)).toMatchObject({ read_only: true })
+  })
 
-    const result = (await actions.createToken!(event('accountadmin', createTokenForm(serviceAccountId)) as never)) as { created?: { token: string } }
-    expect(result?.created?.token).toBeTruthy()
+  it("lists for a docket's admin everyone's tokens that reach it, and lets them revoke those that reach it alone", async () => {
+    const data = (await load(event('developer') as never)) as { tokens: { id: string; owner: string; revocable: boolean; mine: boolean }[] }
+    const others = data.tokens.filter((token) => !token.mine)
+    expect(others.length).toBeGreaterThan(0)
+    expect(others.every((token) => token.revocable)).toBe(true)
+    const target = others[0]!
+    const form = new FormData()
+    form.set('token', target.id)
+    const revoked = (await actions.revokeToken!(event('developer', form) as never)) as { flash?: string }
+    expect(revoked.flash).toMatch(/^Revoked/)
+
+    // A reader sees and revokes only their own.
+    const reader = (await load(event('reader') as never)) as { tokens: { mine: boolean }[] }
+    expect(reader.tokens.every((token) => token.mine)).toBe(true)
   })
 })

@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { parseMcpResourceUrl } from '../principal.js'
 import { tokenResolver } from '../tokens/lookup.js'
 import { approveConsent, denyConsent, describeConsent, interactionCookieValid } from './consent.js'
+import { createConnection } from './connections.js'
 import { DEVICE_CODE_GRANT, PAGE_CSP, createOAuthServer, oauthCookieKeys, type OAuthEndpoint, type OAuthServer } from './provider.js'
 import { authorizationServerMetadata } from './resource-metadata.js'
 
@@ -171,7 +172,9 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
 
     const consent = await describeConsent(oauth.provider, uid)
     expect(consent).toMatchObject({ clientName: 'Test client', redirectHost: '127.0.0.1:9', localApp: true, resource, requested: ['docket:read', 'docket:write'] })
-    const returnTo = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource, scopes: ['docket:read'] })
+    // As the consent page does: the grant is a named connection, here one that reads only.
+    const { continueTo: returnTo, grantId } = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource })
+    await platform((tx) => createConnection(tx, { grantId, orgId: 'orga', userId: 'u-1', clientId, name: 'Test client — Mac', readOnly: true, dockets: ['ws1'] }))
     const resumed = await fetch(returnTo, { redirect: 'manual', headers: { cookie: browser.header() } })
     expect(resumed.status).toBe(303)
     const back = new URL(resumed.headers.get('location') ?? '', origin)
@@ -194,7 +197,8 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
     const exchanged = await fetch(`${origin}/oauth/token`, form({ grant_type: 'authorization_code', code: code2, client_id: clientId, redirect_uri: 'http://127.0.0.1:9/callback', code_verifier: verifier, resource }))
     expect(exchanged.status).toBe(200)
     const tokens = (await exchanged.json()) as { access_token: string; refresh_token: string; expires_in: number; scope: string; token_type: string }
-    expect(tokens).toMatchObject({ expires_in: 900, scope: 'docket:read', token_type: 'Bearer' })
+    // The token carries what the client asked for; the connection decides what it can do.
+    expect(tokens).toMatchObject({ expires_in: 900, scope: 'docket:read docket:write', token_type: 'Bearer' })
     expect(tokens.access_token.split('.')).toHaveLength(1)
 
     // Nothing in the store holds a usable token.
@@ -204,7 +208,16 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
 
     const resolver = tokenResolver({ platform })
     const here = await resolver.resolveBearer(tokens.access_token, { url: resource, orgId: 'orga', workspaceId: 'ws1' })
-    expect(here).toMatchObject({ userId: 'u-1', via: 'oauth', clientId, scopes: ['docket:read'], actor: `oauth:${clientId}/user:u-1` })
+    expect(here).toMatchObject({
+      userId: 'u-1',
+      via: 'oauth',
+      clientId,
+      readOnly: true,
+      dockets: ['ws1'],
+      credentialName: 'Test client — Mac',
+      scopes: ['docket:read', 'ontology:read'],
+      actor: `oauth:${clientId}/conn:${here?.tokenId}/user:u-1`,
+    })
     expect(await resolver.resolveBearer(tokens.access_token, { url: `${origin}/mcp/acme/data`, orgId: 'orga', workspaceId: 'ws2' })).toBeNull()
 
     // Refresh tokens rotate: the new one works once, the old one never again.
@@ -455,7 +468,8 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
       const consent = await describeConsent(oauth.provider, uid)
       expect(consent).toMatchObject({ clientId: 'docket-cli', clientName: 'docket CLI', device: true, preRegistered: true, resource: resource() })
       expect(consent?.requested).toEqual(['docket:read', 'docket:write', 'ontology:read', 'ontology:propose'])
-      const returnTo = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource: resource(), scopes: ['docket:read', 'docket:write'] })
+      const { continueTo: returnTo, grantId } = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource: resource() })
+      await platform((tx) => createConnection(tx, { grantId, orgId: 'orga', userId: 'u-1', clientId: 'docket-cli', name: 'docket CLI', readOnly: false, dockets: ['ws1'] }))
       const resumed = await fetch(returnTo, { headers: { cookie: browser.header() } })
       expect(resumed.status).toBe(200)
       expect(await resumed.text()).toContain('Your terminal is signed in')
@@ -463,10 +477,10 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
       const issued = await poll(started.device_code)
       expect(issued.status).toBe(200)
       const tokens = (await issued.json()) as { access_token: string; refresh_token: string; expires_in: number; token_type: string; scope: string }
-      expect(tokens).toMatchObject({ expires_in: 900, token_type: 'Bearer', scope: 'docket:read docket:write' })
+      expect(tokens).toMatchObject({ expires_in: 900, token_type: 'Bearer', scope: 'docket:read docket:write ontology:read ontology:propose' })
       expect(tokens.refresh_token).toEqual(expect.any(String))
       const principal = await tokenResolver({ platform }).resolveBearer(tokens.access_token, { url: resource(), orgId: 'orga', workspaceId: 'ws1' })
-      expect(principal).toMatchObject({ userId: 'u-1', via: 'oauth', clientId: 'docket-cli', scopes: ['docket:read', 'docket:write'] })
+      expect(principal).toMatchObject({ userId: 'u-1', via: 'oauth', clientId: 'docket-cli', readOnly: false, credentialName: 'docket CLI' })
       // A device code works once.
       expect(await (await poll(started.device_code)).json()).toMatchObject({ error: 'invalid_grant' })
 

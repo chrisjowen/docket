@@ -25,7 +25,17 @@ export {
 } from './session.js'
 export type { Session } from './session.js'
 export { CSRF_FIELD, CSRF_HEADER, csrfToken, verifyCsrf } from './csrf.js'
-export { SCOPES, SCOPE_LABELS, impliedScopes, isScope, namespaceScopes, parseScopeString, roleScopes } from './scopes.js'
+export {
+  SCOPES,
+  SCOPE_LABELS,
+  credentialScopes,
+  fromLegacyScopes,
+  impliedScopes,
+  isScope,
+  namespaceScopes,
+  parseScopeString,
+  roleScopes,
+} from './scopes.js'
 export type { Scope } from './scopes.js'
 export { mcpResourceUrl, parseMcpResourceUrl } from './principal.js'
 export type { McpResource, Principal } from './principal.js'
@@ -34,16 +44,22 @@ export { actsFor, principalLabel } from './label.js'
 export type { Refusal } from './effective-permission.js'
 export {
   ApiTokenError,
+  DEFAULT_SYSTEM_TOKEN_DAYS,
   DEFAULT_TOKEN_DAYS,
+  MAX_SYSTEM_TOKEN_DAYS,
   MAX_TOKEN_DAYS,
   TOKEN_PREFIX,
+  TOKEN_PREFIXES,
+  isApiTokenText,
   issueApiToken,
   listApiTokens,
   newApiToken,
   parseApiToken,
+  renameApiToken,
   tokenHash,
+  tokenName,
 } from './tokens/api-token.js'
-export type { ApiTokenRecord, IssueApiTokenInput } from './tokens/api-token.js'
+export type { ApiTokenRecord, IssueApiTokenInput, TokenKind } from './tokens/api-token.js'
 export { LOOKUP_TTL_MS, tokenResolver } from './tokens/lookup.js'
 export type { TokenResolver } from './tokens/lookup.js'
 export {
@@ -80,3 +96,5 @@ export {
 } from './oauth/resource-metadata.js'
 export { GrantRevocationError, listGrants, revokeGrant } from './oauth/grants.js'
 export type { OAuthGrant } from './oauth/grants.js'
+export { ConnectionError, connectionName, createConnection, listConnections, renameConnection, revokeConnection } from './oauth/connections.js'
+export type { OAuthConnection } from './oauth/connections.js'

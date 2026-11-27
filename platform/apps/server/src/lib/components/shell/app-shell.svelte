@@ -4,8 +4,10 @@
   import { resolve } from '$app/paths'
   import { page } from '$app/state'
   import {
+    BellRing,
     ChevronsUpDown,
     FolderOpen,
+    KeyRound,
     Gauge,
     LayoutGrid,
     LayoutTemplate,
@@ -49,6 +51,8 @@
     permissions?: Record<string, boolean>
     dockets?: { slug: string; name: string; docketNo: string; open: boolean }[]
     ai?: { spentUsd: number; capUsd: number; fraction: number; warned: boolean }
+    /** For the account's owners: system account tokens about to expire, or just expired. */
+    tokenNotices?: { expiring: number; expired: number }
     workspace?: { slug: string; name: string }
   }
 
@@ -59,7 +63,7 @@
   const workspace = $derived(org ? (data.workspace ?? null) : null)
   const docketNo = $derived(workspace ? (data.dockets?.find((entry) => entry.slug === workspace.slug)?.docketNo ?? null) : null)
   const crumbs = $derived(crumbsFor({ routeId: page.route.id, pathname: page.url.pathname, org, workspace }))
-  const orgPath = (path: '' | '/ask' | '/members' | '/audit' | '/templates' | '/settings') => (org ? `/o/${org.slug}${path}` : '/')
+  const orgPath = (path: '' | '/ask' | '/members' | '/tokens' | '/audit' | '/templates' | '/settings') => (org ? `/o/${org.slug}${path}` : '/')
   const current = (href: string) => (page.url.pathname === href ? 'page' : undefined)
   /** Inside a docket, Ask opens on it. */
   const askScope = $derived(workspace ? `?ws=${encodeURIComponent(workspace.slug)}` : '')
@@ -167,7 +171,12 @@
           </li>
           <li>
             <a href={resolve('/o/[org]/members', { org: org.slug })} aria-current={current(orgPath('/members'))}>
-              <Users size={17} aria-hidden="true" /> Members & roles
+              <Users size={17} aria-hidden="true" /> Users
+            </a>
+          </li>
+          <li>
+            <a href={resolve('/o/[org]/tokens', { org: org.slug })} aria-current={current(orgPath('/tokens'))}>
+              <KeyRound size={17} aria-hidden="true" /> Tokens & connections
             </a>
           </li>
           <li>
@@ -182,9 +191,9 @@
               </a>
             </li>
           {/if}
-          {#if data.permissions?.['org.administer']}
+          {#if data.permissions?.['org.administer'] || data.permissions?.['members.manage']}
             <li>
-              <a href={resolve('/o/[org]/settings', { org: org.slug })} aria-current={current(orgPath('/settings'))}>
+              <a href={resolve('/o/[org]/settings', { org: org.slug })} aria-current={page.url.pathname.startsWith(orgPath('/settings')) ? 'page' : undefined}>
                 <Settings size={17} aria-hidden="true" /> Settings
               </a>
             </li>
@@ -243,6 +252,15 @@
     </nav>
 
     <div class="foot">
+      {#if org && data.tokenNotices && data.tokenNotices.expiring + data.tokenNotices.expired > 0}
+        <a class="notice" data-testid="token-notice" href={resolve('/o/[org]/settings/system-accounts', { org: org.slug })}>
+          <BellRing size={14} aria-hidden="true" />
+          <span>
+            {#if data.tokenNotices.expired}{data.tokenNotices.expired} system account {data.tokenNotices.expired === 1 ? 'token has' : 'tokens have'} expired{data.tokenNotices.expiring ? '; ' : '.'}{/if}
+            {#if data.tokenNotices.expiring}{data.tokenNotices.expiring} {data.tokenNotices.expired ? '' : 'system account '}{data.tokenNotices.expiring === 1 ? 'token expires' : 'tokens expire'} within two weeks.{/if}
+          </span>
+        </a>
+      {/if}
       {#if org && data.ai}
         <div class="ai" data-testid="ai-usage" title="AI spend this month: model-written Cypher, answers and extraction. Search never uses it.">
           <span class="label"><Gauge size={13} aria-hidden="true" /> AI this month</span>
@@ -314,7 +332,9 @@
   </div>
 
   {#if org}
-    <CommandMenu bind:open={menu} {org} {workspace} dockets={(data.dockets ?? []).filter((entry) => entry.open)} canAdminister={data.permissions?.['org.administer'] ?? false} />
+    <CommandMenu bind:open={menu} {org} {workspace} dockets={(data.dockets ?? []).filter((entry) => entry.open)} canAdminister={data.permissions?.['org.administer'] ?? false}
+      canManageAccess={data.permissions?.['members.manage'] ?? false}
+    />
   {/if}
 
   <nav class="tabbar" aria-label="Quick links">
@@ -598,6 +618,23 @@
     gap: 12px;
     padding-top: 12px;
     border-top: 1px solid var(--rule);
+  }
+  .notice {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    padding: 7px 8px;
+    border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+    color: inherit;
+    font-size: 12px;
+    line-height: 1.35;
+    text-decoration: none;
+  }
+  .notice :global(svg) {
+    flex: none;
+    margin-top: 2px;
   }
   .ai {
     display: grid;

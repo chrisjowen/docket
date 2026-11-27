@@ -7,9 +7,9 @@ import { CliError, handleCli } from '$lib/server/cli-api'
 import type { RequestHandler } from './$types'
 
 /**
- * `docket cloud token revoke`: the caller's own token, or anyone's in the
- * workspace for a member who manages its tokens (its admins). Revoking
- * notifies every API process (§8.5).
+ * `docket cloud token revoke`: the caller's own token, or, for a member who
+ * manages this docket's tokens (its admins), anyone's that reaches this docket
+ * alone. Revoking notifies every API process (§8.5).
  */
 export const DELETE: RequestHandler = (event) =>
   handleCli(event, { action: 'tokens.revoke', oauthOnly: true }, async (call) => {
@@ -19,16 +19,17 @@ export const DELETE: RequestHandler = (event) =>
       await runtime.router.withPlatform(async (tx) => {
         const revoked = await revokeApiToken(tx, {
           orgId: principal.orgId,
-          workspaceId: principal.workspaceId,
           tokenId,
           by: principal.userId,
-          ...(canInNamespace(permission, 'tokens.manage') ? {} : { ownerId: principal.userId }),
+          ...(canInNamespace(permission, 'tokens.manage')
+            ? { ownOrPinned: { ownerId: principal.userId, workspaceId: principal.workspaceId } }
+            : { ownerId: principal.userId }),
         })
         await runtime.router.enterTenant(tx, principal.orgId)
         await call.audit(tx, { outcome: 'ok', target: [tokenId], args: { prefix: revoked.prefix } })
       })
     } catch (cause) {
-      if (cause instanceof TokenRevocationError) throw new CliError(404, 'not_found', 'No live token of yours with that id in this workspace.')
+      if (cause instanceof TokenRevocationError) throw new CliError(404, 'not_found', 'No live token of yours with that id, or none that reaches this docket alone.')
       throw cause
     }
     return new Response(null, { status: 204 })

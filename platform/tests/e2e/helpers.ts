@@ -73,18 +73,20 @@ export async function acmeWorkspace(page: Page, org: string, name = 'Acme'): Pro
   return ws
 }
 
-/** Creates an API token on the workspace's MCP page and returns its text, which the page shows once. */
+/**
+ * Creates a personal token for one docket on its MCP page and returns its
+ * text, which the page shows once. A token acts as its owner; `scopes` that
+ * write nothing make it read-only.
+ */
 export async function createToken(page: Page, org: string, ws: string, options: { scopes?: string[]; description?: string } = {}): Promise<string> {
   await page.goto(`/o/${org}/w/${ws}/mcp`)
-  await page.getByLabel('Description').fill(options.description ?? 'e2e')
-  for (const box of await page.locator('input[name="scope"]:not([disabled])').all()) {
-    const scope = await box.getAttribute('value')
-    if ((options.scopes ?? ['docket:read']).includes(scope ?? '')) await box.check()
-    else await box.uncheck()
-  }
+  await page.getByLabel('Name', { exact: true }).fill(options.description ?? 'e2e')
+  const writes = (options.scopes ?? ['docket:read']).some((scope) => scope !== 'docket:read' && scope !== 'ontology:read')
+  const readOnly = page.getByLabel(/^Read-only/)
+  if (await readOnly.isEnabled()) await readOnly.setChecked(!writes)
   await page.getByRole('button', { name: 'Create token' }).click()
   const token = await page.getByTestId('token-value').innerText()
-  expect(token).toMatch(/^dkt_live_[0-9A-Za-z]{43}_[0-9a-f]{8}$/)
+  expect(token).toMatch(/^dkt_pat_[0-9A-Za-z]{43}_[0-9a-f]{8}$/)
   return token
 }
 

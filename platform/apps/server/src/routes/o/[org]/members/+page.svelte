@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
   import { ACTION_LABELS, ACTIONS, ROLES, can, canChangeRole } from '@docket/platform-tenancy/roles'
-  import { Bot, Check, Github, Mail, Minus, UserMinus, UserPlus } from '@lucide/svelte'
+  import { resolve } from '$app/paths'
+  import { Check, Github, Mail, Minus, Server, UserMinus, UserPlus } from '@lucide/svelte'
 
   import Avatar from '$lib/components/avatar.svelte'
   import Csrf from '$lib/components/csrf.svelte'
@@ -14,15 +15,15 @@
 </script>
 
 <svelte:head>
-  <title>Members & roles · {data.org.name}</title>
+  <title>Users · {data.org.name}</title>
 </svelte:head>
 
 <div class="head">
   <div>
-    <h1>Members & roles</h1>
+    <h1>Users</h1>
     <p class="muted">
-      Who can see and change <strong>{data.org.name}</strong>'s dockets. Roles apply to every docket in the
-      organisation. {data.seats} of {data.limit} seats used.
+      The people who can see and change <strong>{data.org.name}</strong>'s dockets. Roles apply to every docket in the
+      organisation. {data.seats} of {data.limit} seats used, system accounts included.
     </p>
   </div>
 </div>
@@ -134,73 +135,15 @@
   {/if}
 {/if}
 
-<h2>Service accounts</h2>
-<p class="muted">
-  Non-human members, such as a CI bot. Their only credentials are API tokens, which never do more than their role allows. Each acts for a
-  person: evidence its agents file without a source counts as that person's.
+<p class="card system-accounts">
+  <Server size={16} aria-hidden="true" />
+  <span>
+    Anything that is not a person - CI, an integration, a bot - is a <strong>system account</strong>{data.systemAccounts
+      ? ` (${data.org.name} has ${data.systemAccounts})`
+      : ''}. {#if data.manage}They are made, given access and issued tokens in
+      <a href={resolve('/o/[org]/settings/system-accounts', { org: data.org.slug })}>Settings › System accounts</a>.{:else}An admin makes them in Settings › System accounts.{/if}
+  </span>
 </p>
-{#if data.services.length}
-  <ul class="card list">
-    {#each data.services as account (account.id)}
-      <li data-service={account.name}>
-        <Bot size={16} aria-hidden="true" />
-        <div class="grow">
-          <strong class="mono">{account.name}</strong>
-          {#if account.description}<div class="muted small">{account.description}</div>{/if}
-        </div>
-        <span class="badge">{account.role}</span>
-        {#if data.manage && mayChange(account.role)}
-          <form method="POST" action="?/actsFor" class="acts-for">
-            <Csrf token={data.csrf} />
-            <input type="hidden" name="member" value={account.id} />
-            <label class="muted small">
-              Acts for
-              <select name="person" aria-label="Who {account.name} acts for" onchange={(event) => event.currentTarget.form?.requestSubmit()}>
-                {#if !account.actsFor}<option value="" selected disabled>no one</option>{/if}
-                {#each data.people as person (person.id)}
-                  <option value={person.login} selected={person.login === account.actsFor}>@{person.login}</option>
-                {/each}
-              </select>
-            </label>
-            <noscript><button class="button small" type="submit">Save</button></noscript>
-          </form>
-        {:else}
-          <span class="muted small">acts for {account.actsFor ? `@${account.actsFor}` : 'no one'}</span>
-        {/if}
-        <span class="muted small">added {day(account.joinedAt)}</span>
-        {#if mayChange(account.role)}
-          <form method="POST" action="?/remove">
-            <Csrf token={data.csrf} />
-            <input type="hidden" name="member" value={account.id} />
-            <button class="button small danger" type="submit">Remove</button>
-          </form>
-        {/if}
-      </li>
-    {/each}
-  </ul>
-{/if}
-{#if data.manage}
-  <form method="POST" action="?/addService" class="card invite-form service">
-    <Csrf token={data.csrf} />
-    <label>
-      Name
-      <input name="name" required placeholder="ci-bot" pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]" maxlength="40" />
-    </label>
-    <label class="grow">
-      What it is for <span class="muted">(optional)</span>
-      <input name="description" maxlength="200" placeholder="GitHub Actions: docket cloud push on main" />
-    </label>
-    <label>
-      Role
-      <select name="role">
-        {#each data.assignable.filter((role) => role !== 'owner') as role (role)}
-          <option value={role} selected={role === 'viewer'}>{role}</option>
-        {/each}
-      </select>
-    </label>
-    <button class="button" type="submit"><Bot size={14} aria-hidden="true" /> Add service account</button>
-  </form>
-{/if}
 
 <h2>What each role can do</h2>
 <section class="card table-wrap">
@@ -254,13 +197,12 @@
     align-items: end;
     flex-wrap: wrap;
   }
-  .acts-for label {
+  .system-accounts {
     display: flex;
-    align-items: center;
-    gap: 0.35rem;
-  }
-  .invite-form.service {
-    padding: 1rem 1.25rem;
+    gap: 0.6rem;
+    align-items: flex-start;
+    padding: 0.8rem 1rem;
+    margin-top: 1.5rem;
   }
   .grow {
     flex: 1;

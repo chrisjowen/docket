@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { LIMITS } from './limits.js'
 import { lookupMasterKey } from './master-key.js'
-import { changeRole, createInvite, databaseAccount, insertOrg, listMasterKeys, listMembers, mintMasterKey, namespaceAccess, removeMember, revokeMasterKeys, setAccountable, upsertGitHubUser } from './model.js'
+import { changeRole, createInvite, databaseAccount, insertOrg, listMasterKeys, listMembers, mintMasterKey, namespaceAccess, removeMember, revokeMasterKeys, describeServiceAccount, upsertGitHubUser } from './model.js'
 import { newTenantId } from './names.js'
 import { tenantRouter, type TenantRouter } from './router.js'
 import { TEST_PG_URL, createTestDatabase, type TestDatabase } from './testing.js'
@@ -78,8 +78,8 @@ describe.skipIf(!TEST_PG_URL)('the org admin master key', () => {
   async function accessKey(orgId: string, ownerId: string): Promise<string> {
     const id = `tok_${randomBytes(6).toString('hex')}`
     await db.admin.query(
-      `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, workspace_id, owner_id, scopes, created_by, expires_at)
-       VALUES ($1, $2, 'dkt_live_x', $3, 'ws', $4, ARRAY['docket:read'], $4, now() + interval '1 day')`,
+      `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, dockets, read_only, owner_id, created_by, expires_at)
+       VALUES ($1, $2, 'dkt_sys_x', $3, ARRAY['ws'], true, $4, $4, now() + interval '1 day')`,
       [id, randomBytes(32).toString('hex'), orgId, ownerId],
     )
     return id
@@ -109,7 +109,7 @@ describe.skipIf(!TEST_PG_URL)('the org admin master key', () => {
     for (const change of [
       () => router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: writer, role: 'admin', actorRole: 'owner' })),
       () => router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: writer, actorRole: 'owner' })),
-      () => router.withPlatform((tx) => setAccountable(tx, { orgId: acme.id, serviceId: writer, accountableLogin: 'adminowner' })),
+      () => router.withPlatform((tx) => describeServiceAccount(tx, { orgId: acme.id, serviceId: writer, description: 'mine now' })),
     ]) {
       await expect(change()).rejects.toMatchObject({ code: 'forbidden', message: expect.stringContaining('org admin API') })
     }

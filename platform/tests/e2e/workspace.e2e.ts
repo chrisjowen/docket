@@ -137,7 +137,7 @@ test('an owner deletes a workspace by typing its slug; an editor cannot', async 
     const deletion = await client.query<{ workspace_id: string }>(`SELECT workspace_id FROM "${schema}".workspace_deletions WHERE slug = 'acme'`)
     const workspaceId = deletion.rows[0]?.workspace_id ?? ''
     const left = await client.query<{ count: string }>(`SELECT count(*) FROM "${schema}".documents WHERE workspace_id = $1`, [workspaceId])
-    const tokens = await client.query<{ revoked: boolean }>('SELECT revoked_at IS NOT NULL AS revoked FROM platform.api_tokens WHERE workspace_id = $1', [workspaceId])
+    const tokens = await client.query<{ revoked: boolean }>('SELECT revoked_at IS NOT NULL AS revoked FROM platform.api_tokens WHERE $1 = ANY (dockets)', [workspaceId])
     return { workspaceId, documents: Number(left.rows[0]?.count), tokens: tokens.rows.map((row) => row.revoked) }
   })
   expect(state.workspaceId).not.toBe('')

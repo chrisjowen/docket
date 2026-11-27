@@ -16,7 +16,8 @@ import {
   membershipBySlug,
   openInvitesFor,
   removeMember,
-  setAccountable,
+  describeServiceAccount,
+  listSystemAccounts,
   allowlist,
   upsertGitHubUser,
   type GitHubIdentity,
@@ -215,28 +216,23 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     ).rejects.toMatchObject({ code: 'forbidden' })
   })
 
-  it('has a service account act for whoever made it, until an admin names another member', async () => {
+  it('makes a system account owned by the account, with no person acting for it, and lists it with its tokens', async () => {
     const owner = await human('owner9')
     const acme = await org(owner)
-    const lead = await human('lead9')
-    const stranger = await human('stranger9')
-    await db.admin.query("INSERT INTO platform.memberships (org_id, user_id, role) VALUES ($1, $2, 'editor')", [acme.id, lead.id])
     const bot = await router.withPlatform((tx) =>
-      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: null, role: 'editor', actorId: owner.id, actorRole: 'owner' }),
+      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: 'CI', role: 'editor', actorId: owner.id, actorRole: 'owner' }),
     )
-    const actsFor = async () => (await router.withPlatform((tx) => listMembers(tx, acme.id))).find((member) => member.id === bot.id)?.actsFor
-    expect(await actsFor()).toBe('owner9')
-    expect(await router.withPlatform((tx) => setAccountable(tx, { orgId: acme.id, serviceId: bot.id, accountableLogin: '@Lead9' }))).toEqual({
-      service: 'ci-bot',
-      before: 'owner9',
-      after: 'lead9',
-    })
-    expect(await actsFor()).toBe('lead9')
-    // Only a person in the org, and only for a service account of it.
-    await expect(router.withPlatform((tx) => setAccountable(tx, { orgId: acme.id, serviceId: bot.id, accountableLogin: stranger.login }))).rejects.toMatchObject({
-      code: 'invalid',
-    })
-    await expect(router.withPlatform((tx) => setAccountable(tx, { orgId: acme.id, serviceId: lead.id, accountableLogin: 'owner9' }))).rejects.toMatchObject({
+    const { rows } = await db.admin.query<{ accountable_user_id: string | null; created_by: string }>(
+      'SELECT accountable_user_id, created_by FROM platform.users WHERE id = $1',
+      [bot.id],
+    )
+    expect(rows).toEqual([{ accountable_user_id: null, created_by: owner.id }])
+    const [listed] = await router.withPlatform((tx) => listSystemAccounts(tx, acme.id))
+    expect(listed).toMatchObject({ id: bot.id, name: 'ci-bot', description: 'CI', role: 'editor', createdByLogin: 'owner9', managed: false, liveTokens: 0, nextExpiry: null })
+    await router.withPlatform((tx) => describeServiceAccount(tx, { orgId: acme.id, serviceId: bot.id, description: 'Nightly sync' }))
+    expect((await router.withPlatform((tx) => listSystemAccounts(tx, acme.id)))[0]?.description).toBe('Nightly sync')
+    // A person is not a system account.
+    await expect(router.withPlatform((tx) => describeServiceAccount(tx, { orgId: acme.id, serviceId: owner.id, description: 'x' }))).rejects.toMatchObject({
       code: 'not-found',
     })
     // Its seat in the beta goes back for the next test.

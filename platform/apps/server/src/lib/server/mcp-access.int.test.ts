@@ -66,9 +66,9 @@ describe.skipIf(!TEST_PG_URL)('MCP access by account role and namespace grant', 
   async function apiToken(ownerId: string): Promise<string> {
     const token = newApiToken()
     await org.db.admin.query(
-      `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, workspace_id, owner_id, scopes, created_by, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $6, now() + interval '1 day')`,
-      [`tok_${randomBytes(6).toString('hex')}`, tokenHash(token), token.slice(0, 17), org.orgId, main, ownerId, EVERY_SCOPE],
+      `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, dockets, owner_id, legacy_scopes, created_by, expires_at)
+       VALUES ($1, $2, $3, $4, ARRAY[$5], $6, $7, $6, now() + interval '1 day')`,
+      [`tok_${randomBytes(6).toString('hex')}`, tokenHash(token), token.slice(0, 16), org.orgId, main, ownerId, EVERY_SCOPE],
     )
     return token
   }

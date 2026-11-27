@@ -11,7 +11,7 @@ describe('breadcrumbs', () => {
     expect(crumbsFor({ routeId: '/o/[org]', pathname: '/o/acme', org })).toEqual([{ label: 'Acme casebook' }])
     expect(crumbsFor({ routeId: '/o/[org]/members', pathname: '/o/acme/members', org })).toEqual([
       { label: 'Acme casebook', href: '/o/acme' },
-      { label: 'Members & roles' },
+      { label: 'Users' },
     ])
   })
 

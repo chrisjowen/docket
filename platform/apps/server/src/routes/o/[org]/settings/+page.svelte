@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
   import Csrf from '$lib/components/csrf.svelte'
+  import OrgSettingsTabs from '$lib/components/org-settings-tabs.svelte'
 
   let { data, form } = $props()
 </script>
@@ -10,6 +11,7 @@
 </svelte:head>
 
 <h1>Settings</h1>
+<OrgSettingsTabs org={data.org.slug} active="ai" owner />
 <p class="muted lede">Owners only. Changes are recorded in the audit log.</p>
 
 {#if form?.problem}<p class="alert" role="alert">{form.problem}</p>{/if}

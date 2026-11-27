@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { checkScope, effectiveScopes } from './effective-permission.js'
 import type { McpResource, Principal } from './principal.js'
-import type { Scope } from './scopes.js'
+import { fromLegacyScopes, type Scope } from './scopes.js'
 import { issueApiToken } from './tokens/api-token.js'
 import { tokenResolver } from './tokens/lookup.js'
 import { listenForRevocations, revokeApiToken, type RevocationListener } from './tokens/revocation.js'
@@ -62,8 +62,10 @@ describe.skipIf(!TEST_PG_URL)('effective permission', () => {
     expiresAt: new Date(Date.now() + 60_000),
   })
 
-  const issue = (ownerId: string, scopes: string[]) =>
-    platform((tx) => issueApiToken(tx, { orgId: 'orga', workspaceId: 'ws1', ownerId, createdBy: ownerId, scopes, ontologyWriters: ['owner', 'editor'] }))
+  const issue = (ownerId: string, scopes: Scope[]) => {
+    const { readOnly, legacy } = fromLegacyScopes(scopes)
+    return platform((tx) => issueApiToken(tx, { orgId: 'orga', dockets: ['ws1'], ownerId, createdBy: ownerId, readOnly, legacyScopes: legacy }))
+  }
 
   /** What the MCP endpoint does on every call: resolve, then cut to the role now. */
   async function call(token: string, needed: 'docket:read' | 'docket:write') {
@@ -85,7 +87,8 @@ describe.skipIf(!TEST_PG_URL)('effective permission', () => {
   })
 
   it('ontology:write follows the workspace setting and the role, on every call', async () => {
-    const { token } = await issue('u-own', ['docket:read', 'ontology:write'])
+    // A token that acts as its owner, narrowed by nothing, carries ontology:write only while the setting names their role.
+    const { token } = await platform((tx) => issueApiToken(tx, { orgId: 'orga', dockets: ['ws1'], ownerId: 'u-own', createdBy: 'u-own', legacyScopes: ['docket:read', 'ontology:write'] }))
     const principal = await resolver.resolveBearer(token, resource)
     if (!principal) throw new Error('unresolved')
     let writers: ('owner' | 'admin' | 'editor')[] = ['owner', 'editor']

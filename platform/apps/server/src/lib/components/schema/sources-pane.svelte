@@ -163,7 +163,7 @@
     {@const scoring = policiesFor(model, name)}
     <section class="card main" data-source={name} aria-label="Source {name}">
       {#if source.kind === 'identity'}
-        <p class="note"><Bot size={15} aria-hidden="true" /><span><b>Agents are not a source.</b> Every agent credential acts for a person: the person who signed it in over OAuth, the owner of its API token, or a service account's accountable person. What the agent cites is the source. When it cites nothing, the person it acts for is the source, and what the directory says about them is what gets scored.</span></p>
+        <p class="note"><Bot size={15} aria-hidden="true" /><span><b>Agents are not a source.</b> An agent always acts as someone: the user who signed it in over OAuth or owns its personal token, or a system account. What the agent cites is the source. When it cites nothing, the user it acts as is the source, and what the directory says about them is what gets scored. A system account is no person, so what it writes must cite a source.</span></p>
       {:else if attributes.length && attributes.every(([, attribute]) => attribute.setBy === 'reporter')}
         <p class="note warn"><TriangleAlert size={15} aria-hidden="true" /><span><b>Claimed, not attested.</b> Nothing vouches for a {name}: its attributes are whatever the writer says. Compare a source whose attributes only the registry or a connection can set: a writer saying otherwise is ignored.</span></p>
       {/if}
@@ -297,9 +297,6 @@
               <tr data-person={person.login}>
                 <td>
                   <b>{person.name ?? person.login}</b> <span class="muted mono small">@{person.login}</span>
-                  {#each person.agents as agent (agent.name)}
-                    <div class="agent-line"><Bot size={12} aria-hidden="true" /> <span class="mono">{agent.name}</span> <span class="chip">API token</span></div>
-                  {/each}
                 </td>
                 {#each directoryAttributes as key (key)}
                   {@const declared = source.attributes?.[key]}
@@ -584,14 +581,6 @@
   .inline-add input.narrow {
     flex: 0 1 9rem;
     min-width: 6rem;
-  }
-  .agent-line {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 4px 0 0 4px;
-    font-size: 12px;
-    color: var(--ink-2);
   }
   .foot {
     margin: 2px 0 0;

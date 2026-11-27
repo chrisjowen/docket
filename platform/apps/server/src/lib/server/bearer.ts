@@ -35,7 +35,7 @@ const CREDENTIAL_PARAM = /token|secret|api[-_]?key|password/i
  */
 export function credentialInUrl(url: URL): boolean {
   for (const [name, value] of url.searchParams) {
-    if (CREDENTIAL_PARAM.test(name) || value.includes('dkt_live_') || value.includes('dmk_')) return true
+    if (CREDENTIAL_PARAM.test(name) || /dkt_(?:pat|sys|live)_|dmk_/.test(value)) return true
   }
   return false
 }

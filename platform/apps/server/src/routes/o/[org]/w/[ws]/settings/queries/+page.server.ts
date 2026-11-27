@@ -28,13 +28,8 @@ export const load: PageServerLoad = async (event) => {
     return { access, everyone, traces: await listQueryTraces(ctx, workspace.id, { limit: TRACES_SHOWN, ...(everyone ? {} : { askedBy: user.id }) }) }
   })
   const name = await actorNames(read.access)
-  // A member reads as @login, through an OAuth client too; a token by its prefix.
-  const who = (actor: string) => {
-    const user = actor.replace(/^oauth:[^/]+\//, '')
-    const login = name(user)
-    if (login === user) return actor
-    return user === actor ? login : `${login} via OAuth`
-  }
+  // A member reads as @login; through a token or connection, by its name too.
+  const who = (actor: string) => name(actor)
   return {
     kept: { limit: HISTORY_LIMIT, days: HISTORY_DAYS },
     everyone: read.everyone,

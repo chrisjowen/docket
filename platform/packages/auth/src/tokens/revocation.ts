@@ -24,31 +24,52 @@ export class TokenRevocationError extends Error {
 /**
  * Revokes an API token of the org. `ownerId` limits it to that member's own
  * tokens (what a member without `tokens.manage` may revoke), and
- * `workspaceId` to one workspace's (what a credential bound to it may
- * revoke). Returns the token's prefix and owner for the audit event.
+ * `workspaceId` to tokens that reach that one docket alone (what a docket's
+ * admin, or the org admin API for one database, may revoke); with both, both
+ * must hold. `ownOrPinned` allows either: a docket admin's own tokens, and
+ * anyone's that reach only their docket. Returns the token's prefix, owner and
+ * dockets for the audit event.
  */
 export async function revokeApiToken(
   tx: Tx,
-  input: { orgId: string; tokenId: string; by: string; ownerId?: string; workspaceId?: string },
-): Promise<{ prefix: string; ownerId: string; workspaceId: string }> {
-  const { rows } = await tx.query<{ prefix: string; owner_id: string; workspace_id: string }>(
+  input: {
+    orgId: string
+    tokenId: string
+    by: string
+    ownerId?: string
+    workspaceId?: string
+    ownOrPinned?: { ownerId: string; workspaceId: string }
+  },
+): Promise<{ prefix: string; ownerId: string; dockets: string[] | null }> {
+  const { rows } = await tx.query<{ prefix: string; owner_id: string; dockets: string[] | null }>(
     `UPDATE platform.api_tokens SET revoked_at = now(), revoked_by = $3
       WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL AND ($4::text IS NULL OR owner_id = $4)
-        AND ($5::text IS NULL OR workspace_id = $5)
-      RETURNING prefix, owner_id, workspace_id`,
-    [input.tokenId, input.orgId, input.by, input.ownerId ?? null, input.workspaceId ?? null],
+        AND ($5::text IS NULL OR dockets = ARRAY[$5])
+        AND ($6::text IS NULL OR owner_id = $6 OR dockets = ARRAY[$7])
+      RETURNING prefix, owner_id, dockets`,
+    [
+      input.tokenId,
+      input.orgId,
+      input.by,
+      input.ownerId ?? null,
+      input.workspaceId ?? null,
+      input.ownOrPinned?.ownerId ?? null,
+      input.ownOrPinned?.workspaceId ?? null,
+    ],
   )
   const row = rows[0]
   if (!row) throw new TokenRevocationError('No such live token.')
   await notifyRevoked(tx, `token:${input.tokenId}`)
-  return { prefix: row.prefix, ownerId: row.owner_id, workspaceId: row.workspace_id }
+  return { prefix: row.prefix, ownerId: row.owner_id, dockets: row.dockets }
 }
 
 /**
- * Revokes every credential for a deleted workspace (§4, §8.5): its API tokens,
- * and the OAuth grants on its MCP endpoint with every access and refresh token
- * issued under them. Both are bound to the workspace's id, so none would work
- * on a new workspace at the same address; this leaves none live either.
+ * Revokes every credential for a deleted workspace (§4, §8.5): the API tokens
+ * and named connections that reached it alone, and the OAuth grants on its
+ * MCP endpoint with every access and refresh token issued under them. One that
+ * also named other dockets loses this one and keeps the rest. Credentials are
+ * bound to the workspace's id, so none would work on a new workspace at the
+ * same address; this leaves none live either.
  */
 export async function revokeWorkspaceCredentials(
   tx: Tx,
@@ -56,15 +77,27 @@ export async function revokeWorkspaceCredentials(
 ): Promise<{ tokens: number; grants: number }> {
   const tokens = await tx.query(
     `UPDATE platform.api_tokens SET revoked_at = now(), revoked_by = $3
-      WHERE org_id = $1 AND workspace_id = $2 AND revoked_at IS NULL`,
+      WHERE org_id = $1 AND dockets = ARRAY[$2] AND revoked_at IS NULL`,
     [input.orgId, input.workspaceId, input.by],
   )
+  await tx.query(
+    `UPDATE platform.api_tokens SET dockets = array_remove(dockets, $2)
+      WHERE org_id = $1 AND $2 = ANY (dockets) AND cardinality(dockets) > 1`,
+    [input.orgId, input.workspaceId],
+  )
   const { rows } = await tx.query<{ grant_id: string }>(
-    "SELECT DISTINCT grant_id FROM platform.oauth_store WHERE resource = $1 AND grant_id IS NOT NULL",
-    [input.resource],
+    `SELECT DISTINCT grant_id FROM platform.oauth_store WHERE resource = $1 AND grant_id IS NOT NULL
+     UNION SELECT grant_id FROM platform.oauth_connections WHERE org_id = $2 AND dockets = ARRAY[$3]`,
+    [input.resource, input.orgId, input.workspaceId],
   )
   const grants = rows.map((row) => row.grant_id)
   await tx.query('DELETE FROM platform.oauth_store WHERE grant_id = ANY($1) OR resource = $2', [grants, input.resource])
+  await tx.query('DELETE FROM platform.oauth_connections WHERE grant_id = ANY($1)', [grants])
+  await tx.query(
+    `UPDATE platform.oauth_connections SET dockets = array_remove(dockets, $2)
+      WHERE org_id = $1 AND $2 = ANY (dockets) AND cardinality(dockets) > 1`,
+    [input.orgId, input.workspaceId],
+  )
   await notifyRevoked(tx, `workspace:${input.workspaceId}`)
   return { tokens: tokens.rowCount ?? 0, grants: grants.length }
 }

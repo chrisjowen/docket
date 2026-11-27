@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
   import { resolve } from '$app/paths'
-  import { Bot, Check, Copy, KeyRound, ScrollText, Terminal } from '@lucide/svelte'
+  import { Bot, Check, Copy, KeyRound, Plug, ScrollText, Server, Terminal } from '@lucide/svelte'
 
   import Csrf from '$lib/components/csrf.svelte'
 
@@ -19,6 +19,7 @@
   }
 
   const day = (value: string | null) => (value ? value.slice(0, 10) : '—')
+  const reach = (dockets: { slug: string; name: string }[] | null) => (dockets === null ? 'Every docket' : dockets.map((docket) => docket.name).join(', '))
   const when = (value: string | null) => (value ? value.replace('T', ' ').slice(0, 16) : '—')
 
   const snippets = $derived({
@@ -35,9 +36,9 @@
 
 <h1>Connect an agent</h1>
 <p class="muted lede">
-  Agents read this docket's knowledge over MCP. Interactive tools sign in with OAuth as you; CI and headless agents use
-  a scoped token. Either way a credential reaches this docket only, never does more than its owner's role allows,
-  and every call is audited.
+  Agents read this docket's knowledge over MCP, always as someone: you, signing in with OAuth or with a personal token,
+  or a system account with its token. A credential acts as whoever owns it and can only be narrowed, to read-only or to
+  some dockets, never widened. Every call is audited.
 </p>
 
 <section class="card endpoint">
@@ -50,20 +51,39 @@
 
 <div class="ways">
   <section class="card way">
-    <h2><Bot size={18} aria-hidden="true" /> OAuth, for interactive tools</h2>
-    <p class="muted">The client opens a browser, you sign in with GitHub and choose what it may do. Its tokens last 15 minutes and renew for 30 days.</p>
+    <h2><Bot size={18} aria-hidden="true" /> As yourself, by signing in</h2>
+    <p class="muted">
+      The client opens a browser, you sign in, name the connection ("Claude Code — work laptop") and choose its dockets and
+      whether it only reads. Its tokens last 15 minutes and renew for 30 days.
+    </p>
     <p class="snippet-label">Claude Code</p>
     <pre class="snippet"><code>{snippets.claude}</code></pre>
     <p class="snippet-label">Claude Desktop, Cursor and other clients' JSON</p>
     <pre class="snippet"><code>{snippets.json}</code></pre>
   </section>
   <section class="card way">
-    <h2><Terminal size={18} aria-hidden="true" /> A token, for CI and headless agents</h2>
-    <p class="muted">Create a token below, keep it in a secret store as <span class="mono">DOCKET_TOKEN</span>, and send it as a bearer token. Never put it in a URL.</p>
+    <h2><Terminal size={18} aria-hidden="true" /> As yourself, with a personal token</h2>
+    <p class="muted">
+      Create one below for this docket, or on <a href={resolve('/o/[org]/tokens', { org: data.org.slug })}>Your tokens & connections</a>
+      for several. Keep it in a secret store as <span class="mono">DOCKET_TOKEN</span> and send it as a bearer token, never in a URL.
+    </p>
     <p class="snippet-label">Claude Code</p>
     <pre class="snippet"><code>{snippets.token}</code></pre>
     <p class="snippet-label">Any HTTP client</p>
     <pre class="snippet"><code>{snippets.curl}</code></pre>
+  </section>
+  <section class="card way">
+    <h2><Server size={18} aria-hidden="true" /> As a system account</h2>
+    <p class="muted">
+      For CI, integrations and bots: anything that is not a person. System accounts belong to {data.org.name}, outlive whoever made
+      them, and are created, given access and issued tokens in one place: Settings › System accounts. Their tokens are used just
+      like a personal one.
+    </p>
+    {#if data.permissions?.['members.manage']}
+      <p><a class="button small" href={resolve('/o/[org]/settings/system-accounts', { org: data.org.slug })}>Open System accounts</a></p>
+    {:else}
+      <p class="muted small">Ask an admin of {data.org.name} for one.</p>
+    {/if}
   </section>
 </div>
 
@@ -82,71 +102,50 @@
 {/if}
 
 <section class="block">
-  <h2><KeyRound size={18} aria-hidden="true" /> API tokens</h2>
+  <h2><KeyRound size={18} aria-hidden="true" /> Tokens that reach this docket</h2>
   <form method="POST" action="?/createToken" class="card create">
     <Csrf token={data.csrf} />
-    <label class="wide">Description <input name="description" maxlength="200" placeholder="CI on platform-api" /></label>
-    {#if data.serviceAccounts.length > 0}
-      <label>
-        For
-        <select name="owner">
-          <option value="me">me</option>
-          {#each data.serviceAccounts as account (account.id)}<option value={account.id}>{account.name} ({account.role})</option>{/each}
-        </select>
-      </label>
-    {:else}
-      <input type="hidden" name="owner" value="me" />
-    {/if}
+    <label class="wide">Name <input name="name" maxlength="200" placeholder="CI on platform-api" required /></label>
     <label>
       Expires in
       <select name="days">
         {#each data.expiryChoices as days (days)}<option value={days} selected={days === data.defaultDays}>{days} days</option>{/each}
       </select>
     </label>
-    <fieldset class="wide">
-      <legend>Scopes</legend>
-      {#each data.scopes as entry (entry.scope)}
-        <label class="scope" class:disabled={!entry.allowed}>
-          <input type="checkbox" name="scope" value={entry.scope} checked={entry.scope === 'docket:read'} disabled={!entry.allowed} />
-          <span><span class="mono">{entry.scope}</span> <span class="muted">{entry.label}</span></span>
-        </label>
-      {/each}
-      {#if data.role === 'viewer'}<p class="muted small">As a viewer your tokens are read-only.</p>
-      {:else if data.scopes.some((entry) => entry.scope === 'ontology:write' && !entry.allowed)}
-        <p class="muted small" data-testid="ontology-write-off">
-          ontology:write is off for your role here: the org's owner turns it on in this docket's <a href={resolve('/o/[org]/w/[ws]/settings', { org: data.org.slug, ws: data.workspace.slug })}>settings</a>.
-        </p>
-      {/if}
-    </fieldset>
+    <label class="check">
+      <input type="checkbox" name="readOnly" checked={data.readOnlyHere} disabled={data.readOnlyHere} />
+      <span>Read-only <span class="muted small">{data.readOnlyHere ? 'You can only read this docket, so your tokens only read.' : 'Search, read and ask; never write.'}</span></span>
+    </label>
+    <p class="muted small wide">A personal token for this docket only. It does what you can do here, and stops when you lose access.</p>
     <div class="wide"><button class="button primary" type="submit">Create token</button></div>
   </form>
 
   <div class="card table-wrap">
-    <table class="grid" aria-label="API tokens">
-      <thead><tr><th>Token</th><th>Owner</th><th>Scopes</th><th>Created</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
+    <table class="grid stackable" aria-label="API tokens">
+      <thead><tr><th>Token</th><th>Owner</th><th>Reaches</th><th>Access</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
       <tbody>
         {#each data.tokens as token (token.id)}
           <tr data-testid="token-row">
-            <td><span class="mono">{token.prefix}…</span>{#if token.description}<br /><span class="muted small">{token.description}</span>{/if}</td>
-            <td class="small">{token.owner}</td>
-            <td class="mono small">{token.scopes.join(' ')}</td>
-            <td class="small">{day(token.createdAt)}</td>
-            <td class="small">{day(token.expiresAt)}</td>
-            <td class="small">{when(token.lastUsedAt)}</td>
+            <td data-label="Token"><strong>{token.name ?? 'Unnamed'}</strong><br /><span class="mono small muted">{token.prefix}…</span></td>
+            <td data-label="Owner" class="small">{token.owner}{#if token.ownerKind === 'service'} <span class="badge">system account</span>{/if}</td>
+            <td data-label="Reaches" class="small">{reach(token.dockets)}</td>
+            <td data-label="Access" class="small">{token.readOnly ? 'Read-only' : 'As its owner'}</td>
+            <td data-label="Expires" class="small">{day(token.expiresAt)}</td>
+            <td data-label="Last used" class="small">{when(token.lastUsedAt)}</td>
             <td>
-              {#if token.status === 'live'}
+              {#if token.status !== 'live'}
+                <span class="badge">{token.status}</span>
+              {:else if token.revocable}
                 <form method="POST" action="?/revokeToken">
                   <Csrf token={data.csrf} />
                   <input type="hidden" name="token" value={token.id} />
                   <button class="button small danger" type="submit">Revoke</button>
                 </form>
-              {:else}
-                <span class="badge">{token.status}</span>
               {/if}
             </td>
           </tr>
         {:else}
-          <tr><td colspan="7" class="muted">No tokens yet.</td></tr>
+          <tr><td colspan="7" class="muted">No tokens reach this docket yet.</td></tr>
         {/each}
       </tbody>
     </table>
@@ -154,24 +153,27 @@
 </section>
 
 <section class="block">
-  <h2><Bot size={18} aria-hidden="true" /> OAuth apps</h2>
+  <h2><Plug size={18} aria-hidden="true" /> Connections</h2>
+  <p class="muted small">Each OAuth sign-in by an AI client, under the name it was given. Rename yours on Your tokens & connections.</p>
   <div class="card table-wrap">
-    <table class="grid" aria-label="OAuth apps">
-      <thead><tr><th>Client</th><th>Signed in as</th><th>Scopes</th><th>Allowed</th><th>Until</th><th></th></tr></thead>
+    <table class="grid stackable" aria-label="Connections">
+      <thead><tr><th>Connection</th><th>Signed in as</th><th>Reaches</th><th>Access</th><th>Last used</th><th></th></tr></thead>
       <tbody>
-        {#each data.grants as grant (grant.id)}
+        {#each data.connections as connection (connection.id)}
           <tr data-testid="grant-row">
-            <td>{grant.client}<br /><span class="mono small muted">{grant.clientId}</span></td>
-            <td class="small">{grant.user}</td>
-            <td class="mono small">{grant.scopes.join(' ')}</td>
-            <td class="small">{when(grant.grantedAt)}</td>
-            <td class="small">{day(grant.expiresAt)}</td>
+            <td data-label="Connection"><strong>{connection.name}</strong><br /><span class="small muted">{connection.client}</span></td>
+            <td data-label="Signed in as" class="small">{connection.user}</td>
+            <td data-label="Reaches" class="small">{reach(connection.dockets)}</td>
+            <td data-label="Access" class="small">{connection.readOnly ? 'Read-only' : 'As its owner'}</td>
+            <td data-label="Last used" class="small">{when(connection.lastUsedAt ?? connection.createdAt)}</td>
             <td>
-              <form method="POST" action="?/revokeGrant">
-                <Csrf token={data.csrf} />
-                <input type="hidden" name="grant" value={grant.id} />
-                <button class="button small danger" type="submit">Revoke</button>
-              </form>
+              {#if connection.revocable}
+                <form method="POST" action="?/revokeConnection">
+                  <Csrf token={data.csrf} />
+                  <input type="hidden" name="connection" value={connection.id} />
+                  <button class="button small danger" type="submit">Revoke</button>
+                </form>
+              {/if}
             </td>
           </tr>
         {:else}
@@ -303,27 +305,12 @@
   .create .wide {
     grid-column: 1 / -1;
   }
-  fieldset {
-    display: grid;
-    gap: 0.45rem;
-    margin: 0;
-    padding: 0.6rem 0.8rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-  }
-  legend {
-    padding-inline: 0.3rem;
-    font-size: 0.8125rem;
-    font-weight: 600;
-  }
-  .scope {
+  .check {
     display: flex;
     gap: 0.5rem;
     align-items: baseline;
     font-weight: 400;
-  }
-  .scope.disabled {
-    opacity: 0.55;
+    align-self: end;
   }
   :global(.badge.outcome-ok) {
     color: var(--ok);

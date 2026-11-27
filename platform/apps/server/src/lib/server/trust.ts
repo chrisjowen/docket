@@ -30,8 +30,6 @@ export interface DirectoryEntry {
   role: Member['role']
   attributes: Record<string, unknown>
   updatedAt: string | null
-  /** Service accounts whose tokens act for this person. */
-  agents: { name: string; role: Member['role'] }[]
 }
 
 /** Every human member of the org, with what the directory attests about them and who acts for them. */
@@ -46,9 +44,6 @@ export async function directory(access: OrgAccess, ctx: StoreContext): Promise<D
       role: member.role,
       attributes: attested.get(member.id)?.attributes ?? {},
       updatedAt: attested.get(member.id)?.updatedAt.toISOString() ?? null,
-      agents: members
-        .filter((other) => other.kind === 'service' && other.actsFor?.toLowerCase() === member.login.toLowerCase())
-        .map((other) => ({ name: other.login, role: other.role })),
     }))
 }
 

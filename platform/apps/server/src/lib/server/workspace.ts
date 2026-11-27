@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { workspaceBySlug, type StoreContext, type Workspace } from '@docket/platform-canonical-store'
-import { listMembers } from '@docket/platform-tenancy'
 import { error, type RequestEvent } from '@sveltejs/kit'
 
 import { namespaceAccess, orgAccess, type NamespaceAccess, type OrgAccess } from './request'
 import { getRuntime } from './runtime'
+import { actorNamer } from './tokens'
 
 /** Runs `fn` in one transaction as the org (`withTenant`), with the org's data keys. */
 export async function inOrg<T>(access: OrgAccess, fn: (ctx: StoreContext) => Promise<T>): Promise<T> {
@@ -50,20 +50,9 @@ export function publisherOf(event: RequestEvent) {
   return { actor: `user:${user.id}`, login: user.login }
 }
 
-/**
- * How audit actors read on a page: `user:<id>` as `@login` for the org's
- * members, an MCP client's `oauth:<client>/user:<id>` as `@login via <client>`,
- * anything else as it is.
- */
+/** How audit actors read on a page: who, and through which token or connection (`actorNamer`). */
 export async function actorNames(access: OrgAccess): Promise<(actor: string | null) => string> {
-  const members = await getRuntime().router.withPlatform((tx) => listMembers(tx, access.org.id))
-  const names = new Map(members.map((member) => [`user:${member.id}`, `@${member.login}`]))
-  return (actor) => {
-    if (!actor) return ''
-    const oauth = /^oauth:(.+)\/(user:.+)$/.exec(actor)
-    const via = oauth && names.get(oauth[2] as string)
-    return names.get(actor) ?? (via ? `${via} via ${oauth[1]}` : actor)
-  }
+  return actorNamer(access.org)
 }
 
 /** How the activity log's actors read: a member as @login; a token or OAuth client by how its evidence names it. */

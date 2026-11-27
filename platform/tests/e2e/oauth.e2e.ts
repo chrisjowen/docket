@@ -105,7 +105,12 @@ test('code + PKCE + resource gives a token for this workspace only', async ({ br
 
   await expect(page.getByRole('heading', { name: 'Allow e2e client?' })).toBeVisible()
   await expect(page.locator('p.workspace')).toContainText('/ Platform')
-  await expect(page.getByRole('checkbox', { name: /docket:read/ })).toBeChecked()
+  // A named connection: prefilled from the client's name, on the docket it asked for, read-only if the user says so.
+  await expect(page.getByTestId('connection-name')).toHaveValue(/^e2e client/)
+  await expect(page.getByRole('checkbox', { name: /Platform/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /Data/ })).not.toBeChecked()
+  await page.getByTestId('connection-name').fill('e2e laptop')
+  await page.getByTestId('connection-read-only').check()
   await page.getByRole('button', { name: 'Allow' }).click()
   await page.waitForURL(backAtCallback())
   const back = new URL(page.url())
@@ -126,20 +131,29 @@ test('code + PKCE + resource gives a token for this workspace only', async ({ br
   const names = ((await listed.json()) as { result: { tools: { name: string }[] } }).result.tools.map((tool) => tool.name)
   expect(names).toEqual(['docket_search', 'docket_get', 'docket_ask', 'docket_ontology'])
 
-  // Its audience is this workspace's MCP URL: another workspace refuses it.
+  // It reaches the dockets its connection names: another workspace refuses it.
   const elsewhere = await mcp(request, `/mcp/${org}/data`, tokens.access_token, 'tools/list')
   expect(elsewhere.status()).toBe(401)
   expect(elsewhere.headers()['www-authenticate']).toContain('error="invalid_token"')
 
-  // The grant shows on the workspace's MCP page, and the call in its audit.
+  // The connection shows on the workspace's MCP page by its name, and the call in its audit as who and through what.
   await page.goto(`/o/${org}/w/platform/mcp`)
-  await expect(page.getByTestId('grant-row')).toContainText('e2e client')
+  await expect(page.getByTestId('grant-row')).toContainText('e2e laptop')
+  await expect(page.getByTestId('grant-row')).toContainText('Read-only')
   await expect(page.getByTestId('audit-row').filter({ hasText: 'oauth.grant' }).first()).toContainText(clientId)
-  await expect(page.getByTestId('audit-row').filter({ hasText: 'mcp.tools/list' }).first()).toContainText(`@alice via ${clientId}`)
+  await expect(page.getByTestId('audit-row').filter({ hasText: 'mcp.tools/list' }).first()).toContainText("@alice via 'e2e laptop'")
 
-  // Revoking the grant ends its tokens on the next call.
-  await page.getByTestId('grant-row').getByRole('button', { name: 'Revoke' }).click()
-  await expect(page.getByText('the next call with this client')).toBeVisible()
+  // Your tokens & connections lists it, and renames it.
+  await page.goto(`/o/${org}/tokens`)
+  const row = page.getByTestId('connection-row').filter({ hasText: 'e2e laptop' })
+  await row.getByRole('button', { name: 'Rename e2e laptop' }).click()
+  await row.getByLabel('New name').fill('e2e desk')
+  await row.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Renamed to ‘e2e desk’.')).toBeVisible()
+
+  // Revoking the connection ends its tokens on the next call.
+  await page.getByTestId('connection-row').filter({ hasText: 'e2e desk' }).getByRole('button', { name: 'Revoke e2e desk' }).click()
+  await expect(page.getByText('the next call through this connection will fail')).toBeVisible()
   expect((await mcp(request, `/mcp/${org}/platform`, tokens.access_token, 'tools/list')).status()).toBe(401)
   const refreshed = await request.post('/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: tokens.refresh_token, client_id: clientId } })
   expect(refreshed.status()).toBe(400)

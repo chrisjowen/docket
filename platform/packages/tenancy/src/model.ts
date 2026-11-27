@@ -61,8 +61,6 @@ export interface Member extends User {
   joinedAt: Date
   lastSeenAt: Date | null
   description: string | null
-  /** A service account's accountable person, by login, while they are a member: who its tokens act for. */
-  actsFor: string | null
 }
 
 export interface Invite {
@@ -399,12 +397,10 @@ const DATABASE_ACCOUNT = (m: string) =>
 
 export async function listMembers(tx: Tx, orgId: string): Promise<Member[]> {
   const { rows } = await tx.query<
-    UserRow & { role: string; created_at: Date; last_seen_at: Date | null; description: string | null; acts_for: string | null }
+    UserRow & { role: string; created_at: Date; last_seen_at: Date | null; description: string | null }
   >(
     `SELECT u.id, u.kind, u.login, u.name, u.email, u.emails, u.avatar_url, u.description, u.last_seen_at,
-            m.role, m.created_at,
-            (SELECT a.login FROM platform.users a JOIN platform.memberships am ON am.user_id = a.id AND am.org_id = m.org_id
-              WHERE a.id = u.accountable_user_id AND a.kind = 'human') AS acts_for
+            m.role, m.created_at
        FROM platform.memberships m JOIN platform.users u ON u.id = m.user_id
       WHERE m.org_id = $1 AND NOT ${DATABASE_ACCOUNT('m')}
       ORDER BY array_position(ARRAY['owner','admin','editor','viewer'], m.role), u.login_lower`,
@@ -419,7 +415,6 @@ export async function listMembers(tx: Tx, orgId: string): Promise<Member[]> {
             joinedAt: row.created_at,
             lastSeenAt: row.last_seen_at,
             description: row.description,
-            actsFor: row.acts_for,
           },
         ]
       : [],
@@ -508,7 +503,13 @@ export async function removeMember(
   return row.role
 }
 
-/** Adds a service account (§4): a non-human member whose only credentials will be API tokens. */
+/**
+ * Adds a system account (§4; tenancy v2 §3.3): anything that is not a
+ * person, owned by the account and outliving whoever made it. Its only
+ * credentials are API tokens; no person acts for it, and its account's owners
+ * get its token notices. Settings › System accounts is the one place that
+ * makes them.
+ */
 export async function createServiceAccount(
   tx: Tx,
   input: { orgId: string; name: string; description: string | null; role: Role; actorId: string; actorRole: Role },
@@ -517,20 +518,19 @@ export async function createServiceAccount(
     throw new TenancyError('invalid', 'Name it with 2-40 lowercase letters, digits or hyphens.')
   }
   if (input.role === 'owner' || !canChangeRole(input.actorRole, input.role, input.role)) {
-    throw new TenancyError('forbidden', 'Your role cannot give a service account that role.')
+    throw new TenancyError('forbidden', 'Your role cannot give a system account that role.')
   }
   await reserveSeat(tx, input.orgId)
   const id = randomUUID()
   try {
-    // It acts for whoever made it until an admin names someone else (trust design §3.4).
     await tx.query(
-      `INSERT INTO platform.users (id, kind, login, service_org_id, description, created_by, accountable_user_id)
-       VALUES ($1, 'service', $2, $3, $4, $5, $5)`,
+      `INSERT INTO platform.users (id, kind, login, service_org_id, description, created_by)
+       VALUES ($1, 'service', $2, $3, $4, $5)`,
       [id, input.name, input.orgId, input.description, input.actorId],
     )
   } catch (error) {
     if ((error as { code?: string }).code === '23505') {
-      throw new TenancyError('conflict', 'A service account with that name exists.')
+      throw new TenancyError('conflict', 'A system account with that name exists.')
     }
     throw error
   }
@@ -543,35 +543,130 @@ export async function createServiceAccount(
   return { id, kind: 'service', login: input.name, name: null, email: null, emails: [], avatarUrl: null }
 }
 
-/**
- * Names the person a service account acts for: a human member of its org,
- * whose evidence its tokens give when an agent cites no source. Returns the
- * login it acted for before, if anyone.
- */
-export async function setAccountable(
-  tx: Tx,
-  input: { orgId: string; serviceId: string; accountableLogin: string },
-): Promise<{ service: string; before: string | null; after: string }> {
-  const { rows: services } = await tx.query<{ login: string; before: string | null; org_admin: boolean; database_account: boolean }>(
-    `SELECT u.login, (SELECT a.login FROM platform.users a WHERE a.id = u.accountable_user_id) AS before,
-            (u.id = o.org_admin_id) IS TRUE AS org_admin, ${DATABASE_ACCOUNT('m')} AS database_account
+/** A system account as Settings › System accounts lists it. */
+export interface SystemAccount {
+  id: string
+  name: string
+  description: string | null
+  role: Role
+  createdAt: Date
+  createdByLogin: string | null
+  /** Made and managed by the org admin API (`org-admin` and its databases' accounts): shown, never changed here. */
+  managed: boolean
+  liveTokens: number
+  lastUsedAt: Date | null
+  /** When its next live token expires. */
+  nextExpiry: Date | null
+}
+
+/** The account's system accounts: those made in Settings first, then the org admin API's. */
+export async function listSystemAccounts(tx: Tx, orgId: string): Promise<SystemAccount[]> {
+  const { rows } = await tx.query<{
+    id: string
+    login: string
+    description: string | null
+    role: string
+    created_at: Date
+    created_by: string | null
+    managed: boolean
+    live: string
+    last_used_at: Date | null
+    next_expiry: Date | null
+  }>(
+    `SELECT u.id, u.login, u.description, m.role, u.created_at,
+            (SELECT c.login FROM platform.users c WHERE c.id = u.created_by AND c.kind = 'human') AS created_by,
+            ((u.id = o.org_admin_id) IS TRUE OR ${DATABASE_ACCOUNT('m')}) AS managed,
+            (SELECT count(*) FROM platform.api_tokens t WHERE t.owner_id = u.id AND t.revoked_at IS NULL AND t.expires_at > now()) AS live,
+            (SELECT max(t.last_used_at) FROM platform.api_tokens t WHERE t.owner_id = u.id) AS last_used_at,
+            (SELECT min(t.expires_at) FROM platform.api_tokens t WHERE t.owner_id = u.id AND t.revoked_at IS NULL AND t.expires_at > now()) AS next_expiry
+       FROM platform.memberships m JOIN platform.users u ON u.id = m.user_id JOIN platform.orgs o ON o.id = m.org_id
+      WHERE m.org_id = $1 AND u.kind = 'service'
+      ORDER BY 7, u.login_lower`,
+    [orgId],
+  )
+  return rows.flatMap((row) =>
+    isRole(row.role)
+      ? [
+          {
+            id: row.id,
+            name: row.login,
+            description: row.description,
+            role: row.role,
+            createdAt: row.created_at,
+            createdByLogin: row.created_by,
+            managed: row.managed,
+            liveTokens: Number(row.live),
+            lastUsedAt: row.last_used_at,
+            nextExpiry: row.next_expiry,
+          },
+        ]
+      : [],
+  )
+}
+
+/** Changes a system account's description; the org admin API's own are left to it. */
+export async function describeServiceAccount(tx: Tx, input: { orgId: string; serviceId: string; description: string | null }): Promise<void> {
+  const { rows } = await tx.query<{ org_admin: boolean; database_account: boolean }>(
+    `SELECT (u.id = o.org_admin_id) IS TRUE AS org_admin, ${DATABASE_ACCOUNT('m')} AS database_account
        FROM platform.users u JOIN platform.memberships m ON m.user_id = u.id AND m.org_id = $1 JOIN platform.orgs o ON o.id = m.org_id
       WHERE u.id = $2 AND u.kind = 'service' FOR UPDATE OF u`,
     [input.orgId, input.serviceId],
   )
-  const service = services[0]
-  if (!service) throw new TenancyError('not-found', 'No such service account.')
-  if (service.org_admin) throw new TenancyError('forbidden', ORG_ADMIN_MANAGED)
-  if (service.database_account) throw new TenancyError('forbidden', DATABASE_ACCOUNT_MANAGED)
-  const { rows: people } = await tx.query<{ id: string; login: string }>(
-    `SELECT u.id, u.login FROM platform.users u JOIN platform.memberships m ON m.user_id = u.id AND m.org_id = $1
-      WHERE u.kind = 'human' AND u.login_lower = lower($2)`,
-    [input.orgId, input.accountableLogin.trim().replace(/^@/, '')],
+  const row = rows[0]
+  if (!row) throw new TenancyError('not-found', 'No such system account.')
+  if (row.org_admin) throw new TenancyError('forbidden', ORG_ADMIN_MANAGED)
+  if (row.database_account) throw new TenancyError('forbidden', DATABASE_ACCOUNT_MANAGED)
+  await tx.query('UPDATE platform.users SET description = $2 WHERE id = $1', [input.serviceId, input.description])
+}
+
+/** How soon before it expires a system account's token is called out to the account's owners. */
+export const TOKEN_NOTICE_DAYS = 14
+
+/** A system account's token that is about to expire, or has just expired: what the account's owners are told. */
+export interface TokenNotice {
+  accountId: string
+  account: string
+  tokenId: string
+  prefix: string
+  name: string | null
+  expiresAt: Date
+  expired: boolean
+}
+
+/**
+ * The token notices of an account (tenancy v2 §3.3): every live token of a
+ * system account that expires within `TOKEN_NOTICE_DAYS`, and every one that
+ * expired in the last `TOKEN_NOTICE_DAYS` and was not replaced by a live token
+ * of the same account. No steward: they go to the account's owners.
+ */
+export async function tokenNotices(tx: Tx, orgId: string, now = new Date()): Promise<TokenNotice[]> {
+  const { rows } = await tx.query<{
+    account_id: string
+    login: string
+    id: string
+    prefix: string
+    description: string | null
+    expires_at: Date
+  }>(
+    `SELECT u.id AS account_id, u.login, t.id, t.prefix, t.description, t.expires_at
+       FROM platform.api_tokens t JOIN platform.users u ON u.id = t.owner_id AND u.kind = 'service'
+      WHERE t.org_id = $1 AND t.revoked_at IS NULL
+        AND t.expires_at BETWEEN $2::timestamptz - make_interval(days => $3) AND $2::timestamptz + make_interval(days => $3)
+        AND (t.expires_at > $2 OR NOT EXISTS (
+              SELECT 1 FROM platform.api_tokens n
+               WHERE n.owner_id = t.owner_id AND n.revoked_at IS NULL AND n.expires_at > $2 AND n.created_at > t.created_at))
+      ORDER BY t.expires_at`,
+    [orgId, now, TOKEN_NOTICE_DAYS],
   )
-  const person = people[0]
-  if (!person) throw new TenancyError('invalid', 'A service account acts for a person who is a member of this organisation.')
-  await tx.query('UPDATE platform.users SET accountable_user_id = $2 WHERE id = $1', [input.serviceId, person.id])
-  return { service: service.login, before: service.before, after: person.login }
+  return rows.map((row) => ({
+    accountId: row.account_id,
+    account: row.login,
+    tokenId: row.id,
+    prefix: row.prefix,
+    name: row.description,
+    expiresAt: row.expires_at,
+    expired: row.expires_at <= now,
+  }))
 }
 
 // --- Org admin ------------------------------------------------------------------

@@ -7,6 +7,8 @@
 
   let { data, form } = $props()
 
+  let reach = $state<'chosen' | 'all'>('chosen')
+
   // The server recorded the answer; the browser goes on to the authorization server, which sends it back to the client.
   $effect(() => {
     if (form?.continueTo) window.location.assign(form.continueTo)
@@ -19,10 +21,11 @@
 
 <AuthFrame>
   {#snippet pitch()}
-    <h1 class="hero">An MCP client is asking to use your docket.</h1>
+    <h1 class="hero">An MCP client is asking to connect as you.</h1>
     <p class="lede">
-      It gets a token for one docket only, for 15 minutes at a time, renewed for up to 30 days. It can never do
-      more than your role allows, and you can revoke it at any time from the docket's MCP page.
+      It becomes a named connection that acts as you: never more than you can do, and narrower if you choose. Its
+      tokens last 15 minutes at a time, renewed for up to 30 days. You can rename or revoke it at any time on Your
+      tokens & connections.
     </p>
   {/snippet}
 
@@ -91,24 +94,52 @@
       </p>
       <form method="POST" action="?/approve" class="stack">
         <Csrf token={data.csrf} />
+        <label>
+          Name this connection
+          <input name="name" value={data.suggestedName} maxlength="80" required autocomplete="off" data-testid="connection-name" />
+          <span class="muted small">How it shows on Your tokens & connections and in each docket's activity: “{data.target.workspaceName}: you via ‘…’”.</span>
+        </label>
         <fieldset>
-          <legend>It may</legend>
-          {#each data.scopes as entry (entry.scope)}
-            <label class="scope" class:disabled={!entry.allowed}>
-              <input type="checkbox" name="scope" value={entry.scope} checked={entry.allowed} disabled={!entry.allowed} />
-              <span>
-                <span class="mono">{entry.scope}</span>
-                <span class="muted">{entry.label}</span>
-                {#if !entry.allowed}<span class="muted">Your role cannot grant this.</span>{/if}
-              </span>
-            </label>
-          {:else}
-            <p class="muted">The client asked for no permissions it could use here.</p>
-          {/each}
+          <legend>It may use</legend>
+          <label class="choice">
+            <input type="radio" name="reach" value="chosen" bind:group={reach} />
+            <span>These dockets</span>
+          </label>
+          {#if reach === 'chosen'}
+            <div class="dockets">
+              {#each data.target.dockets as docket (docket.id)}
+                <label class="choice">
+                  <input
+                    type="checkbox"
+                    name="docket"
+                    value={docket.id}
+                    checked={docket.id === data.target.workspaceId}
+                    disabled={docket.id === data.target.workspaceId}
+                  />
+                  <span>
+                    {docket.name}
+                    {#if docket.id === data.target.workspaceId}<span class="muted small">the docket it asked for</span>{/if}
+                    {#if docket.readOnly}<span class="muted small">you only read it</span>{/if}
+                  </span>
+                </label>
+              {/each}
+            </div>
+          {/if}
+          <label class="choice">
+            <input type="radio" name="reach" value="all" bind:group={reach} />
+            <span>Every docket of {data.target.orgName} you can reach, now and later</span>
+          </label>
         </fieldset>
+        <label class="choice">
+          <input type="checkbox" name="readOnly" data-testid="connection-read-only" />
+          <span>
+            Read-only
+            <span class="muted small">Search, read and ask; never write{data.target.readOnlyHere ? '. You only read this docket anyway.' : '.'}</span>
+          </span>
+        </label>
         <div class="actions">
-          <button class="button primary" type="submit" disabled={!data.scopes.some((entry) => entry.allowed)}>Allow</button>
-          <button class="button" type="submit" formaction="?/deny">Deny</button>
+          <button class="button primary" type="submit">Allow</button>
+          <button class="button" type="submit" formaction="?/deny" formnovalidate>Deny</button>
         </div>
       </form>
     {:else}
@@ -169,7 +200,7 @@
   }
   fieldset {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.5rem;
     margin: 0;
     padding: 0.8rem 1rem;
     border: 1px solid var(--border);
@@ -180,18 +211,24 @@
     font-size: 0.8125rem;
     font-weight: 600;
   }
-  .scope {
+  label {
+    display: grid;
+    gap: 0.3rem;
+  }
+  .choice {
     display: flex;
     gap: 0.6rem;
     align-items: flex-start;
     font-weight: 400;
   }
-  .scope > span {
+  .choice > span {
     display: grid;
     gap: 0.1rem;
   }
-  .scope.disabled {
-    opacity: 0.6;
+  .dockets {
+    display: grid;
+    gap: 0.4rem;
+    padding-left: 1.6rem;
   }
   .actions {
     display: flex;
