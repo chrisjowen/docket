@@ -1,322 +1,216 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-/** Per-org roles (§4), most to least privileged. */
-export const ROLES = ['owner', 'admin', 'editor', 'viewer'] as const
-export type Role = (typeof ROLES)[number]
 
-export function isRole(value: unknown): value is Role {
-  return typeof value === 'string' && (ROLES as readonly string[]).includes(value)
-}
+// Access is a role on a place (tenancy v2 §3.1). A capability is one thing
+// someone may do; a role is a named bundle of them; a grant gives a user, a
+// system account or everyone in the account one role on one place - the
+// whole account or one docket - optionally adding or removing single
+// capabilities for that grant alone. What a principal may do on a place is
+// the union of every grant whose place covers it. Nothing subtracts across
+// grants. This module is the one resolver every surface uses: the web app's
+// buttons and requests, the JSON API, MCP, the CLI's API and OAuth consent.
 
-/** The rows of the §4 role table, in its order. */
-export const ACTIONS = [
-  'graph.read',
-  'knowledge.write',
-  'ontology.propose',
-  'ontology.publish',
-  'repos.connect',
-  'workspaces.delete',
-  'enrichment.manage',
-  'projections.manage',
-  'tokens.create-own',
-  'tokens.manage',
-  'members.manage',
-  'trust.manage',
-  'templates.manage',
-  'proposals.override',
-  'audit.view-full',
-  'audit.view-own',
-  'org.administer',
+/** The capabilities, the only permission vocabulary there is, in the order the UI lists them. */
+export const CAPABILITIES = [
+  'read',
+  'write',
+  'propose',
+  'publish',
+  'decide',
+  'create',
+  'access',
+  'system',
+  'tokens',
+  'settings',
+  'delete',
+  'audit',
 ] as const
-export type Action = (typeof ACTIONS)[number]
+export type Capability = (typeof CAPABILITIES)[number]
 
-/** How each row reads in the UI's role matrix. */
-export const ACTION_LABELS: Record<Action, string> = {
-  'graph.read': 'Read graph, search, ask, view activity',
-  'knowledge.write': 'Write knowledge (UI, MCP, CLI push)',
-  'ontology.propose': 'Propose an ontology draft',
-  'ontology.publish': 'Publish an ontology version',
-  'repos.connect': 'Connect repos, enable export PRs',
-  'workspaces.delete': 'Delete a workspace and everything in it',
-  'enrichment.manage': 'Turn background enrichment on or off, set its schedule and limit, retire what a run added',
-  'projections.manage': 'Turn optional projections (cognee) on or off, set their search floor and AI limit',
-  'tokens.create-own': 'Create API tokens for themselves (viewers: read-only tokens)',
-  'tokens.manage': "Create service-account tokens, revoke anyone's token",
-  'members.manage': 'Invite and remove members, change roles (not Owner)',
-  'trust.manage': "Set what the org attests about sources: people's roles, teams and flags, registered documents",
-  'templates.manage': "Save a docket's ontology as an org template, edit and delete the org's templates",
-  'proposals.override': 'Accept a supersede proposal regardless of its score',
-  'audit.view-full': 'View the full audit log',
-  'audit.view-own': 'View their own audit entries',
-  'org.administer': 'Change caps, transfer ownership, delete the org',
+export function isCapability(value: unknown): value is Capability {
+  return typeof value === 'string' && (CAPABILITIES as readonly string[]).includes(value)
 }
 
-const EVERYONE: readonly Action[] = ['graph.read', 'tokens.create-own', 'audit.view-own']
-const WRITERS: readonly Action[] = [...EVERYONE, 'knowledge.write', 'ontology.propose']
-const ADMINS: readonly Action[] = [
-  ...WRITERS,
-  'ontology.publish',
-  'repos.connect',
-  'workspaces.delete',
-  'enrichment.manage',
-  'projections.manage',
-  'tokens.manage',
-  'members.manage',
-  'trust.manage',
-  'templates.manage',
-  'proposals.override',
-  'audit.view-full',
+export interface CapabilityInfo {
+  label: string
+  help: string
+  group: 'Content' | 'Manage'
+}
+
+/** How each capability reads in the UI. */
+export const CAPABILITY_INFO: Record<Capability, CapabilityInfo> = {
+  read: { label: 'Read and ask', help: 'Open dockets, search, chat, see activity, make your own tokens', group: 'Content' },
+  write: { label: 'Write knowledge', help: 'Add, update and retire records and evidence (UI, MCP, CLI push)', group: 'Content' },
+  propose: { label: 'Propose ontology changes', help: 'File an ontology draft for someone else to publish', group: 'Content' },
+  publish: { label: 'Publish ontology changes', help: 'Change the ontology directly, in the UI or over MCP', group: 'Content' },
+  decide: { label: 'Decide proposals', help: 'Accept or reject a supersede proposal whatever its score', group: 'Content' },
+  create: { label: 'Create dockets', help: 'Make new dockets (held on the account)', group: 'Manage' },
+  access: { label: 'Manage access', help: "Give and remove users' and system accounts' access here; invite users", group: 'Manage' },
+  system: { label: 'Manage system accounts', help: 'Create system accounts that reach here; issue and revoke their tokens', group: 'Manage' },
+  tokens: { label: 'Manage tokens', help: "See and revoke anyone's tokens and AI connections here", group: 'Manage' },
+  settings: { label: 'Change settings', help: 'Background agents, projections, repos, trust, templates', group: 'Manage' },
+  delete: { label: 'Delete', help: 'Delete dockets and everything in them', group: 'Manage' },
+  audit: { label: 'See audit and usage', help: 'Who did what, and what it cost', group: 'Manage' },
+}
+
+/** What reaches a docket's content; a role without any of them manages without reading. */
+export const CONTENT_CAPABILITIES: readonly Capability[] = ['read', 'write', 'propose', 'publish', 'decide']
+
+/** A role: a named bundle of capabilities. Reader, Writer and Admin are built in and fixed; an account adds its own. */
+export interface Role {
+  id: string
+  name: string
+  description: string | null
+  caps: readonly Capability[]
+  builtin: boolean
+}
+
+export const BUILTIN_ROLES: readonly Role[] = [
+  { id: 'reader', name: 'Reader', description: 'Reads and asks', caps: ['read'], builtin: true },
+  { id: 'writer', name: 'Writer', description: 'Reads, writes knowledge and proposes ontology changes', caps: ['read', 'write', 'propose'], builtin: true },
+  { id: 'admin', name: 'Admin', description: 'Every capability', caps: CAPABILITIES, builtin: true },
 ]
+export type BuiltinRoleId = 'reader' | 'writer' | 'admin'
 
-const GRANTS: Record<Role, ReadonlySet<Action>> = {
-  viewer: new Set(EVERYONE),
-  editor: new Set(WRITERS),
-  admin: new Set(ADMINS),
-  owner: new Set([...ADMINS, 'org.administer']),
+export function builtinRole(id: BuiltinRoleId): Role {
+  return BUILTIN_ROLES.find((role) => role.id === id) as Role
 }
 
-export function can(role: Role, action: Action): boolean {
-  return GRANTS[role].has(action)
+/** A place a grant is on: the whole account, or one docket (a workspace, by id). Spaces come next (tenancy v2 phase 3). */
+export type Place = { kind: 'account' } | { kind: 'docket'; id: string }
+
+export const ACCOUNT: Place = { kind: 'account' }
+export const docketPlace = (id: string): Place => ({ kind: 'docket', id })
+
+/** Whether a grant on `on` reaches `place`: the account covers everything, a docket only itself. */
+export function covers(on: Place, place: Place): boolean {
+  if (on.kind === 'account') return true
+  return place.kind === 'docket' && place.id === on.id
 }
 
-/** The roles an actor may give someone, or take away from them. Only an owner touches the owner role (§4). */
-export function assignableRoles(actor: Role): readonly Role[] {
-  if (actor === 'owner') return ROLES
-  if (actor === 'admin') return ['admin', 'editor', 'viewer']
-  return []
+export function samePlace(a: Place, b: Place): boolean {
+  return a.kind === b.kind && (a.kind === 'account' || a.id === (b as { id: string }).id)
 }
 
-/**
- * Whether `actor` may change a member from role `from` to role `to`
- * (or remove them, with `to` null). Admins manage everyone but owners.
- */
-export function canChangeRole(actor: Role, from: Role, to: Role | null): boolean {
-  const allowed = assignableRoles(actor)
-  return allowed.includes(from) && (to === null || allowed.includes(to))
+/** Who a grant is for: one user or system account, or everyone in the account (people who are not guests). */
+export type Grantee = { kind: 'user'; id: string } | { kind: 'everyone' }
+
+export interface Grant {
+  id: string
+  who: Grantee
+  place: Place
+  role: Role
+  /** Capabilities this grant adds to its role, for this grantee alone. */
+  add: readonly Capability[]
+  /** Capabilities this grant removes from its role, for this grantee alone. */
+  remove: readonly Capability[]
 }
 
-// Accounts and namespaces (tenancy design §4.2, §4.3). An org becomes an
-// account and each of its workspaces a namespace (a "Docket"). A principal
-// holds one account role, plus grants on single namespaces. The web app, MCP,
-// the CLI's API and OAuth consent enforce these per workspace; what the org
-// does as a whole still goes by the per-org role above.
-
-/** Account roles, as `platform.memberships.account_role` stores them. */
-export const ACCOUNT_ROLES = ['owner', 'admin', 'developer', 'read_only', 'guest', 'provisioner'] as const
-export type AccountRole = (typeof ACCOUNT_ROLES)[number]
-
-export function isAccountRole(value: unknown): value is AccountRole {
-  return typeof value === 'string' && (ACCOUNT_ROLES as readonly string[]).includes(value)
-}
-
-/** A permission on one namespace, most to least privileged, as `platform.namespace_grants.permission` stores it. */
-export const NAMESPACE_PERMISSIONS = ['admin', 'write', 'read'] as const
-export type NamespacePermission = (typeof NAMESPACE_PERMISSIONS)[number]
-
-export function isNamespacePermission(value: unknown): value is NamespacePermission {
-  return typeof value === 'string' && (NAMESPACE_PERMISSIONS as readonly string[]).includes(value)
-}
-
-/** The account role a per-org role becomes, as platform migration 0012 derives it. */
-export function accountRoleOf(role: Role): AccountRole {
-  return ({ owner: 'owner', admin: 'admin', editor: 'developer', viewer: 'read_only' } as const)[role]
-}
-
-/** What an account role allows across the account, whatever namespaces it is granted. */
-export const ACCOUNT_ACTIONS = [
-  'account.view',
-  'namespaces.list',
-  'namespaces.create',
-  'namespaces.manage',
-  'grants.manage',
-  'namespace-service-accounts.manage',
-  'members.manage',
-  'service-accounts.manage',
-  'keys.manage',
-  'trust.manage',
-  'usage.view',
-  'limits.manage',
-  'audit.view-control-plane',
-  'audit.view-full',
-  'account.administer',
-] as const
-export type AccountAction = (typeof ACCOUNT_ACTIONS)[number]
-
-export const ACCOUNT_ACTION_LABELS: Record<AccountAction, string> = {
-  'account.view': "See the account's name and settings",
-  'namespaces.list': 'List every Docket in the account, granted or not',
-  'namespaces.create': 'Create a Docket',
-  'namespaces.manage': 'Rename or delete any Docket',
-  'grants.manage': "Give or take away people's access to any Docket",
-  'namespace-service-accounts.manage': "Create any Docket's service accounts and issue their keys",
-  'members.manage': 'Invite and remove people, change account roles (not Owner)',
-  'service-accounts.manage': 'Create account service accounts, including provisioners',
-  'keys.manage': "Revoke anyone's keys, turn off key creation",
-  'trust.manage': "Set what the account attests about sources: people's roles, teams and flags, registered documents",
-  'usage.view': 'View usage by Docket',
-  'limits.manage': "Change the account's limits",
-  'audit.view-control-plane': 'View the audit log of Dockets, access and keys',
-  'audit.view-full': 'View the full audit log',
-  'account.administer': 'Billing, transfer ownership, delete the account',
-}
-
-const LIST: readonly AccountAction[] = ['account.view', 'namespaces.list']
-/**
- * A provisioner (Initech's server, say) runs the control plane and nothing
- * else: it makes Dockets and decides who reaches them, but sees no content.
- */
-const PROVISION: readonly AccountAction[] = [
-  'namespaces.list',
-  'namespaces.create',
-  'namespaces.manage',
-  'grants.manage',
-  'namespace-service-accounts.manage',
-  'usage.view',
-  'audit.view-control-plane',
-]
-const ACCOUNT_ADMINS: readonly AccountAction[] = [
-  ...LIST,
-  ...PROVISION,
-  'members.manage',
-  'service-accounts.manage',
-  'keys.manage',
-  'trust.manage',
-  'limits.manage',
-  'audit.view-full',
-]
-
-const ACCOUNT_GRANTS: Record<AccountRole, ReadonlySet<AccountAction>> = {
-  guest: new Set(),
-  read_only: new Set(LIST),
-  developer: new Set([...LIST, 'namespaces.create']),
-  provisioner: new Set(PROVISION),
-  admin: new Set(ACCOUNT_ADMINS),
-  owner: new Set([...ACCOUNT_ADMINS, 'account.administer']),
-}
-
-export function canInAccount(role: AccountRole, action: AccountAction): boolean {
-  return ACCOUNT_GRANTS[role].has(action)
-}
-
-/** What a namespace permission allows inside that one namespace. */
-export const NAMESPACE_ACTIONS = [
-  'graph.read',
-  'knowledge.write',
-  'ontology.propose',
-  'ontology.publish',
-  'repos.connect',
-  'enrichment.manage',
-  'projections.manage',
-  'tokens.create-own',
-  'tokens.manage',
-  'grants.manage',
-  'service-accounts.manage',
-  'proposals.override',
-  'audit.view-full',
-  'audit.view-own',
-  'namespace.delete',
-] as const
-export type NamespaceAction = (typeof NAMESPACE_ACTIONS)[number]
-
-export const NAMESPACE_ACTION_LABELS: Record<NamespaceAction, string> = {
-  'graph.read': 'Read graph, search, ask, view activity',
-  'knowledge.write': 'Write knowledge (UI, MCP, CLI push)',
-  'ontology.propose': 'Propose an ontology draft',
-  'ontology.publish': 'Publish an ontology version',
-  'repos.connect': 'Connect repos, enable export PRs',
-  'enrichment.manage': 'Turn background enrichment on or off, set its schedule and limit, retire what a run added',
-  'projections.manage': 'Turn optional projections (cognee) on or off, set their search floor and AI limit',
-  'tokens.create-own': 'Create API tokens for themselves (Read: read-only tokens)',
-  'tokens.manage': "Revoke anyone's token for this Docket",
-  'grants.manage': "Give or take away people's access to this Docket",
-  'service-accounts.manage': "Create this Docket's service accounts and issue their keys",
-  'proposals.override': 'Accept a supersede proposal regardless of its score',
-  'audit.view-full': "View this Docket's full audit log",
-  'audit.view-own': 'View their own audit entries',
-  'namespace.delete': 'Delete this Docket and everything in it',
-}
-
-/** Read, Write and Admin are today's viewer, editor and admin, inside one namespace. */
-const READERS: readonly NamespaceAction[] = ['graph.read', 'tokens.create-own', 'audit.view-own']
-const NAMESPACE_WRITERS: readonly NamespaceAction[] = [...READERS, 'knowledge.write', 'ontology.propose']
-
-const NAMESPACE_GRANTS: Record<NamespacePermission, ReadonlySet<NamespaceAction>> = {
-  read: new Set(READERS),
-  write: new Set(NAMESPACE_WRITERS),
-  admin: new Set(NAMESPACE_ACTIONS),
-}
-
-/** Whether a principal holding `permission` on a namespace (null: none) may do `action` there. */
-export function canInNamespace(permission: NamespacePermission | null, action: NamespaceAction): boolean {
-  return permission !== null && NAMESPACE_GRANTS[permission].has(action)
-}
-
-/** Whether `have` includes everything `need` allows. */
-export function permissionIncludes(have: NamespacePermission | null, need: NamespacePermission): boolean {
-  return have !== null && NAMESPACE_PERMISSIONS.indexOf(have) <= NAMESPACE_PERMISSIONS.indexOf(need)
+/** What one grant gives: its role's capabilities, plus its additions, minus its removals. */
+export function grantCaps(grant: Pick<Grant, 'role' | 'add' | 'remove'>): Capability[] {
+  const caps = new Set<Capability>([...grant.role.caps, ...grant.add])
+  for (const cap of grant.remove) caps.delete(cap)
+  return CAPABILITIES.filter((cap) => caps.has(cap))
 }
 
 /**
- * A principal's permission on one namespace: its account role's, joined with
- * its grants there. Owners and admins are admin on every namespace whatever
- * their grants say. A provisioner reaches no namespace, even one it was
- * granted, so it can never give itself content.
+ * Everything that decides one principal's access in one account: whether
+ * they own it, whether they are a guest, and every grant that applies to them
+ * (their own, and those for everyone when they are a person who is not a guest).
  */
-export function namespacePermission(
-  role: AccountRole,
-  grants: readonly NamespacePermission[],
-): NamespacePermission | null {
-  if (role === 'owner' || role === 'admin') return 'admin'
-  if (role === 'provisioner') return null
-  return NAMESPACE_PERMISSIONS.find((permission) => grants.includes(permission)) ?? null
+export interface Access {
+  userId: string
+  kind: 'human' | 'service'
+  /** Owns the account: Admin on all of it, fixed, and the only one who may administer it (billing, AI caps, ownership). */
+  owner: boolean
+  /** Sees only what they are given: not in "everyone", not the user list, not the dockets they have nothing on. */
+  guest: boolean
+  grants: readonly Grant[]
 }
 
-/** Whether a principal sees a namespace exists: in the list, or as a 404. Guests see only what they are granted. */
-export function namespaceVisible(role: AccountRole, grants: readonly NamespacePermission[]): boolean {
-  return canInAccount(role, 'namespaces.list') || namespacePermission(role, grants) !== null
+/** Whether a grant applies to a principal: their own, or one for everyone when they are a person who is not a guest. */
+export function appliesTo(grant: Pick<Grant, 'who'>, principal: Pick<Access, 'userId' | 'kind' | 'guest'>): boolean {
+  if (grant.who.kind === 'user') return grant.who.id === principal.userId
+  return principal.kind === 'human' && !principal.guest
+}
+
+/** What a principal may do on a place: the union of every grant that covers it. An owner may do everything. */
+export function capsAt(access: Access | null, place: Place): ReadonlySet<Capability> {
+  if (!access) return new Set()
+  if (access.owner) return new Set(CAPABILITIES)
+  const caps = new Set<Capability>()
+  for (const grant of access.grants) {
+    if (covers(grant.place, place)) for (const cap of grantCaps(grant)) caps.add(cap)
+  }
+  return caps
+}
+
+/** Whether a principal holds `cap` on the place, or anywhere at all with `place` omitted. */
+export function can(access: Access | null, cap: Capability, place?: Place): boolean {
+  if (!access) return false
+  if (access.owner) return true
+  if (place) return capsAt(access, place).has(cap)
+  return access.grants.some((grant) => grantCaps(grant).includes(cap))
+}
+
+/** The grants that make up a principal's access to a place: why they can do what they can there. */
+export function because(access: Access, place: Place): Grant[] {
+  return access.grants.filter((grant) => covers(grant.place, place))
 }
 
 /**
- * The grant a principal gets on a namespace it creates: a developer becomes
- * its admin, revocably. Owners and admins need none, and a provisioner takes
- * none.
+ * Whether a principal sees that a docket exists (in lists, or as 403 rather
+ * than 404): everyone but a guest sees them all; a guest only those they hold
+ * something on.
  */
-export function creatorGrant(role: AccountRole): NamespacePermission | null {
-  return role === 'developer' ? 'admin' : null
+export function seesDocket(access: Access | null, docketId: string): boolean {
+  if (!access) return false
+  return !access.guest || capsAt(access, docketPlace(docketId)).size > 0
+}
+
+/** Whether a principal holds every capability on the account: the account's admins and owners. */
+export function isAccountAdmin(access: Access | null): boolean {
+  if (!access) return false
+  const caps = capsAt(access, ACCOUNT)
+  return CAPABILITIES.every((cap) => caps.has(cap))
+}
+
+/** One word for a set of capabilities, and anything beyond that word's usual bundle. */
+export function summarise(caps: Iterable<Capability>): { level: 'admin' | 'write' | 'read' | 'manage' | null; label: string; extra: Capability[] } {
+  const held = new Set(caps)
+  if (held.size === 0) return { level: null, label: 'No access', extra: [] }
+  if (CAPABILITIES.every((cap) => held.has(cap))) return { level: 'admin', label: 'Admin', extra: [] }
+  const level = held.has('write') ? 'write' : held.has('read') ? 'read' : 'manage'
+  const usual: readonly Capability[] = level === 'write' ? builtinRole('writer').caps : level === 'read' ? builtinRole('reader').caps : []
+  const label = { write: 'Can write', read: 'Can read', manage: 'Manages, reads nothing' }[level]
+  return { level, label, extra: CAPABILITIES.filter((cap) => held.has(cap) && !usual.includes(cap)) }
+}
+
+/** "Writer + Publish ontology changes", "Admin, without content". */
+export function grantRoleLabel(grant: Pick<Grant, 'role' | 'add' | 'remove'>): string {
+  let label = grant.role.name
+  if (grant.remove.length && CONTENT_CAPABILITIES.every((cap) => grant.remove.includes(cap))) label += ', without content'
+  else label += grant.remove.map((cap) => ` − ${CAPABILITY_INFO[cap].label}`).join('')
+  label += grant.add.map((cap) => ` + ${CAPABILITY_INFO[cap].label}`).join('')
+  return label
 }
 
 /**
- * The account roles an actor may give someone, or take away from them. Only
- * an owner touches the owner role; a provisioner is a service account's role,
- * never a person's.
+ * Whether `actor` may give, change or take away a grant with `caps` on
+ * `place` for a grantee of `kind`. They manage access there (or, for a system
+ * account, manage system accounts there), and the grant gives nothing they
+ * do not hold there themselves: no one widens anyone past their own reach.
  */
-export function assignableAccountRoles(actor: AccountRole, kind: 'human' | 'service'): readonly AccountRole[] {
-  const allowed: readonly AccountRole[] =
-    actor === 'owner' ? ACCOUNT_ROLES : actor === 'admin' ? ACCOUNT_ROLES.filter((role) => role !== 'owner') : []
-  return kind === 'human' ? allowed.filter((role) => role !== 'provisioner') : allowed
+export function mayGrant(actor: Access | null, place: Place, caps: Iterable<Capability>, grantee: 'human' | 'service' | 'everyone'): boolean {
+  if (!actor) return false
+  if (actor.owner) return true
+  const held = capsAt(actor, place)
+  const manages = held.has('access') || (grantee === 'service' && held.has('system'))
+  if (!manages) return false
+  for (const cap of caps) if (!held.has(cap)) return false
+  return true
 }
 
-/** Whether `actor` may change a `kind` principal's account role from `from` to `to` (or remove them, with `to` null). */
-export function canChangeAccountRole(
-  actor: AccountRole,
-  kind: 'human' | 'service',
-  from: AccountRole,
-  to: AccountRole | null,
-): boolean {
-  const allowed = assignableAccountRoles(actor, kind)
-  return allowed.includes(from) && (to === null || allowed.includes(to))
-}
-
-/**
- * Whether an actor may give a grantee any permission on a namespace, or take
- * their grant away. The actor manages grants across the account, or is that
- * namespace's admin. Only developers, read-only members and guests hold
- * grants: owners and admins are admin everywhere already, and a provisioner
- * may hold none, so it cannot grant itself content.
- */
-export function canSetGrant(
-  actor: { role: AccountRole; permission: NamespacePermission | null },
-  grantee: AccountRole,
-): boolean {
-  const manages = canInAccount(actor.role, 'grants.manage') || canInNamespace(actor.permission, 'grants.manage')
-  return manages && (grantee === 'developer' || grantee === 'read_only' || grantee === 'guest')
+/** Whether `actor` may make, change or delete one of the account's own roles: an admin on the whole account. */
+export function mayEditRoles(actor: Access | null): boolean {
+  return isAccountAdmin(actor)
 }

@@ -88,7 +88,7 @@
       <p class="workspace">
         <KeyRound size={16} aria-hidden="true" />
         <span>
-          Docket <strong>{data.target.orgName} / {data.target.workspaceName}</strong>, where you are
+          Docket <strong>{data.target.orgName} / {data.target.workspaceName}</strong>. Your access there:
           <span class="badge">{data.target.role}</span>
         </span>
       </p>

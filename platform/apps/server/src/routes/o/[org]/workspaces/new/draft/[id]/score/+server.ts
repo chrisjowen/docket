@@ -16,7 +16,7 @@ export const POST: RequestHandler = async (event) => {
   const source = text(body.source, 64)
   if (!source) error(400, 'Choose a source.')
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'ontology.publish')
+  authorise(access, 'create')
   const { actor } = publisherOf(event)
   return inOrg(access, async (ctx) => {
     if (!(await docketDraftById(ctx.tx, event.params.id, actor))) error(404, 'Not found')

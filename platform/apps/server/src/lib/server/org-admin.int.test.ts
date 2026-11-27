@@ -7,7 +7,7 @@ import { insertWorkspace, listWorkspaces, workspaceById, workspaceBySlug } from 
 import { createTestOrg, type TestOrg } from '@docket/platform-canonical-store/testing'
 import { memoryBucketStore, rateLimiter } from '@docket/platform-limits'
 import { template } from '@docket/platform-ontology-service'
-import { insertOrg, listMembers, mintMasterKey, namespaceAccess, newTenantId, type MintedMasterKey, type Tx } from '@docket/platform-tenancy'
+import { accessOf, capsAt, docketPlace, insertOrg, listMembers, mintMasterKey, newTenantId, type MintedMasterKey, type Tx } from '@docket/platform-tenancy'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -160,9 +160,11 @@ describe.skipIf(!TEST_PG_URL)('org admin HTTP endpoints', () => {
     const platform = <T>(fn: (tx: Tx) => Promise<T>) => org.router.withPlatform(fn)
     expect(await effectiveScopes(principal!, { platform })).toEqual(['docket:read', 'ontology:read'])
     // The read account reads this database and nothing else; a write key goes to its write account.
-    expect(await org.router.withPlatform((tx) => namespaceAccess(tx, org.orgId, workspace!.id, principal!.userId))).toMatchObject({ accountRole: 'guest', permission: 'read' })
+    const reader = await org.router.withPlatform((tx) => accessOf(tx, org.orgId, principal!.userId))
+    expect(reader?.guest).toBe(true)
+    expect([...capsAt(reader, docketPlace(workspace!.id))]).toEqual(['read'])
     const concurrent = await org.withOrg(({ tx }) => workspaceBySlug(tx, 'concurrent'))
-    expect(await org.router.withPlatform((tx) => namespaceAccess(tx, org.orgId, concurrent!.id, principal!.userId))).toMatchObject({ permission: null })
+    expect(capsAt(reader, docketPlace(concurrent!.id)).size).toBe(0)
     const writer = await (await call('POST', 'databases/alice/keys', { description: 'Writer' })).json()
     const writes = await resolver.resolveBearer(writer.key, resource)
     expect(writes?.userId).not.toBe(principal?.userId)
@@ -202,9 +204,9 @@ describe.skipIf(!TEST_PG_URL)('org admin HTTP endpoints', () => {
     expect(rows).toEqual([])
     const events = await org.withOrg(({ tx }) => listAudit(tx, { action: 'org.admin.key.issue', limit: 1 }))
     expect(events[0]).toMatchObject({ actor: `token:${master.id}`, outcome: 'denied', target: ['database:ui-handbook'] })
-    // org-admin is a provisioner: it reaches no database, so no key could be issued in its name either.
-    expect(await org.router.withPlatform((tx) => namespaceAccess(tx, org.orgId, workspace.id, master.orgAdminId))).toMatchObject({ accountRole: 'provisioner', permission: null })
-    const { rows: grants } = await org.db.admin.query('SELECT 1 FROM platform.namespace_grants WHERE principal_id = $1', [master.orgAdminId])
+    // org-admin holds no grant: it reaches no database, so no key could be issued in its name either.
+    expect(capsAt(await org.router.withPlatform((tx) => accessOf(tx, org.orgId, master.orgAdminId)), docketPlace(workspace.id)).size).toBe(0)
+    const { rows: grants } = await org.db.admin.query('SELECT 1 FROM platform.grants WHERE principal_id = $1', [master.orgAdminId])
     expect(grants).toEqual([])
     await expect(org.router.withPlatform((tx) => issueApiToken(tx, { orgId: org.orgId, dockets: [workspace.id], ownerId: master.orgAdminId,
       createdBy: master.orgAdminId }))).rejects.toBeInstanceOf(ApiTokenError)

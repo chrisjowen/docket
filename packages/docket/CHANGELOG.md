@@ -49,6 +49,38 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   stays on its one docket, read-only when it only read, with any narrower
   scopes kept as its ceiling.
 
+### Access is a role on a place (multi-tenant server)
+
+- Someone gets a role on a place: on the whole account, which covers every
+  docket in it, or on one docket. Everything someone is given adds up. A role
+  is a bundle of capabilities - Read and ask, Write knowledge, Propose and
+  Publish ontology changes, Decide proposals, Create dockets, Manage access,
+  Manage system accounts, Manage tokens, Change settings, Delete, See audit
+  and usage. Reader, Writer and Admin are built in; an account makes its own
+  in Settings › Roles.
+- Any one grant can add or remove single capabilities for that person alone:
+  "Writer + Publish ontology changes" on one docket lets one person publish
+  there, in the app or straight from an MCP client. It replaces the docket
+  setting that let a whole role publish over MCP.
+- One resolver decides every surface: the web app's buttons and requests,
+  MCP, the CLI's API and OAuth consent all ask what the caller may do on that
+  docket. Owner and guest are flags on a member: an owner may do everything
+  and administers the account; a guest sees only what they are given.
+- A docket's Access tab shows what you may do there and why; whoever manages
+  access there sees everyone who reaches it, and gives, adjusts and removes
+  grants. Users lists each person's role on the whole account, with Explain
+  for every grant they hold. Invites carry a role on a place, as a guest or
+  not, and anyone who manages access somewhere invites people to it. A system
+  account gets its access the same way, from Settings › System accounts.
+- Nobody can give, change or take away more than they hold on that place.
+- Existing members keep exactly what they could do: owners stay owners,
+  admins become Admin, editors Writer and viewers Reader on the whole
+  account, and a database account keeps its one docket. Before anything
+  changes, the migration works out everyone's access to every docket both
+  ways and stops if any answer differs. Whoever could publish an ontology,
+  in the app or over MCP, keeps Publish ontology changes; because publishing
+  is now one capability, admins and owners may also publish over MCP.
+
 ## 0.16.0
 
 ### Confidence comes from policies about sources

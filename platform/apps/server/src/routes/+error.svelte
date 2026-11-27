@@ -19,7 +19,7 @@
     {#if page.status === 404}
       There is nothing here, or it belongs to an organisation you are not in.
     {:else if page.status === 403}
-      Ask an owner or admin of this organisation if you need it.
+      Ask someone who manages access in this organisation if you need it.
     {:else}
       Try again in a moment.
     {/if}

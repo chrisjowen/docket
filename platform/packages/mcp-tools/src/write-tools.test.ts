@@ -20,7 +20,7 @@ function stubContext(overrides: Partial<CloudToolContext> = {}): CloudToolContex
     actor: 'token:dkt_live_abcdefgh',
     userId: 'u-alice',
     writer: vi.fn(async () => ({ workspaceId: 'ws1', actor: 'token:dkt_live_abcdefgh', label: 'ci-bot (token tok_abcd…)', channel: 'mcp' as const, requestId: 'req-1' })),
-    role: vi.fn(async () => 'editor' as const),
+    mayPublish: vi.fn(async () => true),
     audited: vi.fn(),
     ...overrides,
   }

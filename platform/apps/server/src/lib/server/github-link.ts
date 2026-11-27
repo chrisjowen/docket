@@ -2,7 +2,7 @@
 import { audit } from '@docket/platform-audit'
 import { authorizeUrl, exchangeCode, fetchIdentity, newAuthorization } from '@docket/platform-auth'
 import { ConnectionError, linkInstallation } from '@docket/platform-github'
-import { can, membershipBySlug } from '@docket/platform-tenancy'
+import { ACCOUNT, accessOf, can, membershipBySlug, type Tx } from '@docket/platform-tenancy'
 import { error, isHttpError, isRedirect, redirect, type Cookies, type RequestEvent } from '@sveltejs/kit'
 
 import { auditInput, requireUser } from './request'
@@ -54,6 +54,13 @@ function readInstallCookie(cookies: Cookies): { state?: unknown; org?: unknown; 
 
 const reposPage = (org: string, ws: string) => `/o/${encodeURIComponent(org)}/w/${encodeURIComponent(ws)}/repos`
 
+/** The member at `slug`, and whether they may link a GitHub installation to it: Change settings on the whole account. */
+async function linker(tx: Tx, slug: string, userId: string) {
+  const member = await membershipBySlug(tx, slug, userId)
+  if (!member) return null
+  return { org: member.org, mayLink: can(await accessOf(tx, member.org.id, userId), 'settings', ACCOUNT) }
+}
+
 /**
  * GitHub's setup redirect after an install. Checks the `state` cookie, then
  * starts a user authorization whose callback finishes the link.
@@ -73,9 +80,9 @@ export async function setupRedirect(event: RequestEvent): Promise<never> {
     redirect(303, `${back}?link=expired`)
   }
   if (!github) redirect(303, `${back}?link=unconfigured`)
-  const member = await getRuntime().router.withPlatform((tx) => membershipBySlug(tx, started.org as string, user.id))
+  const member = await getRuntime().router.withPlatform((tx) => linker(tx, started.org as string, user.id))
   if (!member) error(404, 'Not found')
-  if (!can(member.role, 'repos.connect')) error(403, 'Your role does not allow that.')
+  if (!member.mayLink) error(403, 'You do not have access to that.')
 
   const authorization = newAuthorization()
   const pending: PendingLink = { installationId, org: started.org, next: back }
@@ -121,8 +128,8 @@ export async function completeLink(event: RequestEvent, link: PendingLink, code:
       const installation = await githubApp.installation(link.installationId)
       account = installation.account.login
       outcome = await router.withPlatform(async (tx) => {
-        const member = await membershipBySlug(tx, link.org, user.id)
-        if (!member || !can(member.role, 'repos.connect')) error(404, 'Not found')
+        const member = await linker(tx, link.org, user.id)
+        if (!member?.mayLink) error(404, 'Not found')
         try {
           await linkInstallation(tx, {
             installationId: installation.id,

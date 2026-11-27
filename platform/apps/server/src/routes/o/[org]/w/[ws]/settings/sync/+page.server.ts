@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { indexStatus, listIngests, optionalStatus, postgresSource, requestRecheck, validate } from '@docket/platform-canonical-store'
 
-import { authorise, recordAudit } from '$lib/server/request'
+import { authorise, authoriseOwner, recordAudit } from '$lib/server/request'
 import { HISTORY_SHOWN, syncLive } from '$lib/server/sync-status'
 import { actorNames, inWorkspace } from '$lib/server/workspace'
 
@@ -18,7 +18,7 @@ import type { Actions, PageServerLoad } from './$types'
  */
 export const load: PageServerLoad = async (event) => {
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     const validation = await validate({ source: postgresSource(ctx, workspace.id) })
     const broken = new Set(validation.diagnostics.flatMap((d) => (d.severity === 'error' && d.path !== undefined ? [d.path] : [])))
     const statusRead = { entities: validation.entities, documents: validation.documents, broken }
@@ -38,7 +38,7 @@ export const load: PageServerLoad = async (event) => {
   const name = await actorNames(read.access)
   const titles = new Map(read.entities.map((entity) => [entity.id, entity.title]))
   return {
-    canRecheck: read.access.can('org.administer'),
+    canRecheck: read.access.owner,
     documents: {
       documents: read.documents,
       exhibits: read.entities.length,
@@ -80,7 +80,7 @@ export const actions: Actions = {
    */
   recheck: (event) =>
     inWorkspace(event, async ({ access, workspace, ctx }) => {
-      authorise(access, 'org.administer')
+      authoriseOwner(access)
       await requestRecheck(ctx.tx, workspace.id)
       await recordAudit(ctx.tx, event, { action: 'projections.recheck', orgId: access.org.id, workspaceId: workspace.id })
       return { flash: 'Re-check requested: the worker compares each store with the documents and catches up anything missing.' }

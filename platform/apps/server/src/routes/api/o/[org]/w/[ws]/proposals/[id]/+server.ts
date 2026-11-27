@@ -15,7 +15,7 @@ export const GET: RequestHandler = async (event) =>
     await inWorkspace(
       event,
       async ({ access, workspace, ctx }) => {
-        authorise(access, 'graph.read')
+        authorise(access, 'read')
         const found = await proposalById(ctx, workspace.id, event.params.id)
         if (!found) error(404, 'No such proposal.')
         const listed = (await listProposals(ctx, workspace.id, { limit: 500 })).find((each) => each.supersession.id === found.id)
@@ -45,7 +45,7 @@ export const POST: RequestHandler = async (event) => {
   const result = await inWorkspace(
     event,
     async ({ access, workspace, ctx }) => {
-      authorise(access, decision === 'accept' ? 'proposals.override' : 'knowledge.write')
+      authorise(access, decision === 'accept' ? 'decide' : 'write')
       const writer = webWriter(event, workspace.id)
       const input = { supersession: event.params.id }
       const done =

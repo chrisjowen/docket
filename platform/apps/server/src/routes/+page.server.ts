@@ -18,7 +18,8 @@ export const load: PageServerLoad = async (event) => {
       id: invite.id,
       orgName: invite.orgName,
       orgSlug: invite.orgSlug,
-      role: invite.role,
+      // What they get: a role on the account or on one docket (they see which once they are in).
+      role: invite.owner ? 'Owner' : `${invite.roleName}${invite.place.kind === 'docket' ? ' on one docket' : ''}${invite.guest ? ', as a guest' : ''}`,
       invitedByLogin: invite.invitedByLogin,
       expiresAt: invite.expiresAt.toISOString(),
     })),

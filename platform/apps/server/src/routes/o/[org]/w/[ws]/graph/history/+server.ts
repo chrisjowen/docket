@@ -19,7 +19,7 @@ export const GET: RequestHandler = async (event) => {
   const read = await inWorkspace(
     event,
     async ({ access, workspace, ctx }) => {
-      authorise(access, 'graph.read')
+      authorise(access, 'read')
       return {
         access,
         events: await listIngests(ctx, { workspaceId: workspace.id, limit: ACTIVITY_SHOWN }),

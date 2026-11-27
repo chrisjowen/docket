@@ -24,15 +24,15 @@ import type { Actions, PageServerLoad } from './$types'
 /** The graph browser (§18): the workspace's graph, how far its index lags, and what the capture forms offer. */
 export const load: PageServerLoad = async (event) =>
   inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     const head = await publishedOntology(ctx, workspace.id)
     return {
       graph: await workspaceGraph(ctx, workspace, { root: `/o/${access.org.slug}/w/${workspace.slug}` }),
       // Rebuilding resets and replays every projection: an admin's call.
-      canRebuild: access.can('ontology.publish'),
+      canRebuild: access.can('publish'),
       // The policy chips in a record's "Why" open the schema editor on the policy.
-      canEditSchema: access.can('ontology.propose'),
-      capture: { canWrite: access.can('knowledge.write'), vocabulary: captureVocabulary(head ? parseOntology(head.text).ontology : null) },
+      canEditSchema: access.can('propose'),
+      capture: { canWrite: access.can('write'), vocabulary: captureVocabulary(head ? parseOntology(head.text).ontology : null) },
     }
   })
 
@@ -54,7 +54,7 @@ async function capture(
 ) {
   const form = await event.request.formData()
   return inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'knowledge.write')
+    authorise(access, 'write')
     const writer = webWriter(event, workspace.id)
     const { id, problems = [], write } = await prepare(form, ctx, writer)
     const record = (outcome: 'ok' | 'invalid') =>
@@ -88,7 +88,7 @@ export const actions: Actions = {
   /** Asks the worker to reset the workspace's projections and replay every document (§6.2 step 4). */
   rebuild: (event) =>
     inWorkspace(event, async ({ access, workspace, ctx }) => {
-      authorise(access, 'ontology.publish')
+      authorise(access, 'publish')
       await enqueue(ctx.tx, workspace.id, 'rebuild')
       await recordAudit(ctx.tx, event, { action: 'projections.rebuild', orgId: access.org.id, workspaceId: workspace.id })
       return { flash: 'Rebuilding the index: every document is projected again. Search catches up in a few minutes.' }

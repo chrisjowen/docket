@@ -15,7 +15,7 @@ export const POST: RequestHandler = async (event) => {
   const migration = migrationSteps(body.migration)
   if (!migration) error(400, 'The migration is not a list.')
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'ontology.publish')
+  authorise(access, 'create')
   const { actor, login } = publisherOf(event)
   return inOrg(access, async (ctx) => {
     if (!(await docketDraftById(ctx.tx, event.params.id, actor))) error(404, 'Not found')

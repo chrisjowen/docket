@@ -16,7 +16,7 @@ describe.skipIf(!TEST_PG_URL)('principalLabel', () => {
       INSERT INTO platform.users (id, kind, github_id, login) VALUES ('u-alice', 'human', 1, 'alice');
       INSERT INTO platform.orgs (id, slug, name, created_by) VALUES ('orga', 'acme', 'Acme', 'u-alice');
       INSERT INTO platform.users (id, kind, login, service_org_id, created_by) VALUES ('s-sync', 'service', 'github-sync', 'orga', 'u-alice');
-      INSERT INTO platform.memberships (org_id, user_id, role) VALUES ('orga', 'u-alice', 'owner'), ('orga', 's-sync', 'editor');
+      INSERT INTO platform.memberships (org_id, user_id, owner) VALUES ('orga', 'u-alice', true), ('orga', 's-sync', false);
       INSERT INTO platform.oauth_store (model, id_hash, payload, client_id)
         VALUES ('Client', repeat('a', 64), '{"client_name": "Claude Code\\nINJECTED"}', 'dcr-client-1');
       INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, owner_id, dockets, description, created_by, expires_at)
@@ -59,7 +59,7 @@ describe.skipIf(!TEST_PG_URL)('actsFor', () => {
     await db.admin.query(`
       INSERT INTO platform.users (id, kind, github_id, login) VALUES ('u-dana', 'human', 1, 'dana');
       INSERT INTO platform.orgs (id, slug, name, created_by) VALUES ('orga', 'acme', 'Acme', 'u-dana');
-      INSERT INTO platform.memberships (org_id, user_id, role) VALUES ('orga', 'u-dana', 'owner');
+      INSERT INTO platform.memberships (org_id, user_id, owner) VALUES ('orga', 'u-dana', true);
       INSERT INTO platform.users (id, kind, login, service_org_id, created_by, accountable_user_id) VALUES
         ('s-ci', 'service', 'ci-bot', 'orga', 'u-dana', 'u-dana');
     `)

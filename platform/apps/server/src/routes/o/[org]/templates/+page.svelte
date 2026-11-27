@@ -20,8 +20,8 @@
     <h1>Templates</h1>
     <p class="muted lede">
       Save a docket's published ontology as one of {data.org.name}'s templates, and New docket offers it beside the built-in ones.
-      A template holds the record types, relationships, sources and policies, never the documents. Only owners and admins see and
-      change these, and no other organisation ever sees them.
+      A template holds the record types, relationships, sources and policies, never the documents. Whoever may change {data.org.name}'s
+      settings sees and changes these, and no other organisation ever sees them.
     </p>
   </div>
   <a class="button" href={resolve('/o/[org]/workspaces/new', { org: data.org.slug })}><Plus size={16} aria-hidden="true" /> New docket</a>

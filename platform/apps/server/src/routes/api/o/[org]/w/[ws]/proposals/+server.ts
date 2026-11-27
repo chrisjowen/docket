@@ -22,7 +22,7 @@ export const GET: RequestHandler = async (event) => {
     await inWorkspace(
       event,
       async ({ access, workspace, ctx }) => {
-        authorise(access, 'graph.read')
+        authorise(access, 'read')
         const listed = await listProposals(ctx, workspace.id, status ? { status: status as (typeof STATUSES)[number] } : {})
         return { workspace: workspace.slug, proposals: listed.map(proposalView) }
       },

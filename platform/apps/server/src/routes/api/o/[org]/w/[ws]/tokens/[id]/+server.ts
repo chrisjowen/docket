@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { TokenRevocationError, revokeApiToken } from '@docket/platform-auth'
-import { canInNamespace } from '@docket/platform-tenancy'
 
 import { CliError, handleCli } from '$lib/server/cli-api'
 
@@ -13,7 +12,7 @@ import type { RequestHandler } from './$types'
  */
 export const DELETE: RequestHandler = (event) =>
   handleCli(event, { action: 'tokens.revoke', oauthOnly: true }, async (call) => {
-    const { runtime, principal, permission } = call
+    const { runtime, principal, caps } = call
     const tokenId = event.params.id ?? ''
     try {
       await runtime.router.withPlatform(async (tx) => {
@@ -21,7 +20,7 @@ export const DELETE: RequestHandler = (event) =>
           orgId: principal.orgId,
           tokenId,
           by: principal.userId,
-          ...(canInNamespace(permission, 'tokens.manage')
+          ...(caps.has('tokens')
             ? { ownOrPinned: { ownerId: principal.userId, workspaceId: principal.workspaceId } }
             : { ownerId: principal.userId }),
         })

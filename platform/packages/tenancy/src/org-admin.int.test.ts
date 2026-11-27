@@ -5,7 +5,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { LIMITS } from './limits.js'
 import { lookupMasterKey } from './master-key.js'
-import { changeRole, createInvite, databaseAccount, insertOrg, listMasterKeys, listMembers, mintMasterKey, namespaceAccess, removeMember, revokeMasterKeys, describeServiceAccount, upsertGitHubUser } from './model.js'
+import { accessOf, setGrant } from './access.js'
+import { createInvite, databaseAccount, insertOrg, listMasterKeys, listMembers, mintMasterKey, removeMember, revokeMasterKeys, describeServiceAccount, upsertGitHubUser } from './model.js'
+import { ACCOUNT, capsAt, docketPlace, type Access } from './roles.js'
 import { newTenantId } from './names.js'
 import { tenantRouter, type TenantRouter } from './router.js'
 import { TEST_PG_URL, createTestDatabase, type TestDatabase } from './testing.js'
@@ -19,6 +21,11 @@ describe.skipIf(!TEST_PG_URL)('the org admin master key', () => {
     router = tenantRouter(db.app)
   })
   afterAll(() => db?.drop())
+
+  const accessFor = async (orgId: string, userId: string): Promise<Access> =>
+    (await router.withPlatform((tx) => accessOf(tx, orgId, userId))) as Access
+  /** What a principal may do on a docket now. */
+  const capsOn = async (orgId: string, docket: string, userId: string) => [...capsAt(await accessFor(orgId, userId), docketPlace(docket))]
 
   async function org() {
     const owner = await router.withPlatform((tx) =>
@@ -43,33 +50,34 @@ describe.skipIf(!TEST_PG_URL)('the org admin master key', () => {
 
     const members = await router.withPlatform((tx) => listMembers(tx, acme.id))
     expect(members.filter((m) => m.kind === 'service')).toEqual([
-      expect.objectContaining({ id: first.orgAdminId, login: 'org-admin', role: 'editor' }),
+      expect.objectContaining({ id: first.orgAdminId, login: 'org-admin', owner: false }),
     ])
-    // A provisioner: it holds no grant, so it reaches no database, whatever its role says.
-    expect(await router.withPlatform((tx) => namespaceAccess(tx, acme.id, 'anyworkspace', first.orgAdminId))).toEqual({ role: 'editor', accountRole: 'provisioner', permission: null })
+    // It holds no grant, so it reaches no database.
+    expect(await capsOn(acme.id, 'anyworkspace', first.orgAdminId)).toEqual([])
+    const ownerAccess = await accessFor(acme.id, owner.id)
     const { rows } = await db.admin.query<{ key_hash: string }>('SELECT key_hash FROM platform.org_master_keys WHERE org_id = $1', [acme.id])
     expect(rows).toHaveLength(2)
     expect(rows.map((row) => row.key_hash)).not.toContain(first.key)
 
     await expect(
-      router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: first.orgAdminId, actorRole: 'owner' })),
+      router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: first.orgAdminId, actor: ownerAccess })),
     ).rejects.toMatchObject({ code: 'forbidden', message: expect.stringContaining('Docket Cloud operators') })
     await expect(
-      router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: first.orgAdminId, role: 'viewer', actorRole: 'owner' })),
+      router.withPlatform((tx) =>
+        setGrant(tx, { orgId: acme.id, who: { kind: 'user', id: first.orgAdminId }, place: ACCOUNT, roleId: 'reader', actor: ownerAccess, actorId: owner.id }),
+      ),
     ).rejects.toMatchObject({ code: 'forbidden' })
-    expect(await router.withPlatform((tx) => listMembers(tx, acme.id))).toContainEqual(
-      expect.objectContaining({ id: first.orgAdminId, role: 'editor' }),
-    )
+    expect(await router.withPlatform((tx) => listMembers(tx, acme.id))).toContainEqual(expect.objectContaining({ id: first.orgAdminId }))
 
     // The owner and every invite fill the seats; the org-admin account takes none.
     for (let i = 1; i < LIMITS.membersPerOrg; i += 1) {
       await router.withPlatform((tx) =>
-        createInvite(tx, { orgId: acme.id, who: `seat${i}`, role: 'viewer', actorId: owner.id, actorRole: 'owner' }),
+        createInvite(tx, { orgId: acme.id, who: `seat${i}`, roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor: ownerAccess }),
       )
     }
     await expect(
       router.withPlatform((tx) =>
-        createInvite(tx, { orgId: acme.id, who: 'onemore', role: 'viewer', actorId: owner.id, actorRole: 'owner' }),
+        createInvite(tx, { orgId: acme.id, who: 'onemore', roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor: ownerAccess }),
       ),
     ).rejects.toMatchObject({ code: 'limit' })
   })
@@ -96,10 +104,11 @@ describe.skipIf(!TEST_PG_URL)('the org admin master key', () => {
     expect(await account('alicedb', 'read')).toBe(reader)
     expect(await account('bobdb', 'read')).not.toBe(reader)
 
-    const access = (workspaceId: string, userId: string) => router.withPlatform((tx) => namespaceAccess(tx, acme.id, workspaceId, userId))
-    expect(await access('alicedb', reader)).toEqual({ role: 'viewer', accountRole: 'guest', permission: 'read' })
-    expect(await access('alicedb', writer)).toEqual({ role: 'editor', accountRole: 'guest', permission: 'write' })
-    expect(await access('bobdb', writer)).toMatchObject({ permission: null })
+    expect(await capsOn(acme.id, 'alicedb', reader)).toEqual(['read'])
+    expect(await capsOn(acme.id, 'alicedb', writer)).toEqual(['read', 'write', 'propose'])
+    expect(await capsOn(acme.id, 'bobdb', writer)).toEqual([])
+    expect((await accessFor(acme.id, writer)).guest).toBe(true)
+    const ownerAccess = await accessFor(acme.id, owner.id)
     const { rows: users } = await db.admin.query<{ login: string; created_by: string }>('SELECT login, created_by FROM platform.users WHERE id = $1', [writer])
     expect(users).toEqual([{ login: 'org-admin/alicedb/write', created_by: minted.orgAdminId }])
     await expect(router.withPlatform((tx) => databaseAccount(tx, { orgId: acme.id, workspaceId: 'alicedb', permission: 'admin' as 'read' }))).rejects.toMatchObject({ code: '22023' })
@@ -107,17 +116,20 @@ describe.skipIf(!TEST_PG_URL)('the org admin master key', () => {
     // Not members: never listed, never changed, removed or reassigned, and no seat taken.
     expect((await router.withPlatform((tx) => listMembers(tx, acme.id))).map((member) => member.id)).not.toContain(writer)
     for (const change of [
-      () => router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: writer, role: 'admin', actorRole: 'owner' })),
-      () => router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: writer, actorRole: 'owner' })),
+      () =>
+        router.withPlatform((tx) =>
+          setGrant(tx, { orgId: acme.id, who: { kind: 'user', id: writer }, place: ACCOUNT, roleId: 'admin', actor: ownerAccess, actorId: owner.id }),
+        ),
+      () => router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: writer, actor: ownerAccess })),
       () => router.withPlatform((tx) => describeServiceAccount(tx, { orgId: acme.id, serviceId: writer, description: 'mine now' })),
     ]) {
       await expect(change()).rejects.toMatchObject({ code: 'forbidden', message: expect.stringContaining('org admin API') })
     }
     for (let i = 1; i < LIMITS.membersPerOrg; i += 1) {
-      await router.withPlatform((tx) => createInvite(tx, { orgId: acme.id, who: `db-seat${i}`, role: 'viewer', actorId: owner.id, actorRole: 'owner' }))
+      await router.withPlatform((tx) => createInvite(tx, { orgId: acme.id, who: `db-seat${i}`, roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor: ownerAccess }))
     }
     await expect(
-      router.withPlatform((tx) => createInvite(tx, { orgId: acme.id, who: 'db-onemore', role: 'viewer', actorId: owner.id, actorRole: 'owner' })),
+      router.withPlatform((tx) => createInvite(tx, { orgId: acme.id, who: 'db-onemore', roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor: ownerAccess })),
     ).rejects.toMatchObject({ code: 'limit' })
   })
 

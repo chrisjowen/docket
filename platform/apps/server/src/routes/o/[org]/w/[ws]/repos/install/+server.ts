@@ -12,6 +12,6 @@ import type { RequestHandler } from './$types'
  */
 export const GET: RequestHandler = async (event) => {
   const { access } = await docketAccess(event)
-  authorise(access, 'repos.connect')
+  authorise(access, 'settings')
   startInstall(event, { org: access.org.slug, ws: event.params.ws })
 }

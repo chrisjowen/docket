@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ApiTokenError, DEFAULT_TOKEN_DAYS, MAX_TOKEN_DAYS, SCOPES, fromLegacyScopes, impliedScopes, isScope, issueApiToken } from '@docket/platform-auth'
 import { tokenCreateLimits } from '@docket/platform-limits'
-import { canInNamespace } from '@docket/platform-tenancy'
 
 import { CliError, cliJson, handleCli } from '$lib/server/cli-api'
 import { accountDockets, tokenView, workspaceTokens } from '$lib/server/tokens'
@@ -13,9 +12,9 @@ import type { RequestHandler } from './$types'
  * An OAuth session only: a token never mints tokens. The list is the MCP page's.
  */
 export const GET: RequestHandler = (event) =>
-  handleCli(event, { action: 'tokens.list', oauthOnly: true }, async ({ runtime, principal, permission, orgSlug }) => {
+  handleCli(event, { action: 'tokens.list', oauthOnly: true }, async ({ runtime, principal, caps, orgSlug }) => {
     const tokens = await runtime.router.withPlatform((tx) =>
-      workspaceTokens(tx, { orgId: principal.orgId, workspaceId: principal.workspaceId, userId: principal.userId, manage: canInNamespace(permission, 'tokens.manage') }),
+      workspaceTokens(tx, { orgId: principal.orgId, workspaceId: principal.workspaceId, userId: principal.userId, manage: caps.has('tokens') }),
     )
     const { dockets } = await accountDockets({ id: principal.orgId, slug: orgSlug })
     const now = Date.now()

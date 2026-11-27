@@ -11,7 +11,7 @@ import type { RequestHandler } from './$types'
 export const GET: RequestHandler = async (event) => {
   const v = event.url.searchParams.get('v')
   return inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     const version = v ? await versionByNumber(ctx.tx, workspace.id, Number(v)) : await headOf(ctx.tx, workspace.id)
     if (!version?.number) error(404, 'Not found')
     const body = exportYaml({

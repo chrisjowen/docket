@@ -63,14 +63,14 @@ export async function loadProposals(event: RequestEvent, id: string | null) {
       ? 'all'
       : 'pending'
   return inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     const all = await listProposals(ctx, workspace.id, { limit: 500 })
     const counts = { pending: 0, accepted: 0, rejected: 0, all: all.length }
     for (const each of all) counts[each.supersession.status] += 1
     const shown = status === 'all' ? all : all.filter((each) => each.supersession.status === status)
     const records = new Map<string, Named>((await readWorkspace(ctx, workspace.id)).entities.map((entity) => [entity.id, { title: entity.title, type: entity.type }]))
     const chosen = id ?? shown[0]?.supersession.id ?? null
-    const canDecide = access.can('knowledge.write')
+    const canDecide = access.can('write')
     const detail = chosen ? await proposalDetail(ctx, workspace.id, chosen, canDecide && event.locals.user ? { viewer: webWriter(event, workspace.id) } : {}) : null
     if (id && !detail) error(404, 'No such proposal.')
     const named = (record: string) => records.get(record) ?? null
@@ -91,12 +91,12 @@ export async function loadProposals(event: RequestEvent, id: string | null) {
       })),
       detail: detail ? { ...detailOf(detail), old: named(detail.supersession.resourceId), new: named(detail.supersession.supersededBy) } : null,
       canDecide,
-      canOverride: access.can('proposals.override'),
+      canOverride: access.can('decide'),
     }
   })
 }
 
-const DECISIONS = { confirm: 'knowledge.write', reject: 'knowledge.write', accept: 'proposals.override' } as const
+const DECISIONS = { confirm: 'write', reject: 'write', accept: 'decide' } as const
 
 /** A decision from the proposal's page, as the signed-in member: the same writes the API makes, audited alike. */
 export async function decide(event: RequestEvent, decision: keyof typeof DECISIONS) {

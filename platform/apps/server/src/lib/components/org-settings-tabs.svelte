@@ -1,16 +1,25 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
   import { resolve } from '$app/paths'
+  import { page } from '$app/state'
 
-  /** The account's Settings: AI for its owners, System accounts for everyone who manages access. */
-  let { org, active, owner }: { org: string; active: 'ai' | 'system-accounts'; owner: boolean } = $props()
+  /**
+   * The account's Settings: AI for its owners, Roles for its admins (everyone
+   * else who reaches Settings reads them), System accounts for whoever manages
+   * system accounts somewhere.
+   */
+  let { org, active }: { org: string; active: 'ai' | 'roles' | 'system-accounts' } = $props()
+  const data = $derived(page.data as { owner?: boolean; managesSystemAccounts?: boolean })
 </script>
 
 <nav class="subtabs" aria-label="Settings">
-  {#if owner}
+  {#if data.owner}
     <a href={resolve('/o/[org]/settings', { org })} aria-current={active === 'ai' ? 'page' : undefined}>AI</a>
   {/if}
-  <a href={resolve('/o/[org]/settings/system-accounts', { org })} aria-current={active === 'system-accounts' ? 'page' : undefined}>System accounts</a>
+  <a href={resolve('/o/[org]/settings/roles', { org })} aria-current={active === 'roles' ? 'page' : undefined}>Roles</a>
+  {#if data.owner || data.managesSystemAccounts}
+    <a href={resolve('/o/[org]/settings/system-accounts', { org })} aria-current={active === 'system-accounts' ? 'page' : undefined}>System accounts</a>
+  {/if}
 </nav>
 
 <style>

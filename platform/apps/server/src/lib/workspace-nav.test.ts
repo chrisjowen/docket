@@ -5,7 +5,7 @@ import { HOME_TAB, WORKSPACE_TABS, activeTab, tabLabel } from './workspace-nav'
 
 describe('docket tabs', () => {
   it('lists the sections in order, opening on the overview', () => {
-    expect(WORKSPACE_TABS.map((tab) => tab.label)).toEqual(['Overview', 'Record', 'Chat', 'Proposals', 'Documents', 'Schema', 'Activity', 'MCP', 'Repos', 'Settings'])
+    expect(WORKSPACE_TABS.map((tab) => tab.label)).toEqual(['Overview', 'Record', 'Chat', 'Proposals', 'Documents', 'Schema', 'Activity', 'Access', 'MCP', 'Repos', 'Settings'])
     expect(HOME_TAB).toBe('overview')
     for (const tab of WORKSPACE_TABS) expect(tab.route).toBe(`/o/[org]/w/[ws]/${tab.key}`)
   })

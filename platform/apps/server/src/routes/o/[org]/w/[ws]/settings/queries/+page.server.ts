@@ -23,8 +23,8 @@ export const load: PageServerLoad = async (event) => {
   const user = event.locals.user
   if (!user) error(401, 'Sign in first.')
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
-    const everyone = access.can('audit.view-full')
+    authorise(access, 'read')
+    const everyone = access.can('audit')
     return { access, everyone, traces: await listQueryTraces(ctx, workspace.id, { limit: TRACES_SHOWN, ...(everyone ? {} : { askedBy: user.id }) }) }
   })
   const name = await actorNames(read.access)

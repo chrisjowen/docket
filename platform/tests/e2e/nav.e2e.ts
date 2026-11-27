@@ -34,7 +34,7 @@ test('a docket opens on its overview, with its sections as tabs, and the old add
   await expect(crumbs.locator('[aria-current="page"]')).toHaveText('Platform')
 
   const tabs = page.getByRole('navigation', { name: 'Docket' })
-  await expect(tabs.getByRole('link')).toHaveText(['Overview', 'Record', 'Chat', 'Proposals', 'Documents', 'Schema', 'Activity', 'MCP', 'Repos', 'Settings'])
+  await expect(tabs.getByRole('link')).toHaveText(['Overview', 'Record', 'Chat', 'Proposals', 'Documents', 'Schema', 'Activity', 'Access', 'MCP', 'Repos', 'Settings'])
   await expect(tabs.locator('[aria-current="page"]')).toHaveText('Overview')
 
   // Each tab opens its section and marks itself current; nested pages keep their section's tab.
@@ -45,6 +45,7 @@ test('a docket opens on its overview, with its sections as tabs, and the old add
     ['Documents', 'documents'],
     ['Schema', 'ontology'],
     ['Activity', 'activity'],
+    ['Access', 'access'],
     ['MCP', 'mcp'],
     ['Repos', 'repos'],
     ['Settings', 'settings'],

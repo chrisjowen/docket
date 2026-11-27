@@ -10,33 +10,31 @@ export {
   workspaceScope,
 } from './names.js'
 export {
-  ACCOUNT_ACTIONS,
-  ACCOUNT_ACTION_LABELS,
-  ACCOUNT_ROLES,
-  ACTIONS,
-  ACTION_LABELS,
-  NAMESPACE_ACTIONS,
-  NAMESPACE_ACTION_LABELS,
-  NAMESPACE_PERMISSIONS,
-  ROLES,
-  accountRoleOf,
-  assignableAccountRoles,
-  assignableRoles,
+  ACCOUNT,
+  BUILTIN_ROLES,
+  CAPABILITIES,
+  CAPABILITY_INFO,
+  CONTENT_CAPABILITIES,
+  appliesTo,
+  because,
+  builtinRole,
   can,
-  canChangeAccountRole,
-  canChangeRole,
-  canInAccount,
-  canInNamespace,
-  canSetGrant,
-  creatorGrant,
-  isAccountRole,
-  isNamespacePermission,
-  isRole,
-  namespacePermission,
-  namespaceVisible,
-  permissionIncludes,
+  capsAt,
+  covers,
+  docketPlace,
+  grantCaps,
+  grantRoleLabel,
+  isAccountAdmin,
+  isCapability,
+  mayEditRoles,
+  mayGrant,
+  samePlace,
+  seesDocket,
+  summarise,
 } from './roles.js'
-export type { AccountAction, AccountRole, Action, NamespaceAction, NamespacePermission, Role } from './roles.js'
+export type { Access, BuiltinRoleId, Capability, CapabilityInfo, Grant, Grantee, Place, Role } from './roles.js'
+export { accessOf, deleteRole, listGrants, listRoles, ownerCount, removeGrant, rolesOf, saveRole, setGrant, setOwner } from './access.js'
+export type { GrantView, RoleUse } from './access.js'
 export { ident, transaction } from './db.js'
 export type { Tx } from './db.js'
 export { MigrationError, migrateBehindOrgs, migrateOrg, migratePlatform } from './migrate.js'

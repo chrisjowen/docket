@@ -22,7 +22,7 @@ import type { Actions, PageServerLoad } from './$types'
 /** Every published version with its author, message and structural diff from the one before (§13.2). */
 export const load: PageServerLoad = async (event) => {
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     return { access, versions: await listPublished(ctx.tx, workspace.id) }
   })
   const name = await actorNames(read.access)
@@ -30,8 +30,8 @@ export const load: PageServerLoad = async (event) => {
   const parsed = oldestFirst.map((version) => parseOntology(version.yaml).ontology)
   const published = Number(event.url.searchParams.get('published') ?? 0)
   return {
-    rollback: read.access.can('ontology.publish'),
-    propose: read.access.can('ontology.propose'),
+    rollback: read.access.can('publish'),
+    propose: read.access.can('propose'),
     published: published || null,
     versions: oldestFirst
       .map((version, i) => ({
@@ -61,7 +61,7 @@ export const actions: Actions = {
     const publisher = publisherOf(event)
     try {
       const version = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'ontology.publish')
+        authorise(access, 'publish')
         const published = await rollback(ctx, workspace.id, to, { expectedHead, publisher, requestId: event.locals.requestId })
         await recordAudit(ctx.tx, event, {
           action: 'ontology.rollback',
@@ -91,7 +91,7 @@ export const actions: Actions = {
     const from = Number(form.get('from') ?? 0)
     const publisher = publisherOf(event)
     const draftId = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-      authorise(access, 'ontology.propose')
+      authorise(access, 'propose')
       const version = await versionByNumber(ctx.tx, workspace.id, from)
       if (!version) return null
       const draft = await createDraft(ctx.tx, workspace.id, {

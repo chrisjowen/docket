@@ -2,20 +2,19 @@
 import { CapError, MAX_MONTHLY_CAP_USD, capOf, modelAllowlist, modelChoices, setCap, type ModelUse } from '@docket/platform-ai'
 import { fail, redirect } from '@sveltejs/kit'
 
-import { authorise, orgAccess, recordAudit } from '$lib/server/request'
+import { authoriseOwner, orgAccess, recordAudit } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 
 import type { Actions, PageServerLoad } from './$types'
 
 /**
  * The org's settings: its monthly AI cap and model choices (§11), owners
- * only (§4). Those who manage access but do not own the account go straight
- * to the settings they do have: System accounts.
+ * only (§4). Anyone else who reaches Settings goes straight to the settings
+ * they do have: the account's roles.
  */
 export const load: PageServerLoad = async (event) => {
   const access = await orgAccess(event)
-  if (!access.can('org.administer') && access.can('members.manage')) redirect(303, `/o/${access.org.slug}/settings/system-accounts`)
-  authorise(access, 'org.administer')
+  if (!access.owner) redirect(303, `/o/${access.org.slug}/settings/roles`)
   const { router, caps } = getRuntime()
   const [status, models] = await Promise.all([caps.status(access.org.id), router.withPlatform((tx) => modelChoices(tx, access.org.id))])
   return {
@@ -32,7 +31,7 @@ export const actions: Actions = {
   /** Sets the cap and models. The worker moves the org's OpenRouter key limit to match within minutes. */
   ai: async (event) => {
     const access = await orgAccess(event)
-    authorise(access, 'org.administer')
+    authoriseOwner(access)
     const form = await event.request.formData()
     const cap = Number(String(form.get('cap') ?? '').trim())
     const cypher = String(form.get('cypher') ?? '')

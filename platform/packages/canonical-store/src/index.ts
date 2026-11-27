@@ -155,22 +155,19 @@ export type { Chat, ChatMessage, ChatRole, ChatSummary, StoredChatMessage } from
 export { documentHistory } from './revisions.js'
 export type { Revision } from './revisions.js'
 export {
-  ONTOLOGY_MCP_ROLES,
   WorkspaceError,
   countMemberWorkspaces,
   deleteWorkspace,
   enqueue,
   insertWorkspace,
   listWorkspaces,
-  ontologyMcpRoles,
   pendingDeletions,
   recordPurge,
-  setOntologyMcpRoles,
   workspaceById,
   workspaceBySlug,
   workspaceSlugProblem,
 } from './workspaces.js'
-export type { OntologyMcpRole, PendingDeletion, Workspace } from './workspaces.js'
+export type { PendingDeletion, Workspace } from './workspaces.js'
 
 export {
   addProposalEvidence,

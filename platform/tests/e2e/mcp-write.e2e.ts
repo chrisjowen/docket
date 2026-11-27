@@ -77,6 +77,7 @@ test('a writing token lists the write tools; a reading token cannot call them', 
     'docket_retire',
     'docket_supersede',
     'docket_propose_ontology_change',
+    'docket_publish_ontology_change',
   ])
   const refused = await mcp(request, endpoint(), reader, 'tools/call', { name: 'docket_remember', arguments: { id: 'service.x', type: 'service', title: 'X', evidence: [] } })
   expect(refused.status()).toBe(403)

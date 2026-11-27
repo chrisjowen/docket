@@ -60,7 +60,7 @@ async function apply(
       }
       continue
     }
-    await tx.query(fill(migration.sql, values))
+    if (!migration.supersededBy) await tx.query(fill(migration.sql, values))
     await tx.query(
       'INSERT INTO platform.schema_migrations (schema_name, version, name, checksum) VALUES ($1, $2, $3, $4)',
       [schemaName, migration.version, migration.name, sum],

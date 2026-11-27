@@ -3,16 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 
 import type { Tx } from './db.js'
 import { INVITE_TTL_MS, LIMITS, PROVISIONING_TIMEOUT_MS } from './limits.js'
-import {
-  canChangeRole,
-  isAccountRole,
-  isNamespacePermission,
-  isRole,
-  namespacePermission,
-  type AccountRole,
-  type NamespacePermission,
-  type Role,
-} from './roles.js'
+import { ACCOUNT, BUILTIN_ROLES, CAPABILITIES, grantCaps, isCapability, mayGrant, type Access, type Capability, type Place } from './roles.js'
 
 /**
  * The tenancy model over the platform schema (§4, §5.1). Every function runs
@@ -57,7 +48,10 @@ export interface Org {
 }
 
 export interface Member extends User {
-  role: Role
+  /** Owns the account. */
+  owner: boolean
+  /** Sees only what they are given. */
+  guest: boolean
   joinedAt: Date
   lastSeenAt: Date | null
   description: string | null
@@ -68,7 +62,12 @@ export interface Invite {
   orgId: string
   githubLogin: string | null
   email: string | null
-  role: Role
+  /** What they get on accepting: a role on a place, and whether they own the account or are a guest in it. */
+  roleId: string
+  roleName: string
+  place: Place
+  owner: boolean
+  guest: boolean
   invitedBy: string
   invitedByLogin: string
   createdAt: Date
@@ -292,7 +291,7 @@ export async function insertOrg(
     input.name,
     input.ownerId,
   ])
-  await tx.query("INSERT INTO platform.memberships (org_id, user_id, role) VALUES ($1, $2, 'owner')", [
+  await tx.query('INSERT INTO platform.memberships (org_id, user_id, owner) VALUES ($1, $2, true)', [
     input.id,
     input.ownerId,
   ])
@@ -306,25 +305,26 @@ export async function discardUnprovisionedOrg(tx: Tx, orgId: string): Promise<vo
 
 export interface OrgMembership {
   org: Org
-  role: Role
-  /** The member's account role, which decides with their grants which namespaces they reach. */
-  accountRole: AccountRole
+  /** Owns the account. */
+  owner: boolean
+  /** Sees only what they are given. */
+  guest: boolean
 }
 
-type MembershipRow = { id: string; slug: string; name: string; status: Org['status']; role: string; account_role: string }
+type MembershipRow = { id: string; slug: string; name: string; status: Org['status']; owner: boolean; guest: boolean }
 
-function membershipOf(row: MembershipRow): OrgMembership | null {
-  if (!isRole(row.role) || !isAccountRole(row.account_role)) return null
-  return { org: { id: row.id, slug: row.slug, name: row.name, status: row.status }, role: row.role, accountRole: row.account_role }
+function membershipOf(row: MembershipRow): OrgMembership {
+  return { org: { id: row.id, slug: row.slug, name: row.name, status: row.status }, owner: row.owner, guest: row.guest }
 }
 
 /**
  * The org at `slug`, if `userId` is a member of it. Anything else - no such
  * org, not a member, a deleted org - is null, which routes answer as 404 (§5.5).
+ * What they may do there is their access (`accessOf`).
  */
 export async function membershipBySlug(tx: Tx, slug: string, userId: string): Promise<OrgMembership | null> {
   const { rows } = await tx.query<MembershipRow>(
-    `SELECT o.id, o.slug, o.name, o.status, m.role, m.account_role
+    `SELECT o.id, o.slug, o.name, o.status, m.owner, m.guest
        FROM platform.orgs o JOIN platform.memberships m ON m.org_id = o.id
       WHERE o.slug = $1 AND m.user_id = $2 AND o.status = 'active'`,
     [slug, userId],
@@ -335,58 +335,13 @@ export async function membershipBySlug(tx: Tx, slug: string, userId: string): Pr
 
 export async function membershipsOf(tx: Tx, userId: string): Promise<OrgMembership[]> {
   const { rows } = await tx.query<MembershipRow>(
-    `SELECT o.id, o.slug, o.name, o.status, m.role, m.account_role
+    `SELECT o.id, o.slug, o.name, o.status, m.owner, m.guest
        FROM platform.orgs o JOIN platform.memberships m ON m.org_id = o.id
       WHERE m.user_id = $1 AND o.status = 'active'
       ORDER BY o.name`,
     [userId],
   )
-  return rows.flatMap((row) => membershipOf(row) ?? [])
-}
-
-/** The member's grants in the org: each namespace (workspace id) they were given, with its permission. */
-export async function namespaceGrantsOf(tx: Tx, orgId: string, userId: string): Promise<Map<string, NamespacePermission>> {
-  const { rows } = await tx.query<{ namespace_id: string; permission: string }>(
-    'SELECT namespace_id, permission FROM platform.namespace_grants WHERE org_id = $1 AND principal_id = $2',
-    [orgId, userId],
-  )
-  return new Map(rows.flatMap((row) => (isNamespacePermission(row.permission) ? [[row.namespace_id, row.permission] as const] : [])))
-}
-
-/** The member's current role in the org, or null. */
-export async function roleOf(tx: Tx, orgId: string, userId: string): Promise<Role | null> {
-  const { rows } = await tx.query<{ role: string }>(
-    'SELECT role FROM platform.memberships WHERE org_id = $1 AND user_id = $2',
-    [orgId, userId],
-  )
-  const role = rows[0]?.role
-  return isRole(role) ? role : null
-}
-
-/** What a member reaches in one namespace: their org role, their account role, and their permission there (null: none). */
-export interface NamespaceAccess {
-  role: Role
-  accountRole: AccountRole
-  permission: NamespacePermission | null
-}
-
-/**
- * A member's access to one namespace (a workspace) now: their account role
- * joined with their grant there (`namespacePermission`). Null when they are
- * not a member of the org.
- */
-export async function namespaceAccess(tx: Tx, orgId: string, namespaceId: string, userId: string): Promise<NamespaceAccess | null> {
-  const { rows } = await tx.query<{ role: string; account_role: string; permission: string | null }>(
-    `SELECT m.role, m.account_role, g.permission
-       FROM platform.memberships m
-       LEFT JOIN platform.namespace_grants g ON g.org_id = m.org_id AND g.principal_id = m.user_id AND g.namespace_id = $2
-      WHERE m.org_id = $1 AND m.user_id = $3`,
-    [orgId, namespaceId, userId],
-  )
-  const row = rows[0]
-  if (!row || !isRole(row.role) || !isAccountRole(row.account_role)) return null
-  const grants = isNamespacePermission(row.permission) ? [row.permission] : []
-  return { role: row.role, accountRole: row.account_role, permission: namespacePermission(row.account_role, grants) }
+  return rows.map(membershipOf)
 }
 
 // --- Members ------------------------------------------------------------------
@@ -397,28 +352,23 @@ const DATABASE_ACCOUNT = (m: string) =>
 
 export async function listMembers(tx: Tx, orgId: string): Promise<Member[]> {
   const { rows } = await tx.query<
-    UserRow & { role: string; created_at: Date; last_seen_at: Date | null; description: string | null }
+    UserRow & { owner: boolean; guest: boolean; created_at: Date; last_seen_at: Date | null; description: string | null }
   >(
     `SELECT u.id, u.kind, u.login, u.name, u.email, u.emails, u.avatar_url, u.description, u.last_seen_at,
-            m.role, m.created_at
+            m.owner, m.guest, m.created_at
        FROM platform.memberships m JOIN platform.users u ON u.id = m.user_id
       WHERE m.org_id = $1 AND NOT ${DATABASE_ACCOUNT('m')}
-      ORDER BY array_position(ARRAY['owner','admin','editor','viewer'], m.role), u.login_lower`,
+      ORDER BY m.owner DESC, m.guest, u.login_lower`,
     [orgId],
   )
-  return rows.flatMap((row) =>
-    isRole(row.role)
-      ? [
-          {
-            ...toUser(row),
-            role: row.role,
-            joinedAt: row.created_at,
-            lastSeenAt: row.last_seen_at,
-            description: row.description,
-          },
-        ]
-      : [],
-  )
+  return rows.map((row) => ({
+    ...toUser(row),
+    owner: row.owner,
+    guest: row.guest,
+    joinedAt: row.created_at,
+    lastSeenAt: row.last_seen_at,
+    description: row.description,
+  }))
 }
 
 /** Locks the org row and checks a new seat fits under the members limit. The org admin API's service accounts take no seat. */
@@ -438,90 +388,75 @@ async function reserveSeat(tx: Tx, orgId: string): Promise<void> {
 const ORG_ADMIN_MANAGED = 'The org-admin service account is managed by Docket Cloud operators through the org master key.'
 const DATABASE_ACCOUNT_MANAGED = "A database's service accounts are managed through the org admin API."
 
-async function ownerCount(tx: Tx, orgId: string): Promise<number> {
-  const { rows } = await tx.query<{ count: string }>(
-    "SELECT count(*) FROM platform.memberships WHERE org_id = $1 AND role = 'owner'",
-    [orgId],
+/** Everything any of a member's own grants gives, anywhere, and whether they own the account. */
+async function heldBy(tx: Tx, orgId: string, userId: string): Promise<{ caps: Capability[]; owner: boolean }> {
+  const { rows } = await tx.query<{ owner: boolean; role_caps: string[] | null; add_caps: string[] | null; remove_caps: string[] | null }>(
+    `SELECT m.owner, r.caps AS role_caps, g.add_caps, g.remove_caps
+       FROM platform.memberships m
+       LEFT JOIN platform.grants g ON g.org_id = m.org_id AND g.principal_id = m.user_id
+       LEFT JOIN platform.roles r ON r.id = g.role_id
+      WHERE m.org_id = $1 AND m.user_id = $2`,
+    [orgId, userId],
   )
-  return Number(rows[0]?.count ?? 0)
+  const caps = new Set<Capability>()
+  for (const row of rows) {
+    if (!row.role_caps) continue
+    const role = { id: '', name: '', description: null, builtin: false, caps: row.role_caps.filter(isCapability) }
+    for (const cap of grantCaps({ role, add: (row.add_caps ?? []).filter(isCapability), remove: (row.remove_caps ?? []).filter(isCapability) })) caps.add(cap)
+  }
+  return { caps: CAPABILITIES.filter((cap) => caps.has(cap)), owner: rows[0]?.owner ?? false }
 }
 
-/** Changes a member's role, as `actorRole` allows; an org always keeps an owner. Returns the old role. */
-export async function changeRole(
-  tx: Tx,
-  input: { orgId: string; userId: string; role: Role; actorRole: Role },
-): Promise<Role> {
-  const { rows } = await tx.query<{ role: string; kind: string; org_admin: boolean; database_account: boolean }>(
-    `SELECT m.role, u.kind, (m.user_id = o.org_admin_id) IS TRUE AS org_admin, ${DATABASE_ACCOUNT('m')} AS database_account
-       FROM platform.memberships m JOIN platform.users u ON u.id = m.user_id JOIN platform.orgs o ON o.id = m.org_id
-      WHERE m.org_id = $1 AND m.user_id = $2 FOR UPDATE OF m`,
-    [input.orgId, input.userId],
-  )
-  const from = rows[0]?.role
-  if (!isRole(from)) throw new TenancyError('not-found', 'No such member.')
-  if (rows[0]?.org_admin) throw new TenancyError('forbidden', ORG_ADMIN_MANAGED)
-  if (rows[0]?.database_account) throw new TenancyError('forbidden', DATABASE_ACCOUNT_MANAGED)
-  if (rows[0]?.kind === 'service' && input.role === 'owner') {
-    throw new TenancyError('forbidden', 'Your role cannot give a system account that role.')
-  }
-  if (!canChangeRole(input.actorRole, from, input.role)) {
-    throw new TenancyError('forbidden', 'Your role cannot make that change.')
-  }
-  if (from === 'owner' && input.role !== 'owner' && (await ownerCount(tx, input.orgId)) <= 1) {
-    throw new TenancyError('last-owner', 'An organisation needs an owner. Make someone else owner first.')
-  }
-  await tx.query('UPDATE platform.memberships SET role = $3 WHERE org_id = $1 AND user_id = $2', [
-    input.orgId,
-    input.userId,
-    input.role,
-  ])
-  return from
-}
-
-/** Removes a member. A removed service account is deleted with its membership. Returns the old role. */
-export async function removeMember(
-  tx: Tx,
-  input: { orgId: string; userId: string; actorRole: Role },
-): Promise<Role> {
-  const { rows } = await tx.query<{ role: string; kind: string; org_admin: boolean; database_account: boolean }>(
-    `SELECT m.role, u.kind, (m.user_id = o.org_admin_id) IS TRUE AS org_admin, ${DATABASE_ACCOUNT('m')} AS database_account
+/**
+ * Removes a member and every grant they hold. The actor must manage access
+ * on the whole account (or system accounts there, for a system account) and
+ * hold everything the member holds; only an owner removes an owner, and an
+ * account keeps one. A removed system account is deleted with its membership.
+ */
+export async function removeMember(tx: Tx, input: { orgId: string; userId: string; actor: Access }): Promise<{ owner: boolean; kind: 'human' | 'service' }> {
+  const { rows } = await tx.query<{ kind: 'human' | 'service'; org_admin: boolean; database_account: boolean }>(
+    `SELECT u.kind, (m.user_id = o.org_admin_id) IS TRUE AS org_admin, ${DATABASE_ACCOUNT('m')} AS database_account
        FROM platform.memberships m JOIN platform.users u ON u.id = m.user_id JOIN platform.orgs o ON o.id = m.org_id
       WHERE m.org_id = $1 AND m.user_id = $2 FOR UPDATE OF m`,
     [input.orgId, input.userId],
   )
   const row = rows[0]
-  if (!row || !isRole(row.role)) throw new TenancyError('not-found', 'No such member.')
+  if (!row) throw new TenancyError('not-found', 'No such member.')
   if (row.org_admin) throw new TenancyError('forbidden', ORG_ADMIN_MANAGED)
   if (row.database_account) throw new TenancyError('forbidden', DATABASE_ACCOUNT_MANAGED)
-  if (!canChangeRole(input.actorRole, row.role, null)) {
-    throw new TenancyError('forbidden', 'Your role cannot remove that member.')
+  const held = await heldBy(tx, input.orgId, input.userId)
+  if (held.owner && !input.actor.owner) throw new TenancyError('forbidden', 'Only an owner can remove an owner.')
+  if (!mayGrant(input.actor, ACCOUNT, held.caps, row.kind)) {
+    throw new TenancyError('forbidden', 'You cannot remove someone who holds more than you do across the account.')
   }
-  if (row.role === 'owner' && (await ownerCount(tx, input.orgId)) <= 1) {
-    throw new TenancyError('last-owner', 'An organisation needs an owner. Make someone else owner first.')
+  if (held.owner) {
+    const { rows: owners } = await tx.query<{ count: string }>('SELECT count(*) FROM platform.memberships WHERE org_id = $1 AND owner', [input.orgId])
+    if (Number(owners[0]?.count ?? 0) <= 1) throw new TenancyError('last-owner', 'An organisation needs an owner. Make someone else owner first.')
   }
   await tx.query('DELETE FROM platform.memberships WHERE org_id = $1 AND user_id = $2', [input.orgId, input.userId])
   if (row.kind === 'service') {
     await tx.query("DELETE FROM platform.users WHERE id = $1 AND kind = 'service'", [input.userId])
   }
-  return row.role
+  return { owner: held.owner, kind: row.kind }
 }
 
 /**
  * Adds a system account (§4; tenancy v2 §3.3): anything that is not a
- * person, owned by the account and outliving whoever made it. Its only
+ * person, owned by the account and outliving whoever made it. It reaches
+ * nothing until it is given a grant, in the same transaction; its only
  * credentials are API tokens; no person acts for it, and its account's owners
  * get its token notices. Settings › System accounts is the one place that
- * makes them.
+ * makes them, by someone who manages system accounts somewhere.
  */
 export async function createServiceAccount(
   tx: Tx,
-  input: { orgId: string; name: string; description: string | null; role: Role; actorId: string; actorRole: Role },
+  input: { orgId: string; name: string; description: string | null; actorId: string; actor: Access },
 ): Promise<User> {
   if (!/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])$/.test(input.name)) {
     throw new TenancyError('invalid', 'Name it with 2-40 lowercase letters, digits or hyphens.')
   }
-  if (input.role === 'owner' || !canChangeRole(input.actorRole, input.role, input.role)) {
-    throw new TenancyError('forbidden', 'Your role cannot give a system account that role.')
+  if (!input.actor.owner && !input.actor.grants.some((grant) => grantCaps(grant).includes('system'))) {
+    throw new TenancyError('forbidden', 'You cannot make system accounts.')
   }
   await reserveSeat(tx, input.orgId)
   const id = randomUUID()
@@ -537,12 +472,7 @@ export async function createServiceAccount(
     }
     throw error
   }
-  await tx.query('INSERT INTO platform.memberships (org_id, user_id, role, invited_by) VALUES ($1, $2, $3, $4)', [
-    input.orgId,
-    id,
-    input.role,
-    input.actorId,
-  ])
+  await tx.query('INSERT INTO platform.memberships (org_id, user_id, invited_by) VALUES ($1, $2, $3)', [input.orgId, id, input.actorId])
   return { id, kind: 'service', login: input.name, name: null, email: null, emails: [], avatarUrl: null }
 }
 
@@ -551,7 +481,6 @@ export interface SystemAccount {
   id: string
   name: string
   description: string | null
-  role: Role
   createdAt: Date
   createdByLogin: string | null
   /** Made and managed by the org admin API (`org-admin` and its databases' accounts): shown, never changed here. */
@@ -568,7 +497,6 @@ export async function listSystemAccounts(tx: Tx, orgId: string): Promise<SystemA
     id: string
     login: string
     description: string | null
-    role: string
     created_at: Date
     created_by: string | null
     managed: boolean
@@ -576,7 +504,7 @@ export async function listSystemAccounts(tx: Tx, orgId: string): Promise<SystemA
     last_used_at: Date | null
     next_expiry: Date | null
   }>(
-    `SELECT u.id, u.login, u.description, m.role, u.created_at,
+    `SELECT u.id, u.login, u.description, u.created_at,
             (SELECT c.login FROM platform.users c WHERE c.id = u.created_by AND c.kind = 'human') AS created_by,
             ((u.id = o.org_admin_id) IS TRUE OR ${DATABASE_ACCOUNT('m')}) AS managed,
             (SELECT count(*) FROM platform.api_tokens t WHERE t.owner_id = u.id AND t.revoked_at IS NULL AND t.expires_at > now()) AS live,
@@ -584,27 +512,20 @@ export async function listSystemAccounts(tx: Tx, orgId: string): Promise<SystemA
             (SELECT min(t.expires_at) FROM platform.api_tokens t WHERE t.owner_id = u.id AND t.revoked_at IS NULL AND t.expires_at > now()) AS next_expiry
        FROM platform.memberships m JOIN platform.users u ON u.id = m.user_id JOIN platform.orgs o ON o.id = m.org_id
       WHERE m.org_id = $1 AND u.kind = 'service'
-      ORDER BY 7, u.login_lower`,
+      ORDER BY 6, u.login_lower`,
     [orgId],
   )
-  return rows.flatMap((row) =>
-    isRole(row.role)
-      ? [
-          {
-            id: row.id,
-            name: row.login,
-            description: row.description,
-            role: row.role,
-            createdAt: row.created_at,
-            createdByLogin: row.created_by,
-            managed: row.managed,
-            liveTokens: Number(row.live),
-            lastUsedAt: row.last_used_at,
-            nextExpiry: row.next_expiry,
-          },
-        ]
-      : [],
-  )
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.login,
+    description: row.description,
+    createdAt: row.created_at,
+    createdByLogin: row.created_by,
+    managed: row.managed,
+    liveTokens: Number(row.live),
+    lastUsedAt: row.last_used_at,
+    nextExpiry: row.next_expiry,
+  }))
 }
 
 /** Changes a system account's description; the org admin API's own are left to it. */
@@ -743,7 +664,7 @@ export async function mintMasterKey(
       throw error
     }
     await tx.query(
-      "INSERT INTO platform.memberships (org_id, user_id, role, account_role) VALUES ($1, $2, 'editor', 'provisioner')",
+      'INSERT INTO platform.memberships (org_id, user_id) VALUES ($1, $2)',
       [input.orgId, orgAdminId],
     )
   }
@@ -879,7 +800,12 @@ type InviteRow = {
   org_id: string
   github_login: string | null
   email: string | null
-  role: string
+  role_id: string
+  role_name: string
+  place_kind: 'account' | 'docket'
+  place_id: string | null
+  owner: boolean
+  guest: boolean
   invited_by: string
   invited_by_login: string
   created_at: Date
@@ -892,7 +818,11 @@ function toInvite(row: InviteRow): Invite {
     orgId: row.org_id,
     githubLogin: row.github_login,
     email: row.email,
-    role: isRole(row.role) ? row.role : 'viewer',
+    roleId: row.role_id,
+    roleName: row.role_name,
+    place: row.place_kind === 'docket' ? { kind: 'docket', id: row.place_id as string } : ACCOUNT,
+    owner: row.owner,
+    guest: row.guest,
     invitedBy: row.invited_by,
     invitedByLogin: row.invited_by_login,
     createdAt: row.created_at,
@@ -900,16 +830,33 @@ function toInvite(row: InviteRow): Invite {
   }
 }
 
-const INVITE_COLUMNS = `i.id, i.org_id, i.github_login, i.email, i.role, i.invited_by,
-  u.login AS invited_by_login, i.created_at, i.expires_at`
+const INVITE_COLUMNS = `i.id, i.org_id, i.github_login, i.email, i.role_id, r.name AS role_name, i.place_kind, i.place_id,
+  i.owner, i.guest, i.invited_by, u.login AS invited_by_login, i.created_at, i.expires_at`
+const INVITE_FROM = 'platform.invites i JOIN platform.users u ON u.id = i.invited_by JOIN platform.roles r ON r.id = i.role_id'
 
-/** Invites someone by GitHub login or email (§8.1). A GitHub invite also admits them to the beta. */
+async function rolesCaps(tx: Tx, orgId: string, roleId: string): Promise<readonly Capability[] | null> {
+  const { rows: roles } = await tx.query<{ caps: string[] }>(
+    'SELECT caps FROM platform.roles WHERE id = $1 AND (org_id IS NULL OR org_id = $2)',
+    [roleId, orgId],
+  )
+  const builtin = BUILTIN_ROLES.find((role) => role.id === roleId)
+  return builtin?.caps ?? roles[0]?.caps.filter(isCapability) ?? null
+}
+
+/**
+ * Invites someone by GitHub login or email (§8.1), to a role on a place: what
+ * they get when they accept. Anyone who manages access on a place may invite
+ * someone to it, with no more than they hold there; a guest sees only what
+ * they are given. A GitHub invite also admits them to the beta.
+ */
 export async function createInvite(
   tx: Tx,
-  input: { orgId: string; who: string; role: Role; actorId: string; actorRole: Role; now?: Date },
+  input: { orgId: string; who: string; roleId: string; place: Place; guest?: boolean; actorId: string; actor: Access; now?: Date },
 ): Promise<Invite> {
-  if (!canChangeRole(input.actorRole, input.role, input.role)) {
-    throw new TenancyError('forbidden', 'Your role cannot invite someone with that role.')
+  const caps = await rolesCaps(tx, input.orgId, input.roleId)
+  if (!caps) throw new TenancyError('invalid', 'Choose a role.')
+  if (!mayGrant(input.actor, input.place, caps, 'human')) {
+    throw new TenancyError('forbidden', 'You can only invite someone to access you hold yourself, where you manage access.')
   }
   const isEmail = input.who.includes('@') && !input.who.trim().startsWith('@')
   const email = isEmail ? normaliseEmail(input.who) : null
@@ -935,9 +882,21 @@ export async function createInvite(
   const id = randomUUID()
   try {
     await tx.query(
-      `INSERT INTO platform.invites (id, org_id, github_login, email, role, invited_by, created_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [id, input.orgId, login, email, input.role, input.actorId, now, new Date(now.getTime() + INVITE_TTL_MS)],
+      `INSERT INTO platform.invites (id, org_id, github_login, email, role_id, place_kind, place_id, guest, invited_by, created_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [
+        id,
+        input.orgId,
+        login,
+        email,
+        input.roleId,
+        input.place.kind,
+        input.place.kind === 'docket' ? input.place.id : null,
+        input.guest ?? false,
+        input.actorId,
+        now,
+        new Date(now.getTime() + INVITE_TTL_MS),
+      ],
     )
   } catch (error) {
     if ((error as { code?: string }).code === '23505') {
@@ -952,7 +911,7 @@ export async function createInvite(
 
 async function inviteById(tx: Tx, id: string): Promise<Invite | null> {
   const { rows } = await tx.query<InviteRow>(
-    `SELECT ${INVITE_COLUMNS} FROM platform.invites i JOIN platform.users u ON u.id = i.invited_by WHERE i.id = $1`,
+    `SELECT ${INVITE_COLUMNS} FROM ${INVITE_FROM} WHERE i.id = $1`,
     [id],
   )
   return rows[0] ? toInvite(rows[0]) : null
@@ -960,7 +919,7 @@ async function inviteById(tx: Tx, id: string): Promise<Invite | null> {
 
 export async function openInvitesOf(tx: Tx, orgId: string): Promise<Invite[]> {
   const { rows } = await tx.query<InviteRow>(
-    `SELECT ${INVITE_COLUMNS} FROM platform.invites i JOIN platform.users u ON u.id = i.invited_by
+    `SELECT ${INVITE_COLUMNS} FROM ${INVITE_FROM}
       WHERE i.org_id = $1 AND ${open('i')}
       ORDER BY i.created_at DESC`,
     [orgId],
@@ -980,8 +939,7 @@ export async function openInvitesFor(
 ): Promise<InviteForUser[]> {
   const { rows } = await tx.query<InviteRow & { org_slug: string; org_name: string }>(
     `SELECT ${INVITE_COLUMNS}, o.slug AS org_slug, o.name AS org_name
-       FROM platform.invites i
-       JOIN platform.users u ON u.id = i.invited_by
+       FROM ${INVITE_FROM}
        JOIN platform.orgs o ON o.id = i.org_id AND o.status = 'active'
       WHERE (i.github_login = $1 OR i.email = ANY($2::text[]))
         AND ${open('i')}
@@ -991,10 +949,18 @@ export async function openInvitesFor(
   return rows.map((row) => ({ ...toInvite(row), orgSlug: row.org_slug, orgName: row.org_name }))
 }
 
-/** Cancels an open invite. */
-export async function revokeInvite(tx: Tx, input: { orgId: string; inviteId: string }): Promise<Invite> {
+/** Cancels an open invite: whoever may give what it gives, where it gives it, may take it back. */
+export async function revokeInvite(tx: Tx, input: { orgId: string; inviteId: string; actor: Access }): Promise<Invite> {
   const invite = await inviteById(tx, input.inviteId)
   if (!invite || invite.orgId !== input.orgId) throw new TenancyError('not-found', 'No such invite.')
+  if (invite.owner) {
+    if (!input.actor.owner) throw new TenancyError('forbidden', 'Only an owner can cancel an invite to own the account.')
+  } else {
+    const caps = (await rolesCaps(tx, input.orgId, invite.roleId)) ?? []
+    if (!mayGrant(input.actor, invite.place, caps, 'human')) {
+      throw new TenancyError('forbidden', 'You can only cancel an invite where you manage access.')
+    }
+  }
   const { rowCount } = await tx.query(
     `UPDATE platform.invites SET revoked_at = now() WHERE id = $1 AND ${OPEN_INVITE}`,
     [input.inviteId],
@@ -1020,11 +986,18 @@ export async function answerInvite(
   )
   if (!rowCount) throw new TenancyError('not-found', 'That invite is no longer open.')
   if (input.accept) {
-    await tx.query(
-      `INSERT INTO platform.memberships (org_id, user_id, role, invited_by) VALUES ($1, $2, $3, $4)
+    const joined = await tx.query(
+      `INSERT INTO platform.memberships (org_id, user_id, owner, guest, invited_by) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (org_id, user_id) DO NOTHING`,
-      [mine.orgId, input.user.id, mine.role, mine.invitedBy],
+      [mine.orgId, input.user.id, mine.owner, mine.guest && !mine.owner, mine.invitedBy],
     )
+    if (joined.rowCount && !mine.owner) {
+      await tx.query(
+        `INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id, granted_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [`g_${randomUUID()}`, mine.orgId, input.user.id, mine.place.kind, mine.place.kind === 'docket' ? mine.place.id : null, mine.roleId, mine.invitedBy],
+      )
+    }
   }
   return mine
 }

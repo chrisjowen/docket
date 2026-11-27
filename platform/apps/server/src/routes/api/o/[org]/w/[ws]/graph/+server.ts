@@ -17,7 +17,7 @@ export const GET: RequestHandler = async (event) =>
     await inWorkspace(
       event,
       async ({ access, workspace, ctx }) => {
-        authorise(access, 'graph.read')
+        authorise(access, 'read')
         return workspaceGraph(ctx, workspace, { root: `/o/${access.org.slug}/w/${workspace.slug}` })
       },
       { api: true },

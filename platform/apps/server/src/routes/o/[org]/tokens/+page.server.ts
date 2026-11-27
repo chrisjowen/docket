@@ -14,10 +14,10 @@ import {
   revokeConnection,
 } from '@docket/platform-auth'
 import { rateLimitMessage, tokenCreateLimits } from '@docket/platform-limits'
-import type { Tx } from '@docket/platform-tenancy'
+import { docketPlace, type Tx } from '@docket/platform-tenancy'
 import { fail, type RequestEvent } from '@sveltejs/kit'
 
-import { orgAccess, permissionOn, recordAudit, recordStandalone, requireUser, type OrgAccess } from '$lib/server/request'
+import { orgAccess, recordAudit, recordStandalone, requireUser, type OrgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 import { accountDockets, connectionView, tokenView, type DocketRef } from '$lib/server/tokens'
 
@@ -36,8 +36,8 @@ const EXPIRY_CHOICES = [7, 30, 60, MAX_TOKEN_DAYS]
 /** The account's dockets the member reaches now: what their tokens may name. */
 function reachable(access: OrgAccess, dockets: ReadonlyMap<string, DocketRef>) {
   return [...dockets.values()].flatMap((docket) => {
-    const permission = permissionOn(access, docket.id)
-    return permission ? [{ ...docket, readOnly: permission === 'read' }] : []
+    const caps = access.capsAt(docketPlace(docket.id))
+    return caps.has('read') ? [{ ...docket, readOnly: !caps.has('write') }] : []
   })
 }
 

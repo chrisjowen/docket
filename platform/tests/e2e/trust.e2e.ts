@@ -119,7 +119,7 @@ test('making the writer a lead in the directory scores them again, and carries t
   const set = await api('PUT', `/api/o/${org}/people/alice`, { attributes: { role: 'lead' } })
   expect(set).toEqual({ status: 200, body: expect.objectContaining({ login: 'alice', attributes: { role: 'lead' } }) })
   const people = await api('GET', `/api/o/${org}/people`)
-  expect(people.body?.people).toEqual([expect.objectContaining({ login: 'alice', role: 'owner', attributes: { role: 'lead' } })])
+  expect(people.body?.people).toEqual([expect.objectContaining({ login: 'alice', role: 'Owner', attributes: { role: 'lead' } })])
 
   const accepted = await api('GET', `/api/o/${org}/w/decisions/proposals?status=accepted`)
   expect(accepted.body?.proposals).toEqual([expect.objectContaining({ resource: 'decision.fraud-in-house', status: 'accepted', decidedBy: 'score' })])
@@ -173,7 +173,7 @@ test('a system account is made in Settings › System accounts, and no person ac
   await page.getByRole('button', { name: 'Create system account' }).click()
   await expect(page.getByText('Created ci-bot. Issue it a token below.')).toBeVisible()
   await page.goto(`/o/${org}/settings/system-accounts`)
-  await expect(page.locator('[data-service="ci-bot"]')).toContainText('Reader: reads every docket')
+  await expect(page.locator('[data-service="ci-bot"]')).toContainText('Reader on')
   const people = await api('GET', `/api/o/${org}/people`)
   expect(people.body?.people).toEqual([expect.objectContaining({ login: 'alice' })])
   expect(people.body?.people?.[0]).not.toHaveProperty('agents')

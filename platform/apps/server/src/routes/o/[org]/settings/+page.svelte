@@ -11,7 +11,7 @@
 </svelte:head>
 
 <h1>Settings</h1>
-<OrgSettingsTabs org={data.org.slug} active="ai" owner />
+<OrgSettingsTabs org={data.org.slug} active="ai" />
 <p class="muted lede">Owners only. Changes are recorded in the audit log.</p>
 
 {#if form?.problem}<p class="alert" role="alert">{form.problem}</p>{/if}

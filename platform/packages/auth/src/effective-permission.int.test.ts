@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { changeRole, removeMember, tenantRouter, type TenantRouter, type Tx } from '@docket/platform-tenancy'
+import { ACCOUNT, accessOf, docketPlace, removeMember, setGrant, tenantRouter, type Access, type TenantRouter, type Tx } from '@docket/platform-tenancy'
 import { TEST_PG_URL, createTestDatabase, type TestDatabase } from '@docket/platform-tenancy/testing'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -31,16 +31,19 @@ describe.skipIf(!TEST_PG_URL)('effective permission', () => {
         ('u-guest', 'human', 7, 'guest'), ('u-out', 'human', 8, 'out'), ('u-dev2', 'human', 9, 'dev2');
       INSERT INTO platform.orgs (id, slug, name, status, created_by) VALUES ('orga', 'acme', 'Acme', 'active', 'u-own');
       INSERT INTO platform.users (id, kind, service_org_id, login) VALUES ('u-prov', 'service', 'orga', 'prov');
-      INSERT INTO platform.memberships (org_id, user_id, role) VALUES
-        ('orga', 'u-own', 'owner'), ('orga', 'u-ed', 'editor'), ('orga', 'u-gone', 'editor'),
-        ('orga', 'u-adm', 'admin'), ('orga', 'u-dev', 'editor'), ('orga', 'u-dev2', 'editor'), ('orga', 'u-ro', 'viewer');
-      INSERT INTO platform.memberships (org_id, user_id, role, account_role) VALUES
-        ('orga', 'u-guest', 'viewer', 'guest'), ('orga', 'u-out', 'viewer', 'guest'), ('orga', 'u-prov', 'editor', 'provisioner');
-      -- What the 0016 backfill gives today's members, and grants made by hand: a write grant on ws2 only for
-      -- u-dev2, a read grant for one guest, and a write grant a provisioner holds but must never use.
-      INSERT INTO platform.namespace_grants (org_id, namespace_id, principal_id, permission) VALUES
-        ('orga', 'ws1', 'u-ed', 'write'), ('orga', 'ws1', 'u-gone', 'write'), ('orga', 'ws1', 'u-ro', 'read'),
-        ('orga', 'ws1', 'u-dev', 'write'), ('orga', 'ws2', 'u-dev2', 'write'), ('orga', 'ws1', 'u-guest', 'read'), ('orga', 'ws1', 'u-prov', 'write');
+      INSERT INTO platform.memberships (org_id, user_id, owner, guest) VALUES
+        ('orga', 'u-own', true, false), ('orga', 'u-ed', false, false), ('orga', 'u-gone', false, false),
+        ('orga', 'u-adm', false, false), ('orga', 'u-dev', false, false), ('orga', 'u-dev2', false, false), ('orga', 'u-ro', false, false),
+        ('orga', 'u-guest', false, true), ('orga', 'u-out', false, true), ('orga', 'u-prov', false, false);
+      -- A role that sets things up and reads nothing.
+      INSERT INTO platform.roles (id, org_id, name, caps) VALUES ('r_prov', 'orga', 'Provisioner', ARRAY['create', 'access', 'audit']);
+      -- Roles on the whole account, and on one docket: Writer on ws2 only for u-dev2, Reader on ws1 for one
+      -- guest, and a provisioner that manages access everywhere but reads nothing.
+      INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id) VALUES
+        ('g1', 'orga', 'u-ed', 'account', NULL, 'writer'), ('g2', 'orga', 'u-gone', 'account', NULL, 'writer'),
+        ('g3', 'orga', 'u-ro', 'account', NULL, 'reader'), ('g4', 'orga', 'u-dev', 'account', NULL, 'writer'),
+        ('g5', 'orga', 'u-adm', 'account', NULL, 'admin'), ('g6', 'orga', 'u-dev2', 'docket', 'ws2', 'writer'),
+        ('g7', 'orga', 'u-guest', 'docket', 'ws1', 'reader'), ('g8', 'orga', 'u-prov', 'account', NULL, 'r_prov');
     `)
     listener = listenForRevocations({ connect: () => new pg.Client({ connectionString: db.url('app') }), onRevoked: () => resolver.forget() })
     for (let waited = 0; !listener.connected && waited < 5_000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50))
@@ -67,7 +70,9 @@ describe.skipIf(!TEST_PG_URL)('effective permission', () => {
     return platform((tx) => issueApiToken(tx, { orgId: 'orga', dockets: ['ws1'], ownerId, createdBy: ownerId, readOnly, legacyScopes: legacy }))
   }
 
-  /** What the MCP endpoint does on every call: resolve, then cut to the role now. */
+  const owner = async (): Promise<Access> => (await platform((tx) => accessOf(tx, 'orga', 'u-own'))) as Access
+
+  /** What the MCP endpoint does on every call: resolve, then cut to the grants now. */
   async function call(token: string, needed: 'docket:read' | 'docket:write') {
     const principal = await resolver.resolveBearer(token, resource)
     if (!principal) return { status: 401 }
@@ -79,61 +84,63 @@ describe.skipIf(!TEST_PG_URL)('effective permission', () => {
     const { token } = await issue('u-ed', ['docket:read', 'docket:write'])
     expect(await call(token, 'docket:write')).toEqual({ status: 200 })
 
-    await platform((tx) => changeRole(tx, { orgId: 'orga', userId: 'u-ed', role: 'viewer', actorRole: 'owner' }))
+    const actor = await owner()
+    await platform((tx) => setGrant(tx, { orgId: 'orga', who: { kind: 'user', id: 'u-ed' }, place: ACCOUNT, roleId: 'reader', actor, actorId: 'u-own' }))
 
-    // The lookup is still cached; the role is not.
+    // The lookup is still cached; the grants are not.
     expect(await call(token, 'docket:write')).toEqual({ status: 403, error: 'insufficient_scope' })
     expect(await call(token, 'docket:read')).toEqual({ status: 200 })
   })
 
-  it('ontology:write follows the workspace setting and the role, on every call', async () => {
-    // A token that acts as its owner, narrowed by nothing, carries ontology:write only while the setting names their role.
-    const { token } = await platform((tx) => issueApiToken(tx, { orgId: 'orga', dockets: ['ws1'], ownerId: 'u-own', createdBy: 'u-own', legacyScopes: ['docket:read', 'ontology:write'] }))
+  it('ontology:write follows Publish ontology changes, given on one docket to one person, on every call', async () => {
+    // A token that acts as its owner, narrowed by nothing, carries ontology:write only while they hold Publish there.
+    const { token } = await platform((tx) => issueApiToken(tx, { orgId: 'orga', dockets: ['ws1'], ownerId: 'u-dev', createdBy: 'u-dev', legacyScopes: ['docket:read', 'ontology:write'] }))
     const principal = await resolver.resolveBearer(token, resource)
     if (!principal) throw new Error('unresolved')
-    let writers: ('owner' | 'admin' | 'editor')[] = ['owner', 'editor']
-    const effective = () => effectiveScopes(principal, { platform, ontologyWriters: async () => writers })
+    const effective = () => effectiveScopes(principal, { platform })
+    expect(await effective()).toEqual(['docket:read', 'ontology:read'])
+    const actor = await owner()
+    const { grant } = await platform((tx) =>
+      setGrant(tx, { orgId: 'orga', who: { kind: 'user', id: 'u-dev' }, place: docketPlace('ws1'), roleId: 'writer', add: ['publish'], actor, actorId: 'u-own' }),
+    )
     expect(await effective()).toEqual(['docket:read', 'ontology:read', 'ontology:write'])
-    // The owner turns it off, or leaves only editors on: the owner's own token loses it at once.
-    writers = ['editor']
+    // Not on the other docket: the grant is on ws1 alone.
+    expect(await effectiveScopes({ ...principal, workspaceId: 'ws2' }, { platform })).toEqual(['docket:read', 'ontology:read'])
+    await db.admin.query('DELETE FROM platform.grants WHERE id = $1', [grant.id])
     expect(await effective()).toEqual(['docket:read', 'ontology:read'])
-    writers = []
-    expect(await effective()).toEqual(['docket:read', 'ontology:read'])
-    // A caller that does not read the setting never gets it.
-    writers = ['owner']
-    expect(await effectiveScopes(principal, { platform })).toEqual(['docket:read', 'ontology:read'])
   })
 
-  it('cuts every credential to its owner\'s permission on the workspace: account role, then grant', async () => {
+  it('cuts every credential to what its owner may do on the docket: every grant that covers it', async () => {
     const scopes: Scope[] = ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose']
     const asIf = (userId: string) => effectiveScopes({ ...principalFor(userId), scopes }, { platform })
     const write = ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose']
     const read = ['docket:read', 'ontology:read']
-    // Owners and admins are admin on every workspace, with no grant.
+    // Owners and account admins reach every docket.
     expect(await asIf('u-own')).toEqual(write)
     expect(await asIf('u-adm')).toEqual(write)
-    // Developers and read-only members reach what they are granted, at its level.
+    // Everyone else reaches what a grant on the account or the docket gives.
     expect(await asIf('u-dev')).toEqual(write)
     expect(await asIf('u-ro')).toEqual(read)
     expect(await asIf('u-guest')).toEqual(read)
-    // Nothing without a grant here: u-dev2's is on ws2, u-out has none; a provisioner reaches no content even granted.
+    // Nothing without a grant here: u-dev2's is on ws2, u-out has none; a role without Read and ask reaches no content.
     expect(await asIf('u-dev2')).toEqual([])
     expect(await asIf('u-out')).toEqual([])
     expect(await asIf('u-prov')).toEqual([])
     expect(checkScope(await asIf('u-dev2'), 'docket:read')).toMatchObject({ status: 401, error: 'invalid_token' })
   })
 
-  it('taking a grant away leaves the token nothing on that workspace', async () => {
+  it('taking a grant away leaves the token nothing on that docket', async () => {
     const { token } = await issue('u-ro', ['docket:read'])
     expect(await call(token, 'docket:read')).toEqual({ status: 200 })
-    await db.admin.query("DELETE FROM platform.namespace_grants WHERE principal_id = 'u-ro'")
+    await db.admin.query("DELETE FROM platform.grants WHERE principal_id = 'u-ro'")
     expect(await call(token, 'docket:read')).toEqual({ status: 401, error: 'invalid_token' })
   })
 
   it('removal leaves the token nothing', async () => {
     const { token } = await issue('u-gone', ['docket:read'])
     expect(await call(token, 'docket:read')).toEqual({ status: 200 })
-    await platform((tx) => removeMember(tx, { orgId: 'orga', userId: 'u-gone', actorRole: 'owner' }))
+    const actor = await owner()
+    await platform((tx) => removeMember(tx, { orgId: 'orga', userId: 'u-gone', actor }))
     expect(await call(token, 'docket:read')).toEqual({ status: 401, error: 'invalid_token' })
   })
 

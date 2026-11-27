@@ -62,7 +62,7 @@ export {
   updateOrgTemplate,
 } from './org-templates.js'
 export type { OrgTemplate } from './org-templates.js'
-export { mergePatch, proposeOntologyChange, proposedText, publishOntologyChange } from './propose.js'
+export { PublishNotGranted, mergePatch, proposeOntologyChange, proposedText, publishOntologyChange } from './propose.js'
 export type { DirectChange, Proposal } from './propose.js'
 export { TEMPLATES, TEMPLATE_IDS, isTemplateId, template } from './templates.js'
 export type { Template, TemplateId } from './templates.js'

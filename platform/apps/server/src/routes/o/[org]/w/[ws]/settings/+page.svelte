@@ -10,8 +10,6 @@
 
   let { data, form } = $props()
   let confirm = $state('')
-
-  const ROLE_LABELS: Record<string, string> = { owner: 'Owners', admin: 'Admins', editor: 'Editors' }
 </script>
 
 <svelte:head>
@@ -19,11 +17,9 @@
 </svelte:head>
 
 <h1>Settings</h1>
-<p class="muted lede">{data.workspace.name} belongs to {data.org.name}; its members' roles apply here.</p>
+<p class="muted lede">{data.workspace.name} belongs to {data.org.name}. Who may do what here is on the Access tab.</p>
 <SettingsTabs org={data.org.slug} ws={data.workspace.slug} active="general" />
 
-{#if form?.ontologyProblem}<p class="alert" role="alert">{form.ontologyProblem}</p>{/if}
-{#if form?.flash}<p class="flash" role="status">{form.flash}</p>{/if}
 
 <section class="card section">
   <h2>Docket</h2>
@@ -45,37 +41,22 @@
   </dl>
 </section>
 
-<form method="POST" action="?/ontologyMcp" class="card section stack mcp" data-testid="ontology-mcp">
-  <Csrf token={data.csrf} />
-  <h2>Ontology changes over MCP</h2>
+<section class="card section stack" data-testid="ontology-publishing">
+  <h2>Ontology changes</h2>
   <p class="muted">
-    MCP clients can always propose an ontology change as a draft for an admin to review. The roles ticked here can also change
-    the ontology directly - publishing new versions, breaking and migrating changes included - from a token or sign-in that
-    carries <span class="mono">ontology:write</span>, with no review. Every change is in the audit log and the
-    <a href={resolve('/o/[org]/w/[ws]/ontology/history', { org: data.org.slug, ws: data.workspace.slug })}>ontology history</a>, where any version can be rolled back. Taking a role off stops its
-    credentials from their next call.
+    Anyone who can propose an ontology change files it as a draft. Whoever holds <strong>Publish ontology changes</strong> on this
+    docket publishes it - in the Schema tab, or straight from an MCP client, with no review. It is a capability like any
+    other: give it to one person on the
+    <a href={resolve('/o/[org]/w/[ws]/access', { org: data.org.slug, ws: data.workspace.slug })}>Access</a> tab. Every change
+    is in the audit log and the
+    <a href={resolve('/o/[org]/w/[ws]/ontology/history', { org: data.org.slug, ws: data.workspace.slug })}>ontology history</a>, where any version can be rolled back.
   </p>
-  <fieldset disabled={!data.ontologyMcp.canChange}>
-    <legend>Roles that can change the ontology directly</legend>
-    {#each data.ontologyMcp.choices as role (role)}
-      <label class="choice">
-        <input type="checkbox" name="role" value={role} checked={data.ontologyMcp.roles.includes(role)} />
-        {ROLE_LABELS[role] ?? role}
-      </label>
-    {/each}
-    <p class="muted fine">Viewers only ever read.</p>
-  </fieldset>
-  {#if data.ontologyMcp.canChange}
-    <div><button class="button primary" type="submit">Save</button></div>
-  {:else}
-    <p class="muted fine">Only the organisation's owner changes this.</p>
-  {/if}
-</form>
+</section>
 
 <EnrichmentSettings
   enrichment={data.enrichment}
   csrf={data.csrf}
-  canManage={data.permissions['enrichment.manage']}
+  canManage={data.here.settings}
   ws={{ org: data.org.slug, ws: data.workspace.slug }}
   problem={form?.enrichmentProblem}
   flash={form?.enrichmentFlash}
@@ -84,13 +65,13 @@
 <CogneeSettings
   cognee={data.cognee}
   csrf={data.csrf}
-  canManage={data.permissions['projections.manage']}
+  canManage={data.here.settings}
   ws={{ org: data.org.slug, ws: data.workspace.slug }}
   problem={form?.cogneeProblem}
   flash={form?.cogneeFlash}
 />
 
-{#if data.permissions['templates.manage']}
+{#if data.permissions.settings}
   <section class="card section template" aria-labelledby="template-heading" data-testid="save-template">
     <h2 id="template-heading"><LayoutTemplate size={16} aria-hidden="true" /> Save as a template</h2>
     <p class="muted">
@@ -114,7 +95,7 @@
   </section>
 {/if}
 
-{#if data.permissions['workspaces.delete']}
+{#if data.here.delete}
   <section class="card danger-zone" aria-labelledby="delete-heading">
     <h2 id="delete-heading"><Trash2 size={16} aria-hidden="true" /> Delete this docket</h2>
     <p class="muted">
@@ -159,25 +140,6 @@
   dd {
     margin: 0;
     overflow-wrap: anywhere;
-  }
-  .mcp p {
-    margin: 0;
-  }
-  .mcp fieldset {
-    border: 0;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.4rem;
-  }
-  .mcp legend {
-    font-weight: 600;
-    margin-bottom: 0.4rem;
-  }
-  .choice {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
   }
   .fine {
     font-size: 0.875rem;

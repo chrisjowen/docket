@@ -5,10 +5,10 @@ import { createOrg, csrfOf, signIn, unique } from './helpers'
 
 /**
  * G1 (spec §1): an invited user signs in with GitHub, creates an org, invites
- * a second user as editor, and the second user can write but not publish the
- * ontology.
+ * a second user as a Writer on the whole account, and the second user can
+ * write but not publish the ontology.
  */
-test('G1: create an org, invite an editor who can write but not publish', async ({ browser }) => {
+test('G1: create an org, invite a writer who can write but not publish', async ({ browser }) => {
   const suffix = unique()
   const bob = `bob${suffix}`
 
@@ -16,12 +16,12 @@ test('G1: create an org, invite an editor who can write but not publish', async 
   await signIn(alice, 'alice', { name: 'Alice Archer' })
   const slug = await createOrg(alice, `Acme ${suffix}`)
   await expect(alice.getByRole('heading', { name: 'Users' })).toBeVisible()
-  await expect(alice.locator(`tr[data-login="alice"] [data-testid="role"]`)).toHaveText('owner')
+  await expect(alice.locator(`tr[data-login="alice"] [data-testid="role"]`)).toHaveText('Owner')
 
   await alice.getByLabel('GitHub login or email').fill(`@${bob}`)
-  await alice.locator('form[action="?/invite"] select[name="role"]').selectOption('editor')
+  await alice.locator('form[action="?/invite"] select[name="role"]').selectOption('writer')
   await alice.getByRole('button', { name: 'Send invite' }).click()
-  await expect(alice.getByText(`Invited @${bob} as editor.`)).toBeVisible()
+  await expect(alice.getByText(`Invited @${bob} as Writer on Acme ${suffix} (the whole account).`)).toBeVisible()
   await expect(alice.getByText(`@${bob}`, { exact: true })).toBeVisible()
 
   // Bob is not on the beta list; the pending invite admits him.
@@ -30,27 +30,27 @@ test('G1: create an org, invite an editor who can write but not publish', async 
   await expect(bobPage.getByRole('heading', { name: 'Invites for you' })).toBeVisible()
   await bobPage.getByRole('button', { name: `Accept and join Acme ${suffix}` }).click()
   await expect(bobPage).toHaveURL(new RegExp(`/o/${slug}$`))
-  await expect(bobPage.getByTestId('my-role')).toHaveText('editor')
-  await expect(bobPage.locator('[data-action="knowledge.write"]')).toHaveAttribute('data-allowed', 'true')
-  await expect(bobPage.locator('[data-action="ontology.propose"]')).toHaveAttribute('data-allowed', 'true')
-  await expect(bobPage.locator('[data-action="ontology.publish"]')).toHaveAttribute('data-allowed', 'false')
-  await expect(bobPage.locator('[data-action="members.manage"]')).toHaveAttribute('data-allowed', 'false')
+  await expect(bobPage.getByTestId('my-role')).toHaveText('Writer')
+  await expect(bobPage.locator('[data-action="write"]')).toHaveAttribute('data-allowed', 'true')
+  await expect(bobPage.locator('[data-action="propose"]')).toHaveAttribute('data-allowed', 'true')
+  await expect(bobPage.locator('[data-action="publish"]')).toHaveAttribute('data-allowed', 'false')
+  await expect(bobPage.locator('[data-action="access"]')).toHaveAttribute('data-allowed', 'false')
 
-  // An editor cannot manage members, through the UI or around it.
+  // A writer cannot manage access, through the UI or around it.
   await bobPage.goto(`/o/${slug}/members`)
   await expect(bobPage.getByRole('button', { name: 'Send invite' })).toHaveCount(0)
   const members = await (await bobPage.request.get(`/api/o/${slug}/members`)).json()
   const aliceId = members.members.find((member: { login: string }) => member.login === 'alice')
-  expect(aliceId?.role).toBe('owner')
+  expect(aliceId?.role).toBe('Owner')
   const refused = await bobPage.request.post(`/o/${slug}/members?/invite`, {
     form: { csrf: await csrfOf(bobPage), who: '@someone', role: 'admin' },
     headers: { origin: new URL(bobPage.url()).origin },
   })
   expect(refused.status()).toBe(403)
 
-  // Alice sees Bob as an editor, and every change in the org's audit log, chain intact.
+  // Alice sees Bob as a writer, and every change in the org's audit log, chain intact.
   await alice.reload()
-  await expect(alice.locator(`tr[data-login="${bob}"] select`)).toHaveValue('editor')
+  await expect(alice.locator(`tr[data-login="${bob}"] select`)).toHaveValue('writer')
   await alice.goto(`/o/${slug}/audit`)
   await expect(alice.getByTestId('chain')).toContainText('Chain verified')
   for (const action of ['org.provision', 'members.invite', 'members.invite.accept']) {
@@ -65,7 +65,7 @@ test('G1: create an org, invite an editor who can write but not publish', async 
   await expect(bobPage.getByRole('cell', { name: 'members.invite', exact: true })).toHaveCount(0)
 })
 
-test('an admin manages roles, removals and service accounts, and an org keeps an owner', async ({ browser }) => {
+test('an admin manages access, removals and system accounts, and an org keeps an owner', async ({ browser }) => {
   const suffix = unique()
   const dana = `dana${suffix}`
   const owner = await (await browser.newContext()).newPage()
@@ -73,24 +73,27 @@ test('an admin manages roles, removals and service accounts, and an org keeps an
   const slug = await createOrg(owner, `Roles ${suffix}`)
 
   await owner.getByLabel('GitHub login or email').fill(dana)
-  await owner.locator('form[action="?/invite"] select[name="role"]').selectOption('viewer')
+  await owner.locator('form[action="?/invite"] select[name="role"]').selectOption('reader')
   await owner.getByRole('button', { name: 'Send invite' }).click()
   const danaPage = await (await browser.newContext()).newPage()
   await signIn(danaPage, dana)
   await danaPage.getByRole('button', { name: `Accept and join Roles ${suffix}` }).click()
-  await expect(danaPage.getByTestId('my-role')).toHaveText('viewer')
+  await expect(danaPage.getByTestId('my-role')).toHaveText('Reader')
 
   await owner.reload()
   const row = owner.locator(`tr[data-login="${dana}"]`)
   await row.locator('select').selectOption('admin')
   await row.getByRole('button', { name: 'Save' }).click()
-  await expect(owner.getByText('Role changed from viewer to admin.')).toBeVisible()
+  await expect(owner.getByText(`${dana} now has Admin on Roles ${suffix} (the whole account).`)).toBeVisible()
 
   // The new admin adds a system account in Settings › System accounts, but cannot touch the owner.
   await danaPage.goto(`/o/${slug}/members`)
-  await expect(danaPage.locator('tr[data-login="alice"] [data-testid="role"]')).toHaveText('owner')
+  await expect(danaPage.locator('tr[data-login="alice"] [data-testid="role"]')).toHaveText('Owner')
+  await expect(danaPage.locator('tr[data-login="alice"]').getByRole('button', { name: 'Remove @alice' })).toHaveCount(0)
+  // Settings opens on the account's roles for anyone but an owner.
   await danaPage.goto(`/o/${slug}/settings`)
-  await expect(danaPage).toHaveURL(new RegExp(`/o/${slug}/settings/system-accounts$`))
+  await expect(danaPage).toHaveURL(new RegExp(`/o/${slug}/settings/roles$`))
+  await danaPage.goto(`/o/${slug}/settings/system-accounts`)
   await danaPage.getByPlaceholder('github-sync').fill('ci-bot')
   await danaPage.getByRole('button', { name: 'Create system account' }).click()
   await expect(danaPage.getByText('Created ci-bot. Issue it a token below.')).toBeVisible()

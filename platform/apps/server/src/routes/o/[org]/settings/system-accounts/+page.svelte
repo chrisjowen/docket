@@ -18,12 +18,12 @@
 </svelte:head>
 
 <h1>Settings</h1>
-<OrgSettingsTabs org={data.org.slug} active="system-accounts" owner={data.owner} />
+<OrgSettingsTabs org={data.org.slug} active="system-accounts" />
 
 <p class="muted lede">
   A system account is anything that is not a person: CI, an integration, a bot. It belongs to {data.org.name}, outlives
   whoever made it, and acts only through its tokens. No person acts for it: what it writes is its own, so its evidence cites
-  its sources. This is the one place to create one, give it access and issue its tokens. {data.org.name}'s owners are told
+  its sources. This is the one place to create one, give it access - a role on a place, as for anyone - and issue its tokens. {data.org.name}'s owners are told
   before its tokens expire.
 </p>
 
@@ -80,9 +80,15 @@
     <input name="description" maxlength="200" placeholder="GitHub Actions: docket push on main" />
   </label>
   <label>
-    It may
+    Role
     <select name="role">
-      {#each data.roles as entry (entry.role)}<option value={entry.role} selected={entry.role === 'viewer'}>{entry.label}</option>{/each}
+      {#each data.roles as role (role.id)}<option value={role.id} selected={role.id === 'reader'}>{role.name}</option>{/each}
+    </select>
+  </label>
+  <label>
+    On
+    <select name="place">
+      {#each data.places as place (place.key)}<option value={place.key}>{place.label}</option>{/each}
     </select>
   </label>
   <div><button class="button primary" type="submit"><Server size={14} aria-hidden="true" /> Create system account</button></div>

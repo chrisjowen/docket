@@ -12,13 +12,14 @@ import {
 import { listMembers, type Member } from '@docket/platform-tenancy'
 import { error, json, type RequestEvent } from '@sveltejs/kit'
 
+import { accountRoles } from './members'
 import { recordAudit, type OrgAccess } from './request'
 import { getRuntime } from './runtime'
 
 /**
  * What the org attests about sources, over JSON (trust design §3.2): the
  * people directory, by member; and the source registry. Everyone in the org
- * reads them; owners and admins change them (`trust.manage`), and every
+ * reads them; whoever may change the account's settings changes them, and every
  * change scores the org's workspaces again - its pending proposals too.
  */
 
@@ -26,21 +27,25 @@ import { getRuntime } from './runtime'
 export interface DirectoryEntry {
   login: string
   name: string | null
-  role: Member['role']
+  /** What they are across the account: Owner, or their role there. */
+  role: string
   attributes: Record<string, unknown>
   updatedAt: string | null
 }
 
 /** Every human member of the org, with what the directory attests about them. */
 export async function directory(access: OrgAccess, ctx: StoreContext): Promise<DirectoryEntry[]> {
-  const members = await getRuntime().router.withPlatform((tx) => listMembers(tx, access.org.id))
+  const { members, roles } = await getRuntime().router.withPlatform(async (tx) => {
+    const members = await listMembers(tx, access.org.id)
+    return { members, roles: await accountRoles(tx, access.org.id, members) }
+  })
   const attested = new Map((await listPeople(ctx)).map((person) => [person.userId, person]))
   return members
     .filter((member) => member.kind === 'human')
     .map((member) => ({
       login: member.login,
       name: member.name,
-      role: member.role,
+      role: roles.get(member.id) ?? '',
       attributes: attested.get(member.id)?.attributes ?? {},
       updatedAt: attested.get(member.id)?.updatedAt.toISOString() ?? null,
     }))

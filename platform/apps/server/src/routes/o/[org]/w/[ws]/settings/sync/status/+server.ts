@@ -16,7 +16,7 @@ export const GET: RequestHandler = (event) =>
   inWorkspace(
     event,
     async ({ access, workspace, ctx }) => {
-      authorise(access, 'graph.read')
+      authorise(access, 'read')
       return json(await syncLive(ctx.tx, workspace.id), { headers: { 'cache-control': 'no-store' } })
     },
     { api: true },

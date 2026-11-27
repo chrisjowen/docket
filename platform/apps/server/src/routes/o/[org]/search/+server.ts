@@ -4,7 +4,7 @@ import { json } from '@sveltejs/kit'
 import { chosenWorkspaces } from '$lib/ask/model'
 import { searchAcross } from '$lib/server/ask'
 import { askDeps, orgWorkspaces } from '$lib/server/ask-runtime'
-import { authorise, orgAccess, requireUser } from '$lib/server/request'
+import { authoriseAnywhere, orgAccess, requireUser } from '$lib/server/request'
 
 import type { RequestHandler } from './$types'
 
@@ -21,7 +21,7 @@ const SENT = 5
  */
 export const GET: RequestHandler = async (event) => {
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'graph.read')
+  authoriseAnywhere(access, 'read')
   const user = requireUser(event)
   const query = (event.url.searchParams.get('q') ?? '').trim().slice(0, MAX_QUERY)
   const all = await orgWorkspaces(access)

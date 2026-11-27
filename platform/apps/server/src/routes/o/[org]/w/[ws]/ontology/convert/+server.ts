@@ -20,7 +20,7 @@ export const POST: RequestHandler = async (event) => {
   return inWorkspace(
     event,
     async ({ access }) => {
-      authorise(access, 'ontology.propose')
+      authorise(access, 'propose')
       try {
         return json({ ok: true, ...convertOntologyText(yaml) })
       } catch (caught) {

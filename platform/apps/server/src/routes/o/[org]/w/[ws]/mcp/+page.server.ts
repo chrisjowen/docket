@@ -30,7 +30,7 @@ import type { Actions, PageServerLoad } from './$types'
  * docket with their revocation, and the audit log of MCP calls. A member
  * makes a personal token for this docket here; every token and connection of
  * theirs is on Your tokens & connections, and system accounts' tokens are in
- * Settings › System accounts. A docket's admins (`tokens.manage`) see
+ * Settings › System accounts. Whoever manages tokens on the docket sees
  * everyone's here, and revoke those that reach this docket alone.
  */
 
@@ -39,10 +39,10 @@ const EXPIRY_CHOICES = [7, 30, 60, MAX_TOKEN_DAYS]
 export const load: PageServerLoad = async (event) => {
   const user = requireUser(event)
   const { access, workspace } = await docketAccess(event)
-  authorise(access, 'graph.read')
+  authorise(access, 'read')
   const { router, origin } = getRuntime()
   const endpoint = mcpResourceUrl(origin, access.org.slug, workspace.slug)
-  const manage = access.can('tokens.manage')
+  const manage = access.can('tokens')
   const { dockets, resources } = await accountDockets(access.org)
 
   const { tokens, connections, members } = await router.withPlatform(async (tx) => ({
@@ -53,7 +53,7 @@ export const load: PageServerLoad = async (event) => {
   const logins = new Map(members.map((member) => [member.id, member.login]))
   const ownTokens = tokens.filter((token) => token.ownerId === user.id)
 
-  const full = access.can('audit.view-full')
+  const full = access.can('audit')
   const events = await router.withTenant(access.org.id, (tx) =>
     listAudit(tx, {
       workspaceId: workspace.id,
@@ -70,7 +70,7 @@ export const load: PageServerLoad = async (event) => {
     csrf: event.locals.csrf,
     endpoint,
     manage,
-    readOnlyHere: access.permission === 'read',
+    readOnlyHere: !access.can('write'),
     expiryChoices: EXPIRY_CHOICES,
     defaultDays: DEFAULT_TOKEN_DAYS,
     tokens: tokens.map((token) => ({ ...tokenView(token, user.id, dockets, now), revocable: token.ownerId === user.id || pinned(token.dockets) })),
@@ -102,7 +102,7 @@ async function change<T extends { flash: string }>(
 ) {
   const user = requireUser(event)
   const { access, workspace } = await docketAccess(event)
-  authorise(access, 'tokens.create-own')
+  authorise(access, 'read')
   const { router } = getRuntime()
   const form = await event.request.formData()
   const { resources } = await accountDockets(access.org)
@@ -136,7 +136,7 @@ export const actions: Actions = {
     }
     return change(event, async (tx, { access, workspace, userId, form }) => {
       const days = Number(form.get('days') ?? DEFAULT_TOKEN_DAYS)
-      const readOnly = form.get('readOnly') === 'on' || access.permission === 'read'
+      const readOnly = form.get('readOnly') === 'on' || !access.can('write')
       const issued = await issueApiToken(tx, {
         orgId: access.org.id,
         ownerId: userId,
@@ -160,7 +160,7 @@ export const actions: Actions = {
     change(event, async (tx, { access, workspace, userId, form }) => {
       const tokenId = String(form.get('token') ?? '')
       // The member's own; for a docket's admins, also anyone's that reaches this docket alone.
-      const whose = access.can('tokens.manage') ? { ownOrPinned: { ownerId: userId, workspaceId: workspace.id } } : { ownerId: userId }
+      const whose = access.can('tokens') ? { ownOrPinned: { ownerId: userId, workspaceId: workspace.id } } : { ownerId: userId }
       const revoked = await revokeApiToken(tx, { orgId: access.org.id, tokenId, by: userId, ...whose })
       return {
         action: 'tokens.revoke',
@@ -173,7 +173,7 @@ export const actions: Actions = {
   revokeConnection: (event) =>
     change(event, async (tx, { access, workspace, userId, form, resources }) => {
       const grantId = String(form.get('connection') ?? '')
-      const whose = access.can('tokens.manage') ? { ownOrPinned: { userId, workspaceId: workspace.id } } : { userId }
+      const whose = access.can('tokens') ? { ownOrPinned: { userId, workspaceId: workspace.id } } : { userId }
       const revoked = await revokeConnection(tx, { orgId: access.org.id, grantId, resources, ...whose })
       return {
         action: 'oauth.revoke',

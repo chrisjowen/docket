@@ -14,7 +14,7 @@ import {
 } from '@docket/platform-ontology-service'
 import { fail, type RequestEvent } from '@sveltejs/kit'
 
-import { authorise, orgAccess, permissionOn, recordAudit, type OrgAccess } from '$lib/server/request'
+import { authorise, orgAccess, readsDocket, recordAudit, type OrgAccess } from '$lib/server/request'
 import { actorNames, inOrg, publisherOf } from '$lib/server/workspace'
 
 import type { Actions, PageServerLoad } from './$types'
@@ -27,9 +27,9 @@ import type { Actions, PageServerLoad } from './$types'
  */
 export const load: PageServerLoad = async (event) => {
   const access = await orgAccess(event)
-  authorise(access, 'templates.manage')
+  authorise(access, 'settings')
   const read = await inOrg(access, async (ctx) => {
-    const workspaces = (await listWorkspaces(ctx.tx)).filter((workspace) => permissionOn(access, workspace.id) !== null)
+    const workspaces = (await listWorkspaces(ctx.tx)).filter((workspace) => readsDocket(access, workspace.id))
     const heads = await Promise.all(workspaces.map(async (workspace) => ({ workspace, head: await headOf(ctx.tx, workspace.id) })))
     return { templates: await listOrgTemplates(ctx.tx), dockets: heads.filter((each) => each.head).map((each) => each.workspace) }
   })
@@ -53,7 +53,7 @@ export const load: PageServerLoad = async (event) => {
 /** A docket named in the form, as long as the member reaches it: a template is only ever saved from one they can read. */
 function docketOf(access: OrgAccess, form: FormData): string | null {
   const id = String(form.get('workspace') ?? '')
-  return id && permissionOn(access, id) !== null ? id : null
+  return id && readsDocket(access, id) ? id : null
 }
 
 const details = (form: FormData) => ({
@@ -64,7 +64,7 @@ const details = (form: FormData) => ({
 
 async function manage<T>(event: RequestEvent, fn: (access: OrgAccess, form: FormData, actor: string) => Promise<T>) {
   const access = await orgAccess(event)
-  authorise(access, 'templates.manage')
+  authorise(access, 'settings')
   const form = await event.request.formData()
   try {
     return await fn(access, form, publisherOf(event).actor)

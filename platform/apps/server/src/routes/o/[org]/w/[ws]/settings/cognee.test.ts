@@ -2,12 +2,12 @@
 import { isActionFailure, isHttpError, type RequestEvent } from '@sveltejs/kit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { accessRows } from '$lib/server/testing-access'
+
 type Query = { sql: string; params: unknown[] }
 
 const committed: Query[] = []
 let role = 'admin'
-/** The account role platform 0012 derives from each role. */
-const ACCOUNT_ROLE: Record<string, string> = { owner: 'owner', admin: 'admin', editor: 'developer', viewer: 'read_only' }
 
 function transaction() {
   return async <T>(fn: (tx: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number }> }) => Promise<T>) => {
@@ -15,9 +15,9 @@ function transaction() {
     const result = await fn({
       async query(sql, params = []) {
         pending.push({ sql, params })
-        if (sql.includes('FROM platform.orgs')) return { rows: [{ id: 'orgacme', slug: 'acme', name: 'Acme', status: 'active', role, account_role: ACCOUNT_ROLE[role] }], rowCount: 1 }
-        if (sql.includes('FROM platform.namespace_grants')) return { rows: [{ namespace_id: 'wsmain', permission: role === 'editor' ? 'write' : 'read' }], rowCount: 1 }
-        if (sql.includes('FROM workspaces WHERE')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', created_by: 'user:u1', created_at: new Date(), ontology_mcp_roles: [] }], rowCount: 1 }
+        const access = accessRows(sql, role)
+        if (access) return { rows: access, rowCount: access.length }
+        if (sql.includes('FROM workspaces WHERE')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', created_by: 'user:u1', created_at: new Date() }], rowCount: 1 }
         if (sql.includes('FROM audit_head')) return { rows: [{ hash: '0'.repeat(64) }], rowCount: 1 }
         if (sql.includes('INSERT INTO cognee_settings')) {
           const [workspace_id, enabled, floor, monthly_limit_usd] = params as [string, boolean, number, number]

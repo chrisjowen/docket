@@ -25,9 +25,18 @@ describe.skipIf(!TEST_PG_URL)('Settings › System accounts', () => {
   let beta: string
   const users: Record<string, { id: string; login: string }> = {}
 
-  async function member(name: string, role: string) {
+  /** A member holding `role` on the account (`docket` null) or on one docket. */
+  async function member(name: string, role: string, docket: string | null = null) {
     const user = await org.router.withPlatform((tx) => upsertGitHubUser(tx, { id: randomInt(1, 2 ** 31), login: `${name}-${org.orgId.slice(0, 4)}`, name: null, avatarUrl: null, emails: [] }))
-    await org.db.app.query('INSERT INTO platform.memberships (org_id, user_id, role) VALUES ($1, $2, $3)', [org.orgId, user.id, role])
+    await org.db.app.query('INSERT INTO platform.memberships (org_id, user_id) VALUES ($1, $2)', [org.orgId, user.id])
+    await org.db.app.query('INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id) VALUES ($1, $2, $3, $4, $5, $6)', [
+      `g_${randomUUID()}`,
+      org.orgId,
+      user.id,
+      docket ? 'docket' : 'account',
+      docket,
+      role,
+    ])
     users[name] = { id: user.id, login: user.login }
   }
 
@@ -69,26 +78,29 @@ describe.skipIf(!TEST_PG_URL)('Settings › System accounts', () => {
       limiter: { check: async () => ({ allowed: true, remaining: 1, resetAt: new Date() }) },
       caps: { status: async () => ({ spentUsd: 0, capUsd: 10, fraction: 0, warnedAt: null }) },
     } as unknown as Runtime
-    await member('admin', 'admin')
-    await member('editor', 'editor')
     alpha = (await org.withOrg((ctx) => insertWorkspace(ctx.tx, { name: 'Alpha', slug: 'alpha', createdBy: org.userId }))).id
     beta = (await org.withOrg((ctx) => insertWorkspace(ctx.tx, { name: 'Beta', slug: 'beta', createdBy: org.userId }))).id
+    await member('admin', 'admin')
+    await member('editor', 'writer')
+    // Admin of alpha alone: manages system accounts there, and nowhere else.
+    await member('lead', 'admin', alpha)
   })
   afterAll(() => org?.drop())
 
-  it('is for those who manage access: an editor is refused', async () => {
+  it('is for those who manage system accounts or access somewhere: a writer is refused', async () => {
     await expect(list.load(event('editor') as never)).rejects.toSatisfy((thrown: unknown) => isHttpError(thrown) && thrown.status === 403)
   })
 
   it('makes a system account with no person acting for it, issues it a narrowed token, and tells the owners before it expires', async () => {
-    const at = await redirected(() => list.actions.create!(event('admin', {}, { name: 'github-sync', description: 'Actions', role: 'editor' }) as never))
+    const at = await redirected(() => list.actions.create!(event('admin', {}, { name: 'github-sync', description: 'Actions', role: 'writer', place: 'account' }) as never))
     const id = /system-accounts\/([^?]+)/.exec(at)?.[1] ?? ''
     expect(id).not.toBe('')
     const { rows } = await org.db.admin.query('SELECT kind, accountable_user_id, created_by FROM platform.users WHERE id = $1', [id])
     expect(rows).toEqual([{ kind: 'service', accountable_user_id: null, created_by: users.admin!.id }])
 
     const shown = (await detail.load(event('admin', { id }) as never)) as { account: { name: string; access: string }; reachable: { id: string }[]; mayChange: boolean }
-    expect(shown.account).toMatchObject({ name: 'github-sync', access: 'Writer: reads and writes every docket' })
+    expect(shown.account.name).toBe('github-sync')
+    expect(shown.account.access).toMatch(/^Writer on .+ \(the whole account\)$/)
     expect(shown.mayChange).toBe(true)
     expect(shown.reachable.map((docket) => docket.id).sort()).toEqual([alpha, beta].sort())
 
@@ -118,5 +130,35 @@ describe.skipIf(!TEST_PG_URL)('Settings › System accounts', () => {
     expect(await redirected(() => detail.actions.remove!(event('admin', { id }, {}) as never))).toBe(`/o/${slug}/settings/system-accounts`)
     const { rows: gone } = await org.db.admin.query('SELECT 1 FROM platform.users WHERE id = $1', [id])
     expect(gone).toEqual([])
+  })
+
+  it('lets a docket\'s admin make one that reaches that docket only, and never more than they hold', async () => {
+    const offered = (await list.load(event('lead') as never)) as { places: { key: string }[] }
+    expect(offered.places.map((place) => place.key)).toEqual([`docket:${alpha}`])
+    const refused = (await list.actions.create!(event('lead', {}, { name: 'too-wide', role: 'reader', place: 'account' }) as never)) as { status?: number }
+    expect(refused.status).toBe(403)
+    const at = await redirected(() => list.actions.create!(event('lead', {}, { name: 'alpha-sync', role: 'writer', place: `docket:${alpha}` }) as never))
+    const id = /system-accounts\/([^?]+)/.exec(at)?.[1] ?? ''
+    const shown = (await detail.load(event('lead', { id }) as never)) as { reachable: { id: string }[]; mayChange: boolean }
+    expect(shown.reachable.map((docket) => docket.id)).toEqual([alpha])
+    expect(shown.mayChange).toBe(true)
+    // Giving it beta is refused: the lead manages nothing there.
+    await expect(detail.actions.give!(event('lead', { id }, { role: 'reader', place: `docket:${beta}` }) as never)).rejects.toSatisfy(
+      (thrown: unknown) => isHttpError(thrown) && thrown.status === 403,
+    )
+  })
+
+  it('hides a system account from a manager whose docket it does not reach, and answers 404 for its page', async () => {
+    await member('outsider', 'admin', beta)
+    const at = await redirected(() => list.actions.create!(event('lead', {}, { name: 'alpha-reach', role: 'writer', place: `docket:${alpha}` }) as never))
+    const id = /system-accounts\/([^?]+)/.exec(at)?.[1] ?? ''
+
+    const asOutsider = (await list.load(event('outsider') as never)) as { accounts: { id: string }[] }
+    expect(asOutsider.accounts.map((account) => account.id)).not.toContain(id)
+    await expect(detail.load(event('outsider', { id }) as never)).rejects.toSatisfy((thrown: unknown) => isHttpError(thrown) && thrown.status === 404)
+
+    const asLead = (await list.load(event('lead') as never)) as { accounts: { id: string }[] }
+    expect(asLead.accounts.map((account) => account.id)).toContain(id)
+    await expect(detail.load(event('lead', { id }) as never)).resolves.toMatchObject({ account: { id } })
   })
 })

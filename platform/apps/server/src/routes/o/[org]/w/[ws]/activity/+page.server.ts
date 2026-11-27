@@ -20,7 +20,7 @@ export const load: PageServerLoad = async (event) => {
   const channel = isChannel(channelParam) ? channelParam : null
   const actor = event.url.searchParams.get('actor')?.slice(0, 300) || null
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     return {
       access,
       events: await listIngests(ctx, { workspaceId: workspace.id, limit: 200, ...(channel ? { channel } : {}), ...(actor ? { actor } : {}) }),

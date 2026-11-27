@@ -80,8 +80,8 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
     await db.admin.query(`
       INSERT INTO platform.users (id, kind, github_id, login) VALUES ('u-1', 'human', 1, 'alice');
       INSERT INTO platform.orgs (id, slug, name, status, created_by) VALUES ('orga', 'acme', 'Acme', 'active', 'u-1');
-      INSERT INTO platform.memberships (org_id, user_id, role) VALUES ('orga', 'u-1', 'editor');
-      INSERT INTO platform.namespace_grants (org_id, namespace_id, principal_id, permission) VALUES ('orga', 'ws1', 'u-1', 'write');
+      INSERT INTO platform.memberships (org_id, user_id) VALUES ('orga', 'u-1');
+      INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id) VALUES ('g1', 'orga', 'u-1', 'docket', 'ws1', 'writer');
     `)
     server = createServer((req, res) => oauth.callback(req, res))
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))

@@ -2,16 +2,16 @@
 import { listAudit, verifyChainIn } from '@docket/platform-audit'
 import { listMembers } from '@docket/platform-tenancy'
 
-import { authorise, orgAccess } from '$lib/server/request'
+import { authoriseAnywhere, orgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 
 import type { PageServerLoad } from './$types'
 
-/** The org's audit log: in full for owners and admins, a member's own entries otherwise (§4). */
+/** The org's audit log: in full for whoever may see audit on the account, a member's own entries otherwise (§4). */
 export const load: PageServerLoad = async (event) => {
   const access = await orgAccess(event)
-  authorise(access, 'audit.view-own')
-  const full = access.can('audit.view-full')
+  authoriseAnywhere(access, 'read')
+  const full = access.can('audit')
   const actor = `user:${event.locals.user?.id}`
   // An activity log entry links here with its request id.
   const request = event.url.searchParams.get('request')?.slice(0, 100) || null

@@ -32,7 +32,7 @@ const errorText = (caught: unknown) => (caught instanceof Error ? caught.message
 export const load: PageServerLoad = async (event) => {
   const { githubApp, router, webhookSecret } = getRuntime()
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     // Jobs are read before what they write: the worker records a sync or export, then finishes its job, so a job
     // seen as finished here has its result in the reads below, and the page never misses both.
     const platform = await router.withPlatform(async (tx) => ({
@@ -53,7 +53,7 @@ export const load: PageServerLoad = async (event) => {
     }
   })
   const { access, platform } = read
-  const manage = access.can('repos.connect')
+  const manage = access.can('settings')
   const live = platform.installations.filter((installation) => !installation.deletedAt)
 
   // What each live installation can read, for the connect form. GitHub being slow or down only hides the form.
@@ -165,7 +165,7 @@ async function queue(tx: Tx, event: RequestEvent, access: OrgAccess, connectionI
 
 async function managing(event: RequestEvent): Promise<OrgAccess> {
   const { access } = await docketAccess(event)
-  authorise(access, 'repos.connect')
+  authorise(access, 'settings')
   return access
 }
 

@@ -22,7 +22,7 @@ export const GET: RequestHandler = async (event) => {
   return inWorkspace(
     event,
     async ({ access, workspace, ctx }) => {
-      authorise(access, 'graph.read')
+      authorise(access, 'read')
       const read = await readWorkspace(ctx, workspace.id)
       const entity = read.entities.find((each) => each.id === id)
       if (!entity) error(404, 'No such record.')

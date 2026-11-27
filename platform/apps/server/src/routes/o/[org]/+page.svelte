@@ -4,15 +4,15 @@
   import { page } from '$app/state'
   import { Check, Minus, Plus, Search } from '@lucide/svelte'
 
-  import { ACTION_LABELS as PERMISSION_LABELS } from '@docket/platform-tenancy/roles'
+  import { CAPABILITIES, CAPABILITY_INFO } from '@docket/platform-tenancy/roles'
 
   import { sparkline } from '$lib/docket'
 
   let { data } = $props()
   const rows = $derived(
-    (Object.keys(PERMISSION_LABELS) as (keyof typeof PERMISSION_LABELS)[]).map((action) => ({
+    CAPABILITIES.map((action) => ({
       action,
-      label: PERMISSION_LABELS[action],
+      label: CAPABILITY_INFO[action].label,
       allowed: data.permissions[action],
     })),
   )
@@ -31,17 +31,17 @@
       <span class="label" aria-hidden="true">·</span>
       <span class="label">{data.members} {data.members === 1 ? 'member' : 'members'}</span>
       <span class="label" aria-hidden="true">·</span>
-      <span class="label">You are <span class="badge" class:owner={data.role === 'owner'} data-testid="my-role">{data.role}</span></span>
+      <span class="label">You are <span class="badge" class:owner={data.owner} data-testid="my-role">{data.role}</span></span>
     </p>
     <h1>The <em>casebook</em></h1>
     <p class="lede">
-      Every docket {data.org.name} keeps on record. Open one to read its records, walk its evidence or ask it a question. Roles apply to every docket
-      in the casebook.
+      Every docket {data.org.name} keeps on record. Open one to read its records, walk its evidence or ask it a question. What you can do in each comes
+      from your role on the whole casebook, or on that docket.
     </p>
   </div>
   <div class="actions">
     <a class="button" href="{resolve('/o/[org]/ask', { org: data.org.slug })}?mode=search"><Search size={16} aria-hidden="true" /> Search the casebook</a>
-    {#if data.permissions['ontology.publish']}
+    {#if data.permissions.create}
       <a class="button primary" href={resolve('/o/[org]/workspaces/new', { org: data.org.slug })}><Plus size={16} aria-hidden="true" /> New docket</a>
     {/if}
   </div>
@@ -103,15 +103,15 @@
     </div>
   {:else}
     <p class="empty muted">
-      No dockets yet. {data.permissions['ontology.publish']
+      No dockets yet. {data.permissions.create
         ? 'Open one from a template, an entities.yaml file, or another docket.'
-        : 'An owner or admin opens them.'}
+        : 'Someone who can create dockets opens them.'}
     </p>
   {/if}
 </section>
 
 <section class="card perms-card" aria-labelledby="perms-title">
-  <h2 id="perms-title">What you <em>can do</em></h2>
+  <h2 id="perms-title">What you <em>can do</em> across {data.org.name}</h2>
   <ul class="perms">
     {#each rows as row (row.action)}
       <li data-action={row.action} data-allowed={row.allowed}>
