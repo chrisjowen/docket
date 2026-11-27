@@ -1,0 +1,32 @@
+{
+  "name": "@docket/platform-projections",
+  "version": "0.0.0",
+  "private": true,
+  "description": "An org's projections for one workspace: docket's Neo4j and mem0 adapters on the org's own stores (§6.3).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude 'src/**/*.int.test.ts' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests --testTimeout 30000 --hookTimeout 30000 .int.test."
+  },
+  "dependencies": {
+    "@chrisjowen/docket": "workspace:*",
+    "@docket/platform-provisioner": "workspace:*",
+    "@docket/platform-tenancy": "workspace:*",
+    "@qdrant/js-client-rest": "^1.18.0",
+    "mem0ai": "3.3.1",
+    "neo4j-driver": "^6.3.0",
+    "ollama": "^0.5.18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

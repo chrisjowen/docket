@@ -1,0 +1,430 @@
+# Research and academic ontology.
+#
+# The literature around a research project: papers, the people and
+# institutions behind them, where they were published, the datasets and
+# methods they use, the claims they make and what supports or contradicts
+# them. Remove what you never use, or extend it: adding a type here is all
+# that is required, no CLI change. A type's `icon` names the Lucide icon
+# (https://lucide.dev/icons) that `docket open` draws it with; see
+# docs/SPEC.md for the icons docket bundles.
+#
+# Read this file before performing structured memory extraction.
+
+version: 1
+
+# --- Sources and trust ---------------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming one of the sources below and the exact location - the
+# fields under a source's `locator`, or the common ones every source takes
+# (repository, path, lines, symbol, key, method, endpoint, urls, commit).
+# Confidence is computed from that evidence by the policies under `trust`,
+# never written by hand:
+#
+#   - A `score` policy prices an observation: "when the source is X (about
+#     type T, with attributes Y), it is worth S". The most specific matching
+#     policy wins - naming the type counts one, each condition one - and a tie
+#     goes to the lower score. With no match an observation is worth
+#     `fallback`.
+#   - An `adjust` policy moves that price up or down; every match applies.
+#   - Observations of one source instance do not corroborate each other: the
+#     strongest one counts. Independent sources combine, so a pod seen in code
+#     (0.3) and running in the cluster (0.9) is 1 - 0.7 * 0.1 = 0.93, and
+#     nothing goes above `cap`.
+#   - A memory with no evidence takes its `provenance.confidence`, or
+#     `unevidenced` when it has none.
+#   - `bands` name how far a confidence goes: established, probable, and below
+#     that unverified. `accept` is the score a supersede proposal needs before
+#     it replaces the record, by the replaced record's type.
+#
+# Run `docket why <id>` to see which policies priced a resource.
+
+sources:
+  person:
+    kind: identity
+    description: >
+      A person, as the people directory knows them: their role, team and
+      flags. Evidence that cites no source is from the person the writer acts
+      for; evidence naming someone else counts as the writer's person until
+      that one confirms it with evidence of their own.
+    attributes:
+      role: { type: string, setBy: directory }
+      team: { type: string, setBy: directory }
+      flags: { type: "string[]", setBy: directory }
+
+  human:
+    description: >
+      Legacy: stated by a person, as whoever wrote it said. Kept so evidence
+      written before the person source scores as it did; a write that names
+      human is recorded as person, scored by who that person is.
+
+  conversation:
+    description: >
+      Established in an agent session - the user said so. Record the session and,
+      in note, what was said.
+
+  publication:
+    description: >
+      The published work itself - its full text or abstract. Record the DOI or
+      URL, and the section or sentence as symbol.
+    locator:
+      urls: {}
+      key: {}
+    requiresAny: [ urls, key ]
+
+  bibliographic:
+    description: >
+      A bibliographic database - Crossref, OpenAlex, Semantic Scholar, PubMed,
+      DBLP. Record the record's URL or identifier as key.
+    locator:
+      urls: {}
+      key: {}
+    requiresAny: [ urls, key ]
+
+  preprint:
+    description: >
+      A preprint or working paper not yet peer reviewed - arXiv, bioRxiv, SSRN.
+      Record the URL.
+    locator:
+      urls: { required: true }
+
+  docs:
+    description: >
+      Reading notes, a lab notebook, a wiki page or a review. Record the file or
+      the URL.
+    locator:
+      path: {}
+      urls: {}
+    requiresAny: [ path, urls ]
+
+trust:
+  unevidenced: 0.5
+  fallback: 0.4
+  cap: 0.99
+  accept: { default: 0.75 }
+  bands: { established: 0.8, probable: 0.5 }
+  policies:
+    - name: A person said so
+      when: { source: person }
+      score: 0.7
+    - name: A lead said so
+      when: { source: person, role: lead }
+      score: 0.85
+    - name: human evidence
+      when: { source: human }
+      score: 0.9
+    - name: conversation evidence
+      when: { source: conversation }
+      score: 0.7
+    - name: publication evidence
+      when: { source: publication }
+      score: 0.85
+    - name: bibliographic evidence
+      when: { source: bibliographic }
+      score: 0.8
+    - name: preprint evidence
+      when: { source: preprint }
+      score: 0.6
+    - name: docs evidence
+      when: { source: docs }
+      score: 0.6
+
+resourceTypes:
+
+  paper:
+    description: >
+      A published or preprinted piece of research - an article, a conference
+      paper, a thesis, a report.
+
+    icon: file-text
+
+    attributes:
+      doi:
+        type: string
+
+      year:
+        type: number
+
+      status:
+        type: string
+        enum:
+          - preprint
+          - published
+          - retracted
+
+    extraction:
+      instructions: >
+        Capture a paper when a piece of research is cited, read or relied on.
+        Use the paper's title as the title, and summarise its findings in the
+        body.
+
+      clues:
+        - paper
+        - article
+        - study
+        - et al.
+        - DOI
+
+      doNotConfuseWith:
+        - claim
+        - dataset
+
+  author:
+    description: >
+      A researcher who wrote or contributed to papers.
+
+    icon: user
+
+    attributes:
+      orcid:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture an author when who did the research matters - to find their
+        other work, or to ask them.
+
+      clues:
+        - author
+        - researcher
+        - professor
+        - PI
+
+  institution:
+    description: >
+      A university, lab, institute or company research group.
+
+    icon: landmark
+
+    attributes:
+      country:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture an institution when where research was done matters.
+
+      clues:
+        - university
+        - institute
+        - lab
+        - department
+
+  venue:
+    description: >
+      A journal, conference or workshop where research is published.
+
+    icon: book-open
+
+    attributes:
+      kind:
+        type: string
+        enum:
+          - journal
+          - conference
+          - workshop
+          - preprint-server
+
+    extraction:
+      instructions: >
+        Capture a venue when where a paper appeared matters.
+
+      clues:
+        - journal
+        - conference
+        - proceedings
+        - workshop
+
+  dataset:
+    description: >
+      A body of data research was done on, or that was released with it.
+
+    icon: database
+
+    attributes:
+      license:
+        type: string
+
+      url:
+        type: string
+
+    extraction:
+      instructions: >
+        Capture a dataset when research uses or releases data that others could
+        reuse or need to cite.
+
+      clues:
+        - dataset
+        - corpus
+        - cohort
+        - benchmark
+
+      doNotConfuseWith:
+        - paper
+
+  method:
+    description: >
+      A technique, model, protocol or instrument a paper proposes or uses.
+
+    icon: flask-conical
+
+    extraction:
+      instructions: >
+        Capture a method when a technique is named and compared, reused or
+        proposed.
+
+      clues:
+        - method
+        - technique
+        - model
+        - protocol
+        - assay
+
+  topic:
+    description: >
+      A research area or subject papers are about.
+
+    icon: tag
+
+    extraction:
+      instructions: >
+        Capture a topic to group papers by subject, when a subject recurs.
+
+      clues:
+        - field
+        - area
+        - topic
+        - subject
+
+  claim:
+    description: >
+      A finding or hypothesis stated in a sentence, that papers support or
+      contradict.
+
+    icon: lightbulb
+
+    attributes:
+      status:
+        type: string
+        enum:
+          - supported
+          - contested
+          - refuted
+          - open
+
+    extraction:
+      instructions: >
+        Capture a claim when a specific statement is relied on or disputed, so
+        the evidence for and against it is kept together.
+
+      clues:
+        - finding
+        - hypothesis
+        - shows that
+        - evidence suggests
+
+      doNotConfuseWith:
+        - paper
+
+relationships:
+
+  authored_by:
+    description: >
+      A paper's authors.
+
+    from:
+      - paper
+
+    to:
+      - author
+
+    attributes:
+      position:
+        type: number
+        description: The author's place in the author list, from 1.
+
+  affiliated_with:
+    description: >
+      An author's institution.
+
+    from:
+      - author
+
+    to:
+      - institution
+
+  published_in:
+    description: >
+      Where a paper appeared.
+
+    from:
+      - paper
+
+    to:
+      - venue
+
+  cites:
+    description: >
+      A paper cites another.
+
+    from:
+      - paper
+
+    to:
+      - paper
+
+  uses_dataset:
+    description: >
+      A paper or method uses a dataset.
+
+    from:
+      - paper
+      - method
+
+    to:
+      - dataset
+
+  proposes:
+    description: >
+      A paper introduces a method, dataset or claim.
+
+    from:
+      - paper
+
+    to:
+      - method
+      - dataset
+      - claim
+
+  about:
+    description: >
+      What a paper, dataset, method or claim is about.
+
+    from:
+      - paper
+      - dataset
+      - method
+      - claim
+
+    to:
+      - topic
+
+  supports:
+    description: >
+      A paper's findings support a claim.
+
+    from:
+      - paper
+
+    to:
+      - claim
+
+  contradicts:
+    description: >
+      A paper's findings contradict a claim.
+
+    from:
+      - paper
+
+    to:
+      - claim

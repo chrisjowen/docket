@@ -1,0 +1,96 @@
+# A small platform workspace: services, their datastores, teams, APIs and pods.
+version: 1
+
+resourceTypes:
+  service:
+    description: A deployable application or worker.
+    icon: server
+    attributes:
+      tier:
+        type: string
+        enum: [critical, standard]
+        description: How bad an outage is.
+      language:
+        type: string
+  datasource:
+    description: A database, queue or bucket a service reads or writes.
+    icon: database
+    attributes:
+      engine:
+        type: string
+  team:
+    description: The people who own something.
+    icon: users
+  api:
+    description: An interface a service exposes.
+    icon: plug
+  pod:
+    description: A running instance of a service.
+    icon: box
+
+relationships:
+  depends_on:
+    description: Needs the target to work.
+    from: [service]
+    to: [service, datasource]
+  owned_by:
+    from: '*'
+    to: [team]
+  exposes:
+    from: [service]
+    to: [api]
+
+# Sources and confidence policies, converted from legacy evidence settings by
+# `docket ontology convert`; they score exactly as those did.
+sources:
+  human:
+    description: Stated or confirmed by a person.
+
+  code:
+    description: Source code.
+    locator:
+      path: { required: true }
+
+  manifest:
+    description: A dependency or package manifest.
+    locator:
+      path: { required: true }
+
+trust:
+  unevidenced: 0.5
+  fallback: 0.5
+  cap: 1
+  policies:
+    - name: human evidence
+      when: { source: human }
+      score: 0.9
+    - name: code evidence
+      when: { source: code }
+      score: 0.6
+    - name: manifest evidence
+      when: { source: manifest }
+      score: 0.9
+    - name: code evidence of datasource
+      when: { about: datasource, source: code }
+      score: 0.5
+    - name: code evidence of team
+      when: { about: team, source: code }
+      score: 0.3
+    - name: code evidence of api
+      when: { about: api, source: code }
+      score: 0.75
+    - name: code evidence of pod
+      when: { about: pod, source: code }
+      score: 0.3
+    - name: manifest evidence of depends_on
+      when: { about: depends_on, source: manifest }
+      score: 0.95
+    - name: code evidence of depends_on
+      when: { about: depends_on, source: code }
+      score: 0.65
+    - name: code evidence of owned_by
+      when: { about: owned_by, source: code }
+      score: 0.3
+    - name: code evidence of exposes
+      when: { about: exposes, source: code }
+      score: 0.75

@@ -1422,9 +1422,13 @@ pass. No separate step is needed, and it is never pushed by hand.
 
 ## Contributing and licence
 
-docket is licensed under the [Apache License, Version 2.0](LICENSE).
-Contributions are welcome under the same licence, with each commit signed off
-under the Developer Certificate of Origin; see
+The docket CLI, the server core, the UI, the contracts and the adapters
+(`packages/`) are licensed under the [Apache License, Version 2.0](LICENSE).
+The multi-tenant server platform (`platform/`) is licensed under the
+[GNU Affero General Public License, version 3 only](platform/LICENSE).
+[`LICENSING.md`](LICENSING.md) says which licence covers which package.
+Contributions are welcome under the licence of the part they change, with each
+commit signed off under the Developer Certificate of Origin; see
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---

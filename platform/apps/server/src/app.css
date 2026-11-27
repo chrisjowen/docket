@@ -1,0 +1,799 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/*
+ * Docket Cloud's look: the "Case Record" design system. A light, editorial
+ * legal theme: ivory paper, ink, hairline rules and one accent, signal red,
+ * used only for emphasis. Instrument Serif sets titles (the key word in red
+ * italic), Geist the UI and Geist Mono every identifier, date and label.
+ * Light is the default; the sidebar's toggle switches to the dark theme, which
+ * keeps the same tokens (lib/theme.ts renders `<html data-theme>`).
+ *
+ * The older token names (--background, --card, --gilt ...) stay, mapped onto
+ * the new ones, so every screen takes the new look.
+ */
+:root {
+  color-scheme: light;
+  /* Paper and ink */
+  --bg: #f6f3ec;
+  --paper: #fffdf8;
+  --sunk: #efebe1;
+  --side: #f0ece3;
+  --ink: #0e0e0c;
+  --ink-2: #37352f;
+  --mute: #6c685f;
+  --rule: #e4dfd3;
+  --rule-2: #cfc8b8;
+  /* The one accent, and the standing colours */
+  --signal: #d92d20;
+  --signal-ink: #ffffff;
+  --signal-soft: #fbe5e1;
+  --ok: #1d7348;
+  --ok-soft: #e3f1e8;
+  --warn: #b54708;
+  --warn-soft: #fcefd9;
+  /* Blue only for what a writer claims, and for adjustments */
+  --info: #2c5a88;
+  --info-soft: #e3ecf6;
+  /* Record type codes (SVC, API, DS ...) */
+  --t-service: #2c5a88;
+  --t-api: #0f736b;
+  --t-datastore: #8a5a1e;
+  --t-queue: #5a52b3;
+  --t-team: #4a7a12;
+  --t-decision: #a15c07;
+  --t-incident: #d92d20;
+  --t-runbook: #7a3fc4;
+  --t-other: #6c685f;
+  --shadow-1: 0 1px 2px rgb(20 16 8 / 0.05), 0 0 0 1px var(--rule);
+  --shadow-2: 0 14px 36px -14px rgb(20 16 8 / 0.28), 0 0 0 1px var(--rule);
+  --radius: 8px;
+  --r-card: 10px;
+  --font-serif: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+  --code-block-bg: #141412;
+  --code-block-fg: #efeadf;
+
+  /* The older names, on the new tokens */
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--bg);
+  --secondary: var(--paper);
+  --secondary-foreground: var(--ink);
+  --muted: var(--sunk);
+  --muted-foreground: var(--mute);
+  --accent: var(--sunk);
+  --accent-foreground: var(--ink);
+  --destructive: var(--signal);
+  --border: var(--rule);
+  --input: var(--rule-2);
+  --ring: var(--signal);
+  --spine: var(--side);
+  --spine-foreground: var(--ink);
+  --spine-muted: var(--mute);
+  --gilt: var(--signal);
+
+  /* The evidence board: paper, and the graph's categorical series */
+  --graph-surface: var(--paper);
+  --graph-rule: #ece7db;
+  --graph-edge: #bdb6a6;
+  --graph-label: var(--ink-2);
+  --graph-other: #8f897c;
+  --series-1: #2c5a88;
+  --series-2: #d95926;
+  --series-3: #0f736b;
+  --series-4: #a15c07;
+  --series-5: #c4457a;
+  --series-6: #4a7a12;
+  --series-7: #5a52b3;
+  --series-8: #d92d20;
+  --series-generated-l: 0.55;
+  --series-generated-c: 0.14;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0f0f0e;
+  --paper: #171715;
+  --sunk: #1f1f1c;
+  --side: #121211;
+  --ink: #f3efe6;
+  --ink-2: #d4cfc4;
+  --mute: #9b968b;
+  --rule: #2a2925;
+  --rule-2: #3b3934;
+  --signal: #ff5a47;
+  --signal-ink: #160403;
+  --signal-soft: #3a1612;
+  --ok: #5cc48f;
+  --ok-soft: #12291d;
+  --warn: #f5a14a;
+  --warn-soft: #33220d;
+  --info: #8fb6e0;
+  --info-soft: #15243a;
+  --t-service: #82b2e3;
+  --t-api: #5fcbbf;
+  --t-datastore: #d9a566;
+  --t-queue: #a8a2f0;
+  --t-team: #a6d16a;
+  --t-decision: #eab35a;
+  --t-incident: #ff6b59;
+  --t-runbook: #c49cf2;
+  --t-other: #9b968b;
+  --shadow-1: 0 0 0 1px var(--rule);
+  --shadow-2: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 0 0 1px var(--rule-2);
+  --code-block-bg: #0a0a09;
+  --graph-rule: #1c1c19;
+  --graph-edge: #4a4842;
+  --graph-other: #8f8a7f;
+  --series-1: #82b2e3;
+  --series-2: #f08a5d;
+  --series-3: #5fcbbf;
+  --series-4: #eab35a;
+  --series-5: #e88bb3;
+  --series-6: #a6d16a;
+  --series-7: #a8a2f0;
+  --series-8: #ff6b59;
+  --series-generated-l: 0.72;
+  --series-generated-c: 0.13;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Instrument Serif has one weight: never fake a bold one. */
+  font-synthesis: none;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--signal-soft);
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--rule-2);
+}
+a:hover {
+  text-decoration-color: var(--signal);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+h1 {
+  font-size: clamp(2.2rem, 4.2vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.015em;
+}
+h2 {
+  font-size: 1.65rem;
+}
+h3 {
+  font-size: 1.3rem;
+}
+/* The key word of a title, in red italic, inked in left to right. */
+h1 em,
+h2 em,
+.title-em {
+  font-style: italic;
+  color: var(--signal);
+}
+h1 em {
+  display: inline-block;
+  padding-right: 0.06em;
+  animation: ink-in 0.9s 0.15s var(--ease-io) both;
+}
+
+kbd {
+  font: 500 10.5px/1 var(--font-mono);
+  padding: 3px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--rule-2);
+  color: var(--mute);
+  background: var(--paper);
+}
+
+code {
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--mute);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  letter-spacing: -0.01em;
+}
+/* Small caps-style mono label: captions, column heads, section names. */
+.label {
+  font: 500 10.5px/1.2 var(--font-mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+/* A docket number, PLA-26-0001: always mono, in the accent. */
+.docket-no {
+  font: 600 12px/1 var(--font-mono);
+  letter-spacing: 0.03em;
+  color: var(--signal);
+  white-space: nowrap;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    transform 0.12s,
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+.button:hover {
+  border-color: var(--ink-2);
+}
+.button:active {
+  transform: translateY(1px) scale(0.99);
+}
+.button.primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+.button.primary:hover {
+  box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.55);
+}
+.button.accent {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: var(--signal-ink);
+}
+.button.danger {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--signal) 60%, transparent);
+  color: var(--signal);
+}
+.button.small {
+  min-height: 1.9rem;
+  padding: 0 0.65rem;
+  font-size: 12.5px;
+}
+.button[aria-disabled='true'],
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+:focus-visible,
+.button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.6rem;
+  min-width: 0;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--mute);
+}
+select.small {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.875rem;
+}
+
+label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.stack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.alert {
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius);
+  background: var(--signal-soft);
+  color: var(--ink);
+  font-size: 0.875rem;
+  box-shadow: inset 3px 0 0 var(--signal);
+}
+.flash {
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius);
+  background: var(--ok-soft);
+  font-size: 0.875rem;
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+
+.card {
+  border: 0;
+  border-radius: var(--r-card);
+  background: var(--paper);
+  box-shadow: var(--shadow-1);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 1.3rem;
+  padding: 0 0.45rem;
+  border-radius: 5px;
+  border: 0;
+  background: var(--sunk);
+  color: var(--ink-2);
+  font: 500 11px/1 var(--font-mono);
+  white-space: nowrap;
+}
+.badge.safe {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+.badge.rescore {
+  color: var(--ok);
+  background: var(--sunk);
+}
+.badge.narrowing {
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+.badge.breaking,
+.badge.invalid {
+  color: var(--signal);
+  background: var(--signal-soft);
+}
+.badge.owner {
+  color: var(--signal);
+  background: var(--signal-soft);
+}
+
+/* A status chip: Active, Dormant, Current, Catching up. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  font: 500 11.5px/1 var(--font-sans);
+  white-space: nowrap;
+}
+.status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.status.warn i {
+  background: var(--warn);
+}
+.status.red i {
+  background: var(--signal);
+}
+.status.idle i {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--mute);
+}
+
+/* A trust stamp: Corroborated, Sole source, Uncorroborated, Overruled. */
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+  font: 600 9.5px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: rotate(-1.5deg);
+}
+.stamp.red {
+  color: var(--signal);
+  background: color-mix(in oklab, var(--signal-soft) 60%, transparent);
+}
+.stamp.ok {
+  color: var(--ok);
+  background: color-mix(in oklab, var(--ok-soft) 60%, transparent);
+}
+.stamp.warn {
+  color: var(--warn);
+  background: color-mix(in oklab, var(--warn-soft) 60%, transparent);
+}
+/* Awaiting proof: a proposal not yet carried or refused. */
+.stamp.pending {
+  color: var(--warn);
+  border-style: dashed;
+  background: repeating-linear-gradient(135deg, var(--warn-soft) 0 4px, transparent 4px 8px);
+}
+
+/* A record type code badge: SVC, API, DS. Colour comes from --c. */
+.code {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font: 600 9.5px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--paper);
+  background: var(--c, var(--t-other));
+}
+
+/* Weight of evidence: a bar that grows in, red when weak. */
+.weight {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 500 12px var(--font-mono);
+}
+.weight .bar {
+  position: relative;
+  width: 56px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rule);
+  overflow: hidden;
+}
+.weight .bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--ink);
+  border-radius: 2px;
+  transform-origin: left;
+  animation: grow 0.8s var(--ease-out) both;
+}
+.weight.low .bar i {
+  background: var(--signal);
+}
+.weight.mid .bar i {
+  background: var(--warn);
+}
+
+/* A page's head: caption row, serif title, lede, and actions to the right. */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+  margin-bottom: 22px;
+}
+.page-head .titles {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+.page-head h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.lede {
+  max-width: 66ch;
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: 15.5px;
+}
+
+/* A row of key figures. */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: var(--paper);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.kpi {
+  padding: 14px 18px;
+  min-width: 0;
+}
+.kpi + .kpi {
+  border-left: 1px solid var(--rule);
+}
+.kpi b {
+  display: block;
+  font: 400 42px/1 var(--font-serif);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.kpi b small {
+  font-size: 20px;
+  color: var(--mute);
+}
+.kpi > span {
+  font-size: 12.5px;
+  color: var(--mute);
+}
+.kpi.flag b {
+  color: var(--signal);
+}
+@media (max-width: 900px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpi:nth-child(3) {
+    border-left: none;
+  }
+  .kpi:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--rule);
+  }
+}
+
+pre.code-block {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  background: var(--code-block-bg);
+  color: var(--code-block-fg);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  font: 12.5px/1.65 var(--font-mono);
+}
+
+table.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+table.grid th {
+  text-align: left;
+  font: 500 10.5px/1.2 var(--font-mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mute);
+  padding: 0.7rem 0.9rem;
+  background: var(--sunk);
+  border-bottom: 1px solid var(--rule);
+}
+table.grid td {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+table.grid tr:last-child td {
+  border-bottom: 0;
+}
+table.grid tbody tr {
+  transition: background 0.12s;
+}
+table.grid tbody tr:hover {
+  background: color-mix(in oklab, var(--sunk) 55%, transparent);
+}
+.table-wrap {
+  overflow-x: auto;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── Motion: subtle and purposeful, and all of it off under prefers-reduced-motion ── */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ink-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 -0.2em 0 0);
+  }
+}
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes ping {
+  from {
+    transform: scale(0.7);
+    opacity: 0.85;
+  }
+  to {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* A view fades up as it arrives. */
+.view-in {
+  animation: rise 0.45s var(--ease-out) both;
+}
+/* Children rise in sequence: set --i on each (style="--i: 2"), 45ms apart. */
+.reveal > * {
+  animation: rise 0.5s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+/* A live dot that pings: sync, MCP connected. */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: none;
+}
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--ok);
+  animation: ping 2.4s ease-out infinite;
+}
+.live-dot.behind {
+  background: var(--warn);
+}
+.live-dot.behind::after {
+  border-color: var(--warn);
+  animation-duration: 1.4s;
+}
+.live-dot.down {
+  background: var(--signal);
+}
+.live-dot.down::after {
+  border-color: var(--signal);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- The schema editor: sources, attributes and policies ------------------ */
+
+/* A small mono tag. `att`: attested (the directory, a connection, the registry vouch for it);
+   `clm`: claimed by a writer; `ign`: a claim that does not count. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 21px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font: 500 11px/1 var(--font-mono);
+  color: var(--ink-2);
+  background: var(--sunk);
+  white-space: nowrap;
+}
+.chip.att {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+.chip.clm {
+  color: var(--info);
+  background: var(--info-soft);
+}
+.chip.ign {
+  color: var(--mute);
+  text-decoration: line-through;
+}
+/* A section name followed by a hairline to the end of the line. */
+.sec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 10px;
+  font: 500 10.5px/1.2 var(--font-mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.sec::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+/* Two or three options side by side: Rules | YAML, Set score | Adjust by. */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--sunk);
+}
+.seg button {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--mute);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+.seg button[aria-pressed='true'] {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}

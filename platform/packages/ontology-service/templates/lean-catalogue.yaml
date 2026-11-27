@@ -1,0 +1,583 @@
+# Lean service catalogue: the most-used part of docket's SDLC ontology -
+# service, team, datasource, api, decision, constraint, environment - and the
+# relationships between them, with the SDLC sources and trust policies. Generated from
+# docket's default-sdlc.yaml by docket-cloud (packages/ontology-service/scripts/templates.mjs).
+
+version: 1
+
+# --- Sources and trust ---------------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming one of the sources below and the exact location - the
+# fields under a source's `locator`, or the common ones every source takes
+# (repository, path, lines, symbol, key, method, endpoint, urls, commit).
+# Confidence is computed from that evidence by the policies under `trust`,
+# never written by hand:
+#
+#   - A `score` policy prices an observation: "when the source is X (about
+#     type T, with attributes Y), it is worth S". The most specific matching
+#     policy wins - naming the type counts one, each condition one - and a tie
+#     goes to the lower score. With no match an observation is worth
+#     `fallback`.
+#   - An `adjust` policy moves that price up or down; every match applies.
+#   - Observations of one source instance do not corroborate each other: the
+#     strongest one counts. Independent sources combine, so a pod seen in code
+#     (0.3) and running in the cluster (0.9) is 1 - 0.7 * 0.1 = 0.93, and
+#     nothing goes above `cap`.
+#   - A memory with no evidence takes its `provenance.confidence`, or
+#     `unevidenced` when it has none.
+#   - `bands` name how far a confidence goes: established, probable, and below
+#     that unverified. `accept` is the score a supersede proposal needs before
+#     it replaces the record, by the replaced record's type.
+#
+# Run `docket why <id>` to see which policies priced a resource.
+
+sources:
+  person:
+    kind: identity
+    description: >
+      A person, as the people directory knows them: their role, team and flags.
+      Evidence that cites no source is from the person the writer acts for;
+      evidence naming someone else counts as the writer's person until that one
+      confirms it with evidence of their own.
+    attributes:
+      role: { type: string, setBy: directory }
+      team: { type: string, setBy: directory }
+      flags: { type: "string[]", setBy: directory }
+
+  human:
+    description: >
+      Legacy: stated by a person, as whoever wrote it said. Kept so evidence
+      written before the person source scores as it did; a write that names
+      human is recorded as person, scored by who that person is.
+
+  conversation:
+    description: >
+      Established in an agent session - the user said so, or a decision was
+      reached. Record the session and, in note, what was said.
+
+  manifest:
+    description: >
+      A dependency or package manifest or lockfile - package.json, go.mod,
+      Cargo.toml, pom.xml, requirements.txt, Chart.yaml. Record the file and the
+      entry, as symbol or key.
+    locator:
+      path: { required: true }
+
+  code:
+    description: >
+      Source code. Record the file, the line range and the function, class or
+      constant, as symbol.
+    locator:
+      path: { required: true }
+
+  config:
+    description: >
+      Application configuration - YAML, JSON, .env and properties files,
+      CODEOWNERS. Record the file and the key.
+    locator:
+      path: { required: true }
+
+  infrastructure:
+    description: >
+      Infrastructure and deployment definitions - Terraform, Kubernetes
+      manifests, Helm values, Dockerfiles, CI pipelines. Record the file and the
+      resource, as symbol.
+    locator:
+      path: { required: true }
+
+  api:
+    description: >
+      An API - its specification (OpenAPI, GraphQL schema, protobuf) or a live
+      response. Record the method and the endpoint or route.
+    locator:
+      endpoint: { required: true }
+
+  runtime:
+    description: >
+      Seen in a running system - kubectl, a cloud console, logs, metrics or
+      traces. Record a URL, the endpoint, or the object (symbol) it showed.
+    locator:
+      urls: {}
+      endpoint: {}
+      symbol: {}
+    requiresAny: [ urls, endpoint, symbol ]
+
+  docs:
+    description: >
+      Documentation - a README, ADR, design doc, wiki page, runbook, ticket or
+      pull request. Record the file or the URL.
+    locator:
+      path: {}
+      urls: {}
+    requiresAny: [ path, urls ]
+
+trust:
+  unevidenced: 0.5
+  fallback: 0.4
+  cap: 0.99
+  accept: { default: 0.75, decision: 0.8 }
+  bands: { established: 0.8, probable: 0.5 }
+  policies:
+    - name: A person said so
+      when: { source: person }
+      score: 0.7
+    - name: A lead said so
+      when: { source: person, role: lead }
+      score: 0.85
+    - name: human evidence
+      when: { source: human }
+      score: 0.9
+    - name: conversation evidence
+      when: { source: conversation }
+      score: 0.7
+    - name: manifest evidence
+      when: { source: manifest }
+      score: 0.9
+    - name: code evidence
+      when: { source: code }
+      score: 0.6
+    - name: config evidence
+      when: { source: config }
+      score: 0.7
+    - name: infrastructure evidence
+      when: { source: infrastructure }
+      score: 0.75
+    - name: api evidence
+      when: { source: api }
+      score: 0.75
+    - name: runtime evidence
+      when: { source: runtime }
+      score: 0.85
+    - name: docs evidence
+      when: { source: docs }
+      score: 0.6
+    - name: code evidence of environment
+      when: { about: environment, source: code }
+      score: 0.4
+    - name: config evidence of environment
+      when: { about: environment, source: config }
+      score: 0.6
+    - name: infrastructure evidence of environment
+      when: { about: environment, source: infrastructure }
+      score: 0.85
+    - name: runtime evidence of environment
+      when: { about: environment, source: runtime }
+      score: 0.9
+    - name: code evidence of datasource
+      when: { about: datasource, source: code }
+      score: 0.5
+    - name: config evidence of datasource
+      when: { about: datasource, source: config }
+      score: 0.65
+    - name: infrastructure evidence of datasource
+      when: { about: datasource, source: infrastructure }
+      score: 0.85
+    - name: runtime evidence of datasource
+      when: { about: datasource, source: runtime }
+      score: 0.9
+    - name: code evidence of team
+      when: { about: team, source: code }
+      score: 0.3
+    - name: config evidence of team
+      when: { about: team, source: config }
+      score: 0.8
+    - name: docs evidence of team
+      when: { about: team, source: docs }
+      score: 0.7
+    - name: code evidence of decision
+      when: { about: decision, source: code }
+      score: 0.3
+    - name: conversation evidence of decision
+      when: { about: decision, source: conversation }
+      score: 0.85
+    - name: docs evidence of decision
+      when: { about: decision, source: docs }
+      score: 0.8
+    - name: code evidence of constraint
+      when: { about: constraint, source: code }
+      score: 0.4
+    - name: conversation evidence of constraint
+      when: { about: constraint, source: conversation }
+      score: 0.85
+    - name: docs evidence of constraint
+      when: { about: constraint, source: docs }
+      score: 0.75
+    - name: code evidence of api
+      when: { about: api, source: code }
+      score: 0.75
+    - name: api evidence of api
+      when: { about: api, source: api }
+      score: 0.9
+    - name: code evidence of owned_by
+      when: { about: owned_by, source: code }
+      score: 0.3
+    - name: config evidence of owned_by
+      when: { about: owned_by, source: config }
+      score: 0.85
+    - name: docs evidence of owned_by
+      when: { about: owned_by, source: docs }
+      score: 0.7
+    - name: conversation evidence of owned_by
+      when: { about: owned_by, source: conversation }
+      score: 0.8
+    - name: manifest evidence of depends_on
+      when: { about: depends_on, source: manifest }
+      score: 0.95
+    - name: code evidence of depends_on
+      when: { about: depends_on, source: code }
+      score: 0.65
+    - name: config evidence of depends_on
+      when: { about: depends_on, source: config }
+      score: 0.7
+    - name: infrastructure evidence of depends_on
+      when: { about: depends_on, source: infrastructure }
+      score: 0.8
+    - name: runtime evidence of depends_on
+      when: { about: depends_on, source: runtime }
+      score: 0.9
+    - name: manifest evidence of uses
+      when: { about: uses, source: manifest }
+      score: 0.9
+    - name: code evidence of uses
+      when: { about: uses, source: code }
+      score: 0.65
+    - name: code evidence of deployed_to
+      when: { about: deployed_to, source: code }
+      score: 0.35
+    - name: config evidence of deployed_to
+      when: { about: deployed_to, source: config }
+      score: 0.5
+    - name: infrastructure evidence of deployed_to
+      when: { about: deployed_to, source: infrastructure }
+      score: 0.85
+    - name: runtime evidence of deployed_to
+      when: { about: deployed_to, source: runtime }
+      score: 0.9
+    - name: code evidence of exposes
+      when: { about: exposes, source: code }
+      score: 0.75
+    - name: api evidence of exposes
+      when: { about: exposes, source: api }
+      score: 0.9
+
+resourceTypes:
+
+  
+  service:
+    description: >
+      Independently deployable or operated software capability.
+
+    icon: server
+
+    attributes:
+      language:
+        type: string
+
+      lifecycle:
+        type: string
+        enum:
+          - experimental
+          - active
+          - deprecated
+          - retired
+
+    extraction:
+      instructions: >
+        Capture a service when software has a distinct operational, deployment,
+        or runtime lifecycle.
+
+      clues:
+        - service
+        - API
+        - backend
+        - deployment
+        - runtime
+
+      doNotConfuseWith:
+        - library
+        - repository
+
+  environment:
+    description: >
+      An execution or deployment environment.
+
+    icon: globe
+
+    attributes:
+      environmentType:
+        type: string
+        enum:
+          - local
+          - dev
+          - test
+          - staging
+          - production
+
+    extraction:
+      instructions: >
+        Capture an environment when software is run or deployed into a named,
+        durable context with its own configuration or data.
+
+      clues:
+        - environment
+        - staging
+        - production
+        - deployed to
+        - cluster
+
+      doNotConfuseWith:
+        - system
+        - service
+
+  datasource:
+    description: >
+      A source of information consumed by software or agents.
+
+    icon: database
+
+    attributes:
+      zone:
+        type: string
+        enum:
+          - public
+          - private
+          - restricted
+
+    extraction:
+      instructions: >
+        Capture a datasource when data is read from a durable store, feed, or
+        API that other resources depend on for information.
+
+      clues:
+        - database
+        - data source
+        - feed
+        - warehouse
+        - index
+
+      doNotConfuseWith:
+        - system
+        - service
+
+  team:
+    description: >
+      An organisational team responsible for resources.
+
+    icon: users
+
+    extraction:
+      instructions: >
+        Capture a team when a named group of people owns or operates resources.
+        Capture the team, never an individual person.
+
+      clues:
+        - team
+        - squad
+        - owned by
+        - on-call
+        - responsible for
+
+      doNotConfuseWith:
+        - agent
+
+  decision:
+    description: >
+      A durable technical or architectural decision.
+
+    icon: gavel
+
+    extraction:
+      instructions: >
+        Capture a decision only where a concrete choice has been made. Do not
+        capture open questions as decisions.
+
+      clues:
+        - we decided
+        - chose
+        - instead of
+        - going with
+        - rejected
+
+      doNotConfuseWith:
+        - constraint
+
+  constraint:
+    description: >
+      A meaningful durable limitation affecting architecture, implementation,
+      deployment, security, operations, or development.
+
+    icon: lock
+
+    extraction:
+      instructions: >
+        Capture a constraint when a limitation is durable and shapes future
+        work. A constraint is imposed; a decision is chosen.
+
+      clues:
+        - must not
+        - cannot
+        - limited to
+        - required by
+        - compliance
+
+      doNotConfuseWith:
+        - decision
+
+  api:
+    description: >
+      An interface a service or agent exposes for others to call or subscribe to
+      - an HTTP, GraphQL or gRPC API, a websocket protocol, or an event
+      contract.
+
+    icon: plug
+
+    attributes:
+      protocol:
+        type: string
+        enum:
+          - rest
+          - graphql
+          - grpc
+          - websocket
+          - event
+          - soap
+          - other
+
+      version:
+        type: string
+
+      spec:
+        type: string
+        description: Path or URL of the API's specification, e.g. an OpenAPI file.
+
+    extraction:
+      instructions: >
+        Capture an API when other software, teams or customers depend on its
+        shape - a published contract, a versioned endpoint family, a channel
+        protocol. Capture the interface, not the service that implements it.
+
+      clues:
+        - API
+        - endpoint
+        - contract
+        - OpenAPI
+        - schema
+        - channel
+
+      doNotConfuseWith:
+        - service
+        - endpoint
+
+relationships:
+
+  # --- The original five: names and meaning unchanged, more types allowed ------
+
+  owned_by:
+    description: >
+      Identifies the team responsible for a resource.
+
+    from:
+      - service
+      - datasource
+      - environment
+      - api
+
+    to:
+      - team
+
+  depends_on:
+    description: >
+      Represents a runtime, build, or operational dependency.
+
+    from:
+      - service
+      - api
+
+    to:
+      - service
+      - datasource
+      - api
+
+    attributes:
+      criticality:
+        type: string
+        enum:
+          - low
+          - medium
+          - high
+
+      runtime:
+        type: boolean
+
+  uses:
+    description: >
+      Represents a resource consuming, invoking, or making use of another.
+
+    from: "*"
+    to: "*"
+
+  supersedes:
+    description: >
+      Marks a decision - or a record, policy, document or API version - as
+      replacing an earlier one.
+
+    from:
+      - decision
+      - api
+
+    to:
+      - decision
+      - api
+
+  deployed_to:
+    description: >
+      Records where a resource runs. Spec §16 uses this relationship in its link
+      examples, and without it the environment type has no inbound edge.
+
+    from:
+      - service
+
+    to:
+      - environment
+
+  exposes:
+    description: >
+      A service or workload offers an API or is reachable at an endpoint.
+
+    from:
+      - service
+
+    to:
+      - api
+
+  consumes:
+    description: >
+      A resource calls an API, reads from an event stream, or calls an endpoint
+      it does not own.
+
+    from:
+      - service
+
+    to:
+      - api
+
+  implements:
+    description: >
+      Software or work that delivers a requirement, feature or API.
+
+    from:
+      - service
+      - api
+
+    to:
+      - api
+
+  governs:
+    description: >
+      A policy, constraint or compliance requirement applies to a resource.
+
+    from:
+      - constraint
+
+    to: "*"

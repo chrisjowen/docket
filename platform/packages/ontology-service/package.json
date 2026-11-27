@@ -1,0 +1,31 @@
+{
+  "name": "@docket/platform-ontology-service",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A workspace's ontology: starter templates, versions, change checks, migrations and YAML import/export.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "templates": "node scripts/templates.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node scripts/templates.mjs --check && vitest run --exclude 'src/**/*.int.test.ts' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests --testTimeout 30000 --hookTimeout 30000 .int.test."
+  },
+  "dependencies": {
+    "@chrisjowen/docket": "workspace:*",
+    "@docket/platform-canonical-store": "workspace:*",
+    "@docket/platform-tenancy": "workspace:*",
+    "pg": "^8.16.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@docket/platform-provisioner": "workspace:*",
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

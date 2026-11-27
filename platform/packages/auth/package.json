@@ -1,0 +1,29 @@
+{
+  "name": "@docket/platform-auth",
+  "version": "0.0.0",
+  "private": true,
+  "description": "GitHub sign-in, sessions, the OAuth 2.1 authorization server, API tokens and scope checks.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./revocation": "./src/tokens/revocation.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude 'src/**/*.int.test.ts' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests --testTimeout 30000 --hookTimeout 30000 .int.test."
+  },
+  "dependencies": {
+    "@docket/platform-tenancy": "workspace:*",
+    "oidc-provider": "9.13.3",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/oidc-provider": "9.13.1",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@docket/platform-mcp-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The MCP tools a workspace endpoint offers (§9): the read tools docket_search, docket_get, docket_ask and docket_ontology, the write tools docket_remember, docket_update_notes, docket_add_evidence, docket_retire and docket_propose_ontology_change, and the worker's query protocol.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./query": "./src/query.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude 'src/**/*.int.test.ts' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests --testTimeout 30000 --hookTimeout 30000 .int.test."
+  },
+  "dependencies": {
+    "@chrisjowen/docket": "workspace:*",
+    "@docket/platform-ai": "workspace:*",
+    "@docket/platform-auth": "workspace:*",
+    "@docket/platform-canonical-store": "workspace:*",
+    "@docket/platform-ontology-service": "workspace:*",
+    "@docket/platform-tenancy": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

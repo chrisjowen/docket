@@ -1,8 +1,11 @@
 # Contributing to docket
 
-Thank you for helping. docket is licensed under the
-[Apache License, Version 2.0](LICENSE), and every contribution is accepted
-under that same licence.
+Thank you for helping. docket's CLI, server core, UI, contracts and adapters
+(`packages/`) are licensed under the [Apache License, Version 2.0](LICENSE);
+the server platform (`platform/`) is licensed under the
+[GNU Affero General Public License, version 3 only](platform/LICENSE).
+Every contribution is accepted under the licence of the part it changes; see
+[`LICENSING.md`](LICENSING.md).
 
 ## Sign off your commits (DCO)
 

@@ -1,11 +1,13 @@
 {
   "name": "docket-workspace",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "Apache-2.0 AND AGPL-3.0-only",
   "packageManager": "pnpm@10.28.2",
   "scripts": {
-    "build": "pnpm --filter \"@docket/*\" build && pnpm --filter @chrisjowen/docket-ui build && pnpm --filter @chrisjowen/docket build && pnpm --filter @chrisjowen/docket-server build",
+    "build": "pnpm --filter \"./packages/*\" --filter \"!@chrisjowen/*\" build && pnpm --filter @chrisjowen/docket-ui build && pnpm --filter @chrisjowen/docket build && pnpm --filter @chrisjowen/docket-server build && pnpm --filter \"./platform/**\" build",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test:integration": "pnpm --filter \"./platform/**\" --no-sort test:integration",
+    "test:e2e": "pnpm --filter @docket/platform-e2e test:e2e"
   }
 }

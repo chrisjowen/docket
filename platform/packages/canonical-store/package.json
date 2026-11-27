@@ -1,0 +1,33 @@
+{
+  "name": "@docket/platform-canonical-store",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Postgres-backed canonical documents and manifests for docket, encrypted per org.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fixture": "./src/fixture.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude 'src/**/*.int.test.ts' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests --testTimeout 30000 --hookTimeout 30000 .int.test."
+  },
+  "dependencies": {
+    "@chrisjowen/docket": "workspace:*",
+    "@docket/platform-keys": "workspace:*",
+    "@docket/platform-tenancy": "workspace:*",
+    "gray-matter": "^4.0.3",
+    "pg": "^8.16.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@docket/platform-provisioner": "workspace:*",
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
