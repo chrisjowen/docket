@@ -16,11 +16,22 @@ import { importYaml } from './yaml-io.js'
  * draft as its first published version. Only the member who started it
  * opens it, changes it or accepts it.
  */
+/** One line of a new docket's initial access: who, and which role they get on it, kept with its draft. */
+export interface InitialAccess {
+  /** A member's id, or `everyone`. */
+  who: string
+  roleId: string
+}
+
 export interface DocketDraft {
   id: string
   /** The docket's name and address, as New docket was given them. */
   name: string
   slug: string
+  /** The space it will be made in. */
+  spaceId: string
+  /** Who gets access to it when it is made, beyond what its space and the account give. */
+  access: InitialAccess[]
   yaml: string
   /** ai:<template>: drafted by AI starting from that template. */
   source: string
@@ -34,6 +45,8 @@ type DraftRow = {
   id: string
   name: string
   slug: string
+  space_id: string
+  access: unknown
   yaml: string
   source: string
   message: string | null
@@ -42,10 +55,20 @@ type DraftRow = {
   updated_at: Date
 }
 
+/** The initial access a draft keeps, as far as it is well formed. */
+export function initialAccessOf(value: unknown): InitialAccess[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) =>
+    entry && typeof entry === 'object' && typeof entry.who === 'string' && typeof entry.roleId === 'string' ? [{ who: entry.who, roleId: entry.roleId }] : [],
+  )
+}
+
 const toDraft = (row: DraftRow): DocketDraft => ({
   id: row.id,
   name: row.name,
   slug: row.slug,
+  spaceId: row.space_id,
+  access: initialAccessOf(row.access),
   yaml: row.yaml,
   source: row.source,
   message: row.message,
@@ -78,7 +101,7 @@ function ontologyText(yaml: string): string {
 /** Keeps a drafted ontology for its author to review. Throws `OntologyInvalid` for text that is not one. */
 export async function createDocketDraft(
   tx: Tx,
-  input: { name: string; slug: string; yaml: string; source: string; message?: string | null; author: string },
+  input: { name: string; slug: string; yaml: string; source: string; message?: string | null; author: string; spaceId?: string; access?: readonly InitialAccess[] },
 ): Promise<DocketDraft> {
   const yaml = ontologyText(input.yaml)
   await tx.query(
@@ -87,8 +110,9 @@ export async function createDocketDraft(
     [input.author, MAX_DOCKET_DRAFTS - 1],
   )
   const { rows } = await tx.query<DraftRow>(
-    'INSERT INTO docket_drafts (name, slug, yaml, source, message, author) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-    [input.name.trim(), input.slug, yaml, input.source, input.message ?? null, input.author],
+    `INSERT INTO docket_drafts (name, slug, yaml, source, message, author, space_id, access)
+     VALUES ($1, $2, $3, $4, $5, $6, coalesce($7, 'general'), $8) RETURNING *`,
+    [input.name.trim(), input.slug, yaml, input.source, input.message ?? null, input.author, input.spaceId ?? null, JSON.stringify(input.access ?? [])],
   )
   return toDraft(rows[0] as DraftRow)
 }
@@ -149,16 +173,17 @@ export async function acceptDocketDraft(
   ctx: StoreContext,
   id: string,
   input: { yaml?: string; message?: string | null; publisher: Publisher; requestId?: string },
-): Promise<{ workspace: Workspace; version: Published }> {
+): Promise<{ workspace: Workspace; version: Published; draft: DocketDraft }> {
   const draft = await openDraft(ctx.tx, id, input.publisher.actor)
   const yaml = input.yaml ? ontologyText(input.yaml) : draft.yaml
   const created = await createWorkspace(ctx, {
     name: draft.name,
     slug: draft.slug,
+    spaceId: draft.spaceId,
     start: { drafted: { yaml, source: draft.source, message: input.message ?? draft.message } },
     publisher: input.publisher,
     ...(input.requestId ? { requestId: input.requestId } : {}),
   })
   await ctx.tx.query('DELETE FROM docket_drafts WHERE id = $1', [id])
-  return created
+  return { ...created, draft }
 }

@@ -25,7 +25,11 @@
     </p>
   </div>
   <div class="toolbar">
-    <a class="button small" href={resolve('/o/[org]/workspaces/new', { org: data.org.slug })}><ArrowLeft size={14} aria-hidden="true" /> New docket</a>
+    {#if data.pending.space}
+      <a class="button small" href={resolve('/o/[org]/s/[space]/new', { org: data.org.slug, space: data.pending.space.slug })}><ArrowLeft size={14} aria-hidden="true" /> New docket</a>
+    {:else}
+      <a class="button small" href={resolve('/o/[org]/workspaces/new', { org: data.org.slug })}><ArrowLeft size={14} aria-hidden="true" /> New docket</a>
+    {/if}
   </div>
 </div>
 

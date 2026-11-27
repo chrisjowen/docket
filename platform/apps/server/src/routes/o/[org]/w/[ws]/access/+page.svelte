@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
   import { resolve } from '$app/paths'
+  import { page } from '$app/state'
   import { CAPABILITY_INFO, type Capability } from '@docket/platform-tenancy/roles'
   import { ShieldCheck } from '@lucide/svelte'
 
@@ -18,11 +19,13 @@
 
 <h1>Access</h1>
 <p class="muted lede">
-  Access is a role on a place: on {data.org.name} as a whole, or on this docket. Everything someone is given adds up, and a
-  role on the whole account covers this docket too.
+  Access is a role on a place: on {data.org.name} as a whole, on a space, or on this docket. Everything someone is given adds
+  up, and a role on a bigger place covers this docket too{#if data.fromSpace}: a role on {data.fromSpace.name} covers every docket in it{/if}.
 </p>
 
-{#if form && 'problem' in form}<p class="alert" role="alert">{form.problem}</p>{/if}
+{#if form && 'problem' in form}<p class="alert" role="alert">{form.problem}</p>{:else if page.url.searchParams.get('problem')}
+  <p class="alert" role="alert">The docket was made, but not all of its initial access could be given: {page.url.searchParams.get('problem')}</p>
+{/if}
 {#if form && 'flash' in form}<p class="flash" role="status">{form.flash}</p>{/if}
 
 <section class="card you" aria-labelledby="you-title" data-testid="your-access">
@@ -70,6 +73,19 @@
 
   <GiveAccess people={data.people} places={[data.place]} roles={data.roles} csrf={data.csrf} title="Give access to {data.workspace.name}" />
 
+  {#if data.fromSpace}
+    <section aria-labelledby="space-grants-title">
+      <h2 id="space-grants-title" class="section">From {data.fromSpace.name}</h2>
+      <p class="muted small">
+        These cover every docket in the {data.fromSpace.name} space, this one included. Change them on
+        <a href={resolve('/o/[org]/s/[space]/access', { org: data.org.slug, space: data.fromSpace.slug })}>{data.fromSpace.name}'s access page</a>.
+      </p>
+      <div class="card">
+        <GrantList grants={data.fromSpace.grants} roles={data.roles} csrf={data.csrf} showPlace={false} label="Grants on {data.fromSpace.name}" />
+      </div>
+    </section>
+  {/if}
+
   <section aria-labelledby="account-grants-title">
     <h2 id="account-grants-title" class="section">From the whole account</h2>
     <p class="muted small">
@@ -77,7 +93,7 @@
       <a href={resolve('/o/[org]/members', { org: data.org.slug })}>Users</a>.
     </p>
     <div class="card">
-      <GrantList grants={data.onAccount.map((grant) => ({ ...grant, mayChange: false }))} roles={data.roles} csrf={data.csrf} showPlace={false} label="Grants on the whole account" />
+      <GrantList grants={data.onAccount} roles={data.roles} csrf={data.csrf} showPlace={false} label="Grants on the whole account" />
     </div>
   </section>
 {/if}

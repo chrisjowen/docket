@@ -276,7 +276,8 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
   const tool = (bearer: string, ws: string, name: string, args: Record<string, unknown>) => mcp(bearer, ws, 'tools/call', { name, arguments: args })
 
   beforeAll(async () => {
-    org = await createTestOrg()
+    // Who reaches what from grants alone: without General's default Reader for everyone.
+    org = await createTestOrg({ everyoneReadsGeneral: false })
     slug = `o-${org.orgId}`
     users.owner = { id: org.userId, login: org.login }
     docket.alpha = await seed(org.orgId, 'alpha', MARK.alpha, org.userId)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { listWorkspaces } from '@docket/platform-canonical-store'
+import { listSpaces, listWorkspaces } from '@docket/platform-canonical-store'
 import {
   ACCOUNT,
   CAPABILITIES,
@@ -11,8 +11,10 @@ import {
   listGrants,
   listRoles,
   mayGrant,
+  placeKey,
   removeGrant,
   setGrant,
+  spacePlace,
   type Access,
   type Capability,
   type GrantView,
@@ -28,41 +30,58 @@ import { getRuntime } from './runtime'
 
 /**
  * Access is a role on a place (tenancy v2 §3.1), given, adjusted and taken
- * away the same way from a docket's Access tab, the Users page and a system
- * account's page. A place travels in forms as `account` or `docket:<id>`.
+ * away the same way from a docket's or a space's access page, the Users page
+ * and a system account's page. A place travels in forms as `account`,
+ * `space:<id>` or `docket:<id>` (`placeKey`).
  */
 
-export const placeKey = (place: Place): string => (place.kind === 'account' ? 'account' : `docket:${place.id}`)
+export { placeKey }
 
-/** The account's dockets, by id, with their names: what a docket place reads as. */
-export async function docketNames(orgId: string): Promise<Map<string, { slug: string; name: string }>> {
-  const workspaces = await getRuntime().router.withTenant(orgId, listWorkspaces)
-  return new Map(workspaces.map((workspace) => [workspace.id, { slug: workspace.slug, name: workspace.name }]))
+/** The account's spaces and dockets, by id, with their names: what a place reads as. */
+export interface PlaceNames {
+  spaces: Map<string, { slug: string; name: string; general: boolean }>
+  dockets: Map<string, { slug: string; name: string; spaceId: string }>
 }
 
-/** A place a form names, if it is the account or one of its dockets. */
-export function placeOf(value: unknown, dockets: ReadonlyMap<string, unknown>): Place | null {
+export async function placeNames(orgId: string): Promise<PlaceNames> {
+  const { spaces, workspaces } = await getRuntime().router.withTenant(orgId, async (tx) => ({ spaces: await listSpaces(tx), workspaces: await listWorkspaces(tx) }))
+  return {
+    spaces: new Map(spaces.map((space) => [space.id, { slug: space.slug, name: space.name, general: space.general }])),
+    dockets: new Map(workspaces.map((workspace) => [workspace.id, { slug: workspace.slug, name: workspace.name, spaceId: workspace.spaceId }])),
+  }
+}
+
+/** A place a form names, if it is the account or one of its spaces or dockets. */
+export function placeOf(value: unknown, names: PlaceNames): Place | null {
   if (value === 'account') return ACCOUNT
-  if (typeof value === 'string' && value.startsWith('docket:') && dockets.has(value.slice(7))) return docketPlace(value.slice(7))
+  if (typeof value !== 'string') return null
+  if (value.startsWith('space:') && names.spaces.has(value.slice(6))) return spacePlace(value.slice(6))
+  if (value.startsWith('docket:') && names.dockets.has(value.slice(7))) return docketPlace(value.slice(7))
   return null
 }
 
-export function placeLabel(place: Place, dockets: ReadonlyMap<string, { name: string }>, orgName: string): string {
-  return place.kind === 'account' ? `${orgName} (the whole account)` : `${dockets.get(place.id)?.name ?? 'a deleted docket'} (docket)`
+export function placeLabel(place: Place, names: PlaceNames, orgName: string): string {
+  if (place.kind === 'account') return `${orgName} (the whole account)`
+  if (place.kind === 'space') return `${names.spaces.get(place.id)?.name ?? 'a deleted space'} (space)`
+  return `${names.dockets.get(place.id)?.name ?? 'a deleted docket'} (docket)`
 }
 
-/** The places where the actor may give access: the account and every docket where they manage access (or system accounts). */
-export function placesToGive(
-  access: OrgAccess,
-  dockets: ReadonlyMap<string, { name: string }>,
-  grantee: 'human' | 'service' | 'everyone' = 'human',
-): { key: string; label: string }[] {
+/**
+ * The places where the actor may give access: the account, every space and
+ * every docket where they manage access (or system accounts), each space
+ * followed by its dockets.
+ */
+export function placesToGive(access: OrgAccess, names: PlaceNames, grantee: 'human' | 'service' | 'everyone' = 'human'): { key: string; label: string }[] {
   const manages = (place: Place) => {
     const caps = access.capsAt(place)
     return caps.has('access') || (grantee === 'service' && caps.has('system'))
   }
-  const places: Place[] = [ACCOUNT, ...[...dockets.keys()].map(docketPlace)]
-  return places.filter(manages).map((place) => ({ key: placeKey(place), label: placeLabel(place, dockets, access.org.name) }))
+  const places: Place[] = [ACCOUNT]
+  for (const spaceId of names.spaces.keys()) {
+    places.push(spacePlace(spaceId))
+    for (const [docketId, docket] of names.dockets) if (docket.spaceId === spaceId) places.push(docketPlace(docketId))
+  }
+  return places.filter(manages).map((place) => ({ key: placeKey(place), label: placeLabel(place, names, access.org.name) }))
 }
 
 /** A role as the forms offer it: its name, what it gives, and whether it is one of the account's own. */
@@ -76,7 +95,7 @@ export const roleView = (role: Role & { grants?: number }) => ({
 })
 
 /** A grant as a page shows it, and whether the viewer may change it. */
-export function grantView(grant: GrantView, viewer: Access, dockets: ReadonlyMap<string, { name: string }>, orgName: string) {
+export function grantView(grant: GrantView, viewer: Access, names: PlaceNames, orgName: string) {
   const caps = grantCaps(grant)
   const kind = grant.grantee.kind === 'everyone' ? 'everyone' : grant.grantee.userKind
   return {
@@ -85,7 +104,7 @@ export function grantView(grant: GrantView, viewer: Access, dockets: ReadonlyMap
       grant.grantee.kind === 'everyone'
         ? { kind: 'everyone' as const, id: null, login: null, name: `Everyone at ${orgName}`, userKind: null, guest: false }
         : { kind: 'user' as const, id: grant.grantee.id, login: grant.grantee.login, name: grant.grantee.name, userKind: grant.grantee.userKind, guest: grant.grantee.guest },
-    place: { key: placeKey(grant.place), kind: grant.place.kind, label: placeLabel(grant.place, dockets, orgName) },
+    place: { key: placeKey(grant.place), kind: grant.place.kind, label: placeLabel(grant.place, names, orgName) },
     role: { id: grant.role.id, name: grant.role.name },
     add: [...grant.add],
     remove: [...grant.remove],
@@ -137,7 +156,7 @@ export function granteeOf(form: FormData): Grantee {
 }
 
 type Change = { action: string; target: string[]; args?: unknown; flash: string; inOrg?: (tx: Tx) => Promise<void> }
-export type ChangeScope = { access: OrgAccess; userId: string; form: FormData; dockets: Map<string, { slug: string; name: string }> }
+export type ChangeScope = { access: OrgAccess; userId: string; form: FormData; names: PlaceNames }
 
 /**
  * Runs one access change from a page: the member's access is read now, the
@@ -155,11 +174,11 @@ export async function changeAccess(
   const user = requireUser(event)
   const access = precomputed ?? (await orgAccess(event))
   const form = await event.request.formData()
-  const dockets = await docketNames(access.org.id)
+  const names = await placeNames(access.org.id)
   const { router } = getRuntime()
   try {
     const done = await router.withPlatform(async (tx) => {
-      const result = await change(tx, { access, userId: user.id, form, dockets })
+      const result = await change(tx, { access, userId: user.id, form, names })
       await router.enterTenant(tx, access.org.id)
       await result.inOrg?.(tx)
       await recordAudit(tx, event, { action: result.action, orgId: access.org.id, target: result.target, args: result.args })
@@ -174,14 +193,13 @@ export async function changeAccess(
   }
 }
 
-const describe = (grant: GrantView, dockets: ReadonlyMap<string, { name: string }>, orgName: string) =>
-  `${grantRoleLabel(grant)} on ${placeLabel(grant.place, dockets, orgName)}`
+const describe = (grant: GrantView, names: PlaceNames, orgName: string) => `${grantRoleLabel(grant)} on ${placeLabel(grant.place, names, orgName)}`
 
 const whoOf = (grant: GrantView) => (grant.grantee.kind === 'everyone' ? 'everyone' : grant.grantee.login)
 
 /** Gives the grantee a form names (or `only`'s) the role on the place it names (or `at`), replacing their grant there. */
-export async function giveChange(tx: Tx, { access, userId, form, dockets }: ChangeScope, only?: Grantee, at?: Place): Promise<Change> {
-  const place = at ?? placeOf(form.get('place'), dockets)
+export async function giveChange(tx: Tx, { access, userId, form, names }: ChangeScope, only?: Grantee, at?: Place): Promise<Change> {
+  const place = at ?? placeOf(form.get('place'), names)
   if (!place) throw new TenancyError('invalid', 'Choose where.')
   const roles = await listRoles(tx, access.org.id)
   const who = only ?? granteeOf(form)
@@ -191,7 +209,7 @@ export async function giveChange(tx: Tx, { access, userId, form, dockets }: Chan
     action: before ? 'access.change' : 'access.grant',
     target: [`grant:${grant.id}`, grant.who.kind === 'user' ? `user:${grant.who.id}` : 'everyone'],
     args: { place: placeKey(place), role: roleId, add, remove, ...(before ? { before: { role: before.role.id, add: before.add, remove: before.remove } } : {}) },
-    flash: `${whoOf(grant)} now has ${describe(grant, dockets, access.org.name)}.`,
+    flash: `${whoOf(grant)} now has ${describe(grant, names, access.org.name)}.`,
   }
 }
 
@@ -204,7 +222,7 @@ async function grantNamed(tx: Tx, orgId: string, grantId: string, only?: Grantee
 }
 
 /** Changes the role and adjustments of the grant a form names. */
-export async function adjustChange(tx: Tx, { access, userId, form, dockets }: ChangeScope, only?: Grantee, at?: Place): Promise<Change> {
+export async function adjustChange(tx: Tx, { access, userId, form, names }: ChangeScope, only?: Grantee, at?: Place): Promise<Change> {
   const existing = await grantNamed(tx, access.org.id, String(form.get('grant') ?? ''), only, at)
   const roles = await listRoles(tx, access.org.id)
   const { roleId, add, remove } = adjustmentOf(form, roles)
@@ -213,19 +231,19 @@ export async function adjustChange(tx: Tx, { access, userId, form, dockets }: Ch
     action: 'access.change',
     target: [`grant:${grant.id}`, grant.who.kind === 'user' ? `user:${grant.who.id}` : 'everyone'],
     args: { place: placeKey(grant.place), role: roleId, add, remove, before: { role: existing.role.id, add: existing.add, remove: existing.remove } },
-    flash: `${whoOf(grant)} now has ${describe(grant, dockets, access.org.name)}.`,
+    flash: `${whoOf(grant)} now has ${describe(grant, names, access.org.name)}.`,
   }
 }
 
 /** Takes away the grant `grantId` names. */
-export async function revokeChange(tx: Tx, { access, dockets }: ChangeScope, grantId: string, only?: Grantee, at?: Place): Promise<Change> {
+export async function revokeChange(tx: Tx, { access, names }: ChangeScope, grantId: string, only?: Grantee, at?: Place): Promise<Change> {
   await grantNamed(tx, access.org.id, grantId, only, at)
   const grant = await removeGrant(tx, { orgId: access.org.id, grantId, actor: access.principal })
   return {
     action: 'access.remove',
     target: [`grant:${grant.id}`, grant.who.kind === 'user' ? `user:${grant.who.id}` : 'everyone'],
     args: { place: placeKey(grant.place), role: grant.role.id },
-    flash: `${whoOf(grant)} no longer has ${describe(grant, dockets, access.org.name)}.`,
+    flash: `${whoOf(grant)} no longer has ${describe(grant, names, access.org.name)}.`,
   }
 }
 

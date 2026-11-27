@@ -20,6 +20,8 @@ test('G1: create an org, invite a writer who can write but not publish', async (
 
   await alice.getByLabel('GitHub login or email').fill(`@${bob}`)
   await alice.locator('form[action="?/invite"] select[name="role"]').selectOption('writer')
+  // New invites default to General; this one is for the whole account.
+  await alice.locator('form[action="?/invite"] select[name="place"]').selectOption('account')
   await alice.getByRole('button', { name: 'Send invite' }).click()
   await expect(alice.getByText(`Invited @${bob} as Writer on Acme ${suffix} (the whole account).`)).toBeVisible()
   await expect(alice.getByText(`@${bob}`, { exact: true })).toBeVisible()
@@ -78,7 +80,7 @@ test('an admin manages access, removals and system accounts, and an org keeps an
   const danaPage = await (await browser.newContext()).newPage()
   await signIn(danaPage, dana)
   await danaPage.getByRole('button', { name: `Accept and join Roles ${suffix}` }).click()
-  await expect(danaPage.getByTestId('my-role')).toHaveText('Reader')
+  await expect(danaPage.getByTestId('my-role')).toHaveText('Reader on General')
 
   await owner.reload()
   const row = owner.locator(`tr[data-login="${dana}"]`)

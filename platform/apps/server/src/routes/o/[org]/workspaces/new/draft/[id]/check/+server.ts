@@ -2,7 +2,7 @@
 import { MigrationInvalid, OntologyInvalid, checkNewDocket, docketDraftById, migrationSteps } from '@docket/platform-ontology-service'
 import { error, json } from '@sveltejs/kit'
 
-import { authorise, orgAccess } from '$lib/server/request'
+import { authoriseAnywhere, orgAccess } from '$lib/server/request'
 import { inOrg, publisherOf } from '$lib/server/workspace'
 
 import type { RequestHandler } from './$types'
@@ -15,7 +15,7 @@ export const POST: RequestHandler = async (event) => {
   const migration = migrationSteps(body.migration)
   if (!migration) error(400, 'The migration is not a list.')
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'create')
+  authoriseAnywhere(access, 'create')
   const { actor, login } = publisherOf(event)
   return inOrg(access, async (ctx) => {
     if (!(await docketDraftById(ctx.tx, event.params.id, actor))) error(404, 'Not found')

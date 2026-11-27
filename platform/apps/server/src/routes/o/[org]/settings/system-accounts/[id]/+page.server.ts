@@ -25,7 +25,7 @@ import {
 } from '@docket/platform-tenancy'
 import { error, fail, redirect } from '@sveltejs/kit'
 
-import { docketNames, grantActions, grantView, placesToGive, rolesFor } from '$lib/server/grants'
+import { grantActions, grantView, placeNames, placesToGive, rolesFor } from '$lib/server/grants'
 import { orgAccess, recordStandalone, requireUser, type OrgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 import { accessSummary, manage, mayChangeAccount, mayManageSystemAccounts } from '$lib/server/system-accounts'
@@ -65,7 +65,7 @@ export const load: PageServerLoad = async (event) => {
   if (!mayManageSystemAccounts(access)) error(403, 'You do not have access to that.')
   const id = event.params.id ?? ''
   const { dockets } = await accountDockets(access.org)
-  const names = await docketNames(access.org.id)
+  const names = await placeNames(access.org.id)
   const { account, tokens, reach, notices, grants } = await getRuntime().router.withPlatform(async (tx) => ({
     account: await systemAccount(tx, access.org.id, id),
     tokens: await listApiTokens(tx, { orgId: access.org.id, ownerId: id }),
@@ -103,7 +103,7 @@ export const load: PageServerLoad = async (event) => {
 async function changeable(tx: Tx, access: OrgAccess, id: string) {
   const account = await systemAccount(tx, access.org.id, id)
   if (account.managed) throw new TenancyError('forbidden', 'This system account is managed through the org admin API.')
-  const names = await docketNames(access.org.id)
+  const names = await placeNames(access.org.id)
   const grants = (await listGrants(tx, access.org.id, { userId: id })).map((grant) => grantView(grant, access.principal, names, access.org.name))
   if (!mayChangeAccount(access, grants)) throw new TenancyError('forbidden', 'You do not manage system accounts where it reaches.')
   return account

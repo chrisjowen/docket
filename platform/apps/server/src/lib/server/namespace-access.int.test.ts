@@ -75,7 +75,8 @@ describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
     inWorkspace(event(name, ws), async ({ access }) => PROBED.filter((cap) => access.can(cap)))
 
   beforeAll(async () => {
-    org = await createTestOrg()
+    // Who reaches what from grants alone: without General's default Reader for everyone.
+    org = await createTestOrg({ everyoneReadsGeneral: false })
     slug = `o-${org.orgId}`
     users.owner = { id: org.userId, login: org.login }
     runtime = {

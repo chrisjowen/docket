@@ -22,18 +22,25 @@ export {
   capsAt,
   covers,
   docketPlace,
+  GENERAL_SPACE_ID,
   grantCaps,
   grantRoleLabel,
   isAccountAdmin,
   isCapability,
+  mayCreateSpace,
   mayEditRoles,
   mayGrant,
+  placeFromRow,
+  placeIdOf,
+  placeKey,
   samePlace,
   seesDocket,
+  seesSpace,
+  spacePlace,
   summarise,
 } from './roles.js'
-export type { Access, BuiltinRoleId, Capability, CapabilityInfo, Grant, Grantee, Place, Role } from './roles.js'
-export { accessOf, deleteRole, listGrants, listRoles, ownerCount, removeGrant, rolesOf, saveRole, setGrant, setOwner } from './access.js'
+export type { Access, BuiltinRoleId, Capability, CapabilityInfo, DocketSpaces, Grant, Grantee, Place, Role } from './roles.js'
+export { accessOf, deleteRole, docketSpaces, listGrants, listRoles, ownerCount, removeGrant, rolesOf, saveRole, setGrant, setOwner } from './access.js'
 export type { GrantView, RoleUse } from './access.js'
 export { ident, transaction } from './db.js'
 export type { Tx } from './db.js'

@@ -2,7 +2,7 @@
 import { convertOntologyText } from '@chrisjowen/docket'
 import { error, json } from '@sveltejs/kit'
 
-import { authorise, orgAccess } from '$lib/server/request'
+import { authoriseAnywhere, orgAccess } from '$lib/server/request'
 
 import type { RequestHandler } from './$types'
 
@@ -11,7 +11,7 @@ export const POST: RequestHandler = async (event) => {
   const body = (await event.request.json().catch(() => null)) as { yaml?: unknown } | null
   if (!body || typeof body.yaml !== 'string') error(400, 'Send { yaml }.')
   const yaml = body.yaml
-  authorise(await orgAccess(event, { api: true }), 'create')
+  authoriseAnywhere(await orgAccess(event, { api: true }), 'create')
   try {
     return json({ ok: true, ...convertOntologyText(yaml) })
   } catch (caught) {

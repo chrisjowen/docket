@@ -17,7 +17,7 @@ import {
 } from '@docket/platform-tenancy'
 import { error } from '@sveltejs/kit'
 
-import { changeAccess, docketNames, giveChange, grantActions, grantView, placeKey, placeLabel, placeOf, placesToGive, revokeChange, rolesFor } from '$lib/server/grants'
+import { changeAccess, giveChange, grantActions, grantView, placeKey, placeLabel, placeNames, placeOf, placesToGive, revokeChange, rolesFor } from '$lib/server/grants'
 import { accountRoles } from '$lib/server/members'
 import { orgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
@@ -37,7 +37,7 @@ export const load: PageServerLoad = async (event) => {
   if (access.principal.guest) error(404, 'Not found')
   const managesAnywhere = access.canAnywhere('access')
   const managesAccount = access.can('access')
-  const dockets = await docketNames(access.org.id)
+  const names = await placeNames(access.org.id)
   const { members, invites, grants, roles, managed } = await getRuntime().router.withPlatform(async (tx) => {
     const members = await listMembers(tx, access.org.id)
     return {
@@ -49,7 +49,7 @@ export const load: PageServerLoad = async (event) => {
     }
   })
   const iso = (date: Date | null) => (date ? date.toISOString() : null)
-  const view = (grant: (typeof grants)[number]) => grantView(grant, access.principal, dockets, access.org.name)
+  const view = (grant: (typeof grants)[number]) => grantView(grant, access.principal, names, access.org.name)
   const roleList = await rolesFor(access.org.id)
   const roleCaps = new Map(roleList.map((role) => [role.id, role.caps]))
   const mayManageInvite = (invite: Invite) =>
@@ -63,7 +63,7 @@ export const load: PageServerLoad = async (event) => {
     seats: members.filter((member) => !managed.has(member.id)).length + invites.length,
     systemAccounts: members.filter((member) => member.kind === 'service' && !managed.has(member.id)).length,
     roles: roleList,
-    invitePlaces: managesAnywhere ? placesToGive(access, dockets) : [],
+    invitePlaces: managesAnywhere ? placesToGive(access, names) : [],
     everyone: grants.filter((grant) => grant.who.kind === 'everyone').map(view),
     people: members
       .filter((member) => member.kind === 'human')
@@ -90,7 +90,7 @@ export const load: PageServerLoad = async (event) => {
       githubLogin: invite.githubLogin,
       email: invite.email,
       role: invite.owner ? 'Owner' : invite.roleName,
-      place: placeLabel(invite.place, dockets, access.org.name),
+      place: placeLabel(invite.place, names, access.org.name),
       guest: invite.guest,
       invitedByLogin: invite.invitedByLogin,
       createdAt: iso(invite.createdAt),
@@ -106,8 +106,8 @@ export const actions: Actions = {
   ...grants,
 
   invite: (event) =>
-    changeAccess(event, async (tx, { access, userId, form, dockets }) => {
-      const place = placeOf(form.get('place') ?? 'account', dockets)
+    changeAccess(event, async (tx, { access, userId, form, names }) => {
+      const place = placeOf(form.get('place') ?? 'account', names)
       if (!place) throw new TenancyError('invalid', 'Choose where.')
       const invite = await createInvite(tx, {
         orgId: access.org.id,
@@ -123,7 +123,7 @@ export const actions: Actions = {
         action: 'members.invite',
         target: [`invite:${invite.id}`],
         args: { who: to, role: invite.roleId, place: placeKey(place), guest: invite.guest },
-        flash: `Invited ${to} as ${invite.roleName} on ${placeLabel(place, dockets, access.org.name)}. Ask them to sign in at this site.`,
+        flash: `Invited ${to} as ${invite.roleName} on ${placeLabel(place, names, access.org.name)}. Ask them to sign in at this site.`,
       }
     }),
 

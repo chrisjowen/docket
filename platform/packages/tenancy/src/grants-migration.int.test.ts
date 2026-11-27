@@ -4,13 +4,14 @@ import { createHash, randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import down0017 from '../migrations/platform/0017_capabilities_and_grants.down.sql?raw'
+import down0018 from '../migrations/platform/0018_spaces.down.sql?raw'
 import { accessOf, listGrants } from './access.js'
 import { ident, transaction, type Tx } from './db.js'
 import { migrateBehindOrgs, migratePlatform } from './migrate.js'
 import { ORG_MIGRATIONS } from './migrations.js'
 import { insertOrg, upsertGitHubUser, type User } from './model.js'
 import { newTenantId, orgRole, orgSchema } from './names.js'
-import { ACCOUNT, capsAt, docketPlace, type Capability } from './roles.js'
+import { ACCOUNT, capsAt, docketPlace, spacePlace, type Capability } from './roles.js'
 import { tenantRouter, type TenantRouter } from './router.js'
 import { TEST_PG_URL, createTestDatabase, type TestDatabase } from './testing.js'
 
@@ -131,7 +132,11 @@ describe.skipIf(!TEST_PG_URL)('capabilities and grants (platform 0017)', () => {
     return rows.map((row) => row.entry)
   }
 
-  const down = () => transaction(db.admin, (tx) => tx.query(down0017.replaceAll('{{app_role}}', ident(db.appRole))))
+  // Spaces (platform 0018, org 0020) came after, so they go first.
+  const down = () =>
+    transaction(db.admin, async (tx) => {
+      for (const sql of [down0018, down0017]) await tx.query(sql.replaceAll('{{app_role}}', ident(db.appRole)))
+    })
   /** What a server start does: the platform, then every org behind it. */
   const up = async () => {
     const applied = await migratePlatform(db.admin, { appRole: db.appRole })
@@ -189,7 +194,7 @@ describe.skipIf(!TEST_PG_URL)('capabilities and grants (platform 0017)', () => {
     const live = new Map([[acme, [platformWs, payments, legal]], [globex, [globexWs]]])
 
     const sixteen = await catalog()
-    expect(await up()).toBe(1)
+    expect(await up()).toBe(2)
     const seventeen = await catalog()
 
     for (const [orgId, members] of before) {
@@ -203,12 +208,13 @@ describe.skipIf(!TEST_PG_URL)('capabilities and grants (platform 0017)', () => {
         expect(access?.guest).toBe(old.accountRole === 'guest')
       }
     }
-    // Spot checks in the model's own words.
+    // Spot checks in the model's own words. Org 0020 then moved account-wide Writer and Reader to General.
     const publisherGrants = await router.withPlatform((tx) => listGrants(tx, acme, { userId: publisher.id }))
     expect(publisherGrants.map((grant) => [grant.place, grant.role.id, grant.add])).toEqual([
-      [ACCOUNT, 'writer', []],
+      [spacePlace('general'), 'writer', []],
       [docketPlace(payments), 'writer', ['publish']],
     ])
+    expect((await router.withPlatform((tx) => listGrants(tx, acme, { userId: admin.id }))).map((grant) => grant.place)).toEqual([ACCOUNT])
     expect((await router.withPlatform((tx) => listGrants(tx, acme, { userId: dbWriter }))).map((grant) => [grant.place, grant.role.id])).toEqual([
       [docketPlace(payments), 'writer'],
     ])
@@ -219,7 +225,7 @@ describe.skipIf(!TEST_PG_URL)('capabilities and grants (platform 0017)', () => {
       [acme],
     )
     expect(invites).toEqual([
-      { github_login: 'inv-editor', role_id: 'writer', owner: false, place_kind: 'account' },
+      { github_login: 'inv-editor', role_id: 'writer', owner: false, place_kind: 'space' },
       { github_login: 'inv-owner', role_id: 'admin', owner: true, place_kind: 'account' },
     ])
 
@@ -252,7 +258,7 @@ describe.skipIf(!TEST_PG_URL)('capabilities and grants (platform 0017)', () => {
     const { rows } = await db.admin.query<{ exists: boolean }>("SELECT to_regclass('platform.namespace_grants') IS NOT NULL AS exists")
     expect(rows).toEqual([{ exists: true }])
     await db.admin.query('DELETE FROM platform.memberships WHERE org_id = $1 AND user_id = $2', [acme, odd.id])
-    expect(await up()).toBe(1)
+    expect(await up()).toBe(2)
     await router.withPlatform((tx) => insertOrg(tx, { id: newTenantId(), slug: `after-${newTenantId()}`, name: 'After', ownerId: owner.id }))
   })
 })

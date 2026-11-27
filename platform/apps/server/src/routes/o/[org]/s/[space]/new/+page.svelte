@@ -2,7 +2,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms'
   import { resolve } from '$app/paths'
-  import { BookCopy, FileUp, LayoutTemplate, Search, Settings2, Sparkles } from '@lucide/svelte'
+  import { BookCopy, FileUp, LayoutTemplate, Plus, Search, Settings2, Sparkles, Users, X } from '@lucide/svelte'
   import { untrack } from 'svelte'
 
   import Csrf from '$lib/components/csrf.svelte'
@@ -21,6 +21,26 @@
   let kind = $state<CatalogueKind>('all')
   let tag = $state<string | null>(null)
   let submitting = $state(false)
+
+  /** Initial access: who gets a role on the docket when it is made, beyond everyone its space already gives access. */
+  type Row = { key: number; who: string; role: string }
+  let nextKey = 0
+  const firstRole = untrack(() => data.initialAccess.roles.find((role) => role.id === 'writer')?.id ?? data.initialAccess.roles[0]?.id ?? '')
+  let rows = $state<Row[]>(
+    untrack(() =>
+      (initial && 'access' in initial && Array.isArray(initial.access) ? (initial.access as { who: string; roleId: string }[]) : []).map((row) => ({
+        key: nextKey++,
+        who: row.who,
+        role: row.roleId,
+      })),
+    ),
+  )
+  const unused = $derived(data.initialAccess.people.filter((person) => !rows.some((row) => row.who === person.id)))
+  function addRow() {
+    const person = unused[0]
+    if (person) rows.push({ key: nextKey++, who: person.id, role: firstRole })
+  }
+  const removeRow = (key: number) => (rows = rows.filter((row) => row.key !== key))
 
   const suggested = $derived(
     name
@@ -57,13 +77,20 @@
 </script>
 
 <svelte:head>
-  <title>New docket · {data.org.name}</title>
+  <title>New docket in {data.space.name} · {data.org.name}</title>
 </svelte:head>
 
+<p class="caption">
+  <span class="label">New docket in</span>
+  <a class="space-chip" href={resolve('/o/[org]/s/[space]', { org: data.org.slug, space: data.space.slug })} data-testid="new-docket-space"
+    ><span class="space-mark" aria-hidden="true">{data.space.name.slice(0, 1).toUpperCase()}</span>{data.space.name}</a
+  >
+</p>
 <h1>New docket</h1>
 <p class="muted lede">
-  A docket is an ontology, the documents that follow it, and later their graph. Dockets share
-  {data.org.name}'s stores and keys, and each has its own ontology.
+  A docket is an ontology, the documents that follow it, and later their graph. It goes in {data.space.name}: everyone with access
+  to {data.space.name} reaches it as soon as it is made. Dockets share {data.org.name}'s stores and keys, and each has its own
+  ontology.
 </p>
 
 {#if data.drafts.length}
@@ -257,6 +284,49 @@
       {/if}
     </fieldset>
 
+    <fieldset class="card access" data-testid="initial-access">
+      <legend><Users size={16} aria-hidden="true" /> Initial access</legend>
+      {#if data.initialAccess.already.length}
+        <p class="muted fine">Already reaching it, from {data.space.name} or the whole account:</p>
+        <ul class="already" aria-label="Who already reaches dockets in {data.space.name}">
+          {#each data.initialAccess.already as person (person.id)}
+            <li><span class="who">{person.name}</span> <span class="badge">{person.summary}</span></li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="muted fine">Everyone with access to {data.space.name}, or to all of {data.org.name}, reaches it as soon as it is made.</p>
+      {/if}
+      {#if data.initialAccess.gives}
+        {#if rows.length}
+          <ul class="rows" aria-label="Also give access to">
+            {#each rows as row, index (row.key)}
+              <li class="row">
+                <label>
+                  <span class="visually-hidden">Who, line {index + 1}</span>
+                  <select name="access_who" bind:value={row.who}>
+                    {#each data.initialAccess.people.filter((person) => person.id === row.who || !rows.some((other) => other.who === person.id)) as person (person.id)}
+                      <option value={person.id}>{person.label}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span class="visually-hidden">Role, line {index + 1}</span>
+                  <select name="access_role" bind:value={row.role}>
+                    {#each data.initialAccess.roles as role (role.id)}<option value={role.id}>{role.name}</option>{/each}
+                  </select>
+                </label>
+                <button type="button" class="icon-btn" aria-label="Remove line {index + 1}" onclick={() => removeRow(row.key)}><X size={16} aria-hidden="true" /></button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        <p class="add-row">
+          <button type="button" class="button small" onclick={addRow} disabled={!unused.length}><Plus size={14} aria-hidden="true" /> Give someone access to this docket</button>
+        </p>
+        <p class="muted fine">A role on this docket only: you can give what you hold on {data.space.name}, and change it later on the docket's Access tab.</p>
+      {/if}
+    </fieldset>
+
     {#if form?.problem}
       <div class="alert" role="alert">
         <p>{form.problem}</p>
@@ -276,15 +346,119 @@
       {:else}
         <button class="button primary" type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create docket'}</button>
       {/if}
-      <a class="button" href={resolve('/o/[org]', { org: data.org.slug })}>Cancel</a>
+      <a class="button" href={resolve('/o/[org]/s/[space]', { org: data.org.slug, space: data.space.slug })}>Cancel</a>
     </div>
   </form>
 {/if}
 
 <style>
+  .caption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 6px;
+  }
+  .space-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px 2px 3px;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--paper);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .space-mark {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--bg);
+    font: 600 10px/1 var(--font-mono);
+  }
   h1 {
     font-size: 2rem;
     margin: 0 0 0.4rem;
+  }
+  .access {
+    padding: 1.1rem 1.25rem;
+    display: grid;
+    gap: 0.7rem;
+  }
+  .access legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .already,
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .already li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.3rem 0.2rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    max-width: 100%;
+  }
+  .already .who {
+    overflow-wrap: anywhere;
+  }
+  .rows {
+    display: grid;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .row select {
+    width: 100%;
+    min-width: 0;
+  }
+  .icon-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--mute);
+    cursor: pointer;
+  }
+  .icon-btn:hover {
+    color: var(--ink);
+  }
+  .add-row {
+    margin: 0;
+  }
+  .add-row .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  @media (max-width: 560px) {
+    .row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .row label:first-child {
+      grid-column: 1 / -1;
+    }
   }
   .lede {
     max-width: 44rem;

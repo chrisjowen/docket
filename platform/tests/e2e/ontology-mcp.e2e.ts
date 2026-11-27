@@ -63,7 +63,7 @@ test.beforeAll(async ({ browser }) => {
   bob = await (await browser.newContext()).newPage()
   await signIn(bob, bobLogin)
   await bob.getByRole('button', { name: /^Accept and join/ }).click()
-  await expect(bob.getByTestId('my-role')).toHaveText('Writer')
+  await expect(bob.getByTestId('my-role')).toHaveText('Writer on General')
 })
 
 test.afterAll(async () => {

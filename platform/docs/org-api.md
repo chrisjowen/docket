@@ -44,7 +44,7 @@ A database = a workspace inside the org. Created with an ontology (template or i
   ```
   - Idempotent on `owner_ref`: if an active database already has this `owner_ref`, and `slug` (if given) is its slug, and `ontology` (if given) matches its current head ontology, returns it with 200 (no-op).
   - Otherwise, if an active database has this `owner_ref` but a different `slug` or ontology, or the `slug` is taken by a database with a different `owner_ref`, or the `slug` or `owner_ref` belongs to a database in its deletion grace period: 409 `conflict`. An existing database is never returned for a different `owner_ref`.
-  - Otherwise creates workspace + first ontology version (same checks as UI create) and returns 201.
+  - Otherwise creates workspace + first ontology version (same checks as UI create), in the org's General space, and returns 201.
   - The beta's per-org workspace limit for members (5) does not apply. The API holds the org to its own `database_limit` (section 1, default 1000), counting every workspace in the org, including those in grace; past it the call is refused with 403 `limit`. Members creating workspaces in the UI stay held to the beta limit, which counts only workspaces without an `owner_ref`: this API's databases never use up the members' allowance.
   - Response 201/200: `{ id, slug, name, status, created_at, ontology_version, owner_ref }`
 

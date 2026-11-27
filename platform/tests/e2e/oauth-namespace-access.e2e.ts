@@ -55,7 +55,7 @@ test('a read-only member’s connection only reads over MCP OAuth, even when the
     const danaPage = await (await browser.newContext()).newPage()
     await signIn(danaPage, dana, { name: 'Dana Diaz' })
     await danaPage.getByRole('button', { name: `Accept and join Acme ${suffix}` }).click()
-    await expect(danaPage.getByTestId('my-role')).toHaveText('Reader')
+    await expect(danaPage.getByTestId('my-role')).toHaveText('Reader on General')
 
     const clientId = await register(request, redirectUri, 'readonly e2e client')
     const resource = `${baseURL}/mcp/${org}/${ws}`

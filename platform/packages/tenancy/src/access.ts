@@ -11,8 +11,11 @@ import {
   isCapability,
   mayEditRoles,
   mayGrant,
+  placeFromRow,
+  placeIdOf,
   type Access,
   type Capability,
+  type DocketSpaces,
   type Grant,
   type Grantee,
   type Place,
@@ -21,9 +24,11 @@ import {
 
 /**
  * Roles and grants over the platform schema (tenancy v2 §3.1, platform
- * 0017). Every function runs inside a `withPlatform` transaction. Callers name
- * a docket by a workspace id they have already found in the org's schema.
+ * 0017, 0018). Every function runs inside a `withPlatform` transaction. Callers
+ * name a docket by a workspace id, and a space by its id, they have already
+ * found in the org's schema.
  */
+
 
 const BUILTIN = new Map(BUILTIN_ROLES.map((role) => [role.id, role]))
 
@@ -139,7 +144,7 @@ type GrantRow = {
   id: string
   org_id: string
   principal_id: string | null
-  place_kind: 'account' | 'docket'
+  place_kind: 'account' | 'space' | 'docket'
   place_id: string | null
   role_id: string
   add_caps: string[]
@@ -164,7 +169,7 @@ const GRANT_SELECT = `
 function toGrant(row: GrantRow, roles: ReadonlyMap<string, Role>): GrantView | null {
   const role = roles.get(row.role_id)
   if (!role) return null
-  const place: Place = row.place_kind === 'account' ? { kind: 'account' } : { kind: 'docket', id: row.place_id as string }
+  const place = placeFromRow(row.place_kind, row.place_id)
   const who: Grantee = row.principal_id ? { kind: 'user', id: row.principal_id } : { kind: 'everyone' }
   return {
     id: row.id,
@@ -201,7 +206,7 @@ export async function listGrants(tx: Tx, orgId: string, filter: { place?: Place;
   if (filter.place) {
     params.push(filter.place.kind)
     where.push(`g.place_kind = $${params.length}`)
-    if (filter.place.kind === 'docket') {
+    if (filter.place.kind !== 'account') {
       params.push(filter.place.id)
       where.push(`g.place_id = $${params.length}`)
     }
@@ -212,7 +217,7 @@ export async function listGrants(tx: Tx, orgId: string, filter: { place?: Place;
   }
   const { rows } = await tx.query<GrantRow>(
     `${GRANT_SELECT} WHERE ${where.join(' AND ')}
-      ORDER BY g.place_kind, (g.principal_id IS NOT NULL), u.kind, lower(u.login), g.created_at`,
+      ORDER BY CASE g.place_kind WHEN 'account' THEN 0 WHEN 'space' THEN 1 ELSE 2 END, g.place_id, (g.principal_id IS NOT NULL), u.kind, lower(u.login), g.created_at`,
     params,
   )
   const roles = await roleMap(tx, orgId)
@@ -246,7 +251,19 @@ export async function accessOf(tx: Tx, orgId: string, userId: string): Promise<A
       const view = toGrant(grant, roles)
       return view && appliesTo(view, principal) ? [view] : []
     }),
+    spaces: await docketSpaces(tx, orgId),
   }
+}
+
+/**
+ * Which space each of an account's dockets is in: what a grant on a space
+ * covers. The workspaces live in the org's own schema; the platform reads
+ * this one mapping through `platform.docket_spaces` (platform 0018), which
+ * gives nothing else away.
+ */
+export async function docketSpaces(tx: Tx, orgId: string): Promise<DocketSpaces> {
+  const { rows } = await tx.query<{ docket_id: string; space_id: string }>('SELECT docket_id, space_id FROM platform.docket_spaces($1)', [orgId])
+  return new Map(rows.map((row) => [row.docket_id, row.space_id]))
 }
 
 /** Whether a member is one the org admin API manages (`org-admin` and its databases' accounts): never changed here. */
@@ -274,7 +291,7 @@ async function granteeKind(tx: Tx, orgId: string, who: Grantee): Promise<'human'
 async function grantAt(tx: Tx, orgId: string, who: Grantee, place: Place): Promise<GrantView | null> {
   const { rows } = await tx.query<GrantRow>(
     `${GRANT_SELECT} WHERE g.org_id = $1 AND coalesce(g.principal_id, '') = $2 AND g.place_kind = $3 AND coalesce(g.place_id, '') = $4 FOR UPDATE OF g`,
-    [orgId, who.kind === 'user' ? who.id : '', place.kind, place.kind === 'docket' ? place.id : ''],
+    [orgId, who.kind === 'user' ? who.id : '', place.kind, placeIdOf(place) ?? ''],
   )
   return rows[0] ? toGrant(rows[0], await roleMap(tx, orgId)) : null
 }
@@ -324,7 +341,7 @@ export async function setGrant(
         input.orgId,
         input.who.kind === 'user' ? input.who.id : null,
         input.place.kind,
-        input.place.kind === 'docket' ? input.place.id : null,
+        placeIdOf(input.place),
         role.id,
         add,
         remove,

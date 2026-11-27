@@ -17,6 +17,14 @@ const ORG_PAGES: Record<string, string> = {
   '/o/[org]/settings/system-accounts': 'System accounts',
   '/o/[org]/settings/system-accounts/[id]': 'System account',
   '/o/[org]/workspaces/new': 'New docket',
+  '/o/[org]/spaces/new': 'New space',
+}
+
+/** A space's pages, by route: its own page carries no label of its own. */
+const SPACE_PAGES: Record<string, string | null> = {
+  '/o/[org]/s/[space]': null,
+  '/o/[org]/s/[space]/access': 'Users & system accounts',
+  '/o/[org]/s/[space]/new': 'New docket',
 }
 
 /** Pages outside any casebook. */
@@ -36,13 +44,19 @@ export function crumbsFor(input: {
   pathname: string
   org?: { slug: string; name: string } | null
   workspace?: { slug: string; name: string } | null
+  space?: { slug: string; name: string } | null
 }): Crumb[] {
-  const { routeId, pathname, org, workspace } = input
+  const { routeId, pathname, org, workspace, space } = input
   if (!org) {
     const label = routeId ? OTHER_PAGES[routeId] : undefined
     return [{ label: label ?? 'Docket Cloud' }]
   }
   const casebook = `/o/${org.slug}`
+  if (space && routeId && routeId in SPACE_PAGES) {
+    const label = SPACE_PAGES[routeId]
+    const trail: Crumb[] = [{ label: org.name, href: casebook }]
+    return label ? [...trail, { label: space.name, href: `${casebook}/s/${space.slug}` }, { label }] : [...trail, { label: space.name }]
+  }
   if (!workspace) {
     const label = routeId ? ORG_PAGES[routeId] : undefined
     return label ? [{ label: `${org.name} casebook`, href: casebook }, { label }] : [{ label: `${org.name} casebook` }]

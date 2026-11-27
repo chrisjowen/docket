@@ -19,20 +19,37 @@ import {
   type OntologyStart,
   type StartingPoint,
 } from '@docket/platform-ontology-service'
-import { LIMITS } from '@docket/platform-tenancy'
-import { fail, redirect } from '@sveltejs/kit'
+import { LIMITS, spacePlace } from '@docket/platform-tenancy'
+import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 
+import { placeNames } from '$lib/server/grants'
+import { accessChoices, giveInitialAccess, initialAccessFrom } from '$lib/server/new-docket'
 import { draftOntology } from '$lib/server/ontology-draft'
-import { authorise, orgAccess, readsDocket, recordAudit, requireUser, type OrgAccess } from '$lib/server/request'
+import { placeAccess } from '$lib/server/place-access'
+import { readsDocket, recordAudit, requireUser, type OrgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
+import { spaceAccess, type SpaceAccess } from '$lib/server/spaces'
 import { formText, inOrg, publisherOf } from '$lib/server/workspace'
 
 import type { Actions, PageServerLoad } from './$types'
 
-/** Creating a workspace publishes its first ontology version, so it takes the publish permission (§4). */
+/**
+ * New docket (tenancy v2 §2, §8), opened from a space's +: the space is
+ * already chosen. Its ontology starts from a template (searched by name,
+ * domain or record type), from "Describe your domain" (AI drafts one, which
+ * is reviewed before the docket is made), a file or another docket; and its
+ * initial access says who gets a role on it beyond everyone the space and the
+ * account already give access. Creating a docket publishes its first ontology
+ * version; it takes Create dockets on the space.
+ */
+async function creating(event: RequestEvent): Promise<SpaceAccess> {
+  const scope = await spaceAccess(event)
+  if (!scope.caps.has('create')) error(403, `You cannot add dockets to ${scope.space.name}.`)
+  return scope
+}
+
 export const load: PageServerLoad = async (event) => {
-  const access = await orgAccess(event)
-  authorise(access, 'create')
+  const { access, space } = await creating(event)
   const { actor } = publisherOf(event)
   const { workspaces, members, templates, drafts } = await getRuntime().router.withTenant(access.org.id, async (tx) => ({
     workspaces: await listWorkspaces(tx),
@@ -40,14 +57,25 @@ export const load: PageServerLoad = async (event) => {
     templates: await listOrgTemplates(tx),
     drafts: await listDocketDrafts(tx, actor),
   }))
+  const choices = await accessChoices(access, space.id)
+  // Who reaches every docket in the space already: shown to whoever may give more.
+  const already = choices.gives ? (await placeAccess({ access, here: spacePlace(space.id), caps: access.capsAt(spacePlace(space.id)), names: await placeNames(access.org.id) })).reach : []
   return {
     catalogue: [...builtInCatalogue(), ...templates.map(orgCatalogueEntry)],
     copyable: workspaces.filter((workspace) => readsDocket(access, workspace.id)).map((workspace) => ({ id: workspace.id, name: workspace.name })),
-    drafts: drafts.map((draft) => ({ id: draft.id, name: draft.name, slug: draft.slug, updatedAt: draft.updatedAt.toISOString() })),
+    drafts: drafts
+      .filter((draft) => draft.spaceId === space.id)
+      .map((draft) => ({ id: draft.id, name: draft.name, slug: draft.slug, updatedAt: draft.updatedAt.toISOString() })),
     manageTemplates: access.can('settings'),
     maxDescription: MAX_DESCRIPTION,
     full: members >= LIMITS.workspacesPerOrg,
     limit: LIMITS.workspacesPerOrg,
+    initialAccess: {
+      gives: choices.gives,
+      people: choices.people.map(({ id, label }) => ({ id, label })),
+      roles: choices.roles,
+      already: already.map((row) => ({ id: row.id, name: row.name ?? row.login, kind: row.kind, summary: row.summary })),
+    },
   }
 }
 
@@ -80,12 +108,15 @@ async function startingPoints(access: OrgAccess): Promise<StartingPoint[]> {
 
 export const actions: Actions = {
   default: async (event) => {
-    const access = await orgAccess(event)
-    authorise(access, 'create')
+    const { access, space } = await creating(event)
     const form = await event.request.formData()
     const name = String(form.get('name') ?? '').trim()
     const slug = String(form.get('slug') ?? '').trim().toLowerCase()
-    const values = { name, slug, start: String(form.get('start') ?? 'template'), template: String(form.get('template') ?? '') }
+    const chosenAccess = form.getAll('access_who').map((who, index) => ({ who: String(who), roleId: String(form.getAll('access_role')[index] ?? '') }))
+    const values = { name, slug, start: String(form.get('start') ?? 'template'), template: String(form.get('template') ?? ''), access: chosenAccess }
+
+    const rows = await initialAccessFrom(form, access, space.id, await accessChoices(access, space.id))
+    if (typeof rows === 'string') return fail(400, { ...values, problem: rows })
 
     // Described: AI drafts the ontology, and the draft is reviewed in the editor before the docket is made.
     if (values.start === 'describe') {
@@ -110,12 +141,14 @@ export const actions: Actions = {
           source: `ai:${drafted.template.id}`,
           message: `Drafted by AI from the ${drafted.template.name} template`,
           author: publisher.actor,
+          spaceId: space.id,
+          access: rows,
         })
         await recordAudit(ctx.tx, event, {
           action: 'workspace.draft',
           orgId: access.org.id,
-          target: [`docket-draft:${created.id}`],
-          args: { slug, template: drafted.template.id },
+          target: [`docket-draft:${created.id}`, `space:${space.id}`],
+          args: { slug, template: drafted.template.id, space: space.slug },
         })
         return created
       })
@@ -126,19 +159,27 @@ export const actions: Actions = {
     if (typeof start === 'string') return fail(400, { ...values, problem: start })
     // A copy reads the other docket's ontology, so it must be one the member reaches.
     if ('copyFrom' in start && !readsDocket(access, start.copyFrom)) return fail(400, { ...values, problem: 'Choose the docket to copy.' })
+    let created: { slug: string; problem: string | null }
     try {
-      const created = await inOrg(access, async (ctx) => {
-        const { workspace, version } = await createWorkspace(ctx, { name, slug, start, publisher: publisherOf(event), requestId: event.locals.requestId })
+      const workspace = await inOrg(access, async (ctx) => {
+        const { workspace, version } = await createWorkspace(ctx, {
+          name,
+          slug,
+          start,
+          spaceId: space.id,
+          publisher: publisherOf(event),
+          requestId: event.locals.requestId,
+        })
         await recordAudit(ctx.tx, event, {
           action: 'workspace.create',
           orgId: access.org.id,
           workspaceId: workspace.id,
-          target: [`workspace:${workspace.id}`, `ontology:v${version.number}`],
-          args: { slug, source: version.source },
+          target: [`workspace:${workspace.id}`, `ontology:v${version.number}`, `space:${space.id}`],
+          args: { slug, source: version.source, space: space.slug },
         })
         return workspace
       })
-      redirect(303, `/o/${access.org.slug}/w/${created.slug}/ontology`)
+      created = { slug: workspace.slug, problem: await giveInitialAccess(event, access, workspace, rows) }
     } catch (caught) {
       if (caught instanceof WorkspaceError || caught instanceof VersionNotFound) return fail(400, { ...values, problem: caught.message })
       if (caught instanceof OntologyInvalid) {
@@ -146,5 +187,8 @@ export const actions: Actions = {
       }
       throw caught
     }
+    // Made, but its initial access could not all be given: its Access tab says so and can give it.
+    if (created.problem) redirect(303, `/o/${access.org.slug}/w/${created.slug}/access?problem=${encodeURIComponent(created.problem)}`)
+    redirect(303, `/o/${access.org.slug}/w/${created.slug}/ontology`)
   },
 }

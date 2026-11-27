@@ -168,6 +168,8 @@ export {
   workspaceSlugProblem,
 } from './workspaces.js'
 export type { PendingDeletion, Workspace } from './workspaces.js'
+export { insertSpace, listSpaces, newSpaceProblem, spaceById, spaceBySlug, spaceSlugProblem } from './spaces.js'
+export type { Space } from './spaces.js'
 
 export {
   addProposalEvidence,

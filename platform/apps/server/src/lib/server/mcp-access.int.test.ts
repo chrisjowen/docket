@@ -128,7 +128,8 @@ describe.skipIf(!TEST_PG_URL)('MCP access by grants on the account and the docke
   const write = (bearer: string) => mcp(bearer, 'tools/call', { name: 'docket_remember', arguments: {} })
 
   beforeAll(async () => {
-    org = await createTestOrg()
+    // Who reaches what from grants alone: without General's default Reader for everyone.
+    org = await createTestOrg({ everyoneReadsGeneral: false })
     const other = await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Other', slug: 'other', createdBy: org.userId }))
     ids.owner = org.userId
     main = (await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Main', slug: 'main', createdBy: org.userId }))).id

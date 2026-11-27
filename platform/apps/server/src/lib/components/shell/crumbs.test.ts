@@ -34,6 +34,20 @@ describe('breadcrumbs', () => {
     })
   })
 
+  it("lead from a space's pages back to the space", () => {
+    const space = { slug: 'engineering', name: 'Engineering' }
+    expect(crumbsFor({ routeId: '/o/[org]/s/[space]', pathname: '/o/acme/s/engineering', org, space })).toEqual([
+      { label: 'Acme', href: '/o/acme' },
+      { label: 'Engineering' },
+    ])
+    expect(crumbsFor({ routeId: '/o/[org]/s/[space]/new', pathname: '/o/acme/s/engineering/new', org, space })).toEqual([
+      { label: 'Acme', href: '/o/acme' },
+      { label: 'Engineering', href: '/o/acme/s/engineering' },
+      { label: 'New docket' },
+    ])
+    expect(crumbsFor({ routeId: '/o/[org]/spaces/new', pathname: '/o/acme/spaces/new', org }).at(-1)).toEqual({ label: 'New space' })
+  })
+
   it('name pages outside a casebook', () => {
     expect(crumbsFor({ routeId: '/orgs/new', pathname: '/orgs/new' })).toEqual([{ label: 'New organisation' }])
     expect(crumbsFor({ routeId: null, pathname: '/nowhere' })).toEqual([{ label: 'Docket Cloud' }])

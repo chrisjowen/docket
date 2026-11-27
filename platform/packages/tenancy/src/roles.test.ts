@@ -9,13 +9,19 @@ import {
   builtinRole,
   can,
   capsAt,
+  covers,
   docketPlace,
   grantCaps,
   grantRoleLabel,
   isAccountAdmin,
+  mayCreateSpace,
   mayEditRoles,
   mayGrant,
+  placeFromRow,
+  placeKey,
   seesDocket,
+  seesSpace,
+  spacePlace,
   summarise,
   type Access,
   type Capability,
@@ -162,5 +168,78 @@ describe('mayGrant', () => {
     expect(isAccountAdmin(person('a', [grant(user('a'), ACCOUNT, admin)]))).toBe(true)
     expect(mayEditRoles(lead)).toBe(false)
     expect(mayEditRoles(owner)).toBe(true)
+  })
+})
+
+describe('spaces', () => {
+  // Engineering holds Platform and Payments; Legal holds Contracts.
+  const spaces = new Map([
+    ['platform', 'eng'],
+    ['payments', 'eng'],
+    ['contracts', 'legal'],
+  ])
+  const eng = spacePlace('eng')
+  const legal = spacePlace('legal')
+  const contracts = docketPlace('contracts')
+  const inAccount = (userId: string, grants: Grant[], flags: { owner?: boolean; guest?: boolean } = {}): Access => ({ ...person(userId, grants, flags), spaces })
+
+  it('a space covers itself and every docket in it, and nothing else', () => {
+    expect(covers(eng, eng, spaces)).toBe(true)
+    expect(covers(eng, platform, spaces)).toBe(true)
+    expect(covers(eng, payments, spaces)).toBe(true)
+    expect(covers(eng, contracts, spaces)).toBe(false)
+    expect(covers(eng, legal, spaces)).toBe(false)
+    expect(covers(eng, ACCOUNT, spaces)).toBe(false)
+    expect(covers(ACCOUNT, eng, spaces)).toBe(true)
+    expect(covers(platform, eng, spaces)).toBe(false)
+    // A docket whose space is not known is covered by no space.
+    expect(covers(eng, docketPlace('new'), spaces)).toBe(false)
+  })
+
+  it("adds up with the account's and the docket's grants: Sam reads Engineering, writes and publishes on Payments", () => {
+    const sam = inAccount('sam', [grant(user('sam'), eng, reader), grant(user('sam'), payments, writer, { add: ['publish'] })])
+    expect([...capsAt(sam, platform)]).toEqual(['read'])
+    expect([...capsAt(sam, payments)]).toEqual(['read', 'write', 'propose', 'publish'])
+    expect([...capsAt(sam, contracts)]).toEqual([])
+    expect([...capsAt(sam, eng)]).toEqual(['read'])
+    expect([...capsAt(sam, ACCOUNT)]).toEqual([])
+    expect(because(sam, payments).map((each) => each.place)).toEqual([eng, payments])
+  })
+
+  it('an Admin on a space does everything in it, in dockets added later too, and nothing outside it', () => {
+    const priya = inAccount('priya', [grant(user('priya'), eng, admin)])
+    expect(capsAt(priya, platform).size).toBe(CAPABILITIES.length)
+    expect(capsAt({ ...priya, spaces: new Map([...spaces, ['incidents', 'eng']]) }, docketPlace('incidents')).size).toBe(CAPABILITIES.length)
+    expect(capsAt(priya, contracts).size).toBe(0)
+    expect(mayGrant(priya, eng, writer.caps, 'human')).toBe(true)
+    expect(mayGrant(priya, legal, reader.caps, 'human')).toBe(false)
+    expect(mayGrant(priya, ACCOUNT, reader.caps, 'human')).toBe(false)
+    // Only admins on the whole account make spaces.
+    expect(mayCreateSpace(priya)).toBe(false)
+    expect(mayCreateSpace(inAccount('a', [grant(user('a'), ACCOUNT, admin)]))).toBe(true)
+    expect(mayCreateSpace(inAccount('o', [], { owner: true }))).toBe(true)
+  })
+
+  it('a grant for everyone on a space reaches people, not guests or system accounts', () => {
+    const general = [grant({ kind: 'everyone' }, eng, reader)]
+    expect([...capsAt(inAccount('p', general), platform)]).toEqual(['read'])
+    expect([...capsAt({ ...inAccount('g', [], { guest: true }) }, platform)]).toEqual([])
+  })
+
+  it('everyone but a guest sees every space; a guest only one they hold something in', () => {
+    const olu = inAccount('olu', [grant(user('olu'), contracts, reader)], { guest: true })
+    expect(seesSpace(olu, 'legal')).toBe(true)
+    expect(seesSpace(olu, 'eng')).toBe(false)
+    expect(seesSpace(inAccount('g2', [grant(user('g2'), eng, reader)], { guest: true }), 'eng')).toBe(true)
+    expect(seesSpace(inAccount('m', []), 'legal')).toBe(true)
+    expect(seesSpace(null, 'eng')).toBe(false)
+  })
+
+  it('travels in forms and rows as space:<id>', () => {
+    expect(placeKey(eng)).toBe('space:eng')
+    expect(placeKey(ACCOUNT)).toBe('account')
+    expect(placeKey(platform)).toBe('docket:platform')
+    expect(placeFromRow('space', 'eng')).toEqual(eng)
+    expect(placeFromRow('account', null)).toEqual(ACCOUNT)
   })
 })

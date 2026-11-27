@@ -3,7 +3,7 @@
 // Access is a role on a place (tenancy v2 §3.1). A capability is one thing
 // someone may do; a role is a named bundle of them; a grant gives a user, a
 // system account or everyone in the account one role on one place - the
-// whole account or one docket - optionally adding or removing single
+// whole account, a space, or one docket - optionally adding or removing single
 // capabilities for that grant alone. What a principal may do on a place is
 // the union of every grant whose place covers it. Nothing subtracts across
 // grants. This module is the one resolver every surface uses: the web app's
@@ -75,20 +75,54 @@ export function builtinRole(id: BuiltinRoleId): Role {
   return BUILTIN_ROLES.find((role) => role.id === id) as Role
 }
 
-/** A place a grant is on: the whole account, or one docket (a workspace, by id). Spaces come next (tenancy v2 phase 3). */
-export type Place = { kind: 'account' } | { kind: 'docket'; id: string }
+/**
+ * A place a grant is on: the whole account, a space (a group of dockets for a
+ * team, department or client, by id), or one docket (a workspace, by id).
+ */
+export type Place = { kind: 'account' } | { kind: 'space'; id: string } | { kind: 'docket'; id: string }
 
 export const ACCOUNT: Place = { kind: 'account' }
+export const spacePlace = (id: string): Place => ({ kind: 'space', id })
 export const docketPlace = (id: string): Place => ({ kind: 'docket', id })
 
-/** Whether a grant on `on` reaches `place`: the account covers everything, a docket only itself. */
-export function covers(on: Place, place: Place): boolean {
+/** The space every account starts with: everyone at the account reads it by default. Its id is the same in every account. */
+export const GENERAL_SPACE_ID = 'general'
+
+/** Which space each docket is in, by docket id. */
+export type DocketSpaces = ReadonlyMap<string, string>
+const NO_SPACES: DocketSpaces = new Map()
+
+/**
+ * Whether a grant on `on` reaches `place`. Bigger places cover smaller ones:
+ * the account covers everything; a space covers itself and every docket in it
+ * (`spaces` says which space a docket is in); a docket only itself.
+ */
+export function covers(on: Place, place: Place, spaces: DocketSpaces = NO_SPACES): boolean {
   if (on.kind === 'account') return true
+  if (on.kind === 'space') {
+    if (place.kind === 'space') return place.id === on.id
+    return place.kind === 'docket' && spaces.get(place.id) === on.id
+  }
   return place.kind === 'docket' && place.id === on.id
 }
 
 export function samePlace(a: Place, b: Place): boolean {
   return a.kind === b.kind && (a.kind === 'account' || a.id === (b as { id: string }).id)
+}
+
+/** A place's id as the grants and invites tables keep it: null for the account. */
+export function placeIdOf(place: Place): string | null {
+  return place.kind === 'account' ? null : place.id
+}
+
+/** A place from the grants or invites table's columns. */
+export function placeFromRow(kind: 'account' | 'space' | 'docket', id: string | null): Place {
+  return kind === 'account' ? { kind: 'account' } : { kind, id: id as string }
+}
+
+/** A place as forms and URLs carry it: `account`, `space:<id>` or `docket:<id>`. */
+export function placeKey(place: Place): string {
+  return place.kind === 'account' ? 'account' : `${place.kind}:${place.id}`
 }
 
 /** Who a grant is for: one user or system account, or everyone in the account (people who are not guests). */
@@ -125,6 +159,8 @@ export interface Access {
   /** Sees only what they are given: not in "everyone", not the user list, not the dockets they have nothing on. */
   guest: boolean
   grants: readonly Grant[]
+  /** Which space each of the account's dockets is in: what a grant on a space covers. */
+  spaces?: DocketSpaces
 }
 
 /** Whether a grant applies to a principal: their own, or one for everyone when they are a person who is not a guest. */
@@ -139,7 +175,7 @@ export function capsAt(access: Access | null, place: Place): ReadonlySet<Capabil
   if (access.owner) return new Set(CAPABILITIES)
   const caps = new Set<Capability>()
   for (const grant of access.grants) {
-    if (covers(grant.place, place)) for (const cap of grantCaps(grant)) caps.add(cap)
+    if (covers(grant.place, place, access.spaces)) for (const cap of grantCaps(grant)) caps.add(cap)
   }
   return caps
 }
@@ -154,7 +190,7 @@ export function can(access: Access | null, cap: Capability, place?: Place): bool
 
 /** The grants that make up a principal's access to a place: why they can do what they can there. */
 export function because(access: Access, place: Place): Grant[] {
-  return access.grants.filter((grant) => covers(grant.place, place))
+  return access.grants.filter((grant) => covers(grant.place, place, access.spaces))
 }
 
 /**
@@ -165,6 +201,20 @@ export function because(access: Access, place: Place): Grant[] {
 export function seesDocket(access: Access | null, docketId: string): boolean {
   if (!access) return false
   return !access.guest || capsAt(access, docketPlace(docketId)).size > 0
+}
+
+/**
+ * Whether a principal sees that a space exists: everyone but a guest sees
+ * them all; a guest only one they hold something on, or that holds a docket
+ * they hold something on.
+ */
+export function seesSpace(access: Access | null, spaceId: string): boolean {
+  if (!access) return false
+  if (!access.guest || capsAt(access, spacePlace(spaceId)).size > 0) return true
+  for (const [docket, space] of access.spaces ?? NO_SPACES) {
+    if (space === spaceId && capsAt(access, docketPlace(docket)).size > 0) return true
+  }
+  return false
 }
 
 /** Whether a principal holds every capability on the account: the account's admins and owners. */
@@ -212,5 +262,10 @@ export function mayGrant(actor: Access | null, place: Place, caps: Iterable<Capa
 
 /** Whether `actor` may make, change or delete one of the account's own roles: an admin on the whole account. */
 export function mayEditRoles(actor: Access | null): boolean {
+  return isAccountAdmin(actor)
+}
+
+/** Whether `actor` may make a space: an admin on the whole account (tenancy v2 §10, question 9). */
+export function mayCreateSpace(actor: Access | null): boolean {
   return isAccountAdmin(actor)
 }
