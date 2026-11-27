@@ -196,7 +196,7 @@ test('the YAML exported after an import equals the imported file, apart from the
   await expect(page.getByRole('alert')).toContainText('relationships.uses.to:')
 })
 
-test('an editor proposes drafts but cannot publish them', async ({ browser }) => {
+test('a writer proposes drafts but cannot publish them', async ({ browser }) => {
   const suffix = unique()
   const alice = await (await browser.newContext()).newPage()
   await signIn(alice, 'alice')
@@ -217,7 +217,7 @@ test('an editor proposes drafts but cannot publish them', async ({ browser }) =>
   await page.getByRole('button', { name: 'Add type' }).click()
   await expect(page.getByTestId('classification')).toHaveText('safe')
   await expect(page.getByRole('button', { name: 'Publish v2' })).toBeDisabled()
-  await expect(page.getByTestId('publish-blocked')).toContainText('Only owners and admins publish')
+  await expect(page.getByTestId('publish-blocked')).toContainText('Publishing needs Publish ontology changes')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible()
 

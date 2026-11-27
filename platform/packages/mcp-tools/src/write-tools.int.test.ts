@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type ToolResult } from '@chrisjowen/docket'
-import { parseMemoryFile, putDocument, readDocument, setOntologyMcpRoles, type StoreContext, type Writer } from '@docket/platform-canonical-store'
+import { parseMemoryFile, putDocument, readDocument, type StoreContext, type Writer } from '@docket/platform-canonical-store'
 import { createTestOrg, readFixture, type TestOrg } from '@docket/platform-canonical-store/testing'
 import { createWorkspace } from '@docket/platform-ontology-service'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
@@ -12,6 +12,8 @@ import { writeTools } from './index.js'
 
 const VIEWER = 'https://docket.test/o/acme/w/platform/graph'
 const HISTORY = 'https://docket.test/o/acme/w/platform/ontology/history'
+/** Whether the caller holds Publish ontology changes on the docket, as the endpoint answers it. */
+let holdsPublish = false
 
 function stubContext(overrides: Partial<CloudToolContext> = {}): CloudToolContext {
   return {
@@ -25,7 +27,7 @@ function stubContext(overrides: Partial<CloudToolContext> = {}): CloudToolContex
     actor: 'token:dkt_live_abcdefgh',
     userId: 'u-alice',
     writer: vi.fn(async () => ({ workspaceId: 'ws1', actor: 'token:dkt_live_abcdefgh', label: 'ci-bot (token tok_abcd…)', channel: 'mcp' as const, requestId: 'req-1' })),
-    role: vi.fn(async () => 'editor' as const),
+    mayPublish: vi.fn(async () => holdsPublish),
     audited: vi.fn(),
     ...overrides,
   }
@@ -170,13 +172,13 @@ describe.skipIf(!TEST_PG_URL)('the write tools on a workspace', () => {
     expect(invalid.content[0]?.text).toContain('no draft was made')
   })
 
-  it('docket_publish_ontology_change publishes only where the workspace lets the role, migrating what a step names', async () => {
+  it('docket_publish_ontology_change publishes only for a caller who holds Publish, migrating what a step names', async () => {
     const add = { patch: 'resourceTypes:\n  queue:\n    description: A message queue.\n', message: 'Add queues' }
     const off = await call(context, 'docket_publish_ontology_change', add)
     expect(off.isError).toBe(true)
-    expect(off.content[0]?.text).toContain("do not let editors change the ontology over MCP")
+    expect(off.content[0]?.text).toContain('you do not hold Publish ontology changes on this docket')
 
-    await org.withOrg((ctx) => setOntologyMcpRoles(ctx.tx, workspaceId, ['editor']))
+    holdsPublish = true
     const published = await call(context, 'docket_publish_ontology_change', add)
     expect(published.isError).toBeUndefined()
     expect(published.content[0]?.text).toContain(`Published v2 (was v1): safe.`)

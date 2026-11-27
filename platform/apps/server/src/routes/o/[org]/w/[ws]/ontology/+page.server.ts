@@ -32,6 +32,8 @@ import {
 } from '@docket/platform-ontology-service'
 import { fail, redirect, type RequestEvent } from '@sveltejs/kit'
 
+import { ACCOUNT } from '@docket/platform-tenancy'
+
 import { authorise, recordAudit } from '$lib/server/request'
 import { directory, registry } from '$lib/server/trust'
 import { actorNames, formText, inWorkspace, publisherOf } from '$lib/server/workspace'
@@ -41,10 +43,10 @@ import type { Actions, PageServerLoad } from './$types'
 export const load: PageServerLoad = async (event) => {
   const draftId = event.url.searchParams.get('draft')
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     const head = await headOf(ctx.tx, workspace.id)
-    const drafts = access.can('ontology.propose') ? await listDrafts(ctx.tx, workspace.id) : []
-    const draft = draftId && access.can('ontology.propose') ? await versionById(ctx.tx, workspace.id, draftId) : null
+    const drafts = access.can('propose') ? await listDrafts(ctx.tx, workspace.id) : []
+    const draft = draftId && access.can('propose') ? await versionById(ctx.tx, workspace.id, draftId) : null
     // What the documents use, so the editor can say what a change touches.
     const { documents } = await readCanonical(postgresSource(ctx, workspace.id))
     const types: Record<string, number> = {}
@@ -73,8 +75,8 @@ export const load: PageServerLoad = async (event) => {
   })
   const name = await actorNames(read.access)
   return {
-    propose: read.access.can('ontology.propose'),
-    publish: read.access.can('ontology.publish'),
+    propose: read.access.can('propose'),
+    publish: read.access.can('publish'),
     head: read.head ? { number: read.head.number ?? 0, yaml: read.head.yaml, hash: read.head.yamlHash } : null,
     drafts: read.drafts.map((draft) => ({
       id: draft.id,
@@ -95,7 +97,7 @@ export const load: PageServerLoad = async (event) => {
         }
       : null,
     usage: read.usage,
-    trust: { ...read.trust, manage: read.access.can('trust.manage') },
+    trust: { ...read.trust, manage: read.access.capsAt(ACCOUNT).has('settings') },
     templates: TEMPLATES.map(({ id, name }) => ({ id, name })),
     vocabulary: { icons: [...ICON_NAMES], attributeTypes: [...ATTRIBUTE_TYPES], locationFields: [...EVIDENCE_LOCATION_FIELDS] },
   }
@@ -136,7 +138,7 @@ export const actions: Actions = {
     const from = String(form.get('from') ?? 'head')
     const publisher = publisherOf(event)
     const created = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-      authorise(access, 'ontology.propose')
+      authorise(access, 'propose')
       const head = await headOf(ctx.tx, workspace.id)
       const id = from.startsWith('template:') ? from.slice('template:'.length) : null
       const yaml = id && isTemplateId(id) ? template(id).yaml : (head?.yaml ?? template('blank').yaml)
@@ -163,7 +165,7 @@ export const actions: Actions = {
     let draftId: string
     try {
       draftId = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'ontology.propose')
+        authorise(access, 'propose')
         const draft = await createDraft(ctx.tx, workspace.id, { yaml: text, source: 'import', author: publisher.actor, message: 'Imported' })
         await recordAudit(ctx.tx, event, {
           action: 'ontology.import',
@@ -185,7 +187,7 @@ export const actions: Actions = {
     const draftId = String(form.get('draft') ?? '')
     try {
       await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'ontology.propose')
+        authorise(access, 'propose')
         await updateDraft(ctx.tx, workspace.id, draftId, {
           yaml: formText(form, 'yaml'),
           message: String(form.get('message') ?? '').trim() || null,
@@ -210,7 +212,7 @@ export const actions: Actions = {
     const form = await event.request.formData()
     const draftId = String(form.get('draft') ?? '')
     await inWorkspace(event, async ({ access, workspace, ctx }) => {
-      authorise(access, 'ontology.propose')
+      authorise(access, 'propose')
       await discardDraft(ctx.tx, workspace.id, draftId)
       await recordAudit(ctx.tx, event, {
         action: 'ontology.draft.discard',
@@ -239,12 +241,12 @@ export const actions: Actions = {
     try {
       if (yaml) {
         await inWorkspace(event, async ({ access, workspace, ctx }) => {
-          authorise(access, 'ontology.propose')
+          authorise(access, 'propose')
           await updateDraft(ctx.tx, workspace.id, draftId, { yaml, message })
         })
       }
       const version = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'ontology.publish')
+        authorise(access, 'publish')
         const published = await publish(ctx, workspace.id, draftId, {
           expectedHead,
           migration,

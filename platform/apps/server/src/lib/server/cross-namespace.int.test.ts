@@ -8,7 +8,7 @@ import { hashContent, insertWorkspace, listDocuments, liveSupersessions, putDocu
 import { createTestOrg, readFixture, type TestOrg } from '@docket/platform-canonical-store/testing'
 import { memoryBucketStore, rateLimiter } from '@docket/platform-limits'
 import type { SearchGraph } from '@docket/platform-mcp-tools'
-import { upsertGitHubUser, type AccountRole, type NamespacePermission } from '@docket/platform-tenancy'
+import { CONTENT_CAPABILITIES, upsertGitHubUser } from '@docket/platform-tenancy'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import { isActionFailure, isHttpError, isRedirect, type RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,22 +71,22 @@ const emptyGraph = (query: string): SearchGraph => ({
 
 interface Member {
   name: string
-  /** The org role the membership is made with; the account role follows it unless `accountRole` says otherwise. */
-  role: 'editor' | 'viewer'
-  accountRole?: AccountRole
-  /** Their grant on alpha. They hold none on beta. */
-  permission: NamespacePermission
+  /** A guest sees only what they are given; a provisioner holds a role on alpha without any content capability. */
+  accountRole?: 'guest' | 'provisioner'
+  /** Their role on alpha, by how far it reaches. They hold nothing on beta. */
+  permission: 'read' | 'write' | 'admin'
 }
 
-/** Every account role that a grant decides for, with every namespace permission on alpha and nothing on beta. */
+const ROLE_OF = { read: 'reader', write: 'writer', admin: 'admin' } as const
+
+/** Members and guests holding each built-in role on alpha alone, and one that manages alpha without reading it. */
 const GRANTED_ALPHA_ONLY: Member[] = [
   ...(['read', 'write', 'admin'] as const).flatMap((permission): Member[] => [
-    { name: `developer-${permission}`, role: 'editor', permission },
-    { name: `readonly-${permission}`, role: 'viewer', permission },
-    { name: `guest-${permission}`, role: 'viewer', accountRole: 'guest', permission },
+    { name: `member-${permission}`, permission },
+    { name: `guest-${permission}`, accountRole: 'guest', permission },
   ]),
-  // Granted, and still reaching no content anywhere.
-  { name: 'provisioner', role: 'editor', accountRole: 'provisioner', permission: 'admin' },
+  // Admin on alpha without content: it manages, and reaches no content anywhere.
+  { name: 'provisioner', accountRole: 'provisioner', permission: 'admin' },
 ]
 /** What beta answers a member of the account with no grant there: 404 to a guest, who may not see it exists; 403 to the rest. */
 const refusalOnBeta = (member: Member) => (member.accountRole === 'guest' ? 404 : 403)
@@ -286,24 +286,20 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
     await seed(other.orgId, 'alpha', MARK.elsewhere, other.userId)
 
     const admin = await human(`admin-${org.orgId.slice(0, 6)}`)
-    await org.db.admin.query("INSERT INTO platform.memberships (org_id, user_id, role) VALUES ($1, $2, 'admin')", [org.orgId, admin.id])
+    await org.db.admin.query('INSERT INTO platform.memberships (org_id, user_id) VALUES ($1, $2)', [org.orgId, admin.id])
+    await org.db.admin.query("INSERT INTO platform.grants (id, org_id, principal_id, place_kind, role_id) VALUES ($1, $2, $3, 'account', 'admin')", [
+      `g_${randomUUID()}`,
+      org.orgId,
+      admin.id,
+    ])
     users.admin = { id: admin.id, login: admin.login }
     for (const member of GRANTED_ALPHA_ONLY) {
       const user = await human(`${member.name}-${org.orgId.slice(0, 6)}`)
-      await org.db.admin.query('INSERT INTO platform.memberships (org_id, user_id, role, account_role) VALUES ($1, $2, $3, $4)', [
-        org.orgId,
-        user.id,
-        member.role,
-        member.accountRole ?? null,
-      ])
-      // Joining grants every live Docket at the role's level (platform 0013); this member's grants differ.
-      await org.db.admin.query('DELETE FROM platform.namespace_grants WHERE org_id = $1 AND principal_id = $2', [org.orgId, user.id])
-      await org.db.admin.query('INSERT INTO platform.namespace_grants (org_id, namespace_id, principal_id, permission) VALUES ($1, $2, $3, $4)', [
-        org.orgId,
-        docket.alpha,
-        user.id,
-        member.permission,
-      ])
+      await org.db.admin.query('INSERT INTO platform.memberships (org_id, user_id, guest) VALUES ($1, $2, $3)', [org.orgId, user.id, member.accountRole === 'guest'])
+      await org.db.admin.query(
+        "INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id, remove_caps) VALUES ($1, $2, $3, 'docket', $4, $5, $6)",
+        [`g_${randomUUID()}`, org.orgId, user.id, docket.alpha, ROLE_OF[member.permission], member.accountRole === 'provisioner' ? CONTENT_CAPABILITIES : []],
+      )
       users[member.name] = { id: user.id, login: user.login }
     }
     for (const [name, user] of Object.entries(users)) {
@@ -391,7 +387,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
         }
       }
       // Nobody in this account reaches the other account's Docket of the same name, nor its owner.
-      for (const name of ['owner', 'admin', 'developer-admin', 'guest-admin']) {
+      for (const name of ['owner', 'admin', 'member-admin', 'guest-admin']) {
         for (const handler of handlers) {
           const event = sessionEvent(name, other.slug, 'alpha', request(handler))
           answers.push(`${name} elsewhere ${handler.route} ${handler.name} ${await statusOf(() => handler.call(event))}`)
@@ -409,7 +405,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
         const { dockets } = (await orgLayout(sessionEvent(member.name, slug, null) as never)) as { dockets: { slug: string }[] }
         expect(dockets.map((d) => d.slug)).toEqual(['alpha'])
       }
-      for (const name of ['owner', 'admin', 'developer-admin', 'guest-read']) expect(await sidebar(name, other.slug)).toBe(404)
+      for (const name of ['owner', 'admin', 'member-admin', 'guest-read']) expect(await sidebar(name, other.slug)).toBe(404)
     })
 
     it('searches only the dockets a member reaches from the command menu, even when beta is named', async () => {
@@ -474,7 +470,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
       }
       for (const name of ['owner', 'admin']) expect(await approve(name, elsewhere), name).toEqual({ status: 403, approved: [] })
       // The control: alpha is approved, as a connection that reaches alpha alone, beta though it was asked for.
-      expect(await approve('readonly-read', `https://docket.example/mcp/${slug}/alpha`)).toMatchObject({ status: 200, approved: [{ resource: `https://docket.example/mcp/${slug}/alpha` }] })
+      expect(await approve('member-read', `https://docket.example/mcp/${slug}/alpha`)).toMatchObject({ status: 200, approved: [{ resource: `https://docket.example/mcp/${slug}/alpha` }] })
       const { rows } = await org.db.admin.query<{ dockets: string[] }>("SELECT dockets FROM platform.oauth_connections WHERE name = 'Sweep client'")
       expect(rows).toEqual([{ dockets: [docket.alpha] }])
     })

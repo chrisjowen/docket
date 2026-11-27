@@ -1,30 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { namespaceAccess, type Role, type Tx } from '@docket/platform-tenancy'
+import { accessOf, capsAt, docketPlace, type Tx } from '@docket/platform-tenancy'
 
 import type { Principal } from './principal.js'
-import { impliedScopes, namespaceScopes, type Scope } from './scopes.js'
+import { capabilityScopes, impliedScopes, type Scope } from './scopes.js'
 
 type Platform = <T>(fn: (tx: Tx) => Promise<T>) => Promise<T>
 
 /**
- * Effective permission = the credential's scopes ∩ its owner's permission on
- * its workspace now (§8.4; tenancy design §5.1). The workspace was matched
- * when the bearer resolved; the owner's account role and their grant on that
- * namespace are read on every call, so demoting a member, taking their grant
- * away or removing them narrows every token they hold from their very next
- * call. A credential whose owner holds nothing there - a former member, a
- * member with no grant, a provisioner - has no scopes at all. `ontology:write`
- * also needs the workspace's setting to name the owner's org role, read now
- * through `ontologyWriters` (only for a credential that carries it); without
- * it, it is never effective.
+ * Effective permission = the credential's ceiling ∩ what its owner may do on
+ * its docket now (§8.4; tenancy v2 §3.4): their capabilities there, from
+ * every grant that covers it (`capsAt`, the resolver every surface uses).
+ * The docket was matched when the bearer resolved; the owner's grants are
+ * read on every call, so taking a grant away or removing them narrows every
+ * token and connection they hold from their very next call. A credential
+ * whose owner holds nothing there - a former member, one with no grant, a
+ * role that manages without reading - has no scopes at all.
  */
-export async function effectiveScopes(
-  principal: Principal,
-  deps: { platform: Platform; ontologyWriters?: () => Promise<readonly Role[]> },
-): Promise<Scope[]> {
-  const access = await deps.platform((tx) => namespaceAccess(tx, principal.orgId, principal.workspaceId, principal.userId))
-  const writers = principal.scopes.includes('ontology:write') && deps.ontologyWriters ? await deps.ontologyWriters() : []
-  const allowed = new Set(namespaceScopes(access, writers))
+export async function effectiveScopes(principal: Principal, deps: { platform: Platform }): Promise<Scope[]> {
+  const access = await deps.platform((tx) => accessOf(tx, principal.orgId, principal.userId))
+  const allowed = new Set(capabilityScopes(capsAt(access, docketPlace(principal.workspaceId))))
   return impliedScopes(principal.scopes).filter((scope) => allowed.has(scope))
 }
 

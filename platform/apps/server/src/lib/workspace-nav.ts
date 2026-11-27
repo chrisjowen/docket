@@ -4,7 +4,8 @@
  * docket page. A docket opens on its overview: the sidebar's link, the
  * casebook's and the bare `/o/{org}/w/{ws}` address all land there. The graph
  * is the docket's Record, and its ontology its Schema; Proposals is the queue
- * of replacements awaiting proof. Chat asks the docket alone.
+ * of replacements awaiting proof. Chat asks the docket alone. Access is who
+ * may do what here, and why.
  */
 export const WORKSPACE_TABS = [
   { key: 'overview', label: 'Overview', route: '/o/[org]/w/[ws]/overview' },
@@ -14,6 +15,7 @@ export const WORKSPACE_TABS = [
   { key: 'documents', label: 'Documents', route: '/o/[org]/w/[ws]/documents' },
   { key: 'ontology', label: 'Schema', route: '/o/[org]/w/[ws]/ontology' },
   { key: 'activity', label: 'Activity', route: '/o/[org]/w/[ws]/activity' },
+  { key: 'access', label: 'Access', route: '/o/[org]/w/[ws]/access' },
   { key: 'mcp', label: 'MCP', route: '/o/[org]/w/[ws]/mcp' },
   { key: 'repos', label: 'Repos', route: '/o/[org]/w/[ws]/repos' },
   { key: 'settings', label: 'Settings', route: '/o/[org]/w/[ws]/settings' },

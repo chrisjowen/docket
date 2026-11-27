@@ -9,7 +9,7 @@ import { typeSlots } from '$lib/graph/model'
 import { ACTIVITY_SHOWN, activityEntries } from './activity'
 import type { AskDeps, CanonicalGraph, OrgWorkspace } from './ask'
 import type { AgentDeps } from './ask-agent'
-import { permissionOn, type OrgAccess } from './request'
+import { readsDocket, type OrgAccess } from './request'
 import { getRuntime } from './runtime'
 import { activityActors, actorNames, inOrg } from './workspace'
 
@@ -89,7 +89,7 @@ export function agentDeps(access: OrgAccess, userId: string): AgentDeps {
         actor: asking.actor,
         userId,
         writer: readOnly,
-        role: async () => access.role,
+        mayPublish: async () => false,
         audited: readOnly,
       }),
   }
@@ -109,8 +109,8 @@ export const typeRanks = (access: OrgAccess, workspaces: readonly OrgWorkspace[]
     return ranks
   })
 
-/** The org's workspaces the member reads: those their account role or a grant lets them into (`graph.read` there). */
+/** The org's workspaces the member reads: those a grant lets them read. */
 export const orgWorkspaces = async (access: OrgAccess): Promise<OrgWorkspace[]> =>
   (await inOrg(access, ({ tx }) => listWorkspaces(tx)))
-    .filter((workspace) => permissionOn(access, workspace.id) !== null)
+    .filter((workspace) => readsDocket(access, workspace.id))
     .map(({ id, slug, name }) => ({ id, slug, name }))

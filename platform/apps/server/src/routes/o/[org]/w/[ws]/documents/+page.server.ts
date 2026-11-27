@@ -20,7 +20,7 @@ import type { Actions, PageServerLoad } from './$types'
 /** The workspace's documents, each with what docket's validator says about it under the published head. */
 export const load: PageServerLoad = async (event) => {
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     const records = await listDocuments(ctx.tx, workspace.id)
     const validation = await validate({ source: postgresSource(ctx, workspace.id) })
     return { access, records, validation }
@@ -33,7 +33,7 @@ export const load: PageServerLoad = async (event) => {
     byPath.set(d.path, [...(byPath.get(d.path) ?? []), { severity: d.severity, code: d.code, message: d.message }])
   }
   return {
-    write: read.access.can('knowledge.write'),
+    write: read.access.can('write'),
     limit: LIMITS.documentsPerWorkspace,
     documents: read.records.map((record) => ({
       path: record.path,
@@ -56,7 +56,7 @@ export const actions: Actions = {
     if (!files.length) return fail(400, { problem: 'Choose one or more docket Markdown files.' })
     const publisher = publisherOf(event)
     return inWorkspace(event, async ({ access, workspace, ctx }) => {
-      authorise(access, 'knowledge.write')
+      authorise(access, 'write')
       const problems: string[] = []
       const written: string[] = []
       let unchanged = 0
@@ -108,7 +108,7 @@ export const actions: Actions = {
     const form = await event.request.formData()
     const path = String(form.get('path') ?? '')
     return inWorkspace(event, async ({ access, workspace, ctx }) => {
-      authorise(access, 'knowledge.write')
+      authorise(access, 'write')
       try {
         const retired = await retireDocument(ctx.tx, { workspaceId: workspace.id, path })
         await recordAudit(ctx.tx, event, {

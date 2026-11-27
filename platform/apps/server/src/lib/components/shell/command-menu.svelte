@@ -25,7 +25,7 @@
     workspace: { slug: string; name: string } | null
     dockets: { slug: string; name: string; docketNo: string }[]
     canAdminister: boolean
-    /** Owners and admins: who makes system accounts. */
+    /** Whoever manages system accounts somewhere. */
     canManageAccess?: boolean
   }
 

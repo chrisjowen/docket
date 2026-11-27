@@ -2,6 +2,8 @@
 import { isRedirect, type RequestEvent } from '@sveltejs/kit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { accessRows } from '$lib/server/testing-access'
+
 type Query = { sql: string; params: unknown[] }
 
 /** What each database holds once its transactions commit; a transaction whose callback throws rolls back. */
@@ -15,8 +17,9 @@ function transaction(db: 'org' | 'platform') {
       async query(sql, params = []) {
         pending.push({ sql, params })
         if (db === 'platform' && platformDown && sql.includes('oauth_store')) throw new Error('pool timeout')
-        if (sql.includes('FROM platform.orgs')) return { rows: [{ id: 'orgacme', slug: 'acme', name: 'Acme', status: 'active', role: 'owner', account_role: 'owner' }], rowCount: 1 }
-        if (sql.includes('FROM workspaces WHERE')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', created_by: 'user:u1', created_at: new Date(), ontology_mcp_roles: [] }], rowCount: 1 }
+        const access = accessRows(sql, 'owner')
+        if (access) return { rows: access, rowCount: access.length }
+        if (sql.includes('FROM workspaces WHERE')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', created_by: 'user:u1', created_at: new Date() }], rowCount: 1 }
         if (sql.includes('FROM repo_connections')) return { rows: [{ id: 'conn1' }], rowCount: 1 }
         if (sql.includes('FROM audit_head')) return { rows: [{ hash: '0'.repeat(64) }], rowCount: 1 }
         if (sql.includes('SELECT DISTINCT grant_id')) return { rows: [{ grant_id: 'grant1' }], rowCount: 1 }

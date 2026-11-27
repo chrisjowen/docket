@@ -24,7 +24,7 @@ import type { Actions, PageServerLoad } from './$types'
  */
 export const load: PageServerLoad = async (event) => {
   const access = await orgAccess(event)
-  authorise(access, 'ontology.publish')
+  authorise(access, 'create')
   const { actor } = publisherOf(event)
   const read = await inOrg(access, async (ctx) => {
     const draft = await docketDraftById(ctx.tx, event.params.id, actor)
@@ -48,7 +48,7 @@ export const load: PageServerLoad = async (event) => {
       author: name(read.draft.author),
     },
     usage: { types: {}, relationships: {} },
-    trust: { people: read.people, registered: read.registered, repositories: read.repositories, records: [], manage: access.can('trust.manage') },
+    trust: { people: read.people, registered: read.registered, repositories: read.repositories, records: [], manage: access.can('settings') },
     vocabulary: { icons: [...ICON_NAMES], attributeTypes: [...ATTRIBUTE_TYPES], locationFields: [...EVIDENCE_LOCATION_FIELDS] },
   }
 }
@@ -61,7 +61,7 @@ const picker = (event: RequestEvent) => `/o/${event.params.org}/workspaces/new`
 export const actions: Actions = {
   save: async (event) => {
     const access = await orgAccess(event)
-    authorise(access, 'ontology.publish')
+    authorise(access, 'create')
     const form = await event.request.formData()
     const { actor } = publisherOf(event)
     try {
@@ -78,7 +78,7 @@ export const actions: Actions = {
 
   discard: async (event) => {
     const access = await orgAccess(event)
-    authorise(access, 'ontology.publish')
+    authorise(access, 'create')
     const { actor } = publisherOf(event)
     try {
       await inOrg(access, async (ctx) => {
@@ -95,7 +95,7 @@ export const actions: Actions = {
   /** "Create docket": the docket is made with the editor's text as its first published version, and the draft goes. */
   publish: async (event) => {
     const access = await orgAccess(event)
-    authorise(access, 'ontology.publish')
+    authorise(access, 'create')
     const form = await event.request.formData()
     const yaml = formText(form, 'yaml')
     const message = String(form.get('message') ?? '').trim() || null

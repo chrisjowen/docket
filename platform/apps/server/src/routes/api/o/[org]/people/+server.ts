@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { json } from '@sveltejs/kit'
 
-import { authorise, orgAccess } from '$lib/server/request'
+import { authoriseAnywhere, orgAccess } from '$lib/server/request'
 import { directory } from '$lib/server/trust'
 import { inOrg } from '$lib/server/workspace'
 
@@ -14,6 +14,6 @@ import type { RequestHandler } from './$types'
  */
 export const GET: RequestHandler = async (event) => {
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'graph.read')
+  authoriseAnywhere(access, 'read')
   return json({ org: access.org.slug, people: await inOrg(access, (ctx) => directory(access, ctx)) })
 }

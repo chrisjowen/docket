@@ -2,21 +2,21 @@
 import { isHttpError, type RequestEvent } from '@sveltejs/kit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { accessRows } from '$lib/server/testing-access'
+
 type Query = { sql: string; params: unknown[] }
 
 const queries: Query[] = []
 let role: string | null = 'viewer'
-/** The account role platform 0012 derives from each role. */
-const ACCOUNT_ROLE: Record<string, string> = { owner: 'owner', admin: 'admin', editor: 'developer', viewer: 'read_only' }
 let cogneeOn = false
 
 async function transaction<T>(fn: (tx: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number }> }) => Promise<T>) {
   return fn({
     async query(sql, params = []) {
       queries.push({ sql, params })
-      if (sql.includes('FROM platform.orgs')) return role ? { rows: [{ id: 'orgacme', slug: 'acme', name: 'Acme', status: 'active', role, account_role: ACCOUNT_ROLE[role] }], rowCount: 1 } : { rows: [], rowCount: 0 }
-      if (sql.includes('FROM platform.namespace_grants')) return { rows: [{ namespace_id: 'wsmain', permission: role === 'editor' ? 'write' : 'read' }], rowCount: 1 }
-      if (sql.includes('FROM workspaces WHERE')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', created_by: 'user:u1', created_at: new Date(), ontology_mcp_roles: [] }], rowCount: 1 }
+      const access = accessRows(sql, role)
+      if (access) return { rows: access, rowCount: access.length }
+      if (sql.includes('FROM workspaces WHERE')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', created_by: 'user:u1', created_at: new Date() }], rowCount: 1 }
       if (sql.includes('FROM projection_status')) {
         const row = { failures: 2, last_error: 'pod asleep', attempted_at: new Date(), synced_at: null, retry_at: null }
         return { rows: [{ ...row, instance_id: 'neo4j' }, { ...row, instance_id: 'mem0' }], rowCount: 2 }
@@ -71,10 +71,10 @@ describe('the Sync page’s standing, read again while it is open', () => {
     cogneeOn = false
   })
 
-  it('answers any member, under graph.read, with each store’s standing from the worker’s bookkeeping, opening no document and leaving the lag to the page load', async () => {
+  it('answers any member, under Read and ask, with each store’s standing from the worker’s bookkeeping, opening no document and leaving the lag to the page load', async () => {
     const response = await GET(event() as never)
     expect(response.status).toBe(200)
-    expect(authorise).toHaveBeenCalledWith('graph.read')
+    expect(authorise).toHaveBeenCalledWith('read')
     const body = (await response.json()) as { outbox: unknown; stores: Record<string, unknown>[]; runs: { id: string; triggers: string[] }[] }
     expect(body.outbox).toMatchObject({ pending: 3, recheckPending: true })
     expect(body.stores).toEqual([

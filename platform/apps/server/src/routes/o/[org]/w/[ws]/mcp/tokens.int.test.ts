@@ -3,7 +3,7 @@ import { randomInt, randomUUID } from 'node:crypto'
 
 import { insertWorkspace } from '@docket/platform-canonical-store'
 import { createTestOrg, type TestOrg } from '@docket/platform-canonical-store/testing'
-import { createServiceAccount, upsertGitHubUser } from '@docket/platform-tenancy'
+import { accessOf, createServiceAccount, upsertGitHubUser, type Access } from '@docket/platform-tenancy'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -14,7 +14,7 @@ let runtime: Runtime
 vi.mock('$lib/server/runtime', () => ({ getRuntime: () => runtime }))
 const { load, actions } = await import('./+page.server')
 
-// Real Postgres roles, migrations and account roles; only the process runtime is injected.
+// Real Postgres roles, migrations and grants; only the process runtime is injected.
 describe.skipIf(!TEST_PG_URL)("tokens on a docket's MCP page", () => {
   let org: TestOrg
   let slug: string
@@ -23,18 +23,23 @@ describe.skipIf(!TEST_PG_URL)("tokens on a docket's MCP page", () => {
   let serviceAccountId: string
   const users: Record<string, { id: string; login: string }> = {}
 
-  /** A member as the app (and platform 0012's trigger) makes one; `role` decides their account role too. */
+  /** A member holding `role` on the whole account. */
   async function member(name: string, role: string) {
     const user = await org.router.withPlatform((tx) => upsertGitHubUser(tx, { id: randomInt(1, 2 ** 31), login: `${name}-${org.orgId.slice(0, 4)}`, name: null, avatarUrl: null, emails: [] }))
-    await org.db.app.query('INSERT INTO platform.memberships (org_id, user_id, role) VALUES ($1, $2, $3)', [org.orgId, user.id, role])
+    await org.db.app.query('INSERT INTO platform.memberships (org_id, user_id) VALUES ($1, $2)', [org.orgId, user.id])
     users[name] = { id: user.id, login: user.login }
+    await grant(name, null, role)
   }
-  const grant = (name: string, workspaceId: string, permission: string) =>
-    org.db.admin.query(
-      `INSERT INTO platform.namespace_grants (org_id, namespace_id, principal_id, permission) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (org_id, namespace_id, principal_id) DO UPDATE SET permission = EXCLUDED.permission`,
-      [org.orgId, workspaceId, users[name]!.id, permission],
-    )
+  /** A role on the account (`docket` null) or on one docket. */
+  const grant = (name: string, docket: string | null, role: string) =>
+    org.db.app.query('INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id) VALUES ($1, $2, $3, $4, $5, $6)', [
+      `g_${randomUUID()}`,
+      org.orgId,
+      users[name]!.id,
+      docket ? 'docket' : 'account',
+      docket,
+      role,
+    ])
 
   function event(name: string, form?: FormData): RequestEvent {
     const url = new URL(`https://docket.example/o/${slug}/w/${wsSlug}/mcp`)
@@ -65,15 +70,16 @@ describe.skipIf(!TEST_PG_URL)("tokens on a docket's MCP page", () => {
       origin: 'https://docket.example',
       limiter: { check: async () => ({ allowed: true, remaining: 1, resetAt: new Date() }) },
     } as unknown as Runtime
-    // A developer made admin of just this one docket, and a read-only member.
-    await member('developer', 'editor')
-    await member('reader', 'viewer')
+    // A writer made admin of just this one docket, and a reader.
+    await member('developer', 'writer')
+    await member('reader', 'reader')
     wsId = (await org.withOrg((ctx) => insertWorkspace(ctx.tx, { name: 'Alpha', slug: wsSlug, createdBy: org.userId }))).id
     await grant('developer', wsId, 'admin')
-    const service = await org.router.withPlatform((tx) =>
-      createServiceAccount(tx, { orgId: org.orgId, name: 'ci-bot', description: null, role: 'viewer', actorId: org.userId, actorRole: 'owner' }),
-    )
+    const owner = (await org.router.withPlatform((tx) => accessOf(tx, org.orgId, org.userId))) as Access
+    const service = await org.router.withPlatform((tx) => createServiceAccount(tx, { orgId: org.orgId, name: 'ci-bot', description: null, actorId: org.userId, actor: owner }))
     serviceAccountId = service.id
+    users['ci-bot'] = { id: service.id, login: 'ci-bot' }
+    await grant('ci-bot', null, 'reader')
   })
   afterAll(() => org?.drop())
 

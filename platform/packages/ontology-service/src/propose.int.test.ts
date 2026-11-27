@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {
-  WorkspaceError,
   listIngests,
-  ontologyMcpRoles,
   putDocument,
   readDocument,
-  setOntologyMcpRoles,
   type StoreContext,
   type Writer,
 } from '@docket/platform-canonical-store'
@@ -14,7 +11,7 @@ import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { OntologyBreakingChange, OntologyWriteDisabled, StaleDraft } from './errors.js'
-import { proposeOntologyChange, publishOntologyChange } from './propose.js'
+import { PublishNotGranted, proposeOntologyChange, publishOntologyChange } from './propose.js'
 import { headOf, listDrafts, rollback, versionByNumber } from './versions.js'
 import { createWorkspace } from './workspaces.js'
 
@@ -68,22 +65,20 @@ describe.skipIf(!TEST_PG_URL)('publishOntologyChange', () => {
 
   const head = async () => (await as((ctx) => headOf(ctx.tx, workspaceId)))?.number
 
-  it('is refused until the workspace lets the role change the ontology, and leaves nothing behind', async () => {
-    expect(await as((ctx) => ontologyMcpRoles(ctx.tx, workspaceId))).toEqual([])
-    const refused = await as((ctx) => publishOntologyChange(ctx, writer, 'owner', { patch: 'resourceTypes:\n  queue:\n    description: A queue.\n' })).catch((e: unknown) => e)
+  it('is refused to a caller without Publish ontology changes, asked under the locks, and leaves nothing behind', async () => {
+    let asked = 0
+    const refused = await as((ctx) =>
+      publishOntologyChange(ctx, writer, async () => ((asked += 1), false), { patch: 'resourceTypes:\n  queue:\n    description: A queue.\n' }),
+    ).catch((e: unknown) => e)
+    expect(refused).toBeInstanceOf(PublishNotGranted)
     expect(refused).toBeInstanceOf(OntologyWriteDisabled)
+    expect(asked).toBe(1)
     expect(await head()).toBe(1)
     expect(await as((ctx) => listDrafts(ctx.tx, workspaceId))).toEqual([])
-
-    await expect(as((ctx) => setOntologyMcpRoles(ctx.tx, workspaceId, ['viewer']))).rejects.toBeInstanceOf(WorkspaceError)
-    expect(await as((ctx) => setOntologyMcpRoles(ctx.tx, workspaceId, ['editor', 'owner']))).toEqual(['owner', 'editor'])
-    // Admins were not ticked; nor is a former member anything.
-    expect(await as((ctx) => publishOntologyChange(ctx, writer, 'admin', { patch: 'resourceTypes:\n  queue:\n    description: A queue.\n' })).catch((e: unknown) => e)).toBeInstanceOf(OntologyWriteDisabled)
-    expect(await as((ctx) => publishOntologyChange(ctx, writer, null, { patch: 'resourceTypes:\n  queue:\n    description: A queue.\n' })).catch((e: unknown) => e)).toBeInstanceOf(OntologyWriteDisabled)
   })
 
-  it('publishes an enabled role\'s change as the next version, recorded as the editor records one', async () => {
-    const published = await as((ctx) => publishOntologyChange(ctx, writer, 'editor', { patch: 'resourceTypes:\n  queue:\n    description: A message queue.\n', message: 'Add queues' }))
+  it('publishes a publisher\'s change as the next version, recorded as the editor records one', async () => {
+    const published = await as((ctx) => publishOntologyChange(ctx, writer, async () => true, { patch: 'resourceTypes:\n  queue:\n    description: A message queue.\n', message: 'Add queues' }))
     expect(published).toMatchObject({ number: 2, parentNumber: 1, status: 'published', source: 'mcp:token:dkt_live_abcdefgh', publishedBy: writer.actor, message: 'Add queues' })
     expect(published.checkResult?.classification).toBe('safe')
     expect(await head()).toBe(2)
@@ -92,14 +87,14 @@ describe.skipIf(!TEST_PG_URL)('publishOntologyChange', () => {
   })
 
   it('refuses a stale head, and a breaking change without its migration', async () => {
-    expect(await as((ctx) => publishOntologyChange(ctx, writer, 'editor', { patch: 'resourceTypes:\n  topic:\n    description: A topic.\n', expectedHead: 1 })).catch((e: unknown) => e)).toBeInstanceOf(StaleDraft)
-    expect(await as((ctx) => publishOntologyChange(ctx, writer, 'editor', { patch: rename, acceptNarrowing: true })).catch((e: unknown) => e)).toBeInstanceOf(OntologyBreakingChange)
+    expect(await as((ctx) => publishOntologyChange(ctx, writer, async () => true, { patch: 'resourceTypes:\n  topic:\n    description: A topic.\n', expectedHead: 1 })).catch((e: unknown) => e)).toBeInstanceOf(StaleDraft)
+    expect(await as((ctx) => publishOntologyChange(ctx, writer, async () => true, { patch: rename, acceptNarrowing: true })).catch((e: unknown) => e)).toBeInstanceOf(OntologyBreakingChange)
     expect(await head()).toBe(2)
   })
 
   it('migrates the documents a breaking change names, and rolls back from the history', async () => {
     const published = await as((ctx) =>
-      publishOntologyChange(ctx, writer, 'editor', { patch: rename, expectedHead: 2, migration: [{ op: 'renameType', from: 'pod', to: 'container' }], acceptNarrowing: true }),
+      publishOntologyChange(ctx, writer, async () => true, { patch: rename, expectedHead: 2, migration: [{ op: 'renameType', from: 'pod', to: 'container' }], acceptNarrowing: true }),
     )
     expect(published.number).toBe(3)
     expect(published.rewritten.map((document) => [document.resourceId, document.resourceType])).toEqual([

@@ -3,7 +3,7 @@ import { countDocuments, listIngests, listWorkspaces } from '@docket/platform-ca
 import { listMembers } from '@docket/platform-tenancy'
 
 import { filingsByMonth, standingOf } from '$lib/docket'
-import { orgAccess, permissionOn } from '$lib/server/request'
+import { orgAccess, readsDocket } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 import { inOrg } from '$lib/server/workspace'
 
@@ -23,7 +23,7 @@ export const load: PageServerLoad = async (event) => {
   const [dockets, members] = await Promise.all([
     inOrg(access, async (ctx) => {
       const rows = []
-      for (const workspace of (await listWorkspaces(ctx.tx)).filter((each) => permissionOn(access, each.id) !== null)) {
+      for (const workspace of (await listWorkspaces(ctx.tx)).filter((each) => readsDocket(access, each.id))) {
         const filings = await listIngests(ctx, { workspaceId: workspace.id, limit: FILINGS_READ, detail: false })
         const last = filings[0]?.createdAt ?? null
         rows.push({

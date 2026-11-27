@@ -3,7 +3,7 @@ import { randomInt, randomUUID } from 'node:crypto'
 
 import { insertWorkspace } from '@docket/platform-canonical-store'
 import { createTestOrg, type TestOrg } from '@docket/platform-canonical-store/testing'
-import { upsertGitHubUser, type Action } from '@docket/platform-tenancy'
+import { CONTENT_CAPABILITIES, upsertGitHubUser, type Capability } from '@docket/platform-tenancy'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import { isHttpError, type RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -20,10 +20,10 @@ const { inWorkspace } = await import('./workspace')
 const { orgAccess } = await import('./request')
 const { orgWorkspaces } = await import('./ask-runtime')
 
-/** What each kind of member may do inside a docket they reach: the docket's own actions, and the org's. */
-const PROBED: readonly Action[] = ['graph.read', 'knowledge.write', 'ontology.publish', 'workspaces.delete', 'tokens.manage', 'members.manage', 'org.administer']
+/** What each kind of member may do inside a docket they reach. */
+const PROBED: readonly Capability[] = ['read', 'write', 'publish', 'delete', 'tokens', 'access']
 
-// Real Postgres roles, migrations, account roles and namespace grants; only the process runtime is injected.
+// Real Postgres roles, migrations and grants; only the process runtime is injected.
 describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
   let org: TestOrg
   let slug: string
@@ -31,20 +31,18 @@ describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
   let beta: string
   const users: Record<string, { id: string; login: string }> = {}
 
-  /** A member as the app (and platform 0012's trigger) makes one; `accountRole` set outright for those `role` cannot express. */
-  async function member(name: string, role: string, accountRole?: string) {
+  /** A member of the account, holding nothing until given a grant. */
+  async function member(name: string, flags: { guest?: boolean } = {}) {
     const user = await org.router.withPlatform((tx) => upsertGitHubUser(tx, { id: randomInt(1, 2 ** 31), login: `${name}-${org.orgId.slice(0, 4)}`, name: null, avatarUrl: null, emails: [] }))
-    await org.db.app.query('INSERT INTO platform.memberships (org_id, user_id, role, account_role) VALUES ($1, $2, $3, $4)', [org.orgId, user.id, role, accountRole ?? null])
+    await org.db.app.query('INSERT INTO platform.memberships (org_id, user_id, guest) VALUES ($1, $2, $3)', [org.orgId, user.id, flags.guest ?? false])
     users[name] = { id: user.id, login: user.login }
   }
-  const grant = (name: string, workspaceId: string, permission: string) =>
-    org.db.admin.query(
-      `INSERT INTO platform.namespace_grants (org_id, namespace_id, principal_id, permission) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (org_id, namespace_id, principal_id) DO UPDATE SET permission = EXCLUDED.permission`,
-      [org.orgId, workspaceId, users[name]!.id, permission],
+  /** A role on the account (`docket` null) or one docket, adjusted; `name` null gives it to everyone. */
+  const grant = (name: string | null, docket: string | null, role: string, adjust: { add?: Capability[]; remove?: readonly Capability[] } = {}) =>
+    org.db.app.query(
+      'INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id, add_caps, remove_caps) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [`g_${randomUUID()}`, org.orgId, name ? users[name]!.id : null, docket ? 'docket' : 'account', docket, role, adjust.add ?? [], adjust.remove ?? []],
     )
-  const ungrant = (name: string, workspaceId: string) =>
-    org.db.admin.query('DELETE FROM platform.namespace_grants WHERE org_id = $1 AND namespace_id = $2 AND principal_id = $3', [org.orgId, workspaceId, users[name]!.id])
 
   function event(name: string, ws?: string): RequestEvent {
     const path = ws ? `/o/${slug}/w/${ws}` : `/o/${slug}`
@@ -74,7 +72,7 @@ describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
   const docket = (name: string, ws: string) => status(() => docketLayout(event(name, ws) as never))
   const api = (name: string, ws: string) => status(() => proposalsApi(event(name, ws) as never))
   const allowed = (name: string, ws: string) =>
-    inWorkspace(event(name, ws), async ({ access }) => PROBED.filter((action) => access.can(action)))
+    inWorkspace(event(name, ws), async ({ access }) => PROBED.filter((cap) => access.can(cap)))
 
   beforeAll(async () => {
     org = await createTestOrg()
@@ -86,23 +84,25 @@ describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
       origin: 'https://docket.example',
       caps: { status: async () => ({ spentUsd: 0, capUsd: 10, fraction: 0, warnedAt: null }) },
     } as unknown as Runtime
-    await member('admin', 'admin')
-    await member('developer', 'editor')
-    await member('reader', 'viewer')
-    await member('guest', 'viewer', 'guest')
-    await member('provisioner', 'editor', 'provisioner')
-    await member('promoted', 'editor')
-    // Each new workspace grants developers write and read-only members read (platform 0013), as today's roles reach.
     ;[alpha, beta] = await org.withOrg(async ({ tx }) => [
       (await insertWorkspace(tx, { name: 'Alpha', slug: 'alpha', createdBy: org.userId })).id,
       (await insertWorkspace(tx, { name: 'Beta', slug: 'beta', createdBy: org.userId })).id,
     ])
-    // Then grants the way they will differ: a reader kept out of beta, a guest let into alpha, a provisioner
-    // granted (which reaches nothing), and a developer made admin of alpha.
-    await ungrant('reader', beta)
-    await grant('guest', alpha, 'read')
-    await grant('provisioner', alpha, 'admin')
+    for (const name of ['admin', 'developer', 'reader', 'provisioner', 'promoted', 'publisher']) await member(name)
+    await member('guest', { guest: true })
+    // A role on the whole account covers both dockets; one on a docket, that docket alone.
+    await grant('admin', null, 'admin')
+    await grant('developer', null, 'writer')
+    await grant('reader', alpha, 'reader')
+    await grant('guest', alpha, 'reader')
+    // Admin on the account without content: it manages, and reads nothing anywhere.
+    await grant('provisioner', null, 'admin', { remove: CONTENT_CAPABILITIES })
+    // Writer on the account, and Admin of alpha alone.
+    await grant('promoted', null, 'writer')
     await grant('promoted', alpha, 'admin')
+    // One person who may publish ontology changes, on alpha alone (the captain's "set at user level").
+    await grant('publisher', null, 'reader')
+    await grant('publisher', alpha, 'writer', { add: ['publish'] })
   })
   afterAll(() => org?.drop())
 
@@ -115,7 +115,7 @@ describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
     expect(await sidebar('provisioner')).toEqual(['alpha (no access)', 'beta (no access)'])
   })
 
-  it('opens a docket to those its account role or a grant lets in: 404 for one they cannot see, 403 for one they see', async () => {
+  it('opens a docket to those a grant lets read it: 404 for one they cannot see, 403 for one they see', async () => {
     const reach = async (name: string) => [await docket(name, 'alpha'), await docket(name, 'beta')]
     expect(await reach('owner')).toEqual([200, 200])
     expect(await reach('admin')).toEqual([200, 200])
@@ -128,16 +128,28 @@ describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
     expect(await docket('owner', 'missing')).toBe(404)
   })
 
-  it('decides what a member may do in a docket from their permission there, and the org-wide rest from their org role', async () => {
-    const admins = ['graph.read', 'knowledge.write', 'ontology.publish', 'workspaces.delete', 'tokens.manage', 'members.manage']
-    expect(await allowed('owner', 'beta')).toEqual([...admins, 'org.administer'])
-    expect(await allowed('admin', 'beta')).toEqual(admins)
-    expect(await allowed('developer', 'alpha')).toEqual(['graph.read', 'knowledge.write'])
-    expect(await allowed('reader', 'alpha')).toEqual(['graph.read'])
-    expect(await allowed('guest', 'alpha')).toEqual(['graph.read'])
-    // Admin of one docket runs that docket, and nothing of the org's or of any other docket.
-    expect(await allowed('promoted', 'alpha')).toEqual(['graph.read', 'knowledge.write', 'ontology.publish', 'workspaces.delete', 'tokens.manage'])
-    expect(await allowed('promoted', 'beta')).toEqual(['graph.read', 'knowledge.write'])
+  it('decides what a member may do in a docket from every grant that covers it, and nothing more', async () => {
+    expect(await allowed('owner', 'beta')).toEqual(PROBED)
+    expect(await allowed('admin', 'beta')).toEqual(PROBED)
+    expect(await allowed('developer', 'alpha')).toEqual(['read', 'write'])
+    expect(await allowed('reader', 'alpha')).toEqual(['read'])
+    expect(await allowed('guest', 'alpha')).toEqual(['read'])
+    // Admin of one docket runs that docket, its access included, and nothing of any other docket.
+    expect(await allowed('promoted', 'alpha')).toEqual(PROBED)
+    expect(await allowed('promoted', 'beta')).toEqual(['read', 'write'])
+    // One capability given to one person on one docket reaches only there.
+    expect(await allowed('publisher', 'alpha')).toEqual(['read', 'write', 'publish'])
+    expect(await allowed('publisher', 'beta')).toEqual(['read'])
+  })
+
+  it('gives what everyone is given to the people of the account, never to a guest', async () => {
+    const before = await sidebar('reader')
+    await grant(null, beta, 'reader')
+    expect(await sidebar('reader')).toEqual(['alpha', 'beta'])
+    expect(await docket('guest', 'beta')).toBe(404)
+    expect(await sidebar('guest')).toEqual(['alpha'])
+    await org.db.app.query("DELETE FROM platform.grants WHERE org_id = $1 AND principal_id IS NULL", [org.orgId])
+    expect(await sidebar('reader')).toEqual(before)
   })
 
   it('keeps the casebook and Ask to the dockets each member reaches', async () => {

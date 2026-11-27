@@ -2,16 +2,19 @@
 import { createHash } from 'node:crypto'
 import { crc32 } from 'node:zlib'
 
-import { effectiveScopes, impliedScopes, listConnections, namespaceScopes, principalLabel, tokenResolver, type McpResource, type Scope } from '@docket/platform-auth'
+import { effectiveScopes, impliedScopes, listConnections, principalLabel, tokenResolver, type McpResource, type Scope } from '@docket/platform-auth'
 import { insertWorkspace } from '@docket/platform-canonical-store'
 import { createTestOrg, type TestOrg } from '@docket/platform-canonical-store/testing'
-import { migratePlatform, namespaceAccess, transaction, type Tx } from '@docket/platform-tenancy'
+import { ident, migratePlatform, transaction, type Tx } from '@docket/platform-tenancy'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import down0016 from '../../../../../packages/tenancy/migrations/platform/0016_tokens_and_connections.down.sql?raw'
+import down0017 from '../../../../../packages/tenancy/migrations/platform/0017_capabilities_and_grants.down.sql?raw'
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
+const READ: Scope[] = ['docket:read', 'ontology:read']
+const WRITE: Scope[] = ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose']
 /** A `dkt_live_` token as the server issued them before personal and system tokens. */
 const legacyToken = (seed: string) => {
   const body = seed.padEnd(43, '0').slice(0, 43)
@@ -35,8 +38,14 @@ describe.skipIf(!TEST_PG_URL)('tokens and grants become narrowed credentials and
     const resource = (workspaceId: string, slug: string): McpResource => ({ orgId: org.orgId, workspaceId, url: `${origin}/mcp/o-${org.orgId}/${slug}` })
     const at = { alpha: resource(alpha.id, 'alpha'), beta: resource(beta.id, 'beta') }
 
-    // Back to before 0016: tokens bound to one workspace with scopes, grants with theirs, a service account that acts for a person.
-    await transaction(org.db.admin, (tx) => tx.query(down0016))
+    // Back to before 0016 (and 0017, which follows it): tokens bound to one workspace with scopes, grants with theirs, a
+    // service account that acts for a person.
+    const down = () =>
+      transaction(org.db.admin, async (tx) => {
+        await tx.query(down0017.replaceAll('{{app_role}}', ident(org.db.appRole)))
+        await tx.query(down0016)
+      })
+    await down()
     await org.db.admin.query(
       "INSERT INTO platform.users (id, kind, login, service_org_id, created_by, accountable_user_id) VALUES ('svc-1', 'service', 'ci-bot', $1, $2, $2)",
       [org.orgId, org.userId],
@@ -81,10 +90,19 @@ describe.skipIf(!TEST_PG_URL)('tokens and grants become narrowed credentials and
       )
     }
 
-    // What each could do before: its scopes, cut to its owner's permission on its workspace (the old effectiveScopes).
+    // What each could do before: its scopes, cut to its owner's permission on its workspace (the old effectiveScopes,
+    // frozen here: owners and admins wrote everywhere, a provisioner nowhere, anyone else by their namespace grant).
+    // Platform 0017 then makes publishing one capability: whoever could publish in the app - the owner here - may over MCP too.
     const before = async (scopes: Scope[], owner: string, workspace: McpResource) => {
-      const access = await platform((tx) => namespaceAccess(tx, org.orgId, workspace.workspaceId, owner))
-      const allowed = new Set(namespaceScopes(access, []))
+      const { rows } = await org.db.admin.query<{ account_role: string; permission: string | null }>(
+        `SELECT m.account_role, g.permission FROM platform.memberships m
+           LEFT JOIN platform.namespace_grants g ON g.org_id = m.org_id AND g.principal_id = m.user_id AND g.namespace_id = $2
+          WHERE m.org_id = $1 AND m.user_id = $3`,
+        [org.orgId, workspace.workspaceId, owner],
+      )
+      const role = rows[0]?.account_role
+      const permission = role === 'owner' || role === 'admin' ? 'admin' : role === 'provisioner' ? null : (rows[0]?.permission ?? null)
+      const allowed = new Set<Scope>(permission === null ? [] : permission === 'read' ? READ : permission === 'admin' ? [...WRITE, 'ontology:write'] : WRITE)
       return impliedScopes(scopes).filter((scope) => allowed.has(scope))
     }
     const expected = [
@@ -92,7 +110,7 @@ describe.skipIf(!TEST_PG_URL)('tokens and grants become narrowed credentials and
       ...(await Promise.all(grants.map((grant) => before(grant.scopes, org.userId, grant.workspace)))),
     ]
 
-    expect(await migratePlatform(org.db.admin, { appRole: org.db.appRole })).toBe(1)
+    expect(await migratePlatform(org.db.admin, { appRole: org.db.appRole })).toBe(2)
 
     const resolver = tokenResolver({ platform, ttlMs: 0 })
     const now = async (raw: string, workspace: McpResource) => {
@@ -132,9 +150,9 @@ describe.skipIf(!TEST_PG_URL)('tokens and grants become narrowed credentials and
     expect(services).toEqual([{ accountable_user_id: null }])
 
     // The rollback is clean, and gives nothing back that 0016 took away.
-    await transaction(org.db.admin, (tx) => tx.query(down0016))
+    await down()
     const { rows: rolled } = await org.db.admin.query('SELECT id, scopes FROM platform.api_tokens ORDER BY id')
     expect(rolled.map((row) => row.scopes)).toEqual(tokens.map((token) => impliedScopes(token.scopes)))
-    expect(await migratePlatform(org.db.admin, { appRole: org.db.appRole })).toBe(1)
+    expect(await migratePlatform(org.db.admin, { appRole: org.db.appRole })).toBe(2)
   })
 })

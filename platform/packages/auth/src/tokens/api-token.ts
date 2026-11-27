@@ -2,7 +2,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { crc32 } from 'node:zlib'
 
-import { namespaceAccess, newTenantId, type Tx } from '@docket/platform-tenancy'
+import { accessOf, capsAt, docketPlace, newTenantId, type Tx } from '@docket/platform-tenancy'
 
 import { SCOPES, credentialScopes, impliedScopes, isScope, type Scope } from '../scopes.js'
 
@@ -149,10 +149,11 @@ export async function issueApiToken(
   const dockets = input.dockets ? [...new Set(input.dockets)] : null
   if (dockets && dockets.length === 0) throw new ApiTokenError('invalid', 'Choose at least one docket, or every docket.')
   let readOnly = input.readOnly ?? false
+  const reach = await accessOf(tx, input.orgId, input.ownerId)
   for (const docket of dockets ?? []) {
-    const access = await namespaceAccess(tx, input.orgId, docket, input.ownerId)
-    if (!access?.permission) throw new ApiTokenError('forbidden', 'The token owner has no access to one of those dockets.')
-    if (access.permission === 'read') readOnly = true
+    const caps = capsAt(reach, docketPlace(docket))
+    if (!caps.has('read')) throw new ApiTokenError('forbidden', 'The token owner has no access to one of those dockets.')
+    if (!caps.has('write')) readOnly = true
   }
   if (legacy && credentialScopes({ readOnly, legacy }).length === 0) {
     throw new ApiTokenError('invalid', 'A token must be able to read.')

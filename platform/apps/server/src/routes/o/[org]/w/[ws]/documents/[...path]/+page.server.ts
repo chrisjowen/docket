@@ -21,7 +21,7 @@ export const load: PageServerLoad = async (event) => {
   const path = event.params.path
   const asked = event.url.searchParams.get('rev')
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     const document = await readDocument(ctx, workspace.id, path)
     if (!document) error(404, 'No live document at that path.')
     return { access, document, history: await documentHistory(ctx, workspace.id, document.id) }

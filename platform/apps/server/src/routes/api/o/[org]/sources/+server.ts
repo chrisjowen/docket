@@ -2,7 +2,7 @@
 import { registerSource, unregisterSource } from '@docket/platform-canonical-store'
 import { error, json } from '@sveltejs/kit'
 
-import { authorise, orgAccess, requireUser } from '$lib/server/request'
+import { authorise, authoriseAnywhere, orgAccess, requireUser } from '$lib/server/request'
 import { attest, bodyOf, registered, registry } from '$lib/server/trust'
 import { inOrg } from '$lib/server/workspace'
 
@@ -20,7 +20,7 @@ const text = (value: unknown, name: string): string => {
  */
 export const GET: RequestHandler = async (event) => {
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'graph.read')
+  authoriseAnywhere(access, 'read')
   return json({ org: access.org.slug, sources: await inOrg(access, (ctx) => registry(ctx, event.url.searchParams.get('source'))) })
 }
 
@@ -32,7 +32,7 @@ export const GET: RequestHandler = async (event) => {
 export const PUT: RequestHandler = async (event) => {
   const user = requireUser(event)
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'trust.manage')
+  authorise(access, 'settings')
   const body = await bodyOf(event)
   const source = text(body.source, 'the source type')
   const instance = text(body.instance, 'the instance')
@@ -50,7 +50,7 @@ export const PUT: RequestHandler = async (event) => {
 /** Unregisters a source instance: `?source=document&instance=…`. Owners and admins only. */
 export const DELETE: RequestHandler = async (event) => {
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'trust.manage')
+  authorise(access, 'settings')
   const source = text(event.url.searchParams.get('source'), 'the source type')
   const instance = text(event.url.searchParams.get('instance'), 'the instance')
   await inOrg(access, (ctx) =>

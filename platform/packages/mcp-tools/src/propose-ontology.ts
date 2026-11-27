@@ -12,8 +12,8 @@ const DEFINITION = {
     "Propose a change to this workspace's ontology as a draft: new resource types, relationships, attributes or " +
     'evidence sources. Give either patch, a YAML merge patch onto the published ontology (a mapping merges key by key; ' +
     'null removes a key), or yaml, a whole ontology. It returns the change check: what the draft would do to every ' +
-    'document. It never publishes; an admin reviews and publishes drafts in the web app (or, where the workspace allows ' +
-    'your role, docket_publish_ontology_change publishes directly).',
+    'document. It never publishes; someone who holds Publish ontology changes reviews and publishes drafts in the web ' +
+    'app (or, if you hold it, docket_publish_ontology_change publishes directly).',
   inputSchema: {
     type: 'object',
     properties: {

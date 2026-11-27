@@ -2,20 +2,20 @@
 import { isHttpError, type RequestEvent } from '@sveltejs/kit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { accessRows } from '$lib/server/testing-access'
+
 type Query = { sql: string; params: unknown[] }
 
 const queries: Query[] = []
 let role = 'owner'
-/** The account role platform 0012 derives from each role. */
-const ACCOUNT_ROLE: Record<string, string> = { owner: 'owner', admin: 'admin', editor: 'developer', viewer: 'read_only' }
 
 async function transaction<T>(fn: (tx: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number }> }) => Promise<T>) {
   return fn({
     async query(sql, params = []) {
       queries.push({ sql, params })
-      if (sql.includes('FROM platform.orgs')) return { rows: [{ id: 'orgacme', slug: 'acme', name: 'Acme', status: 'active', role, account_role: ACCOUNT_ROLE[role] }], rowCount: 1 }
-      if (sql.includes('FROM platform.namespace_grants')) return { rows: [{ namespace_id: 'wsmain', permission: role === 'editor' ? 'write' : 'read' }], rowCount: 1 }
-      if (sql.includes('FROM workspaces WHERE')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', created_by: 'user:u1', created_at: new Date(), ontology_mcp_roles: [] }], rowCount: 1 }
+      const access = accessRows(sql, role)
+      if (access) return { rows: access, rowCount: access.length }
+      if (sql.includes('FROM workspaces WHERE')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', created_by: 'user:u1', created_at: new Date() }], rowCount: 1 }
       if (sql.includes('FROM audit_head')) return { rows: [{ hash: '0'.repeat(64) }], rowCount: 1 }
       return { rows: [], rowCount: 0 }
     },

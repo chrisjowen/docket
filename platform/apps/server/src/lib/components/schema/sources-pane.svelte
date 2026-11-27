@@ -321,7 +321,7 @@
             {/each}
           </tbody>
         </table>
-        <p class="muted small foot">Set once per org, by an owner or admin, and attested to every workspace's policies. Changing someone's role scores again everything they are the source of. Service accounts act for the person shown above them; change that on <a href={resolve('/o/[org]/members', { org })}>Members &amp; roles</a>.</p>
+        <p class="muted small foot">Set once per org, by whoever may change its settings, and attested to every workspace's policies. Changing someone's role scores again everything they are the source of. Service accounts act for the person shown above them; change that on <a href={resolve('/o/[org]/members', { org })}>Members &amp; roles</a>.</p>
       {:else if connectionAttributes.length || registryAttributes.length}
         {#if connectionAttributes.length}
           <h3 class="sec">Connected repositories</h3>
@@ -382,7 +382,7 @@
               <button type="button" class="button small" disabled={busy} onclick={() => register(name, registryAttributes)}><Plus size={13} aria-hidden="true" /> Register</button>
             </div>
           {/if}
-          <p class="muted small foot">Kept in the org's source registry; owners and admins mark what is verified. A writer claiming otherwise is ignored.</p>
+          <p class="muted small foot">Kept in the org's source registry; whoever may change its settings marks what is verified. A writer claiming otherwise is ignored.</p>
         {/if}
       {:else}
         <h3 class="sec">Registry</h3>

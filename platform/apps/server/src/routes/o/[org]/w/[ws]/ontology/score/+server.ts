@@ -17,7 +17,7 @@ export const POST: RequestHandler = async (event) => {
   return inWorkspace(
     event,
     async ({ access, workspace, ctx }) => {
-      authorise(access, 'ontology.propose')
+      authorise(access, 'propose')
       return json(await scoreSample(ctx, workspace.id, body, yaml, source))
     },
     { api: true },

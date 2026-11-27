@@ -23,7 +23,7 @@ import { LIMITS } from '@docket/platform-tenancy'
 import { fail, redirect } from '@sveltejs/kit'
 
 import { draftOntology } from '$lib/server/ontology-draft'
-import { authorise, orgAccess, permissionOn, recordAudit, requireUser, type OrgAccess } from '$lib/server/request'
+import { authorise, orgAccess, readsDocket, recordAudit, requireUser, type OrgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 import { formText, inOrg, publisherOf } from '$lib/server/workspace'
 
@@ -32,7 +32,7 @@ import type { Actions, PageServerLoad } from './$types'
 /** Creating a workspace publishes its first ontology version, so it takes the publish permission (§4). */
 export const load: PageServerLoad = async (event) => {
   const access = await orgAccess(event)
-  authorise(access, 'ontology.publish')
+  authorise(access, 'create')
   const { actor } = publisherOf(event)
   const { workspaces, members, templates, drafts } = await getRuntime().router.withTenant(access.org.id, async (tx) => ({
     workspaces: await listWorkspaces(tx),
@@ -42,9 +42,9 @@ export const load: PageServerLoad = async (event) => {
   }))
   return {
     catalogue: [...builtInCatalogue(), ...templates.map(orgCatalogueEntry)],
-    copyable: workspaces.filter((workspace) => permissionOn(access, workspace.id) !== null).map((workspace) => ({ id: workspace.id, name: workspace.name })),
+    copyable: workspaces.filter((workspace) => readsDocket(access, workspace.id)).map((workspace) => ({ id: workspace.id, name: workspace.name })),
     drafts: drafts.map((draft) => ({ id: draft.id, name: draft.name, slug: draft.slug, updatedAt: draft.updatedAt.toISOString() })),
-    manageTemplates: access.can('templates.manage'),
+    manageTemplates: access.can('settings'),
     maxDescription: MAX_DESCRIPTION,
     full: members >= LIMITS.workspacesPerOrg,
     limit: LIMITS.workspacesPerOrg,
@@ -81,7 +81,7 @@ async function startingPoints(access: OrgAccess): Promise<StartingPoint[]> {
 export const actions: Actions = {
   default: async (event) => {
     const access = await orgAccess(event)
-    authorise(access, 'ontology.publish')
+    authorise(access, 'create')
     const form = await event.request.formData()
     const name = String(form.get('name') ?? '').trim()
     const slug = String(form.get('slug') ?? '').trim().toLowerCase()
@@ -125,7 +125,7 @@ export const actions: Actions = {
     const start = await startOf(form)
     if (typeof start === 'string') return fail(400, { ...values, problem: start })
     // A copy reads the other docket's ontology, so it must be one the member reaches.
-    if ('copyFrom' in start && permissionOn(access, start.copyFrom) === null) return fail(400, { ...values, problem: 'Choose the docket to copy.' })
+    if ('copyFrom' in start && !readsDocket(access, start.copyFrom)) return fail(400, { ...values, problem: 'Choose the docket to copy.' })
     try {
       const created = await inOrg(access, async (ctx) => {
         const { workspace, version } = await createWorkspace(ctx, { name, slug, start, publisher: publisherOf(event), requestId: event.locals.requestId })

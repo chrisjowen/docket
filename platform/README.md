@@ -24,7 +24,7 @@ from these packages.
 | --- | --- | --- |
 | `apps/server` | `@docket/server-platform` | The SvelteKit app (adapter-node): the API, MCP endpoints (`/mcp/{org}/{ws}`), the OAuth endpoints, sign-in, and the product's pages. `server.js` serves the build, with the OAuth authorization server in front. |
 | `apps/worker` | `@docket/server-worker` | The worker: the outbox and projections (Neo4j, Qdrant/mem0, optional cognee), the query service behind `docket_search` and `docket_ask`, repository sync and export PRs, enrichment, consolidation, and per-account provisioning. |
-| `packages/tenancy` | `@docket/platform-tenancy` | Accounts, members, invites, roles and namespace grants, the identities every sign-in provider resolves to, tenant routing, and the platform and per-account SQL migrations. |
+| `packages/tenancy` | `@docket/platform-tenancy` | Accounts, members, invites, capabilities, roles and grants (a role on a place, and `capsAt`, the one access resolver), the identities every sign-in provider resolves to, tenant routing, and the platform and per-account SQL migrations. |
 | `packages/auth` | `@docket/platform-auth` | GitHub, OpenID Connect and password sign-in, sessions, CSRF, the OAuth provider (`oidc-provider`), API tokens and effective scopes. |
 | `packages/keys` | `@docket/platform-keys` | `KeyService`: envelope encryption of per-account data keys under the platform key (KEK). |
 | `packages/audit` | `@docket/platform-audit` | The append-only, hash-chained audit log. |

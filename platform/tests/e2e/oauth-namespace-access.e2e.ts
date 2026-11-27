@@ -48,14 +48,14 @@ test('a read-only member’s connection only reads over MCP OAuth, even when the
 
     await owner.goto(`/o/${org}/members`)
     await owner.getByLabel('GitHub login or email').fill(`@${dana}`)
-    await owner.locator('form[action="?/invite"] select[name="role"]').selectOption('viewer')
+    await owner.locator('form[action="?/invite"] select[name="role"]').selectOption('reader')
     await owner.getByRole('button', { name: 'Send invite' }).click()
-    await expect(owner.getByText(`Invited @${dana} as viewer.`)).toBeVisible()
+    await expect(owner.getByText(`Invited @${dana} as Reader on`)).toBeVisible()
 
     const danaPage = await (await browser.newContext()).newPage()
     await signIn(danaPage, dana, { name: 'Dana Diaz' })
     await danaPage.getByRole('button', { name: `Accept and join Acme ${suffix}` }).click()
-    await expect(danaPage.getByTestId('my-role')).toHaveText('viewer')
+    await expect(danaPage.getByTestId('my-role')).toHaveText('Reader')
 
     const clientId = await register(request, redirectUri, 'readonly e2e client')
     const resource = `${baseURL}/mcp/${org}/${ws}`

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { lockOntologyHead, ontologyMcpRoles, recordIngest, type StoreContext, type Writer } from '@docket/platform-canonical-store'
-import type { Role } from '@docket/platform-tenancy'
+import { lockOntologyHead, recordIngest, type StoreContext, type Writer } from '@docket/platform-canonical-store'
 import { isMap, parseDocument, stringify } from 'yaml'
 
 import { checkDraft, type Disposition, type DraftCheck } from './check.js'
@@ -109,20 +108,29 @@ export type DirectChange = Proposal & {
   dispositions?: Readonly<Record<string, Disposition>>
 }
 
+/** The caller does not hold Publish ontology changes on this docket (any more). */
+export class PublishNotGranted extends OntologyWriteDisabled {
+  override name = 'PublishNotGranted'
+  constructor() {
+    super(null)
+    this.message = 'you do not hold Publish ontology changes on this docket'
+  }
+}
+
 /**
  * `docket_publish_ontology_change`: publishes a proposal as the next version,
  * through the editor's publish path - the same change check, migration of
  * the documents, dispositions and activity record, with no review. Allowed
- * only while the workspace's setting names `role`: the setting is read under
- * the publish's own locks (the head, then the workspace row, in the order
- * `publish` takes them), so turning it off waits for an in-flight publish and
- * refuses every one after. Rolled back like any version, from the history.
+ * only while the caller holds Publish ontology changes on the docket:
+ * `mayPublish` is asked again once the publish holds its locks (the head,
+ * then the workspace row, in the order `publish` takes them), so a grant
+ * taken away before then refuses it. Rolled back like any version, from the
+ * history.
  */
-export async function publishOntologyChange(ctx: StoreContext, writer: Writer, role: Role | null, change: DirectChange): Promise<Published> {
+export async function publishOntologyChange(ctx: StoreContext, writer: Writer, mayPublish: () => Promise<boolean>, change: DirectChange): Promise<Published> {
   const head = await lockOntologyHead(ctx, writer.workspaceId, 'update')
   await ctx.tx.query('SELECT 1 FROM workspaces WHERE id = $1 AND deleted_at IS NULL FOR UPDATE', [writer.workspaceId])
-  const allowed = await ontologyMcpRoles(ctx.tx, writer.workspaceId)
-  if (role === null || !(allowed as readonly string[]).includes(role)) throw new OntologyWriteDisabled(role)
+  if (!(await mayPublish())) throw new PublishNotGranted()
   const message = change.message?.trim() || `Published by ${writer.label}`
   const draft = await createDraft(ctx.tx, writer.workspaceId, {
     yaml: proposedText(head?.yaml ?? null, change),

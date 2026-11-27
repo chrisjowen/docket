@@ -31,10 +31,9 @@ export {
   credentialScopes,
   fromLegacyScopes,
   impliedScopes,
+  capabilityScopes,
   isScope,
-  namespaceScopes,
   parseScopeString,
-  roleScopes,
 } from './scopes.js'
 export type { Scope } from './scopes.js'
 export { mcpResourceUrl, parseMcpResourceUrl } from './principal.js'

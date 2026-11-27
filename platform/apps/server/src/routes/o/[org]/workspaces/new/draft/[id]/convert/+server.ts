@@ -11,7 +11,7 @@ export const POST: RequestHandler = async (event) => {
   const body = (await event.request.json().catch(() => null)) as { yaml?: unknown } | null
   if (!body || typeof body.yaml !== 'string') error(400, 'Send { yaml }.')
   const yaml = body.yaml
-  authorise(await orgAccess(event, { api: true }), 'ontology.publish')
+  authorise(await orgAccess(event, { api: true }), 'create')
   try {
     return json({ ok: true, ...convertOntologyText(yaml) })
   } catch (caught) {

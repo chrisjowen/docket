@@ -20,9 +20,10 @@ describe.skipIf(!TEST_PG_URL)('API tokens in Postgres', () => {
       INSERT INTO platform.users (id, kind, github_id, login) VALUES ('u-ed', 'human', 1, 'ed'), ('u-vi', 'human', 2, 'vi');
       INSERT INTO platform.orgs (id, slug, name, status, created_by) VALUES ('orga', 'acme', 'Acme', 'active', 'u-ed');
       INSERT INTO platform.users (id, kind, login, service_org_id, created_by) VALUES ('u-bot', 'service', 'ci-bot', 'orga', 'u-ed');
-      INSERT INTO platform.memberships (org_id, user_id, role) VALUES ('orga', 'u-ed', 'editor'), ('orga', 'u-vi', 'viewer'), ('orga', 'u-bot', 'viewer');
-      INSERT INTO platform.namespace_grants (org_id, namespace_id, principal_id, permission) VALUES
-        ('orga', 'ws1', 'u-ed', 'write'), ('orga', 'ws2', 'u-ed', 'write'), ('orga', 'ws1', 'u-vi', 'read'), ('orga', 'ws1', 'u-bot', 'read');
+      INSERT INTO platform.memberships (org_id, user_id) VALUES ('orga', 'u-ed'), ('orga', 'u-vi'), ('orga', 'u-bot');
+      INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id) VALUES
+        ('g1', 'orga', 'u-ed', 'docket', 'ws1', 'writer'), ('g2', 'orga', 'u-ed', 'docket', 'ws2', 'writer'),
+        ('g3', 'orga', 'u-vi', 'docket', 'ws1', 'reader'), ('g4', 'orga', 'u-bot', 'docket', 'ws1', 'reader');
     `)
   }, 60_000)
 

@@ -2,7 +2,6 @@
 import { InvalidArgumentsError, type Tool } from '@chrisjowen/docket'
 import type { Scope } from '@docket/platform-auth'
 import type { StoreContext, Writer } from '@docket/platform-canonical-store'
-import type { Role } from '@docket/platform-tenancy'
 
 import type { QueryClient } from './query.js'
 
@@ -32,8 +31,8 @@ export interface CloudToolContext {
    * activity log (§9.1): looked up only when a write tool runs.
    */
   writer(): Promise<Writer>
-  /** The caller's role in the org now: `docket_publish_ontology_change` checks it against the workspace's setting. */
-  role(): Promise<Role | null>
+  /** Whether the caller holds Publish ontology changes on the docket now: `docket_publish_ontology_change` asks again under its locks. */
+  mayPublish(): Promise<boolean>
   /**
    * Runs a write in one tenant transaction and records the request's audit
    * event in it, last, so the change and its audit event commit together

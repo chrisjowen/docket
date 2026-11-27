@@ -49,6 +49,10 @@
     org?: { slug: string; name: string }
     role?: string
     permissions?: Record<string, boolean>
+    owner?: boolean
+    accountAdmin?: boolean
+    managesAccess?: boolean
+    managesSystemAccounts?: boolean
     dockets?: { slug: string; name: string; docketNo: string; open: boolean }[]
     ai?: { spentUsd: number; capUsd: number; fraction: number; warned: boolean }
     /** For the account's owners: system account tokens about to expire, or just expired. */
@@ -184,14 +188,14 @@
               <ScrollText size={17} aria-hidden="true" /> Audit log
             </a>
           </li>
-          {#if data.permissions?.['templates.manage']}
+          {#if data.permissions?.settings}
             <li>
               <a href={resolve('/o/[org]/templates', { org: org.slug })} aria-current={current(orgPath('/templates'))}>
                 <LayoutTemplate size={17} aria-hidden="true" /> Templates
               </a>
             </li>
           {/if}
-          {#if data.permissions?.['org.administer'] || data.permissions?.['members.manage']}
+          {#if data.owner || data.accountAdmin || data.managesSystemAccounts}
             <li>
               <a href={resolve('/o/[org]/settings', { org: org.slug })} aria-current={page.url.pathname.startsWith(orgPath('/settings')) ? 'page' : undefined}>
                 <Settings size={17} aria-hidden="true" /> Settings
@@ -224,7 +228,7 @@
           {:else}
             <li class="muted none">No dockets yet.</li>
           {/each}
-          {#if data.permissions?.['ontology.publish']}
+          {#if data.permissions?.create}
             <li>
               <a
                 href={resolve('/o/[org]/workspaces/new', { org: org.slug })}
@@ -270,9 +274,9 @@
           <span class="figures mono">${data.ai.spentUsd.toFixed(2)} of ${data.ai.capUsd.toFixed(2)}</span>
           {#if data.ai.fraction >= 1}
             <span class="note"
-              >Budget reached: search still works{data.permissions?.['org.administer'] ? '; raise the cap in Settings' : '; ask an owner to raise the cap'}.</span
+              >Budget reached: search still works{data.owner ? '; raise the cap in Settings' : '; ask an owner to raise the cap'}.</span
             >
-          {:else if data.ai.warned && data.permissions?.['org.administer']}
+          {:else if data.ai.warned && data.owner}
             <span class="note">Over 80% of this month's cap.</span>
           {/if}
         </div>
@@ -332,8 +336,8 @@
   </div>
 
   {#if org}
-    <CommandMenu bind:open={menu} {org} {workspace} dockets={(data.dockets ?? []).filter((entry) => entry.open)} canAdminister={data.permissions?.['org.administer'] ?? false}
-      canManageAccess={data.permissions?.['members.manage'] ?? false}
+    <CommandMenu bind:open={menu} {org} {workspace} dockets={(data.dockets ?? []).filter((entry) => entry.open)} canAdminister={data.owner ?? false}
+      canManageAccess={data.managesSystemAccounts ?? false}
     />
   {/if}
 

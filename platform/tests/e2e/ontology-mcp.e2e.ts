@@ -4,11 +4,11 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { acmeWorkspace, createOrg, createToken, csrfOf, mcp, signIn, unique } from './helpers'
 
 /**
- * Direct ontology changes over MCP: the workspace's owner chooses the roles
- * whose `ontology:write` credentials may publish the ontology from an MCP
- * client, breaking and migrating changes included, with no review. The
- * setting is checked on every call, and every change is in the history,
- * where it rolls back.
+ * Direct ontology changes over MCP: Publish ontology changes is a capability,
+ * given person by person on a docket's Access tab (tenancy v2 §3.1). Whoever
+ * holds it publishes from an MCP client, breaking and migrating changes
+ * included, with no review. It is read on every call, and every change is in
+ * the history, where it rolls back.
  */
 
 type Result = {
@@ -33,17 +33,22 @@ async function tools(request: APIRequestContext, token: string): Promise<string[
   return listed.result?.tools?.map((tool) => tool.name) ?? []
 }
 
-/** The owner ticks exactly `roles` in the workspace's settings. */
-async function allow(roles: string[]) {
-  await alice.goto(`${ws()}/settings`)
-  const form = alice.getByTestId('ontology-mcp')
-  for (const role of ['Owners', 'Admins', 'Editors']) {
-    const box = form.getByLabel(role)
-    if (roles.includes(role)) await box.check()
-    else await box.uncheck()
+/** The owner gives Bob Writer + Publish ontology changes on this docket, or takes that grant away. */
+async function letBobPublish(on: boolean) {
+  await alice.goto(`${ws()}/access`)
+  if (on) {
+    const form = alice.getByTestId('give-access')
+    const bobId = await form.locator('select[name="who"] option', { hasText: bobLogin }).getAttribute('value')
+    await form.locator('select[name="who"]').selectOption(bobId ?? '')
+    await form.getByTestId('role-select').selectOption('writer')
+    await form.getByText('Adjust capabilities').click()
+    await form.getByLabel('Publish ontology changes').check()
+    await form.getByRole('button', { name: 'Give access' }).click()
+    await expect(alice.getByRole('status')).toContainText(`${bobLogin} now has Writer + Publish ontology changes`)
+  } else {
+    await alice.getByRole('list', { name: 'Grants on this docket' }).locator(`li[data-who="${bobLogin}"]`).getByRole('button', { name: /^Remove / }).click()
+    await expect(alice.getByRole('status')).toContainText(`${bobLogin} no longer has`)
   }
-  await form.getByRole('button', { name: 'Save' }).click()
-  await expect(alice.getByRole('status')).toContainText('Saved')
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -53,12 +58,12 @@ test.beforeAll(async ({ browser }) => {
   await acmeWorkspace(alice, org)
   await alice.goto(`/o/${org}/members`)
   await alice.getByLabel('GitHub login or email').fill(`@${bobLogin}`)
-  await alice.locator('form[action="?/invite"] select[name="role"]').selectOption('editor')
+  await alice.locator('form[action="?/invite"] select[name="role"]').selectOption('writer')
   await alice.getByRole('button', { name: 'Send invite' }).click()
   bob = await (await browser.newContext()).newPage()
   await signIn(bob, bobLogin)
   await bob.getByRole('button', { name: /^Accept and join/ }).click()
-  await expect(bob.getByTestId('my-role')).toHaveText('editor')
+  await expect(bob.getByTestId('my-role')).toHaveText('Writer')
 })
 
 test.afterAll(async () => {
@@ -66,32 +71,31 @@ test.afterAll(async () => {
   await bob?.context().close()
 })
 
-test('only the owner changes the setting, and a token publishes only while it names its owner’s role', async ({ request }) => {
-  // Off by default: an editor's token proposes, and cannot publish.
-  const editors = await createToken(bob, org, 'acme', { scopes: ['docket:read', 'docket:write'], description: 'e2e editor' })
-  expect(await tools(request, editors)).not.toContain('docket_publish_ontology_change')
-  await bob.goto(`${ws()}/settings`)
-  await expect(bob.getByTestId('ontology-mcp').getByLabel('Editors')).toBeDisabled()
-  await expect(bob.getByText("Only the organisation's owner changes this.")).toBeVisible()
-  const refused = await bob.request.post(`${ws()}/settings?/ontologyMcp`, {
-    form: { csrf: await csrfOf(bob), role: 'editor' },
+test('only someone who manages access gives Publish, and a token publishes only while its owner holds it', async ({ request }) => {
+  // A writer's token proposes, and cannot publish.
+  const writers = await createToken(bob, org, 'acme', { scopes: ['docket:read', 'docket:write'], description: 'e2e writer' })
+  expect(await tools(request, writers)).not.toContain('docket_publish_ontology_change')
+  // Bob sees his own access on the Access tab, and cannot give any.
+  await bob.goto(`${ws()}/access`)
+  await expect(bob.getByTestId('your-access')).toContainText('Can write')
+  await expect(bob.getByTestId('give-access')).toHaveCount(0)
+  const refused = await bob.request.post(`${ws()}/access?/give`, {
+    form: { csrf: await csrfOf(bob), who: 'everyone', role: 'admin' },
     headers: { origin: new URL(bob.url()).origin },
   })
   expect(refused.status()).toBe(403)
 
-  // The owner lets editors, not owners: role by role.
-  await allow(['Editors'])
-  await alice.reload()
-  await expect(alice.getByTestId('ontology-mcp').getByLabel('Editors')).toBeChecked()
-  await expect(alice.getByTestId('ontology-mcp').getByLabel('Owners')).not.toBeChecked()
-  // A token acts as its owner: the editor's same token publishes from its next call, the owner's does not.
-  expect(await tools(request, editors)).toContain('docket_publish_ontology_change')
-  const owners = await createToken(alice, org, 'acme', { scopes: ['docket:read', 'docket:write'], description: 'e2e owner' })
-  expect(await tools(request, owners)).not.toContain('docket_publish_ontology_change')
+  // The owner gives Bob alone Publish ontology changes on this docket.
+  await letBobPublish(true)
+  await expect(alice.getByRole('list', { name: 'Grants on this docket' }).locator(`li[data-who="${bobLogin}"]`)).toContainText('Writer + Publish ontology changes')
+  // A token acts as its owner: Bob's same token publishes from its next call. The owner holds every capability.
+  expect(await tools(request, writers)).toContain('docket_publish_ontology_change')
+  const owners = await createToken(alice, org, 'acme', { scopes: ['docket:read', 'docket:write', 'ontology:write'], description: 'e2e owner' })
+  expect(await tools(request, owners)).toContain('docket_publish_ontology_change')
 })
 
-test("an editor's ontology:write token publishes and migrates over MCP, rolls back from the history, and stops when the owner turns it off", async ({ request }) => {
-  await allow(['Editors'])
+test("a publisher's ontology:write token publishes and migrates over MCP, rolls back from the history, and stops when the grant goes", async ({ request }) => {
+  await letBobPublish(true)
   const token = await createToken(bob, org, 'acme', { scopes: ['docket:read', 'ontology:propose', 'ontology:write'], description: 'e2e ontology writer' })
   expect(await tools(request, token)).toContain('docket_publish_ontology_change')
 
@@ -126,13 +130,13 @@ test("an editor's ontology:write token publishes and migrates over MCP, rolls ba
   await alice.goto(`${ws()}/ontology/history`)
   await expect(alice.locator('li[data-version="4"]')).toContainText('renameType feature_flag -> flag')
 
-  // Every call and the setting's changes are in the audit log.
+  // Every call and every change to who may publish are in the audit log.
   await alice.goto(`/o/${org}/audit`)
   await expect(alice.getByRole('cell', { name: 'mcp.tools/call docket_publish_ontology_change' }).first()).toBeVisible()
-  await expect(alice.getByRole('cell', { name: 'workspace.ontology-mcp' }).first()).toBeVisible()
+  await expect(alice.getByRole('cell', { name: /^access\.(grant|change)$/ }).first()).toBeVisible()
 
-  // Turned off: the same token loses the tool on its very next call, and can still propose.
-  await allow([])
+  // Taken away: the same token loses the tool on its very next call, and can still propose.
+  await letBobPublish(false)
   expect(await tools(request, token)).not.toContain('docket_publish_ontology_change')
   expect(await tools(request, token)).toContain('docket_propose_ontology_change')
   const off = await mcp(request, endpoint(), token, 'tools/call', { name: 'docket_publish_ontology_change', arguments: { patch: 'resourceTypes:\n  topic:\n    description: A topic.\n' } })

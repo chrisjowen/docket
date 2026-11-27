@@ -6,7 +6,7 @@ import { insertWorkspace } from '@docket/platform-canonical-store'
 import { createTestOrg, type TestOrg } from '@docket/platform-canonical-store/testing'
 import { memoryBucketStore, rateLimiter } from '@docket/platform-limits'
 import type { SearchGraph } from '@docket/platform-mcp-tools'
-import { createServiceAccount, upsertGitHubUser } from '@docket/platform-tenancy'
+import { CONTENT_CAPABILITIES, accessOf, createServiceAccount, upsertGitHubUser, type Access } from '@docket/platform-tenancy'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -34,12 +34,12 @@ const graph: SearchGraph = {
   warnings: [],
 }
 
-const EVERY_SCOPE: Scope[] = ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose']
+const EVERY_SCOPE: Scope[] = ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose', 'ontology:write']
 
 // Namespace access over MCP (tenancy design §5.1): real Postgres roles, migrations, grants and token lookups;
 // only the process runtime is injected. Every credential below carries every scope, so what it can do is
-// exactly its owner's permission on the workspace now.
-describe.skipIf(!TEST_PG_URL)('MCP access by account role and namespace grant', () => {
+// exactly what its owner may do on the docket now: every grant that covers it.
+describe.skipIf(!TEST_PG_URL)('MCP access by grants on the account and the docket', () => {
   let org: TestOrg
   let main: string
   const orgSlug = () => `o-${org.orgId}`
@@ -50,17 +50,21 @@ describe.skipIf(!TEST_PG_URL)('MCP access by account role and namespace grant', 
   const human = (login: string) =>
     org.router.withPlatform((tx) => upsertGitHubUser(tx, { id: randomInt(1, 2 ** 31), login, name: null, avatarUrl: null, emails: [] }))
 
-  /** A membership as the app makes one (the account role follows `role`), or with an account role set outright. */
-  async function member(name: string, role: string, accountRole?: string): Promise<string> {
+  /** A membership, holding a role on the whole account when `role` names one. */
+  async function member(name: string, role: string | null, flags: { guest?: boolean } = {}): Promise<string> {
     const user = await human(`${name}${org.orgId.slice(0, 6)}`)
-    await org.db.admin.query('INSERT INTO platform.memberships (org_id, user_id, role, account_role) VALUES ($1, $2, $3, $4)', [
-      org.orgId,
-      user.id,
-      role,
-      accountRole ?? null,
-    ])
+    await org.db.admin.query('INSERT INTO platform.memberships (org_id, user_id, guest) VALUES ($1, $2, $3)', [org.orgId, user.id, flags.guest ?? false])
+    if (role) await grant(user.id, null, role)
     return user.id
   }
+  /** A role on the account (`docket` null) or on one docket, adjusted. */
+  const grant = (userId: string, docket: string | null, role: string, adjust: { add?: string[]; remove?: readonly string[] } = {}) =>
+    org.db.admin.query(
+      'INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id, add_caps, remove_caps) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [`g_${randomUUID()}`, org.orgId, userId, docket ? 'docket' : 'account', docket, role, adjust.add ?? [], adjust.remove ?? []],
+    )
+  const setDocketRole = (userId: string, role: string) =>
+    org.db.admin.query("UPDATE platform.grants SET role_id = $3 WHERE principal_id = $1 AND place_kind = 'docket' AND place_id = $2", [userId, main, role])
 
   /** A token row as any issue path stores it, bound to `main`; issuing is not what is under test. */
   async function apiToken(ownerId: string): Promise<string> {
@@ -127,31 +131,27 @@ describe.skipIf(!TEST_PG_URL)('MCP access by account role and namespace grant', 
     org = await createTestOrg()
     const other = await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Other', slug: 'other', createdBy: org.userId }))
     ids.owner = org.userId
+    main = (await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Main', slug: 'main', createdBy: org.userId }))).id
     ids.admin = await member('admin', 'admin')
-    ids.developer = await member('developer', 'editor')
-    ids.readOnly = await member('readonly', 'viewer')
-    ids.guest = await member('guest', 'viewer', 'guest')
-    ids.ungranted = await member('ungranted', 'viewer', 'guest')
+    ids.developer = await member('developer', 'writer')
+    ids.readOnly = await member('readonly', 'reader')
+    ids.guest = await member('guest', null, { guest: true })
+    await grant(ids.guest, main, 'reader')
+    ids.ungranted = await member('ungranted', null, { guest: true })
+    const owner = (await org.router.withPlatform((tx) => accessOf(tx, org.orgId, org.userId))) as Access
     ids.provisioner = (
       await org.router.withPlatform((tx) =>
-        createServiceAccount(tx, { orgId: org.orgId, name: `initech${org.orgId.slice(0, 6)}`, description: null, role: 'editor', actorId: org.userId, actorRole: 'owner' }),
+        createServiceAccount(tx, { orgId: org.orgId, name: `initech${org.orgId.slice(0, 6)}`, description: null, actorId: org.userId, actor: owner }),
       )
     ).id
-    await org.db.admin.query("UPDATE platform.memberships SET account_role = 'provisioner' WHERE user_id = $1", [ids.provisioner])
-    // A developer who joined before `main` existed, then lost its grant there: theirs is on `other` only.
-    ids.elsewhere = await member('elsewhere', 'editor')
-    main = (await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Main', slug: 'main', createdBy: org.userId }))).id
-    await org.db.admin.query('DELETE FROM platform.namespace_grants WHERE principal_id = $1 AND namespace_id = $2', [ids.elsewhere, main])
-    // Grants by hand: read for one guest, and write for the provisioner, which must never reach content.
-    await org.db.admin.query(
-      `INSERT INTO platform.namespace_grants (org_id, namespace_id, principal_id, permission) VALUES ($1, $2, $3, 'read'), ($1, $2, $4, 'write')`,
-      [org.orgId, main, ids.guest, ids.provisioner],
-    )
-    const { rows } = await org.db.admin.query<{ principal_id: string; namespace_id: string; permission: string }>(
-      'SELECT principal_id, namespace_id, permission FROM platform.namespace_grants WHERE principal_id = $1',
-      [ids.elsewhere],
-    )
-    expect(rows).toEqual([{ principal_id: ids.elsewhere, namespace_id: other.id, permission: 'write' }])
+    // Admin on the account without content: it may set things up, and must never reach content.
+    await grant(ids.provisioner, null, 'admin', { remove: CONTENT_CAPABILITIES })
+    // Writer on another docket only.
+    ids.elsewhere = await member('elsewhere', null)
+    await grant(ids.elsewhere, other.id, 'writer')
+    // Writer + Publish ontology changes on `main`, given to this one person.
+    ids.publisher = await member('publisher', 'reader')
+    await grant(ids.publisher, main, 'writer', { add: ['publish'] })
     for (const [name, id] of Object.entries(ids)) tokens[name] = await apiToken(id)
 
     runtime = {
@@ -170,7 +170,7 @@ describe.skipIf(!TEST_PG_URL)('MCP access by account role and namespace grant', 
   })
   afterAll(() => org?.drop())
 
-  it('lets owners, admins and developers read and write, as they do today', async () => {
+  it('lets owners, admins and writers on the account read and write', async () => {
     for (const name of ['owner', 'admin', 'developer']) {
       const token = tokens[name] as string
       expect(await toolNames(token)).toEqual(expect.arrayContaining(['docket_search', 'docket_remember', 'docket_propose_ontology_change']))
@@ -181,7 +181,7 @@ describe.skipIf(!TEST_PG_URL)('MCP access by account role and namespace grant', 
     }
   })
 
-  it('lets read-only members, and a guest granted Read, read but never write', async () => {
+  it('lets readers on the account, and a guest given Reader on the docket, read but never write', async () => {
     for (const name of ['readOnly', 'guest']) {
       const token = tokens[name] as string
       const names = await toolNames(token)
@@ -195,7 +195,7 @@ describe.skipIf(!TEST_PG_URL)('MCP access by account role and namespace grant', 
     }
   })
 
-  it('refuses everything to a guest with no grant, a developer granted another Docket only, and a provisioner', async () => {
+  it('refuses everything to a guest with no grant, a writer on another docket only, and a role without content', async () => {
     for (const name of ['ungranted', 'elsewhere', 'provisioner']) {
       const token = tokens[name] as string
       for (const answer of [await mcp(token, 'tools/list'), await search(token), await write(token), await mcp(token, 'resources/list')]) {
@@ -218,11 +218,21 @@ describe.skipIf(!TEST_PG_URL)('MCP access by account role and namespace grant', 
 
   it('narrows a live token from the next call when its grant is lowered or taken away', async () => {
     const token = await apiToken(ids.guest as string)
-    await org.db.admin.query("UPDATE platform.namespace_grants SET permission = 'write' WHERE principal_id = $1 AND namespace_id = $2", [ids.guest, main])
+    await setDocketRole(ids.guest as string, 'writer')
     expect(await toolNames(token)).toContain('docket_remember')
-    await org.db.admin.query("UPDATE platform.namespace_grants SET permission = 'read' WHERE principal_id = $1 AND namespace_id = $2", [ids.guest, main])
+    await setDocketRole(ids.guest as string, 'reader')
     expect((await write(token)).status).toBe(403)
-    await org.db.admin.query('DELETE FROM platform.namespace_grants WHERE principal_id = $1 AND namespace_id = $2', [ids.guest, main])
+    await org.db.admin.query("DELETE FROM platform.grants WHERE principal_id = $1 AND place_id = $2", [ids.guest, main])
     expect((await search(token)).status).toBe(401)
+  })
+
+  it('offers publishing the ontology over MCP only to whoever holds Publish ontology changes on the docket', async () => {
+    expect(await toolNames(tokens.publisher as string)).toContain('docket_publish_ontology_change')
+    expect(await toolNames(tokens.developer as string)).not.toContain('docket_publish_ontology_change')
+    // An admin holds every capability, Publish included.
+    expect(await toolNames(tokens.admin as string)).toContain('docket_publish_ontology_change')
+    // Taken away, it is gone from the next call.
+    await org.db.admin.query("UPDATE platform.grants SET add_caps = '{}' WHERE principal_id = $1 AND place_id = $2", [ids.publisher, main])
+    expect(await toolNames(tokens.publisher as string)).not.toContain('docket_publish_ontology_change')
   })
 })

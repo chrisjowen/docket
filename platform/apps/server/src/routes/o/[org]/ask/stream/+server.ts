@@ -2,7 +2,7 @@
 import { error } from '@sveltejs/kit'
 
 import { askQuestion, type Question } from '$lib/server/ask-chat'
-import { authorise, orgAccess, recordStandalone, requireUser } from '$lib/server/request'
+import { authoriseAnywhere, orgAccess, recordStandalone, requireUser } from '$lib/server/request'
 
 import type { RequestHandler } from './$types'
 
@@ -16,7 +16,7 @@ import type { RequestHandler } from './$types'
  */
 export const POST: RequestHandler = async (event) => {
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'graph.read')
+  authoriseAnywhere(access, 'read')
   const user = requireUser(event)
   let body: unknown
   try {

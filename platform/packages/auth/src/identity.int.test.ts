@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {
+  ACCOUNT,
   GITHUB_ISSUER,
+  accessOf,
   createInvite,
   identitiesOf,
   insertOrg,
@@ -85,7 +87,8 @@ describe.skipIf(!TEST_PG_URL)('one identity resolver for every provider', () => 
     const owner = await router.withPlatform((tx) => upsertGitHubUser(tx, { id: 777, login: 'owner', name: null, avatarUrl: null, emails: [] }))
     const org = await router.withPlatform((tx) => insertOrg(tx, { id: newTenantId(), slug: 'acme', name: 'Acme', ownerId: owner.id }))
     await router.withPlatform((tx) => tx.query("UPDATE platform.orgs SET status = 'active' WHERE id = $1", [org.id]))
-    await router.withPlatform((tx) => createInvite(tx, { orgId: org.id, who: 'stranger@elsewhere.example', role: 'viewer', actorId: owner.id, actorRole: 'owner' }))
+    const actor = await router.withPlatform((tx) => accessOf(tx, org.id, owner.id))
+    await router.withPlatform((tx) => createInvite(tx, { orgId: org.id, who: 'stranger@elsewhere.example', roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor: actor! }))
     expect(await router.withPlatform((tx) => mayEnter(tx, stranger))).toBe(true)
   })
 

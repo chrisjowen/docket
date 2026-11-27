@@ -27,7 +27,7 @@ export function readTools(context: CloudToolContext): CloudTool[] {
 /**
  * The write tools (§9, §9.1): every write carries evidence and is checked
  * against the published ontology. `docket_publish_ontology_change` is listed
- * only where the workspace lets the caller's role change the ontology over MCP.
+ * only to callers who hold Publish ontology changes on the docket.
  */
 export function writeTools(context: CloudToolContext): CloudTool[] {
   return [

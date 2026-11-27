@@ -22,7 +22,7 @@ export const GET: RequestHandler = async (event) => {
   const { access, workspace } = await inWorkspace(
     event,
     async ({ access, workspace }) => {
-      authorise(access, 'graph.read')
+      authorise(access, 'read')
       return { access, workspace }
     },
     { api: true },

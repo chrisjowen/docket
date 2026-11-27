@@ -218,7 +218,7 @@
                 <label class="grow"><span class="visually-hidden">Why accept it regardless</span><input name="reason" placeholder="Why it is right without the evidence" required maxlength="1000" /></label>
                 <button class="button" type="submit">Accept regardless</button>
               </form>
-              <p class="small muted">Recorded as an override, with your name and reason. Owners and admins only.</p>
+              <p class="small muted">Recorded as an override, with your name and reason. Needs Decide proposals.</p>
             {/if}
           </section>
         {/if}

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { audit, type AuditEventInput, type Outcome } from '@docket/platform-audit'
 import { bearerChallenge, checkScope, effectiveScopes, mcpResourceUrl, type McpResource, type Principal, type Scope } from '@docket/platform-auth'
-import { ontologyMcpRoles, type StoreContext } from '@docket/platform-canonical-store'
+import type { StoreContext } from '@docket/platform-canonical-store'
 import { mcpLimits, rateLimitMessage, writeLimits, type Limit } from '@docket/platform-limits'
-import { namespaceAccess, type NamespacePermission, type Role, type Tx } from '@docket/platform-tenancy'
+import { accessOf, capsAt, docketPlace, type Capability, type Tx } from '@docket/platform-tenancy'
 import type { RequestEvent } from '@sveltejs/kit'
 
 import { bearerOf, credentialInUrl, locateWorkspace, refusedCredentials } from './bearer'
@@ -41,10 +41,10 @@ export interface CliCall {
   orgSlug: string
   workspaceSlug: string
   effective: Scope[]
-  /** The caller's org role now. */
-  role: Role
-  /** The caller's permission on this workspace now: what the namespace matrix (`canInNamespace`) decides on. */
-  permission: NamespacePermission
+  /** Whether the caller owns the account. */
+  owner: boolean
+  /** What the caller may do on this docket now: every grant that covers it (`capsAt`). */
+  caps: ReadonlySet<Capability>
   /** Runs `fn` in one transaction as the org, with its data keys. */
   inTenant<T>(fn: (ctx: StoreContext) => Promise<T>): Promise<T>
   /** The call's audit event, written in `tx`: the transaction that made its change. */
@@ -133,16 +133,14 @@ export async function handleCli(event: RequestEvent, route: CliRoute, run: (call
     return problem(429, 'rate_limited', rateLimitMessage(decision), { 'retry-after': String(decision.retryAfterSeconds) })
   }
 
-  const effective = await effectiveScopes(principal, {
-    platform: (fn) => runtime.router.withPlatform(fn),
-    ontologyWriters: () => runtime.router.withTenant(principal.orgId, (tx) => ontologyMcpRoles(tx, principal.workspaceId)),
-  })
-  const access = await runtime.router.withPlatform((tx) => namespaceAccess(tx, principal.orgId, principal.workspaceId, principal.userId))
-  if (effective.length === 0 || !access?.permission) {
+  const effective = await effectiveScopes(principal, { platform: (fn) => runtime.router.withPlatform(fn) })
+  const access = await runtime.router.withPlatform((tx) => accessOf(tx, principal.orgId, principal.userId))
+  const caps = capsAt(access, docketPlace(principal.workspaceId))
+  if (effective.length === 0 || !access || !caps.has('read')) {
     await record({ outcome: 'denied' })
     return invalidToken('This credential no longer grants anything in this workspace.')
   }
-  const { role, permission } = access
+  const owner = access.owner
   if (route.oauthOnly && principal.via !== 'oauth') {
     await record({ outcome: 'denied' })
     const description = 'An API token cannot manage tokens: sign in with docket cloud login.'
@@ -163,8 +161,8 @@ export async function handleCli(event: RequestEvent, route: CliRoute, run: (call
     orgSlug,
     workspaceSlug,
     effective,
-    role,
-    permission,
+    owner,
+    caps,
     async inTenant(fn) {
       const keys = await runtime.keyring.forOrg(principal.orgId)
       return runtime.router.withTenant(principal.orgId, (tx) => fn({ tx, keys }))

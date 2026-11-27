@@ -15,7 +15,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
   return {
     user: { login: user.login, name: user.name, avatarUrl: user.avatarUrl, allowlisted: user.allowlisted, platformAdmin: isPlatformAdmin(user) },
     csrf: locals.csrf,
-    orgs: orgs.map(({ org, role }) => ({ slug: org.slug, name: org.name, role })),
+    orgs: orgs.map(({ org, owner, guest }) => ({ slug: org.slug, name: org.name, role: owner ? 'owner' : guest ? 'guest' : 'member' })),
     theme,
   }
 }

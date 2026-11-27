@@ -105,7 +105,7 @@
   // A rescore moves confidence and nothing else: it publishes without "publish anyway".
   const needsAcceptance = $derived(check?.classification === 'narrowing' || check?.classification === 'breaking')
   const blockedReason = $derived.by(() => {
-    if (!canPublish) return 'Only owners and admins publish. Save the draft and ask one of them.'
+    if (!canPublish) return 'Publishing needs Publish ontology changes on this docket. Save the draft and ask someone who holds it.'
     if (stale) return `The head moved to v${head?.number}. Rebase the draft and check it again.`
     if (result.status === 'checking' || result.status === 'idle') return 'Waiting for the check.'
     if (!check) return 'Fix the draft first.'

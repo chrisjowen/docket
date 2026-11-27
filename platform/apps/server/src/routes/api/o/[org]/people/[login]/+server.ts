@@ -17,7 +17,7 @@ import type { RequestHandler } from './$types'
 export const PUT: RequestHandler = async (event) => {
   const user = requireUser(event)
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'trust.manage')
+  authorise(access, 'settings')
   const member = await memberByLogin(access, event.params.login)
   const body = await bodyOf(event)
   const person = await inOrg(access, (ctx) =>

@@ -31,8 +31,8 @@ const DEFINITION = {
     'the published ontology (a mapping merges key by key; null removes a key), or yaml, a whole ontology. A change ' +
     'that breaks resources (a type or relationship they use goes away) needs a migration that resolves them, or a ' +
     'disposition for each; one that gives resources new diagnostics needs acceptNarrowing. Try ' +
-    'docket_propose_ontology_change first to see what a change does. Offered only where the workspace owner lets your ' +
-    'role change the ontology over MCP.',
+    'docket_propose_ontology_change first to see what a change does. Offered only to callers who hold Publish ' +
+    'ontology changes on this docket.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -148,10 +148,10 @@ function refusalOf(caught: unknown): string | null {
 }
 
 /**
- * `docket_publish_ontology_change`: publishes the ontology directly, where
- * the workspace's owner allows the caller's role to (§13.2's publish, over
- * MCP). Needs `ontology:write`, which is effective only while the setting
- * names the caller's role; the publish re-reads it under its own locks.
+ * `docket_publish_ontology_change`: publishes the ontology directly, for a
+ * caller who holds Publish ontology changes on the docket (§13.2's publish,
+ * over MCP). Needs `ontology:write`, which is effective only while they do;
+ * the publish asks again under its own locks.
  */
 export function publishOntologyTool(context: CloudToolContext): CloudTool {
   const tool: Tool = {
@@ -159,11 +159,10 @@ export function publishOntologyTool(context: CloudToolContext): CloudTool {
     async call(raw) {
       const change = changeOf(raw)
       const writer = await context.writer()
-      const role = await context.role()
       let published
       try {
         published = await context.audited(async (ctx) => {
-          const value = await publishOntologyChange(ctx, writer, role, change)
+          const value = await publishOntologyChange(ctx, writer, () => context.mayPublish(), change)
           return { value, outcome: 'ok', target: [`ontology:v${value.number}`, ...value.rewritten.map((document) => document.resourceId)] }
         })
       } catch (caught) {

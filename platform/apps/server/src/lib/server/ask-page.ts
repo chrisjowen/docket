@@ -7,7 +7,7 @@ import { ASK_SCOPE_COOKIE, askScope, remember } from '$lib/ask/scope'
 import { searchAcross, type SearchOutcome } from '$lib/server/ask'
 import { askQuestion } from '$lib/server/ask-chat'
 import { askDeps as deps, orgWorkspaces, typeRanks } from '$lib/server/ask-runtime'
-import { authorise, orgAccess, recordAudit, requireUser } from '$lib/server/request'
+import { authoriseAnywhere, orgAccess, recordAudit, requireUser } from '$lib/server/request'
 import { formText, inOrg } from '$lib/server/workspace'
 
 /**
@@ -34,7 +34,7 @@ const page = (org: string, docket: string | null, params: Record<string, string 
 
 export async function loadAsk(event: RequestEvent) {
   const access = await orgAccess(event)
-  authorise(access, 'graph.read')
+  authoriseAnywhere(access, 'read')
   const user = requireUser(event)
   const params = event.url.searchParams
   const workspaces = await orgWorkspaces(access)
@@ -96,7 +96,7 @@ export async function loadAsk(event: RequestEvent) {
 /** Asks without script: the answer opens in its chat on this page. A Chat tab asks its docket whatever the form names. */
 async function ask(event: RequestEvent) {
   const access = await orgAccess(event)
-  authorise(access, 'graph.read')
+  authoriseAnywhere(access, 'read')
   const user = requireUser(event)
   const form = await event.request.formData()
   const question = formText(form, 'question')
@@ -110,7 +110,7 @@ async function ask(event: RequestEvent) {
 /** Deletes one of the member's own chats. */
 async function remove(event: RequestEvent) {
   const access = await orgAccess(event)
-  authorise(access, 'graph.read')
+  authoriseAnywhere(access, 'read')
   const user = requireUser(event)
   const chatId = String((await event.request.formData()).get('chat') ?? '')
   const deleted = await inOrg(access, async (ctx) => {

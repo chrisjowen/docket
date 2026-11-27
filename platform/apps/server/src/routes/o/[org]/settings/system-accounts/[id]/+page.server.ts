@@ -13,23 +13,22 @@ import {
 import { rateLimitMessage, tokenCreateLimits } from '@docket/platform-limits'
 import {
   TenancyError,
-  assignableRoles,
-  canChangeRole,
-  changeRole,
+  accessOf,
+  capsAt,
   describeServiceAccount,
-  isRole,
+  docketPlace,
+  listGrants,
   listSystemAccounts,
-  namespaceGrantsOf,
-  namespacePermission,
   removeMember,
   tokenNotices,
   type Tx,
 } from '@docket/platform-tenancy'
 import { error, fail, redirect } from '@sveltejs/kit'
 
-import { authorise, orgAccess, recordStandalone, requireUser } from '$lib/server/request'
+import { docketNames, grantActions, grantView, placesToGive, rolesFor } from '$lib/server/grants'
+import { orgAccess, recordStandalone, requireUser, type OrgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
-import { ROLE_LABELS, manage } from '$lib/server/system-accounts'
+import { accessSummary, manage, mayManageSystemAccounts } from '$lib/server/system-accounts'
 import { accountDockets, tokenView, type DocketRef } from '$lib/server/tokens'
 
 import type { Actions, PageServerLoad } from './$types'
@@ -51,31 +50,30 @@ async function systemAccount(tx: Tx, orgId: string, id: string) {
   return account
 }
 
-/** The dockets a system account reaches now, by its role: what its tokens may name. */
+/** The dockets a system account reaches now, by its grants: what its tokens may name. */
 async function reachable(tx: Tx, orgId: string, accountId: string, dockets: ReadonlyMap<string, DocketRef>) {
-  const { rows } = await tx.query<{ account_role: string }>('SELECT account_role FROM platform.memberships WHERE org_id = $1 AND user_id = $2', [orgId, accountId])
-  const role = rows[0]?.account_role
-  if (!role) return []
-  const grants = await namespaceGrantsOf(tx, orgId, accountId)
+  const access = await accessOf(tx, orgId, accountId)
   return [...dockets.values()].flatMap((docket) => {
-    const grant = grants.get(docket.id)
-    const permission = namespacePermission(role as Parameters<typeof namespacePermission>[0], grant ? [grant] : [])
-    return permission ? [{ ...docket, readOnly: permission === 'read' }] : []
+    const caps = capsAt(access, docketPlace(docket.id))
+    return caps.has('read') ? [{ ...docket, readOnly: !caps.has('write') }] : []
   })
 }
 
 export const load: PageServerLoad = async (event) => {
   const user = requireUser(event)
   const access = await orgAccess(event)
-  authorise(access, 'members.manage')
+  if (!mayManageSystemAccounts(access)) error(403, 'You do not have access to that.')
   const id = event.params.id ?? ''
   const { dockets } = await accountDockets(access.org)
-  const { account, tokens, reach, notices } = await getRuntime().router.withPlatform(async (tx) => ({
+  const names = await docketNames(access.org.id)
+  const { account, tokens, reach, notices, grants } = await getRuntime().router.withPlatform(async (tx) => ({
     account: await systemAccount(tx, access.org.id, id),
     tokens: await listApiTokens(tx, { orgId: access.org.id, ownerId: id }),
     reach: await reachable(tx, access.org.id, id, dockets),
     notices: (await tokenNotices(tx, access.org.id)).filter((notice) => notice.accountId === id),
+    grants: await listGrants(tx, access.org.id, { userId: id }),
   }))
+  const views = grants.map((grant) => grantView(grant, access.principal, names, access.org.name))
   const now = Date.now()
   return {
     created: event.url.searchParams.has('created'),
@@ -83,16 +81,15 @@ export const load: PageServerLoad = async (event) => {
       id: account.id,
       name: account.name,
       description: account.description,
-      role: account.role,
-      access: ROLE_LABELS[account.role as keyof typeof ROLE_LABELS] ?? account.role,
+      access: accessSummary(views),
       managed: account.managed,
       createdAt: iso(account.createdAt),
       createdBy: account.createdByLogin,
     },
-    mayChange: !account.managed && canChangeRole(access.role, account.role, account.role),
-    roles: assignableRoles(access.role)
-      .filter((role) => role !== 'owner')
-      .map((role) => ({ role, label: ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role })),
+    mayChange: !account.managed && mayChangeAccount(access, views),
+    grants: account.managed ? views.map((grant) => ({ ...grant, mayChange: false })) : views,
+    roles: await rolesFor(access.org.id),
+    places: placesToGive(access, names, 'service'),
     reachable: reach,
     expiryChoices: EXPIRY_CHOICES,
     defaultDays: DEFAULT_SYSTEM_TOKEN_DAYS,
@@ -101,11 +98,26 @@ export const load: PageServerLoad = async (event) => {
   }
 }
 
+/**
+ * Whether the member may change a system account: they manage system accounts
+ * (or access) on a place it reaches, or anywhere when it reaches nothing yet.
+ */
+function mayChangeAccount(access: OrgAccess, grants: readonly { place: { key: string }; who: unknown }[]): boolean {
+  if (access.owner) return true
+  const manages = (key: string) => {
+    const caps = access.capsAt(key === 'account' ? { kind: 'account' } : docketPlace(key.slice(7)))
+    return caps.has('system') || caps.has('access')
+  }
+  return grants.length ? grants.some((grant) => manages(grant.place.key)) : mayManageSystemAccounts(access)
+}
+
 /** The system account named in the path, if this member may change it. */
-async function changeable(tx: Tx, access: { org: { id: string }; role: Parameters<typeof canChangeRole>[0] }, id: string) {
+async function changeable(tx: Tx, access: OrgAccess, id: string) {
   const account = await systemAccount(tx, access.org.id, id)
   if (account.managed) throw new TenancyError('forbidden', 'This system account is managed through the org admin API.')
-  if (!canChangeRole(access.role, account.role, account.role)) throw new TenancyError('forbidden', 'Your role cannot change that system account.')
+  const names = await docketNames(access.org.id)
+  const grants = (await listGrants(tx, access.org.id, { userId: id })).map((grant) => grantView(grant, access.principal, names, access.org.name))
+  if (!mayChangeAccount(access, grants)) throw new TenancyError('forbidden', 'You do not manage system accounts where it reaches.')
   return account
 }
 
@@ -178,16 +190,8 @@ export const actions: Actions = {
       tokenRefusals,
     ),
 
-  access: (event) =>
-    manage(event, async (tx, { access, form }) => {
-      const account = await changeable(tx, access, event.params.id ?? '')
-      const role = form.get('role')
-      if (!isRole(role)) throw new TenancyError('invalid', 'Choose what it may do.')
-      const from = await changeRole(tx, { orgId: access.org.id, userId: account.id, role, actorRole: access.role })
-      // Its tokens act as it: they reach what it reaches from their very next call.
-      await notifyRevoked(tx, `user:${account.id}`)
-      return { action: 'system-accounts.access', target: [`user:${account.id}`], args: { from, to: role }, flash: from === role ? 'No change.' : `${account.name} is now ${ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role}.` }
-    }),
+  // Its grants, as anywhere else: given, adjusted and removed here, for this system account alone.
+  ...grantActions({ only: (event) => ({ kind: 'user', id: event.params.id ?? '' }) }),
 
   describe: (event) =>
     manage(event, async (tx, { access, form }) => {
@@ -200,7 +204,7 @@ export const actions: Actions = {
   remove: async (event) => {
     const removed = await manage(event, async (tx, { access }) => {
       const account = await changeable(tx, access, event.params.id ?? '')
-      await removeMember(tx, { orgId: access.org.id, userId: account.id, actorRole: access.role })
+      await removeMember(tx, { orgId: access.org.id, userId: account.id, actor: access.principal })
       await notifyRevoked(tx, `user:${account.id}`)
       return { action: 'system-accounts.remove', target: [`user:${account.id}`], args: { name: account.name }, flash: `Removed ${account.name} and revoked its tokens.`, gone: true }
     })

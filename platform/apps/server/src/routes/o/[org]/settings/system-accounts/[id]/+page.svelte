@@ -7,6 +7,8 @@
   import NewToken from '$lib/components/credentials/new-token.svelte'
   import TokenForm from '$lib/components/credentials/token-form.svelte'
   import OrgSettingsTabs from '$lib/components/org-settings-tabs.svelte'
+  import GiveAccess from '$lib/components/access/give-access.svelte'
+  import GrantList from '$lib/components/access/grant-list.svelte'
 
   let { data, form } = $props()
 
@@ -23,7 +25,7 @@
 </svelte:head>
 
 <h1>Settings</h1>
-<OrgSettingsTabs org={data.org.slug} active="system-accounts" owner={data.permissions['org.administer']} />
+<OrgSettingsTabs org={data.org.slug} active="system-accounts" />
 <p><a class="back small" href={resolve('/o/[org]/settings/system-accounts', { org: data.org.slug })}><ArrowLeft size={14} aria-hidden="true" /> System accounts</a></p>
 
 <header class="account">
@@ -52,32 +54,32 @@
 
 {#if data.account.managed}
   <p class="muted">Managed through the org admin API: it is changed there, not here.</p>
-{:else if data.mayChange}
-  <section class="grid-2">
-    <form method="POST" action="?/access" class="card section">
-      <Csrf token={data.csrf} />
-      <h3>What it may do</h3>
-      <label>
-        Across {data.org.name}
-        <select name="role">
-          {#each data.roles as entry (entry.role)}<option value={entry.role} selected={entry.role === data.account.role}>{entry.label}</option>{/each}
-        </select>
-      </label>
-      <p class="muted small">Its tokens act as it, narrowed as each says: a change here reaches them from their next call.</p>
-      <div><button class="button small" type="submit">Save</button></div>
-    </form>
-    <form method="POST" action="?/describe" class="card section">
-      <Csrf token={data.csrf} />
-      <h3>What it is for</h3>
-      <label>
-        Description
-        <input name="description" maxlength="200" value={data.account.description ?? ''} placeholder="GitHub Actions: docket push on main" />
-      </label>
-      <div><button class="button small" type="submit">Save</button></div>
-    </form>
-  </section>
-{:else}
-  <p class="muted">It may: {data.account.access}. Your role cannot change it.</p>
+{/if}
+
+<section class="block" aria-labelledby="access-title">
+  <h3 id="access-title">What it may do</h3>
+  <p class="muted small">
+    {data.account.access}. A system account is never part of “everyone”: it reaches only what it is given here. Its tokens act
+    as it, narrowed as each says: a change here reaches them from their next call.
+  </p>
+  <div class="card">
+    <GrantList grants={data.grants} roles={data.roles} csrf={data.csrf} showWho={false} label="Grants of {data.account.name}" />
+  </div>
+  {#if data.mayChange && data.places.length}
+    <GiveAccess people={null} places={data.places} roles={data.roles} csrf={data.csrf} title="Give {data.account.name} access" id="give-system" />
+  {/if}
+</section>
+
+{#if data.mayChange}
+  <form method="POST" action="?/describe" class="card section describe">
+    <Csrf token={data.csrf} />
+    <h3>What it is for</h3>
+    <label>
+      Description
+      <input name="description" maxlength="200" value={data.account.description ?? ''} placeholder="GitHub Actions: docket push on main" />
+    </label>
+    <div><button class="button small" type="submit">Save</button></div>
+  </form>
 {/if}
 
 <section class="block">
@@ -198,18 +200,14 @@
   .notices p {
     margin: 0;
   }
-  .grid-2 {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-    gap: 1rem;
+  .describe {
+    margin-top: 1rem;
+    max-width: 36rem;
   }
   .section {
     display: grid;
     gap: 0.6rem;
     padding: 1rem 1.1rem;
-  }
-  .section p {
-    margin: 0;
   }
   .section label {
     display: grid;

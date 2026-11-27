@@ -79,7 +79,7 @@
       them, and are created, given access and issued tokens in one place: Settings › System accounts. Their tokens are used just
       like a personal one.
     </p>
-    {#if data.permissions?.['members.manage']}
+    {#if data.managesSystemAccounts}
       <p><a class="button small" href={resolve('/o/[org]/settings/system-accounts', { org: data.org.slug })}>Open System accounts</a></p>
     {:else}
       <p class="muted small">Ask an admin of {data.org.name} for one.</p>

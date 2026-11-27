@@ -14,7 +14,7 @@ import {
   type ConsentRequest,
 } from '@docket/platform-auth'
 import { listWorkspaces, workspaceBySlug } from '@docket/platform-canonical-store'
-import { membershipBySlug, namespaceAccess, namespaceGrantsOf, namespacePermission, type NamespaceAccess } from '@docket/platform-tenancy'
+import { accessOf, capsAt, docketPlace, membershipBySlug, summarise, type Capability } from '@docket/platform-tenancy'
 import { error, fail, type RequestEvent } from '@sveltejs/kit'
 
 import { auditInput, requireUser, type SignedIn } from '$lib/server/request'
@@ -40,7 +40,9 @@ type Target = {
   workspaceId: string
   workspaceSlug: string
   workspaceName: string
-  access: NamespaceAccess
+  /** What the user may do on the docket asked for. */
+  caps: ReadonlySet<Capability>
+  owner: boolean
   /** The account's dockets the user reaches, the asked-for one first. */
   dockets: { id: string; slug: string; name: string; readOnly: boolean }[]
 }
@@ -61,15 +63,12 @@ async function consentOf(event: RequestEvent, user: SignedIn): Promise<{ consent
     all: await listWorkspaces(tx),
   }))
   if (!workspace) return { consent, target: null }
-  const { access, grants } = await runtime.router.withPlatform(async (tx) => ({
-    access: await namespaceAccess(tx, membership.org.id, workspace.id, user.id),
-    grants: await namespaceGrantsOf(tx, membership.org.id, user.id),
-  }))
-  if (!access?.permission) return { consent, target: null }
+  const access = await runtime.router.withPlatform((tx) => accessOf(tx, membership.org.id, user.id))
+  const caps = capsAt(access, docketPlace(workspace.id))
+  if (!access || !caps.has('read')) return { consent, target: null }
   const reachable = all.flatMap((docket) => {
-    const grant = grants.get(docket.id)
-    const permission = namespacePermission(access.accountRole, grant ? [grant] : [])
-    return permission ? [{ id: docket.id, slug: docket.slug, name: docket.name, readOnly: permission === 'read' }] : []
+    const here = capsAt(access, docketPlace(docket.id))
+    return here.has('read') ? [{ id: docket.id, slug: docket.slug, name: docket.name, readOnly: !here.has('write') }] : []
   })
   return {
     consent,
@@ -80,7 +79,8 @@ async function consentOf(event: RequestEvent, user: SignedIn): Promise<{ consent
       workspaceId: workspace.id,
       workspaceSlug: workspace.slug,
       workspaceName: workspace.name,
-      access,
+      caps,
+      owner: access.owner,
       dockets: [...reachable.filter((docket) => docket.id === workspace.id), ...reachable.filter((docket) => docket.id !== workspace.id)],
     },
   }
@@ -123,8 +123,8 @@ export const load: PageServerLoad = async (event) => {
       workspaceName: target.workspaceName,
       workspaceSlug: target.workspaceSlug,
       workspaceId: target.workspaceId,
-      role: target.access.role,
-      readOnlyHere: target.access.permission === 'read',
+      role: target.owner ? 'Owner' : summarise(target.caps).label,
+      readOnlyHere: !target.caps.has('write'),
       dockets: target.dockets,
     },
   }

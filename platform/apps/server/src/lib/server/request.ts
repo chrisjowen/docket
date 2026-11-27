@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { audit, type AuditEventInput, type Outcome } from '@docket/platform-audit'
 import {
+  ACCOUNT,
+  accessOf,
   can,
-  canInNamespace,
+  capsAt,
+  docketPlace,
   membershipBySlug,
-  namespaceGrantsOf,
-  namespacePermission,
-  namespaceVisible,
-  type AccountRole,
-  type Action,
-  type NamespaceAction,
-  type NamespacePermission,
+  seesDocket as sees,
+  type Access,
+  type Capability,
   type Org,
-  type Role,
+  type Place,
   type Tx,
 } from '@docket/platform-tenancy'
 import { error, redirect, type RequestEvent } from '@sveltejs/kit'
@@ -101,18 +100,33 @@ export function requirePlatformAdmin(event: RequestEvent): SignedIn {
 
 export interface OrgAccess {
   org: Org
-  role: Role
-  /** The member's account role: with their grants, it decides which of the org's dockets they reach. */
-  accountRole: AccountRole
-  /** The member's namespace grants, by workspace id. */
-  grants: ReadonlyMap<string, NamespacePermission>
-  can(action: Action): boolean
+  /** The member's access: whether they own the account or are a guest in it, and every grant that applies to them. */
+  principal: Access
+  /** Owns the account: the only one who administers it (billing, the AI cap, ownership, deleting it). */
+  owner: boolean
+  /** Whether they hold `cap` on the whole account. */
+  can(cap: Capability): boolean
+  /** Whether they hold `cap` anywhere in the account: on the account or on any docket. */
+  canAnywhere(cap: Capability): boolean
+  /** What they may do on a place: the resolver every surface uses (tenancy v2 §3.1). */
+  capsAt(place: Place): ReadonlySet<Capability>
+}
+
+function orgAccessOf(org: Org, principal: Access): OrgAccess {
+  return {
+    org,
+    principal,
+    owner: principal.owner,
+    can: (cap) => capsAt(principal, ACCOUNT).has(cap),
+    canAnywhere: (cap) => can(principal, cap),
+    capsAt: (place) => capsAt(principal, place),
+  }
 }
 
 /**
- * The org named in the URL path (never the body, §3) and the user's role in
- * it. Not a member, no such org, a deleted org: all 404, never 403, so the
- * answer reveals nothing about orgs the user is not in (§5.5).
+ * The org named in the URL path (never the body, §3) and what the user may
+ * do in it. Not a member, no such org, a deleted org: all 404, never 403, so
+ * the answer reveals nothing about orgs the user is not in (§5.5).
  */
 export async function orgAccess(event: RequestEvent, options: { api?: boolean } = {}): Promise<OrgAccess> {
   const user = event.locals.user
@@ -124,80 +138,55 @@ export async function orgAccess(event: RequestEvent, options: { api?: boolean } 
   const slug = event.params.org ?? ''
   const found = await getRuntime().router.withPlatform(async (tx) => {
     const membership = await membershipBySlug(tx, slug, user.id)
-    return membership && { ...membership, grants: await namespaceGrantsOf(tx, membership.org.id, user.id) }
+    const principal = membership && (await accessOf(tx, membership.org.id, user.id))
+    return membership && principal ? { org: membership.org, principal } : null
   })
   if (!found) error(404, 'Not found')
   event.locals.auditOrgId = found.org.id
-  return { org: found.org, role: found.role, accountRole: found.accountRole, grants: found.grants, can: (action) => can(found.role, action) }
+  return orgAccessOf(found.org, found.principal)
 }
 
-/** Refuses an action the role does not allow. Members get 403: they know the org exists. */
-export function authorise(access: OrgAccess, action: Action): void {
-  if (!access.can(action)) error(403, 'Your role does not allow that.')
+/** Refuses what the member may not do on the whole account. Members get 403: they know the org exists. */
+export function authorise(access: OrgAccess, cap: Capability): void {
+  if (!access.can(cap)) error(403, 'You do not have access to that.')
 }
 
-/** The member's permission on one of the org's dockets: their account role's, joined with their grant there. */
-export function permissionOn(access: OrgAccess, workspaceId: string): NamespacePermission | null {
-  const grant = access.grants.get(workspaceId)
-  return namespacePermission(access.accountRole, grant ? [grant] : [])
+/** Refuses what the member may not do anywhere in the account: a page that then shows only the places where they may. */
+export function authoriseAnywhere(access: OrgAccess, cap: Capability): void {
+  if (!access.canAnywhere(cap)) error(403, 'You do not have access to that.')
 }
 
-/** Whether the member sees that a docket exists: everyone but a guest sees them all, a guest only those it was granted. */
+/** Refuses anyone but an owner of the account. */
+export function authoriseOwner(access: OrgAccess): void {
+  if (!access.owner) error(403, 'Only an owner of the account can do that.')
+}
+
+/** Whether the member reads one of the org's dockets: what lists, search and Ask cover. */
+export function readsDocket(access: OrgAccess, workspaceId: string): boolean {
+  return access.capsAt(docketPlace(workspaceId)).has('read')
+}
+
+/** Whether the member sees that a docket exists: everyone but a guest sees them all, a guest only those it holds something on. */
 export function seesDocket(access: OrgAccess, workspaceId: string): boolean {
-  const grant = access.grants.get(workspaceId)
-  return namespaceVisible(access.accountRole, grant ? [grant] : [])
+  return sees(access.principal, workspaceId)
 }
-
-/** What a docket's own permission decides; the rest (members, trust, the org's caps) stays with the org role. */
-const IN_DOCKET: Partial<Record<Action, NamespaceAction>> = {
-  'graph.read': 'graph.read',
-  'knowledge.write': 'knowledge.write',
-  'ontology.propose': 'ontology.propose',
-  'ontology.publish': 'ontology.publish',
-  'repos.connect': 'repos.connect',
-  'workspaces.delete': 'namespace.delete',
-  'enrichment.manage': 'enrichment.manage',
-  'projections.manage': 'projections.manage',
-  'tokens.create-own': 'tokens.create-own',
-  'tokens.manage': 'tokens.manage',
-  'proposals.override': 'proposals.override',
-  'audit.view-full': 'audit.view-full',
-  'audit.view-own': 'audit.view-own',
-}
-
-/** The per-org role that does in one docket what a permission there does. */
-const ROLE_FOR: Record<NamespacePermission, Role> = { admin: 'admin', write: 'editor', read: 'viewer' }
 
 export interface NamespaceAccess extends OrgAccess {
-  /** The member's permission on this docket. */
-  permission: NamespacePermission
-  /**
-   * The per-org role that reaches in this docket what `permission` does (an
-   * owner stays one), for what is still keyed by role: the scopes a token may
-   * carry and the workspace's MCP ontology writers.
-   */
-  roleHere: Role
+  /** What the member may do on this docket. */
+  caps: ReadonlySet<Capability>
 }
 
 /**
- * The member's access to one of the org's dockets: allowed by their account
- * role or a grant there. A docket they cannot see is 404, like one the org
- * does not have (§5.5); one they see but were not granted is 403. Inside it,
- * `can` answers the docket's own actions from that permission.
+ * The member's access to one of the org's dockets: what every grant covering
+ * it gives them, which must include reading it. A docket they cannot see is
+ * 404, like one the org does not have (§5.5); one they see but may not read
+ * is 403. Inside it, `can` answers for this docket.
  */
 export function namespaceAccess(access: OrgAccess, workspace: { id: string }): NamespaceAccess {
-  const permission = permissionOn(access, workspace.id)
-  if (permission === null) {
+  const caps = access.capsAt(docketPlace(workspace.id))
+  if (!caps.has('read')) {
     if (!seesDocket(access, workspace.id)) error(404, 'Not found')
     error(403, 'You have no access to this docket.')
   }
-  return {
-    ...access,
-    permission,
-    roleHere: access.role === 'owner' ? 'owner' : ROLE_FOR[permission],
-    can: (action) => {
-      const inDocket = IN_DOCKET[action]
-      return inDocket ? canInNamespace(permission, inDocket) : access.can(action)
-    },
-  }
+  return { ...access, caps, can: (cap) => caps.has(cap) }
 }

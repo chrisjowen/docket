@@ -25,7 +25,7 @@ const CORROBORATE_SHOWN = 4
  */
 export const load: PageServerLoad = async (event) => {
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     return {
       access,
       graph: await workspaceGraph(ctx, workspace, { root: `/o/${access.org.slug}/w/${workspace.slug}` }),

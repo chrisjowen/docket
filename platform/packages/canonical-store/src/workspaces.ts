@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { LIMITS, SLUG, newTenantId, type Role, type Tx } from '@docket/platform-tenancy'
+import { LIMITS, SLUG, newTenantId, type Tx } from '@docket/platform-tenancy'
 
 import { purgeWorkspaceFromChats } from './chats.js'
 import type { StoreContext } from './documents.js'
@@ -15,13 +15,7 @@ export interface Workspace {
   name: string
   createdBy: string
   createdAt: Date
-  /** The roles whose `ontology:write` credentials may publish the ontology over MCP; empty keeps MCP to proposals. */
-  ontologyMcpRoles: OntologyMcpRole[]
 }
-
-/** The roles the owner can let change the ontology directly over MCP: viewers only ever read. */
-export const ONTOLOGY_MCP_ROLES = ['owner', 'admin', 'editor'] as const satisfies readonly Role[]
-export type OntologyMcpRole = (typeof ONTOLOGY_MCP_ROLES)[number]
 
 export class WorkspaceError extends Error {
   override name = 'WorkspaceError'
@@ -41,9 +35,8 @@ export function workspaceSlugProblem(slug: string): string | null {
   return null
 }
 
-type WorkspaceRow = { id: string; slug: string; name: string; created_by: string; created_at: Date; ontology_mcp_roles: string[] }
-
-const isOntologyMcpRole = (value: unknown): value is OntologyMcpRole => (ONTOLOGY_MCP_ROLES as readonly unknown[]).includes(value)
+// `ontology_mcp_roles` (org 0007) stays for the record: who may publish over MCP is the Publish capability now (platform 0017).
+type WorkspaceRow = { id: string; slug: string; name: string; created_by: string; created_at: Date }
 
 const toWorkspace = (row: WorkspaceRow): Workspace => ({
   id: row.id,
@@ -51,7 +44,6 @@ const toWorkspace = (row: WorkspaceRow): Workspace => ({
   name: row.name,
   createdBy: row.created_by,
   createdAt: row.created_at,
-  ontologyMcpRoles: row.ontology_mcp_roles.filter(isOntologyMcpRole),
 })
 
 export async function listWorkspaces(tx: Tx): Promise<Workspace[]> {
@@ -179,29 +171,6 @@ export async function recordPurge(
       [workspaceId, outcome.at],
     )
   }
-}
-
-/**
- * The roles that may publish the workspace's ontology over MCP, read now.
- * A publish serialises with the setting by taking the head lock, then the
- * workspace row FOR UPDATE, before reading it.
- */
-export async function ontologyMcpRoles(tx: Tx, workspaceId: string): Promise<OntologyMcpRole[]> {
-  const { rows } = await tx.query<{ ontology_mcp_roles: string[] }>(
-    'SELECT ontology_mcp_roles FROM workspaces WHERE id = $1 AND deleted_at IS NULL',
-    [workspaceId],
-  )
-  return rows[0]?.ontology_mcp_roles.filter(isOntologyMcpRole) ?? []
-}
-
-/** Sets which roles may publish the ontology over MCP. The caller checks the actor is the org's owner. */
-export async function setOntologyMcpRoles(tx: Tx, workspaceId: string, roles: readonly string[]): Promise<OntologyMcpRole[]> {
-  const unknown = roles.filter((role) => !isOntologyMcpRole(role))
-  if (unknown.length) throw new WorkspaceError('invalid', `Only ${ONTOLOGY_MCP_ROLES.join(', ')} can change the ontology over MCP.`)
-  const chosen = ONTOLOGY_MCP_ROLES.filter((role) => roles.includes(role))
-  const updated = await tx.query('UPDATE workspaces SET ontology_mcp_roles = $2 WHERE id = $1 AND deleted_at IS NULL', [workspaceId, chosen])
-  if (!updated.rowCount) throw new WorkspaceError('not-found', 'No such workspace.')
-  return chosen
 }
 
 /**

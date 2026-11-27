@@ -6,6 +6,7 @@ import type { RequestEvent } from '@sveltejs/kit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { rateLimiter } from './rate-limit'
+import { accessRows } from './testing-access'
 
 /** Every query the endpoint makes, and the audit events it writes. */
 const queries: string[] = []
@@ -17,8 +18,9 @@ const tx = {
     if (sql.includes('INSERT INTO audit_event')) audited.push({ ip: params[5] as string | null, action: params[7] as string, target: params[8] as string[], outcome: params[10] as string })
     // Only the org `busy` exists, with its workspace `main`, where every caller is a member.
     if (sql.includes('FROM platform.orgs') && params[0] === 'busy') return { rows: [{ id: 'orgbusy' }] }
-    if (sql.includes('FROM workspaces WHERE slug')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main', ontology_mcp_roles: [] }] }
-    if (sql.includes('FROM platform.memberships')) return { rows: [{ role: 'viewer', account_role: 'read_only', permission: 'read' }] }
+    if (sql.includes('FROM workspaces WHERE slug')) return { rows: [{ id: 'wsmain', slug: 'main', name: 'Main' }] }
+    const access = accessRows(sql, 'reader')
+    if (access) return { rows: access }
     return { rows: [] }
   },
 }

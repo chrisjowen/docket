@@ -36,7 +36,7 @@
 <p class="intro">
   <span data-testid="queries-whose">
     {#if data.everyone}Every question anyone asked of {data.workspace.name}, with who asked it.
-    {:else}Only the questions you asked of {data.workspace.name}, through any of your tokens or OAuth clients; owners and admins see everyone's.{/if}
+    {:else}Only the questions you asked of {data.workspace.name}, through any of your tokens or OAuth clients; whoever may see audit and usage here sees everyone's.{/if}
   </span>
   Each is replayed step by step: what the documents held, which stores were asked and what each returned, the query each
   ran and whether a fixed template or a model wrote it, what went into the answer, and what it cost. The newest

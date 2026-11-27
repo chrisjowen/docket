@@ -3,13 +3,11 @@ import { actorMonthSpend, monthOf } from '@docket/platform-ai'
 import { mcpResourceUrl, revokeWorkspaceCredentials } from '@docket/platform-auth'
 import {
   CogneeSettingsError,
-  ONTOLOGY_MCP_ROLES,
   WorkspaceError,
   cogneeAiActor,
   cogneeSettings,
   deleteWorkspace,
   saveCogneeSettings,
-  setOntologyMcpRoles,
 } from '@docket/platform-canonical-store'
 import {
   EnrichmentSettingsError,
@@ -26,33 +24,33 @@ import {
 } from '@docket/platform-enrichment'
 import { dropRoutes } from '@docket/platform-github'
 import { OntologyBreakingChange, OntologyNarrowingChange, StaleDraft, TemplateError, VersionNotFound, saveOrgTemplate } from '@docket/platform-ontology-service'
-import { fail, redirect } from '@sveltejs/kit'
+import { ACCOUNT } from '@docket/platform-tenancy'
+import { error, fail, redirect } from '@sveltejs/kit'
 
-import { authorise, recordAudit, requireUser } from '$lib/server/request'
+import { authorise, authoriseOwner, recordAudit, requireUser } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 import { actorNames, inWorkspace, publisherOf } from '$lib/server/workspace'
 
 import type { Actions, PageServerLoad } from './$types'
 
 /**
- * The workspace's settings: what it is, which roles may change its ontology
- * directly over MCP (`ontology:write`) rather than only propose, its
- * background enrichment (its settings, what its AI review has spent this
- * month, its recent runs), cognee, the optional projection (on or off, its
- * search floor, what its cognify has spent this month), and its deletion.
- * Everyone who reads the workspace sees them; only the owner changes the
- * ontology setting or runs enrichment now, and owners and admins the rest of
- * the enrichment and cognee.
+ * The workspace's settings: what it is, its background enrichment (its
+ * settings, what its AI review has spent this month, its recent runs),
+ * cognee, the optional projection (on or off, its search floor, what its
+ * cognify has spent this month), and its deletion. Everyone who reads the
+ * workspace sees them; only the owner runs enrichment now, and whoever may
+ * change settings here the rest of the enrichment and cognee. Who may publish
+ * the ontology, in the app or over MCP, is on the Access tab: a capability,
+ * given person by person.
  */
 export const load: PageServerLoad = async (event) => {
   const { router, caps, cognee: cogneeRuns } = getRuntime()
   const read = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-    authorise(access, 'graph.read')
+    authorise(access, 'read')
     return {
       access,
       workspaceId: workspace.id,
-      roles: workspace.ontologyMcpRoles,
-      owner: access.can('org.administer'),
+      owner: access.owner,
       settings: await enrichmentSettings(ctx.tx, workspace.id),
       runs: await recentRuns(ctx.tx, workspace.id, 5),
       cognee: await cogneeSettings(ctx.tx, workspace.id),
@@ -67,7 +65,6 @@ export const load: PageServerLoad = async (event) => {
     actorNames(access),
   ])
   return {
-    ontologyMcp: { roles: read.roles, choices: [...ONTOLOGY_MCP_ROLES], canChange: read.owner },
     cognee: {
       available: cogneeRuns,
       enabled: read.cognee.enabled,
@@ -117,13 +114,13 @@ export const actions: Actions = {
   /**
    * Saves the docket's published ontology - its types, relationships, sources
    * and policies, never its documents - as one of the org's templates, which
-   * New docket then offers. Owners and admins only.
+   * New docket then offers. Whoever may change the account's settings.
    */
   saveTemplate: async (event) => {
     const form = await event.request.formData()
     try {
       const saved = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'templates.manage')
+        if (!access.capsAt(ACCOUNT).has('settings')) error(403, 'You do not have access to that.')
         const template = await saveOrgTemplate(ctx.tx, {
           name: String(form.get('name') ?? ''),
           description: String(form.get('description') ?? ''),
@@ -148,39 +145,6 @@ export const actions: Actions = {
   },
 
   /**
-   * Sets the roles whose credentials may publish the ontology over MCP. A role
-   * taken off loses `ontology:write` on every token and grant from its next
-   * call; the setting is audited with what it was.
-   */
-  ontologyMcp: async (event) => {
-    const form = await event.request.formData()
-    const asked = form.getAll('role').map(String)
-    let roles
-    try {
-      roles = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'org.administer')
-        const roles = await setOntologyMcpRoles(ctx.tx, workspace.id, asked)
-        await recordAudit(ctx.tx, event, {
-          action: 'workspace.ontology-mcp',
-          orgId: access.org.id,
-          workspaceId: workspace.id,
-          target: [`workspace:${workspace.id}`],
-          args: { before: workspace.ontologyMcpRoles, roles },
-        })
-        return roles
-      })
-    } catch (caught) {
-      if (caught instanceof WorkspaceError) return fail(400, { ontologyProblem: caught.message })
-      throw caught
-    }
-    return {
-      flash: roles.length
-        ? `Saved: ${roles.join(', ')} can now change the ontology directly over MCP, with a token or sign-in that carries ontology:write.`
-        : 'Saved: MCP clients can only propose ontology changes.',
-    }
-  },
-
-  /**
    * Turns enrichment on or off and sets its schedule and monthly AI limit
    * (at most the org's cap). Turning it on first publishes what it writes
    * with onto the ontology, if the head lacks it: the `inferred` evidence
@@ -196,7 +160,7 @@ export const actions: Actions = {
     const { caps } = getRuntime()
     try {
       const saved = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'enrichment.manage')
+        if (!access.capsAt(ACCOUNT).has('settings')) error(403, 'You do not have access to that.')
         const capUsd = (await caps.status(access.org.id)).capUsd
         const published = enabled ? await ensureEnrichmentOntology(ctx, workspace.id, { ...publisherOf(event), requestId: event.locals.requestId }) : null
         await saveSettings(ctx.tx, workspace.id, { enabled, schedule, monthlyLimitUsd: limit, capUsd, by: `user:${user.id}` })
@@ -234,7 +198,7 @@ export const actions: Actions = {
     if (enabled && !cogneeRuns) return fail(400, { cogneeProblem: 'cognee does not run on this server, so it cannot be turned on.' })
     try {
       await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'projections.manage')
+        authorise(access, 'settings')
         const capUsd = (await caps.status(access.org.id)).capUsd
         await saveCogneeSettings(ctx.tx, workspace.id, { enabled, floor, monthlyLimitUsd: limit, capUsd, by: `user:${user.id}` })
         await recordAudit(ctx.tx, event, {
@@ -261,7 +225,7 @@ export const actions: Actions = {
     const user = requireUser(event)
     try {
       await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'org.administer')
+        authoriseOwner(access)
         await requestRun(ctx.tx, workspace.id, `user:${user.id}`)
         await recordAudit(ctx.tx, event, { action: 'enrichment.request', orgId: access.org.id, workspaceId: workspace.id, target: [workspace.slug] })
       })
@@ -280,7 +244,7 @@ export const actions: Actions = {
     let outcome
     try {
       outcome = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-        authorise(access, 'enrichment.manage')
+        authorise(access, 'settings')
         const run = await runById(ctx.tx, workspace.id, runId)
         if (!run) return null
         const { retired } = await retireRun(ctx, {
@@ -321,7 +285,7 @@ export const actions: Actions = {
     const confirm = String((await event.request.formData()).get('confirm') ?? '').trim()
     const runtime = getRuntime()
     const deleted = await inWorkspace(event, async ({ access, workspace, ctx }) => {
-      authorise(access, 'workspaces.delete')
+      authorise(access, 'delete')
       if (confirm !== workspace.slug) return fail(400, { problem: `Type ${workspace.slug} to delete this docket.` })
       const { connections } = await deleteWorkspace(ctx, { workspaceId: workspace.id, deletedBy: `user:${user.id}` })
       await recordAudit(ctx.tx, event, {

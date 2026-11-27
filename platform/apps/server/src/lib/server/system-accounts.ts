@@ -2,21 +2,24 @@
 import { TenancyError, type Tx } from '@docket/platform-tenancy'
 import { fail, type ActionFailure, type RequestEvent } from '@sveltejs/kit'
 
-import { authorise, orgAccess, recordAudit, requireUser, type OrgAccess } from './request'
+import { orgAccess, recordAudit, requireUser, type OrgAccess } from './request'
 import { getRuntime } from './runtime'
 
 /**
  * Settings › System accounts (tenancy v2 §3.3): the one place to create a
  * system account, give it access, and issue and revoke its tokens. Anyone who
- * manages the account's access (owners and admins) does it here.
+ * manages system accounts somewhere does it here, for the places they manage.
  */
 
-/** The access a system account holds across the account, as its role reads. */
-export const ROLE_LABELS = {
-  viewer: 'Reader: reads every docket',
-  editor: 'Writer: reads and writes every docket',
-  admin: 'Admin: every capability on every docket',
-} as const
+/** Whether the member manages system accounts (or access) anywhere: who reaches Settings › System accounts. */
+export function mayManageSystemAccounts(access: OrgAccess): boolean {
+  return access.owner || access.canAnywhere('system') || access.canAnywhere('access')
+}
+
+/** What a system account may do, in a line: each of its grants as a role on a place. */
+export function accessSummary(grants: readonly { label: string; place: { label: string } }[]): string {
+  return grants.length ? grants.map((grant) => `${grant.label} on ${grant.place.label}`).join('; ') : 'Nothing yet: give it access below'
+}
 
 /** One change to a system account, audited in the org's own log in the same transaction (§10). */
 export async function manage<T extends { flash: string }>(
@@ -29,7 +32,7 @@ export async function manage<T extends { flash: string }>(
 ): Promise<ActionFailure<{ problem: string }> | Omit<T, 'action' | 'target' | 'args'>> {
   const user = requireUser(event)
   const access = await orgAccess(event)
-  authorise(access, 'members.manage')
+  if (!mayManageSystemAccounts(access)) return fail(403, { problem: 'You do not manage system accounts.' })
   const form = await event.request.formData()
   const { router } = getRuntime()
   try {

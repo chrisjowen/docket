@@ -11,7 +11,7 @@ import type { Actions, PageServerLoad } from './$types'
  * Refuses a docket the member was not granted, or one in another account, as
  * every other docket route does (403), before the casebook's Ask looks at it.
  */
-const mayRead = (event: RequestEvent) => inWorkspace(event, async ({ access }) => authorise(access, 'graph.read'))
+const mayRead = (event: RequestEvent) => inWorkspace(event, async ({ access }) => authorise(access, 'read'))
 
 /** A docket's Chat tab: questions to this docket alone, and the chats that asked it alone. */
 export const load: PageServerLoad = async (event) => {

@@ -1,117 +1,130 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { removeMemberAttributes, trustChanged } from '@docket/platform-canonical-store'
 import {
+  ACCOUNT,
   LIMITS,
   TenancyError,
-  assignableRoles,
-  changeRole,
   createInvite,
-  isRole,
+  listGrants,
   listMembers,
+  listSystemAccounts,
   openInvitesOf,
   removeMember,
   revokeInvite,
-  type Tx,
+  setOwner,
 } from '@docket/platform-tenancy'
-import { fail, type RequestEvent } from '@sveltejs/kit'
+import { error } from '@sveltejs/kit'
 
-import { authorise, orgAccess, recordAudit, requireUser, type OrgAccess } from '$lib/server/request'
+import { changeAccess, docketNames, giveChange, grantActions, grantView, placeKey, placeLabel, placeOf, placesToGive, revokeChange, rolesFor } from '$lib/server/grants'
+import { accountRoles } from '$lib/server/members'
+import { orgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 
 import type { Actions, PageServerLoad } from './$types'
 
+/**
+ * Users (tenancy v2 §3): the people of the account, each with their role on
+ * the whole account and, with Explain, every grant they hold. Anyone who
+ * manages access somewhere invites people to where they manage it, as a role
+ * on that place; whoever manages access on the whole account changes and
+ * removes people's access there. Only owners make or unmake owners. A guest
+ * sees only what they are given, not this list.
+ */
 export const load: PageServerLoad = async (event) => {
   const access = await orgAccess(event)
-  const { members, invites } = await getRuntime().router.withPlatform(async (tx) => ({
-    members: await listMembers(tx, access.org.id),
-    invites: access.can('members.manage') ? await openInvitesOf(tx, access.org.id) : [],
-  }))
+  if (access.principal.guest) error(404, 'Not found')
+  const managesAnywhere = access.canAnywhere('access')
+  const managesAccount = access.can('access')
+  const dockets = await docketNames(access.org.id)
+  const { members, invites, grants, roles, managed } = await getRuntime().router.withPlatform(async (tx) => {
+    const members = await listMembers(tx, access.org.id)
+    return {
+      members,
+      invites: managesAnywhere ? await openInvitesOf(tx, access.org.id) : [],
+      grants: await listGrants(tx, access.org.id),
+      roles: await accountRoles(tx, access.org.id, members),
+      managed: new Set((await listSystemAccounts(tx, access.org.id)).filter((account) => account.managed).map((account) => account.id)),
+    }
+  })
   const iso = (date: Date | null) => (date ? date.toISOString() : null)
+  const view = (grant: (typeof grants)[number]) => grantView(grant, access.principal, dockets, access.org.name)
+  const roleList = await rolesFor(access.org.id)
   return {
     me: event.locals.user?.login ?? null,
-    manage: access.can('members.manage'),
-    assignable: access.can('members.manage') ? assignableRoles(access.role) : [],
+    manage: managesAnywhere,
+    manageAccount: managesAccount,
+    isOwner: access.owner,
     limit: LIMITS.membersPerOrg,
-    seats: members.length + invites.length,
-    systemAccounts: members.filter((member) => member.kind === 'service').length,
+    seats: members.filter((member) => !managed.has(member.id)).length + invites.length,
+    systemAccounts: members.filter((member) => member.kind === 'service' && !managed.has(member.id)).length,
+    roles: roleList,
+    invitePlaces: managesAnywhere ? placesToGive(access, dockets) : [],
+    everyone: grants.filter((grant) => grant.who.kind === 'everyone').map(view),
     people: members
       .filter((member) => member.kind === 'human')
-      .map((member) => ({
-        id: member.id,
-        login: member.login,
-        name: member.name,
-        email: access.can('members.manage') ? member.email : null,
-        role: member.role,
-        joinedAt: iso(member.joinedAt),
-        lastSeenAt: iso(member.lastSeenAt),
-      })),
+      .map((member) => {
+        const own = grants.filter((grant) => grant.who.kind === 'user' && grant.who.id === member.id)
+        const onAccount = own.find((grant) => grant.place.kind === 'account')
+        return {
+          id: member.id,
+          login: member.login,
+          name: member.name,
+          email: managesAnywhere ? member.email : null,
+          owner: member.owner,
+          guest: member.guest,
+          role: roles.get(member.id) ?? '',
+          accountRole: onAccount?.role.id ?? null,
+          accountGrant: onAccount ? view(onAccount) : null,
+          grants: own.map(view),
+          joinedAt: iso(member.joinedAt),
+          lastSeenAt: iso(member.lastSeenAt),
+        }
+      }),
     invites: invites.map((invite) => ({
       id: invite.id,
       githubLogin: invite.githubLogin,
       email: invite.email,
-      role: invite.role,
+      role: invite.owner ? 'Owner' : invite.roleName,
+      place: placeLabel(invite.place, dockets, access.org.name),
+      guest: invite.guest,
       invitedByLogin: invite.invitedByLogin,
       createdAt: iso(invite.createdAt),
       expiresAt: iso(invite.expiresAt),
     })),
+    accountPlace: placeKey(ACCOUNT),
   }
 }
 
-/**
- * Runs one member-management change: authorise, change the platform rows,
- * then audit in the org's own log in the same transaction (§10).
- */
-async function manage(
-  event: RequestEvent,
-  change: (
-    tx: Tx,
-    access: OrgAccess,
-    form: FormData,
-    actorId: string,
-  ) => Promise<{ action: string; target: string[]; args?: unknown; flash: string; inOrg?: (tx: Tx) => Promise<void> }>,
-) {
-  const user = requireUser(event)
-  const access = await orgAccess(event)
-  authorise(access, 'members.manage')
-  const form = await event.request.formData()
-  const { router } = getRuntime()
-  try {
-    const done = await router.withPlatform(async (tx) => {
-      const result = await change(tx, access, form, user.id)
-      await router.enterTenant(tx, access.org.id)
-      await result.inOrg?.(tx)
-      await recordAudit(tx, event, { action: result.action, orgId: access.org.id, target: result.target, args: result.args })
-      return result
-    })
-    return { flash: done.flash }
-  } catch (error) {
-    if (error instanceof TenancyError) return fail(error.code === 'forbidden' ? 403 : 400, { problem: error.message })
-    throw error
-  }
-}
-
-function roleFrom(form: FormData) {
-  const role = form.get('role')
-  if (!isRole(role)) throw new TenancyError('invalid', 'Choose a role.')
-  return role
-}
+const grants = grantActions()
 
 export const actions: Actions = {
+  ...grants,
+
   invite: (event) =>
-    manage(event, async (tx, access, form, actorId) => {
-      const who = String(form.get('who') ?? '')
-      const invite = await createInvite(tx, { orgId: access.org.id, who, role: roleFrom(form), actorId, actorRole: access.role })
+    changeAccess(event, async (tx, { access, userId, form, dockets }) => {
+      const place = placeOf(form.get('place') ?? 'account', dockets)
+      if (!place) throw new TenancyError('invalid', 'Choose where.')
+      const invite = await createInvite(tx, {
+        orgId: access.org.id,
+        who: String(form.get('who') ?? ''),
+        roleId: String(form.get('role') ?? ''),
+        place,
+        guest: form.get('guest') === 'on',
+        actorId: userId,
+        actor: access.principal,
+      })
       const to = invite.githubLogin ? `@${invite.githubLogin}` : (invite.email ?? '')
       return {
         action: 'members.invite',
         target: [`invite:${invite.id}`],
-        args: { who: to, role: invite.role },
-        flash: `Invited ${to} as ${invite.role}. Ask them to sign in at this site with GitHub.`,
+        args: { who: to, role: invite.roleId, place: placeKey(place), guest: invite.guest },
+        flash: `Invited ${to} as ${invite.roleName} on ${placeLabel(place, dockets, access.org.name)}. Ask them to sign in at this site.`,
       }
     }),
 
   revokeInvite: (event) =>
-    manage(event, async (tx, access, form) => {
+    changeAccess(event, async (tx, { access, form }) => {
+      if (!access.canAnywhere('access')) throw new TenancyError('forbidden', 'You cannot manage invites.')
       const invite = await revokeInvite(tx, { orgId: access.org.id, inviteId: String(form.get('invite') ?? '') })
       return {
         action: 'members.invite.revoke',
@@ -120,27 +133,40 @@ export const actions: Actions = {
       }
     }),
 
-  changeRole: (event) =>
-    manage(event, async (tx, access, form) => {
-      const userId = String(form.get('member') ?? '')
-      const role = roleFrom(form)
-      const from = await changeRole(tx, { orgId: access.org.id, userId, role, actorRole: access.role })
+  /** Sets someone's role on the whole account: a grant there, or none. */
+  accountRole: (event) =>
+    changeAccess(event, async (tx, scope) => {
+      const member = String(scope.form.get('member') ?? '')
+      if (String(scope.form.get('role') ?? '') !== 'none') {
+        scope.form.set('place', 'account')
+        return giveChange(tx, scope, { kind: 'user', id: member })
+      }
+      const existing = (await listGrants(tx, scope.access.org.id, { place: ACCOUNT, userId: member }))[0]
+      if (!existing) return { action: 'access.remove', target: [`user:${member}`], flash: 'No change.' }
+      return revokeChange(tx, scope, existing.id)
+    }),
+
+  owner: (event) =>
+    changeAccess(event, async (tx, { access, form }) => {
+      const member = String(form.get('member') ?? '')
+      const owner = form.get('owner') === 'true'
+      const was = await setOwner(tx, { orgId: access.org.id, userId: member, owner, actor: access.principal })
       return {
-        action: 'members.role',
-        target: [`user:${userId}`],
-        args: { from, to: role },
-        flash: from === role ? 'No change.' : `Role changed from ${from} to ${role}.`,
+        action: 'members.owner',
+        target: [`user:${member}`],
+        args: { from: was, to: owner },
+        flash: was === owner ? 'No change.' : owner ? 'They now own the account too.' : 'They no longer own the account.',
       }
     }),
 
   remove: (event) =>
-    manage(event, async (tx, access, form) => {
+    changeAccess(event, async (tx, { access, form }) => {
       const userId = String(form.get('member') ?? '')
-      const role = await removeMember(tx, { orgId: access.org.id, userId, actorRole: access.role })
+      const removed = await removeMember(tx, { orgId: access.org.id, userId, actor: access.principal })
       return {
         action: 'members.remove',
         target: [`user:${userId}`],
-        args: { role },
+        args: removed,
         flash: 'Member removed.',
         // What the directory said about them goes too: no policy trusts a role they no longer hold here.
         inOrg: async (tenant) => {

@@ -11,10 +11,10 @@ import {
   type Principal,
   type Refusal,
 } from '@docket/platform-auth'
-import { cloudResolvedConfig, ontologyMcpRoles, publishedOntology, readDocuments, type StoreContext, type Writer } from '@docket/platform-canonical-store'
+import { cloudResolvedConfig, publishedOntology, readDocuments, type StoreContext, type Writer } from '@docket/platform-canonical-store'
 import { mcpRateLimit, type McpMessage } from '@docket/platform-limits'
 import { SERVER_INSTRUCTIONS, cloudTools, isWriteTool, registryFor, scopeOf } from '@docket/platform-mcp-tools'
-import { roleOf, type Tx } from '@docket/platform-tenancy'
+import type { Tx } from '@docket/platform-tenancy'
 import type { RequestEvent } from '@sveltejs/kit'
 
 import { bearerOf, credentialInUrl, locateWorkspace, refusedCredentials } from './bearer'
@@ -27,8 +27,8 @@ import { getRuntime } from './runtime'
  * HTTP as `docket open` speaks it - one JSON-RPC message per POST, JSON
  * answers, no sessions - behind the request pipeline (§3): a bearer token
  * only, the tenant from the path, the credential's scopes cut to its owner's
- * permission on the workspace on every call (§8.4: their account role and
- * namespace grant), the rate limits (§12: 120 calls a minute per
+ * capabilities on the docket on every call (§8.4; tenancy v2 §3.1: every
+ * grant that covers it), the rate limits (§12: 120 calls a minute per
  * token, 600 per org, and 30 writes a minute per token, in token buckets every
  * replica shares), and one audit event per request with a digest of the
  * arguments, never the arguments (§10).
@@ -187,7 +187,8 @@ export async function handleMcp(event: RequestEvent): Promise<Response> {
           requestId: base.requestId,
           ...(person ? { principal: person } : {}),
         }))),
-    role: () => runtime.router.withPlatform((tx) => roleOf(tx, principal.orgId, principal.userId)),
+    // Asked again under the publish's locks: Publish ontology changes on this docket, cut by the credential.
+    mayPublish: async () => (await effectiveScopes(principal, { platform: (fn) => runtime.router.withPlatform(fn) })).includes('ontology:write'),
     audited: async (fn) => {
       const value = await inTenant(async (ctx) => {
         const done = await fn(ctx)
@@ -213,11 +214,8 @@ export async function handleMcp(event: RequestEvent): Promise<Response> {
     return limited
   }
 
-  // ontology:write is effective only while the workspace's setting names the owner's role: read on every call.
-  const effective = await effectiveScopes(principal, {
-    platform: (fn) => runtime.router.withPlatform(fn),
-    ontologyWriters: () => runtime.router.withTenant(principal.orgId, (tx) => ontologyMcpRoles(tx, principal.workspaceId)),
-  })
+  // What the owner may do on the docket now, read on every call: ontology:write only while they hold Publish there.
+  const effective = await effectiveScopes(principal, { platform: (fn) => runtime.router.withPlatform(fn) })
   if (effective.length === 0) {
     await record({ action: 'mcp.auth', outcome: 'denied' })
     return refusal(resourceUrl, checkScope(effective, 'docket:read'))

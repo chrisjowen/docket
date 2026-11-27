@@ -6,7 +6,6 @@ import {
   TenancyError,
   answerInvite,
   countLiveOrgs,
-  changeRole,
   createInvite,
   createServiceAccount,
   insertOrg,
@@ -23,7 +22,9 @@ import {
   type GitHubIdentity,
   type User,
 } from './model.js'
+import { accessOf, listGrants, setGrant, setOwner } from './access.js'
 import { newTenantId } from './names.js'
+import { ACCOUNT, docketPlace, type Access } from './roles.js'
 import { tenantRouter, type TenantRouter } from './router.js'
 import { TEST_PG_URL, createTestDatabase, type TestDatabase } from './testing.js'
 
@@ -49,6 +50,10 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     return { id, slug }
   }
 
+  /** The member's access now, as a request reads it. */
+  const accessFor = async (orgId: string, user: User): Promise<Access> =>
+    (await router.withPlatform((tx) => accessOf(tx, orgId, user.id))) as Access
+
   beforeAll(async () => {
     db = await createTestDatabase()
     router = tenantRouter(db.app)
@@ -62,11 +67,11 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     expect(await router.withPlatform((tx) => mayEnterBeta(tx, identity('listed')))).toBe(true)
     expect(await router.withPlatform((tx) => mayEnterBeta(tx, identity('stranger')))).toBe(false)
 
-    await router.withPlatform((tx) =>
-      createInvite(tx, { orgId: acme.id, who: '@Invitee', role: 'editor', actorId: owner.id, actorRole: 'owner' }),
+    await router.withPlatform(async (tx) =>
+      createInvite(tx, { orgId: acme.id, who: '@Invitee', roleId: 'writer', place: ACCOUNT, actorId: owner.id, actor: await accessFor(acme.id, owner) }),
     )
-    await router.withPlatform((tx) =>
-      createInvite(tx, { orgId: acme.id, who: 'Ops@Acme.dev', role: 'viewer', actorId: owner.id, actorRole: 'owner' }),
+    await router.withPlatform(async (tx) =>
+      createInvite(tx, { orgId: acme.id, who: 'Ops@Acme.dev', roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor: await accessFor(acme.id, owner) }),
     )
     expect(await router.withPlatform((tx) => mayEnterBeta(tx, identity('invitee')))).toBe(true)
     // An email invite matches a verified email, whatever the login.
@@ -93,19 +98,21 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     const owner = await human('owner2')
     const acme = await org(owner)
     const past = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
-    await router.withPlatform((tx) =>
-      createInvite(tx, { orgId: acme.id, who: 'late', role: 'editor', actorId: owner.id, actorRole: 'owner', now: past }),
+    await router.withPlatform(async (tx) =>
+      createInvite(tx, { orgId: acme.id, who: 'late', roleId: 'writer', place: ACCOUNT, actorId: owner.id, actor: await accessFor(acme.id, owner), now: past }),
     )
     expect(await router.withPlatform((tx) => mayEnterBeta(tx, identity('late')))).toBe(false)
     // A fresh invite replaces the expired one.
-    const fresh = await router.withPlatform((tx) =>
-      createInvite(tx, { orgId: acme.id, who: 'late', role: 'editor', actorId: owner.id, actorRole: 'owner' }),
+    const fresh = await router.withPlatform(async (tx) =>
+      createInvite(tx, { orgId: acme.id, who: 'late', roleId: 'writer', place: ACCOUNT, actorId: owner.id, actor: await accessFor(acme.id, owner) }),
     )
 
     const late = await human('late')
     const accepted = await router.withPlatform((tx) => answerInvite(tx, { inviteId: fresh.id, user: late, accept: true }))
     expect(accepted.orgId).toBe(acme.id)
-    expect(await router.withPlatform((tx) => membershipBySlug(tx, acme.slug, late.id))).toMatchObject({ role: 'editor' })
+    expect(await router.withPlatform((tx) => membershipBySlug(tx, acme.slug, late.id))).toMatchObject({ owner: false, guest: false })
+    const [given] = await router.withPlatform((tx) => listGrants(tx, acme.id, { userId: late.id }))
+    expect(given).toMatchObject({ place: ACCOUNT, role: { id: 'writer' }, grantedByLogin: 'owner2' })
     await expect(
       router.withPlatform((tx) => answerInvite(tx, { inviteId: fresh.id, user: late, accept: true })),
     ).rejects.toThrow(TenancyError)
@@ -116,8 +123,8 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     const owner = await human('owner7')
     const acme = await org(owner)
     const bob = identity('bob7')
-    const invite = await router.withPlatform((tx) =>
-      createInvite(tx, { orgId: acme.id, who: 'bob7', role: 'editor', actorId: owner.id, actorRole: 'owner' }),
+    const invite = await router.withPlatform(async (tx) =>
+      createInvite(tx, { orgId: acme.id, who: 'bob7', roleId: 'writer', place: ACCOUNT, actorId: owner.id, actor: await accessFor(acme.id, owner) }),
     )
     const user = await router.withPlatform((tx) => upsertGitHubUser(tx, bob))
     await router.withPlatform((tx) => answerInvite(tx, { inviteId: invite.id, user, accept: true }))
@@ -126,7 +133,8 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     expect(await router.withPlatform((tx) => openInvitesFor(tx, bob))).toEqual([])
     expect(await router.withPlatform((tx) => mayEnterBeta(tx, bob))).toBe(true)
 
-    await router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: user.id, actorRole: 'owner' }))
+    const ownerAccess = await accessFor(acme.id, owner)
+    await router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: user.id, actor: ownerAccess }))
     expect(await router.withPlatform((tx) => mayEnterBeta(tx, bob))).toBe(false)
   })
 
@@ -152,8 +160,9 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
   it('refuses an invite for a member, a duplicate, and someone else’s invite', async () => {
     const owner = await human('owner3')
     const acme = await org(owner)
+    const actor = await accessFor(acme.id, owner)
     const invite = (who: string) =>
-      router.withPlatform((tx) => createInvite(tx, { orgId: acme.id, who, role: 'viewer', actorId: owner.id, actorRole: 'owner' }))
+      router.withPlatform((tx) => createInvite(tx, { orgId: acme.id, who, roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor }))
     await expect(invite('owner3')).rejects.toMatchObject({ code: 'conflict' })
     const first = await invite('twice')
     await expect(invite('@TWICE')).rejects.toMatchObject({ code: 'conflict' })
@@ -168,65 +177,67 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     const owner = await human('owner4')
     const acme = await org(owner)
     const admin = await human('admin4')
-    const inv = await router.withPlatform((tx) =>
-      createInvite(tx, { orgId: acme.id, who: 'admin4', role: 'admin', actorId: owner.id, actorRole: 'owner' }),
+    const inv = await router.withPlatform(async (tx) =>
+      createInvite(tx, { orgId: acme.id, who: 'admin4', roleId: 'admin', place: ACCOUNT, actorId: owner.id, actor: await accessFor(acme.id, owner) }),
     )
     await router.withPlatform((tx) => answerInvite(tx, { inviteId: inv.id, user: admin, accept: true }))
+    const asOwner = await accessFor(acme.id, owner)
+    const asAdmin = await accessFor(acme.id, admin)
 
     await expect(
-      router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: owner.id, role: 'admin', actorRole: 'owner' })),
+      router.withPlatform((tx) => setOwner(tx, { orgId: acme.id, userId: owner.id, owner: false, actor: asOwner })),
     ).rejects.toMatchObject({ code: 'last-owner' })
     await expect(
-      router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: owner.id, actorRole: 'owner' })),
+      router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: owner.id, actor: asOwner })),
     ).rejects.toMatchObject({ code: 'last-owner' })
     await expect(
-      router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: owner.id, role: 'viewer', actorRole: 'admin' })),
+      router.withPlatform((tx) => removeMember(tx, { orgId: acme.id, userId: owner.id, actor: asAdmin })),
     ).rejects.toMatchObject({ code: 'forbidden' })
     await expect(
-      router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: admin.id, role: 'owner', actorRole: 'admin' })),
+      router.withPlatform((tx) => setOwner(tx, { orgId: acme.id, userId: admin.id, owner: true, actor: asAdmin })),
     ).rejects.toMatchObject({ code: 'forbidden' })
 
     // Ownership moves only through an owner, and then the old owner may step down.
-    await router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: admin.id, role: 'owner', actorRole: 'owner' }))
-    await router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: owner.id, role: 'viewer', actorRole: 'owner' }))
-    const roles = Object.fromEntries((await router.withPlatform((tx) => listMembers(tx, acme.id))).map((m) => [m.login, m.role]))
-    expect(roles).toEqual({ admin4: 'owner', owner4: 'viewer' })
+    await router.withPlatform((tx) => setOwner(tx, { orgId: acme.id, userId: admin.id, owner: true, actor: asOwner }))
+    await router.withPlatform((tx) => setOwner(tx, { orgId: acme.id, userId: owner.id, owner: false, actor: asOwner }))
+    const owners = Object.fromEntries((await router.withPlatform((tx) => listMembers(tx, acme.id))).map((m) => [m.login, m.owner]))
+    expect(owners).toEqual({ admin4: true, owner4: false })
   })
 
   it('holds an org to the members limit, counting service accounts and open invites', async () => {
     const owner = await human('owner5')
     const acme = await org(owner)
+    const ownerAccess = await accessFor(acme.id, owner)
     for (let i = 1; i < LIMITS.membersPerOrg - 1; i += 1) {
       await router.withPlatform((tx) =>
-        createInvite(tx, { orgId: acme.id, who: `seat${i}`, role: 'viewer', actorId: owner.id, actorRole: 'owner' }),
+        createInvite(tx, { orgId: acme.id, who: `seat${i}`, roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor: ownerAccess }),
       )
     }
     await router.withPlatform((tx) =>
-      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: null, role: 'editor', actorId: owner.id, actorRole: 'owner' }),
+      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: null, actorId: owner.id, actor: ownerAccess }),
     )
     await expect(
       router.withPlatform((tx) =>
-        createInvite(tx, { orgId: acme.id, who: 'onemore', role: 'viewer', actorId: owner.id, actorRole: 'owner' }),
+        createInvite(tx, { orgId: acme.id, who: 'onemore', roleId: 'reader', place: ACCOUNT, actorId: owner.id, actor: ownerAccess }),
       ),
     ).rejects.toMatchObject({ code: 'limit' })
-    await expect(
-      router.withPlatform((tx) =>
-        createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: null, role: 'owner', actorId: owner.id, actorRole: 'owner' }),
-      ),
-    ).rejects.toMatchObject({ code: 'forbidden' })
   })
 
-  it('never lets a system account become owner, even through the role-change action an owner could otherwise use on themselves', async () => {
+  it('never lets a system account become owner, and gives it access only by a grant', async () => {
     const owner = await human('owner10')
     const acme = await org(owner)
+    const ownerAccess = await accessFor(acme.id, owner)
     const bot = await router.withPlatform((tx) =>
-      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: null, role: 'editor', actorId: owner.id, actorRole: 'owner' }),
+      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: null, actorId: owner.id, actor: ownerAccess }),
     )
     await expect(
-      router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: bot.id, role: 'owner', actorRole: 'owner' })),
+      router.withPlatform((tx) => setOwner(tx, { orgId: acme.id, userId: bot.id, owner: true, actor: ownerAccess })),
     ).rejects.toMatchObject({ code: 'forbidden' })
-    const [listed] = await router.withPlatform((tx) => listSystemAccounts(tx, acme.id))
-    expect(listed).toMatchObject({ role: 'editor' })
+    expect((await accessFor(acme.id, bot as User)).grants).toEqual([])
+    await router.withPlatform((tx) =>
+      setGrant(tx, { orgId: acme.id, who: { kind: 'user', id: bot.id }, place: docketPlace('abc'), roleId: 'writer', actor: ownerAccess, actorId: owner.id }),
+    )
+    expect((await accessFor(acme.id, bot as User)).grants.map((grant) => grant.role.id)).toEqual(['writer'])
     // Its seat in the beta goes back for the next test.
     await db.admin.query("UPDATE platform.orgs SET status = 'deleted' WHERE id = $1", [acme.id])
   })
@@ -234,8 +245,9 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
   it('makes a system account owned by the account, with no person acting for it, and lists it with its tokens', async () => {
     const owner = await human('owner9')
     const acme = await org(owner)
+    const ownerAccess = await accessFor(acme.id, owner)
     const bot = await router.withPlatform((tx) =>
-      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: 'CI', role: 'editor', actorId: owner.id, actorRole: 'owner' }),
+      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: 'CI', actorId: owner.id, actor: ownerAccess }),
     )
     const { rows } = await db.admin.query<{ accountable_user_id: string | null; created_by: string }>(
       'SELECT accountable_user_id, created_by FROM platform.users WHERE id = $1',
@@ -243,7 +255,7 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     )
     expect(rows).toEqual([{ accountable_user_id: null, created_by: owner.id }])
     const [listed] = await router.withPlatform((tx) => listSystemAccounts(tx, acme.id))
-    expect(listed).toMatchObject({ id: bot.id, name: 'ci-bot', description: 'CI', role: 'editor', createdByLogin: 'owner9', managed: false, liveTokens: 0, nextExpiry: null })
+    expect(listed).toMatchObject({ id: bot.id, name: 'ci-bot', description: 'CI', createdByLogin: 'owner9', managed: false, liveTokens: 0, nextExpiry: null })
     await router.withPlatform((tx) => describeServiceAccount(tx, { orgId: acme.id, serviceId: bot.id, description: 'Nightly sync' }))
     expect((await router.withPlatform((tx) => listSystemAccounts(tx, acme.id)))[0]?.description).toBe('Nightly sync')
     // A person is not a system account.

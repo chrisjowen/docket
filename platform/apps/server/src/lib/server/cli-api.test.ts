@@ -5,6 +5,7 @@ import type { RequestEvent } from '@sveltejs/kit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { rateLimiter } from './rate-limit'
+import { accessRows } from './testing-access'
 
 /** The audit events the pipeline writes. */
 const audited: { action: string; outcome: string; actor: string; target: string[] }[] = []
@@ -15,9 +16,9 @@ const tx = {
     if (sql.includes('INSERT INTO audit_event')) audited.push({ actor: params[4] as string, action: params[7] as string, target: params[8] as string[], outcome: params[10] as string })
     // The org `acme` has the workspace `main`; `other` is a workspace nobody's token is for.
     if (sql.includes('FROM platform.orgs') && params[0] === 'acme') return { rows: [{ id: 'orgacme' }] }
-    if (sql.includes('FROM workspaces WHERE slug')) return { rows: [{ id: params[0] === 'main' ? 'wsmain' : 'wsother', slug: params[0], name: 'Main', ontology_mcp_roles: [] }] }
-    // A member's access to the workspace: an editor is a developer with a write grant on it, as the backfill gives.
-    if (sql.includes('FROM platform.memberships')) return { rows: role ? [{ role, account_role: 'developer', permission: 'write' }] : [] }
+    if (sql.includes('FROM workspaces WHERE slug')) return { rows: [{ id: params[0] === 'main' ? 'wsmain' : 'wsother', slug: params[0], name: 'Main' }] }
+    const access = accessRows(sql, role)
+    if (access) return { rows: access }
     return { rows: [] }
   },
 }

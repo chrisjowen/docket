@@ -20,6 +20,7 @@ import org0015 from '../migrations/org/0015_trust.sql?raw'
 import org0016 from '../migrations/org/0016_namespace_grants.sql?raw'
 import org0017 from '../migrations/org/0017_namespace_access.sql?raw'
 import org0018 from '../migrations/org/0018_ontology_templates.sql?raw'
+import org0019 from '../migrations/org/0019_docket_grants.sql?raw'
 import platform0001 from '../migrations/platform/0001_identity_orgs_audit.sql?raw'
 import platform0002 from '../migrations/platform/0002_ai_and_stores.sql?raw'
 import platform0003 from '../migrations/platform/0003_mcp_auth.sql?raw'
@@ -36,11 +37,18 @@ import platform0013 from '../migrations/platform/0013_namespace_access.sql?raw'
 import platform0014 from '../migrations/platform/0014_database_accounts.sql?raw'
 import platform0015 from '../migrations/platform/0015_identities.sql?raw'
 import platform0016 from '../migrations/platform/0016_tokens_and_connections.sql?raw'
+import platform0017 from '../migrations/platform/0017_capabilities_and_grants.sql?raw'
 
 export interface Migration {
   version: number
   name: string
   sql: string
+  /**
+   * A later migration that replaced what this one set up. A schema that
+   * already has it keeps it; one that does not records it as applied, with
+   * its checksum, without running it.
+   */
+  supersededBy?: string
 }
 
 /**
@@ -65,6 +73,7 @@ export const PLATFORM_MIGRATIONS: readonly Migration[] = [
   { version: 14, name: '0014_database_accounts', sql: platform0014 },
   { version: 15, name: '0015_identities', sql: platform0015 },
   { version: 16, name: '0016_tokens_and_connections', sql: platform0016 },
+  { version: 17, name: '0017_capabilities_and_grants', sql: platform0017 },
 ]
 
 export const ORG_MIGRATIONS: readonly Migration[] = [
@@ -83,9 +92,10 @@ export const ORG_MIGRATIONS: readonly Migration[] = [
   { version: 13, name: '0013_supersession', sql: org0013 },
   { version: 14, name: '0014_cognee', sql: org0014 },
   { version: 15, name: '0015_trust', sql: org0015 },
-  { version: 16, name: '0016_namespace_grants', sql: org0016 },
-  { version: 17, name: '0017_namespace_access', sql: org0017 },
+  { version: 16, name: '0016_namespace_grants', sql: org0016, supersededBy: 'platform 0017_capabilities_and_grants' },
+  { version: 17, name: '0017_namespace_access', sql: org0017, supersededBy: 'platform 0017_capabilities_and_grants' },
   { version: 18, name: '0018_ontology_templates', sql: org0018 },
+  { version: 19, name: '0019_docket_grants', sql: org0019 },
 ]
 
 /** The org schema version this build serves. An org behind it is migrated before it is served. */
