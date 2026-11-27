@@ -105,7 +105,8 @@ const RRF_K = 60
 export interface QueryServiceDeps {
   router: TenantRouter
   keyring: Keyring
-  storeAccess(orgId: string): Promise<StoreAccess>
+  /** The docket's stores for one question (tenancy v2 §5: its space's Neo4j or the account's, its own collection or the account's). */
+  storeAccess(orgId: string, workspaceId: string): Promise<StoreAccess>
   /**
    * The org's metered, capped models (§11); null when OpenRouter is not set
    * up. `onUsage` hears of each metered call, for the question's trace.
@@ -204,7 +205,7 @@ export async function askProjections(
   models: Models | null,
 ): Promise<Asked> {
   const keys = await deps.keyring.forOrg(orgId)
-  const access = await deps.storeAccess(orgId)
+  const access = await deps.storeAccess(orgId, workspaceId)
   const adapters = await openProjections({ orgId, workspaceId, access, ...(models?.cypher ? { cypher: chatOf(models.cypher) } : {}) })
   const cognee = await openWorkspaceCognee(deps, orgId, workspaceId).catch(async (cause: unknown) => {
     await closeAll(adapters).catch(() => undefined)
@@ -430,7 +431,7 @@ export function queryService(deps: QueryServiceDeps) {
       : built.prompt
     try {
       const text = (await chatOf(models.synthesis)(prompt)).trim()
-      const model = (await deps.router.withPlatform((tx) => modelChoices(tx, query.orgId))).synthesis
+      const model = (await deps.router.withPlatform((tx) => modelChoices(tx, query.orgId, query.workspaceId))).synthesis
       const synthesis: CoordinatedAnswer['synthesis'] = {
         text,
         citedEntities: citationsIn(text, new Set(built.exhibits.map((exhibit) => exhibit.id))),

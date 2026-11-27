@@ -71,3 +71,15 @@ export async function monthSpend(tx: Tx, orgId: string, month: string): Promise<
   )
   return Number(rows[0]?.spent ?? 0)
 }
+
+/** What the dockets in one space have spent on AI in a calendar month, in US dollars: calls made for one of them. */
+export async function spaceMonthSpend(tx: Tx, orgId: string, spaceId: string, month: string): Promise<number> {
+  const [from, to] = monthRange(month)
+  const { rows } = await tx.query<{ spent: string | null }>(
+    `SELECT sum(u.cost_usd) AS spent FROM platform.ai_usage u
+       JOIN platform.docket_spaces($1) d ON d.docket_id = u.workspace_id
+      WHERE u.org_id = $1 AND d.space_id = $2 AND u.at >= $3 AND u.at < $4`,
+    [orgId, spaceId, from, to],
+  )
+  return Number(rows[0]?.spent ?? 0)
+}

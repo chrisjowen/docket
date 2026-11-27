@@ -9,6 +9,8 @@
   const tabs = $derived([
     { label: 'Dockets', href: resolve('/o/[org]/s/[space]', { org: data.org.slug, space: data.space.slug }) },
     { label: 'Users & system accounts', href: resolve('/o/[org]/s/[space]/access', { org: data.org.slug, space: data.space.slug }) },
+    // Storage and AI per space (tenancy v2 §5), for whoever may change settings here.
+    ...(data.onSpace.settings ? [{ label: 'Settings', href: resolve('/o/[org]/s/[space]/settings', { org: data.org.slug, space: data.space.slug }) }] : []),
   ])
   const onNew = $derived(page.route.id === '/o/[org]/s/[space]/new')
 </script>

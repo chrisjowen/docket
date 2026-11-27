@@ -114,4 +114,37 @@ describe('neo4jPodProvisioner', () => {
     const { provisioner } = setup()
     await expect(provisioner.provision({ orgId: 'Acme/../x' })).rejects.toThrow(/lowercase/)
   })
+
+  it("gives a space's own instance (tenancy v2 §5) its own objects, which the org's instance never selects", async () => {
+    const { kube, provisioner } = setup()
+    await provisioner.provision({ orgId: 'acme' })
+    const binding = await provisioner.provision({ orgId: 'acme', storeId: 'st0123456789abcdef' })
+    expect(neo4jName({ orgId: 'acme', storeId: 'st0123456789abcdef' })).toBe('neo4j-st0123456789abcdef')
+    expect(binding).toEqual({
+      store: 'neo4j',
+      target: 'bolt+s://neo4j-st0123456789abcdef.docket-cloud.svc:7687',
+      credentialsSecret: 'neo4j-st0123456789abcdef',
+      created: true,
+    })
+    const own = kube.objects.get(kubePath('StatefulSet', NS, 'neo4j-st0123456789abcdef'))
+    const orgs = kube.objects.get(kubePath('StatefulSet', NS, 'neo4j-org-acme'))
+    const ownLabels = (own as unknown as { spec: { template: { metadata: { labels: Record<string, string> } } } }).spec.template.metadata.labels
+    expect(ownLabels['docket.dev/store']).toBe('st0123456789abcdef')
+    expect(ownLabels['docket.dev/store-org']).toBe('acme')
+    expect(ownLabels['docket.dev/org']).toBeUndefined()
+    // The org's Service and NetworkPolicy select by `docket.dev/org`, which the space's pod does not carry.
+    const orgSelector = (spec(kube.objects.get(kubePath('Service', NS, 'neo4j-org-acme'))) as { selector: Record<string, string> }).selector
+    expect(Object.entries(orgSelector).every(([key, value]) => ownLabels[key] === value)).toBe(false)
+    expect(spec(own)?.selector).toEqual({ matchLabels: { 'app.kubernetes.io/component': 'neo4j', 'docket.dev/store': 'st0123456789abcdef' } })
+    expect(spec(orgs)?.selector).toEqual({ matchLabels: { 'app.kubernetes.io/component': 'neo4j', 'docket.dev/org': 'acme' } })
+
+    await provisioner.deprovision({ orgId: 'acme', storeId: 'st0123456789abcdef' }, 'shred')
+    expect([...kube.objects.keys()].filter((path) => path.includes('st0123456789abcdef'))).toEqual([])
+    expect([...kube.objects.keys()].filter((path) => path.includes('org-acme'))).toHaveLength(6)
+  })
+
+  it('refuses a store id that is not a safe name', async () => {
+    const { provisioner } = setup()
+    await expect(provisioner.provision({ orgId: 'acme', storeId: 'st../../x' })).rejects.toThrow(/not a store id/)
+  })
 })

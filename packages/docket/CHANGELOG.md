@@ -151,6 +151,29 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   connection that still carries its old scope ceiling is read-only, and an
   OAuth grant made before named connections is refused.
 
+### Storage and AI per space (multi-tenant server)
+
+- AI settings resolve account, then space, then docket. The account chooses
+  its models, as before, and may limit which models its spaces and dockets
+  choose from; a space may choose others within that list, and a docket its
+  own within its space's. Owners see on Settings › AI which spaces and
+  dockets chose something of their own.
+- A space's Settings tab, for whoever may change settings on it, chooses its
+  models, gives it a slice of the account's monthly AI cap (never more than
+  the cap), and takes its own OpenRouter, Anthropic or OpenAI key. The key is
+  sealed with the account's own encryption key; only its last four characters
+  are ever shown or recorded again. Calls for the space's dockets go to that
+  provider on that key, are still metered, and stop at the space's slice.
+- A space can have its own Neo4j instance (one more pod on the box): its
+  Settings tab shows how many pods are left (`DOCKET_NEO4J_POD_CAPACITY`,
+  default 8). Its dockets move there once it is up and are rebuilt from their
+  records; going back moves them to the account's instance and removes the
+  pod. Each new docket gets a Qdrant collection of its own.
+- Nothing changes for existing accounts: the account's models move to the new
+  settings unchanged, and every existing docket keeps the account's Neo4j and
+  its shared Qdrant collection. A migration test checks every docket resolves
+  to the same models, key and stores before and after.
+
 ## 0.16.0
 
 ### Confidence comes from policies about sources

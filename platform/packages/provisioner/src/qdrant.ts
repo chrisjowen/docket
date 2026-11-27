@@ -34,8 +34,12 @@ export interface QdrantAccess {
 }
 
 export interface QdrantProvisioner extends TenantProvisioner {
-  /** A JWT for the org's collections, valid for `ttlSeconds`. */
-  access(org: OrgRef, ttlSeconds?: number): Promise<QdrantAccess>
+  provision(org: QdrantRef): Promise<StoreBinding>
+  bind(org: QdrantRef): Promise<StoreBinding>
+  deprovision(org: QdrantRef, mode: 'soft' | 'shred'): Promise<void>
+  health(org: QdrantRef): Promise<StoreHealth>
+  /** A JWT for the org's (or the docket's) collections only, valid for `ttlSeconds`. */
+  access(org: QdrantRef, ttlSeconds?: number): Promise<QdrantAccess>
 }
 
 export class QdrantError extends Error {
@@ -53,9 +57,27 @@ export function mem0Collection(org: OrgRef): string {
   return `${qdrantCollectionPrefix(org.orgId)}mem0`
 }
 
-/** The collections an org owns: mem0's memories and its entity index. */
-export function orgCollections(org: OrgRef): string[] {
-  const memories = mem0Collection(org)
+/**
+ * Which Qdrant collection: the org's shared one (`docketId` absent), where
+ * the dockets it had before tenancy v2 phase 5 keep their vectors, or one
+ * docket's own.
+ */
+export interface QdrantRef extends OrgRef {
+  docketId?: string
+}
+
+const DOCKET_ID = /^[a-z0-9]{1,40}$/
+
+/** mem0's collection for the org (`org_<id>__mem0`), or for one docket (`org_<id>__ws_<docket>`). */
+export function qdrantCollection(ref: QdrantRef): string {
+  if (ref.docketId === undefined) return mem0Collection(ref)
+  if (!DOCKET_ID.test(ref.docketId)) throw new QdrantError(400, `not a docket id: ${ref.docketId}`)
+  return `${qdrantCollectionPrefix(ref.orgId)}ws_${ref.docketId}`
+}
+
+/** The collections an org (or one docket) owns: mem0's memories and its entity index. */
+export function orgCollections(org: QdrantRef): string[] {
+  const memories = qdrantCollection(org)
   return [memories, `${memories}_entities`]
 }
 
@@ -141,13 +163,13 @@ export function qdrantProvisioner(options: QdrantOptions): QdrantProvisioner {
     },
 
     async bind(org): Promise<StoreBinding> {
-      return { store: 'qdrant', target: `${base}/collections/${mem0Collection(org)}` }
+      return { store: 'qdrant', target: `${base}/collections/${qdrantCollection(org)}` }
     },
 
     async access(org, ttlSeconds = 3_600) {
       return {
         url: base,
-        collection: mem0Collection(org),
+        collection: qdrantCollection(org),
         token: qdrantToken(options.apiKey, orgCollections(org), ttlSeconds),
         dimension: options.dimension,
       }
@@ -167,7 +189,7 @@ export function qdrantProvisioner(options: QdrantOptions): QdrantProvisioner {
 
     async health(org): Promise<StoreHealth> {
       try {
-        const found = await call('GET', `/collections/${mem0Collection(org)}`)
+        const found = await call('GET', `/collections/${qdrantCollection(org)}`)
         return found.status === 200 ? 'ok' : 'down'
       } catch {
         return 'down'

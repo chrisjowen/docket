@@ -1,7 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Server } from 'node:http'
 
-import { aiCaps, auditCapWarning, configureModels, meteredTurns, openRouterClient, openRouterKeys, openRouterModels, type AiDeps } from '@docket/platform-ai'
+import {
+  PROVIDER_INFO,
+  aiCaps,
+  auditCapWarning,
+  configureModels,
+  meteredTurns,
+  openRouterClient,
+  openRouterKeys,
+  openRouterModels,
+  spaceAiKeys,
+  type AiDeps,
+} from '@docket/platform-ai'
 import { redactConsole } from '@docket/platform-audit'
 import { keyring } from '@docket/platform-canonical-store'
 import { githubApp, githubAppConfigFromEnv } from '@docket/platform-github'
@@ -14,7 +25,7 @@ import {
   type Neo4jPodProvisioner,
 } from '@docket/platform-provisioner'
 import { queryKey } from '@docket/platform-mcp-tools/query'
-import { CogneeUnavailable, type CogneeAccess } from '@docket/platform-projections'
+import { CogneeUnavailable, clearNeo4jScope, type CogneeAccess } from '@docket/platform-projections'
 import { PLATFORM_MIGRATIONS, countLiveOrgs, tenantRouter } from '@docket/platform-tenancy'
 import pg from 'pg'
 
@@ -147,6 +158,8 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
     }),
     embedder,
     log,
+    // A docket moving to its space's own Neo4j (or back) is cleared from the one it leaves.
+    clearScope: (neo4j, workspaceId) => clearNeo4jScope(neo4j, workspaceId),
     idleMs: Number(env.DOCKET_NEO4J_IDLE_HOURS ?? 24) * 3_600_000,
   })
 
@@ -166,7 +179,8 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
     reconciler: reconciler({
       router,
       keyring: ring,
-      storeAccess: (orgId) => stores.access(orgId),
+      storeAccess: (orgId, workspaceId) => stores.access(orgId, workspaceId),
+      released: (orgId, workspaceId) => stores.release(orgId, workspaceId),
       ...(cognee
         ? {
             purgeAlso: [
@@ -225,6 +239,10 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
     caps: aiCaps({ platform: (fn) => router.withPlatform(fn), notifyOwners: auditCapWarning(router) }),
     keys: ai.keys,
     client: client({ appUrl: env.ORIGIN }),
+    // A space's own key (tenancy v2 §5) goes to its own provider, whatever the platform's provider is.
+    spaceKeys: spaceAiKeys({ platform: (fn) => router.withPlatform(fn), keysFor: (orgId) => ring.forOrg(orgId) }),
+    providerClient: (provider) =>
+      openRouterClient({ apiBase: PROVIDER_INFO[provider].apiBase, dialect: PROVIDER_INFO[provider].dialect, appUrl: env.ORIGIN }),
   }
   const platformKey = provider?.sharedKey
 
@@ -240,7 +258,7 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
     service: queryService({
       router,
       keyring: ring,
-      storeAccess: (orgId) => stores.access(orgId),
+      storeAccess: (orgId, workspaceId) => stores.access(orgId, workspaceId),
       models: (orgId, context) => (aiDeps ? openRouterModels(aiDeps, orgId, context) : null),
       // Turns run on the org's synthesis model, metered as what they are for: the Ask page's `agent`, or `ontology` drafts.
       turns: (orgId, context) => (aiDeps ? meteredTurns(aiDeps, orgId, { actor: context.actor }, 'synthesis', context.purpose) : null),
@@ -322,7 +340,7 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
     server.listen(healthPort, '0.0.0.0')
   }
   log.info(
-    `worker up: projecting into ${env.DOCKET_NEO4J_URL ? 'one shared Neo4j (local)' : 'a Neo4j pod per org'} and Qdrant${github ? `; repo sync as GitHub App ${appConfig?.slug}` : ''}`,
+    `worker up: projecting into ${env.DOCKET_NEO4J_URL ? 'one shared Neo4j (local)' : "a Neo4j pod per org (and per space that has its own)"} and Qdrant${github ? `; repo sync as GitHub App ${appConfig?.slug}` : ''}`,
   )
 
   let stopping: Promise<void> | null = null

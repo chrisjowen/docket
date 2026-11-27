@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { actorMonthSpend, monthOf } from '@docket/platform-ai'
+import { SettingsError, actorMonthSpend, monthOf, placeAiSettings, resolveAiSettings, saveAiSettings } from '@docket/platform-ai'
 import { mcpResourceUrl, revokeWorkspaceCredentials } from '@docket/platform-auth'
 import {
   CogneeSettingsError,
@@ -8,6 +8,7 @@ import {
   cogneeSettings,
   deleteWorkspace,
   saveCogneeSettings,
+  spaceById,
 } from '@docket/platform-canonical-store'
 import {
   EnrichmentSettingsError,
@@ -29,7 +30,8 @@ import { error, fail, redirect } from '@sveltejs/kit'
 
 import { authorise, authoriseOwner, recordAudit, requireUser } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
-import { actorNames, inWorkspace, publisherOf } from '$lib/server/workspace'
+import { modelSlots, modelsFrom } from '$lib/server/place-settings'
+import { actorNames, docketAccess, inWorkspace, publisherOf } from '$lib/server/workspace'
 
 import type { Actions, PageServerLoad } from './$types'
 
@@ -54,17 +56,29 @@ export const load: PageServerLoad = async (event) => {
       settings: await enrichmentSettings(ctx.tx, workspace.id),
       runs: await recentRuns(ctx.tx, workspace.id, 5),
       cognee: await cogneeSettings(ctx.tx, workspace.id),
+      space: (await spaceById(ctx.tx, workspace.spaceId))?.name ?? 'its space',
     }
   })
   const { access, settings, runs } = read
   const month = monthOf(new Date())
-  const [cap, spentUsd, cogneeSpentUsd, name] = await Promise.all([
+  const [cap, spentUsd, cogneeSpentUsd, name, ai] = await Promise.all([
     caps.status(access.org.id),
     router.withPlatform((tx) => actorMonthSpend(tx, access.org.id, enrichmentAiActor(read.workspaceId), month)),
     router.withPlatform((tx) => actorMonthSpend(tx, access.org.id, cogneeAiActor(read.workspaceId), month)),
     actorNames(access),
+    router.withPlatform(async (tx) => {
+      const resolved = await resolveAiSettings(tx, access.org.id, { docketId: read.workspaceId })
+      return { resolved, own: await placeAiSettings(tx, access.org.id, { kind: 'docket', id: read.workspaceId }) }
+    }),
   ])
   return {
+    /** The docket's models (tenancy v2 §5): its own choice, or its space's; whoever may change settings here changes them. */
+    models: {
+      slots: modelSlots(ai.resolved, ai.own),
+      space: read.space,
+      key: ai.resolved.key.from === 'space' ? { provider: ai.resolved.key.provider, hint: ai.resolved.key.hint } : null,
+      canChange: access.caps.has('settings'),
+    },
     cognee: {
       available: cogneeRuns,
       enabled: read.cognee.enabled,
@@ -111,6 +125,31 @@ function problemOf(caught: unknown): string | null {
 }
 
 export const actions: Actions = {
+  /** The docket's own models, within what its space and the account allow; empty takes its space's. */
+  models: async (event) => {
+    const user = requireUser(event)
+    const { access, workspace } = await docketAccess(event)
+    if (!access.caps.has('settings')) error(403, 'You do not have access to that.')
+    const { models } = modelsFrom(await event.request.formData())
+    const { router } = getRuntime()
+    try {
+      await router.withPlatform(async (tx) => {
+        const saved = await saveAiSettings(tx, { orgId: access.org.id, place: { kind: 'docket', id: workspace.id }, models, by: user.id })
+        await router.enterTenant(tx, access.org.id)
+        await recordAudit(tx, event, {
+          action: 'docket.models',
+          orgId: access.org.id,
+          workspaceId: workspace.id,
+          args: { before: saved.before.models, after: saved.after.models },
+        })
+      })
+    } catch (caught) {
+      if (caught instanceof SettingsError) return fail(400, { modelsProblem: caught.message })
+      throw caught
+    }
+    return { modelsFlash: `Saved ${workspace.name}'s models.` }
+  },
+
   /**
    * Saves the docket's published ontology - its types, relationships, sources
    * and policies, never its documents - as one of the org's templates, which

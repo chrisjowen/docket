@@ -71,8 +71,10 @@ export class ReconcileError extends Error {
 export interface ReconcileDeps {
   router: TenantRouter
   keyring: Keyring
-  /** The org's stores for one pass: Neo4j credentials (waking a suspended pod), a Qdrant JWT, the embedder. */
-  storeAccess(orgId: string): Promise<StoreAccess>
+  /** The docket's stores for one pass: Neo4j credentials (waking a suspended pod), a Qdrant JWT, the embedder. */
+  storeAccess(orgId: string, workspaceId: string): Promise<StoreAccess>
+  /** After a deleted docket's stores are cleared: drops what was its own (its Qdrant collection). */
+  released?(orgId: string, workspaceId: string): Promise<void>
   /** Opens one instance for the workspace. Defaults to docket's adapters on the org's stores. */
   open?(instance: CloudProjection, options: { orgId: string; workspaceId: string; access: StoreAccess }): Promise<MemoryAdapter>
   /**
@@ -399,7 +401,7 @@ export function reconciler(deps: ReconcileDeps): Reconciler {
       const { workspaceId } = deletion
       const errors: string[] = []
       try {
-        const access = await deps.storeAccess(orgId)
+        const access = await deps.storeAccess(orgId, workspaceId)
         for (const instance of CLOUD_PROJECTIONS) {
           try {
             const adapter = await openInstance(deps)(instance, { orgId, workspaceId, access })
@@ -429,6 +431,13 @@ export function reconciler(deps: ReconcileDeps): Reconciler {
           }
         } catch (cause) {
           if (!optional.unavailable?.(cause)) errors.push(`${optional.id}: ${messageOf(cause)}`)
+        }
+      }
+      if (!errors.length && deps.released) {
+        try {
+          await deps.released(orgId, workspaceId)
+        } catch (cause) {
+          errors.push(`its own stores: ${messageOf(cause)}`)
         }
       }
       const at = now()
@@ -463,7 +472,7 @@ export function reconciler(deps: ReconcileDeps): Reconciler {
       let access: StoreAccess | undefined
       let accessError: string | undefined
       try {
-        access = await deps.storeAccess(orgId)
+        access = await deps.storeAccess(orgId, workspaceId)
       } catch (cause) {
         accessError = `the org's stores are not reachable: ${messageOf(cause)}`
       }

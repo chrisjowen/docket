@@ -6,6 +6,7 @@ import type { Tx } from '@docket/platform-tenancy'
 
 import { capOf } from './caps.js'
 import type { OpenRouterClient } from './openrouter-client.js'
+import { PROVIDER_INFO, isProvider, providerKeyInfo, type Provider, type ProviderKeyInfo } from './settings.js'
 
 /** The slice of the canonical store's keyring this needs: an org's data keys. */
 export interface OrgKeys {
@@ -29,8 +30,11 @@ export interface OrgAiKeysDeps {
 
 export class AiNotConfigured extends Error {
   override name = 'AiNotConfigured'
-  constructor(readonly orgId: string) {
-    super('AI is not set up for this organisation yet — search still works')
+  constructor(
+    readonly orgId: string,
+    message = 'AI is not set up for this organisation yet — search still works',
+  ) {
+    super(message)
   }
 }
 
@@ -141,4 +145,88 @@ export function openRouterKeys(
     return { mode: 'shared', keys: { ...shared, ensure: async () => 'shared', revoke: async () => undefined } }
   }
   return { mode: 'off', keys: null }
+}
+
+// --- A space's own provider key (tenancy v2 §5, phase 5.2) ------------------------------
+
+/** Binds a space's sealed key to its org, space and provider, so no other space's ciphertext stands in for it. */
+const spaceAad = (orgId: string, spaceId: string, provider: Provider) => `${orgId}|space:${spaceId}|${provider}`
+
+export class ProviderKeyError extends Error {
+  override name = 'ProviderKeyError'
+}
+
+export interface SpaceAiKeysDeps {
+  platform<T>(fn: (tx: Tx) => Promise<T>): Promise<T>
+  /** Unwraps an org's data keys (the canonical store's keyring). */
+  keysFor(orgId: string): Promise<OrgKeys>
+}
+
+/** A space's own model key, unsealed for one call: which provider it is for, and the key. Never logged. */
+export interface SpaceKey {
+  provider: Provider
+  key: string
+}
+
+export interface SpaceAiKeys {
+  /**
+   * Seals and keeps a space's own key for `provider`, replacing any it had,
+   * inside the caller's transaction; the key itself is never shown again,
+   * only its last four characters.
+   */
+  set(tx: Tx, input: { orgId: string; spaceId: string; provider: Provider; key: string; by: string }): Promise<ProviderKeyInfo>
+  /** Removes a space's own key: its calls go on the account's key again. The removed key's description, or null. */
+  remove(tx: Tx, input: { orgId: string; spaceId: string }): Promise<ProviderKeyInfo | null>
+  /** The space's own key, unsealed for one call; null when it has none. */
+  key(orgId: string, spaceId: string): Promise<SpaceKey | null>
+}
+
+/** What a key looks like: one line of printable characters, no spaces. */
+const KEY_SHAPE = /^[\x21-\x7e]{8,512}$/
+
+export function spaceAiKeys(deps: SpaceAiKeysDeps): SpaceAiKeys {
+  return {
+    async set(tx, input) {
+      const key = input.key.trim()
+      if (!isProvider(input.provider)) throw new ProviderKeyError('Choose OpenRouter, Anthropic or OpenAI.')
+      if (!KEY_SHAPE.test(key)) throw new ProviderKeyError(`Paste the whole ${PROVIDER_INFO[input.provider].label} key: one line, no spaces.`)
+      const keys = await deps.keysFor(input.orgId)
+      const sealed = await encrypt(keys.key(), key, spaceAad(input.orgId, input.spaceId, input.provider))
+      const hint = key.slice(-4)
+      const { rows } = await tx.query<{ created_at: Date }>(
+        `INSERT INTO platform.provider_keys (org_id, space_id, provider, ciphertext, nonce, dek_version, hint, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (org_id, space_id) DO UPDATE SET provider = EXCLUDED.provider, ciphertext = EXCLUDED.ciphertext,
+           nonce = EXCLUDED.nonce, dek_version = EXCLUDED.dek_version, hint = EXCLUDED.hint,
+           created_by = EXCLUDED.created_by, created_at = now()
+         RETURNING created_at`,
+        [input.orgId, input.spaceId, input.provider, Buffer.from(sealed.ciphertext), Buffer.from(sealed.nonce), keys.version, hint, input.by],
+      )
+      return { spaceId: input.spaceId, provider: input.provider, hint, createdAt: (rows[0] as { created_at: Date }).created_at, createdBy: input.by }
+    },
+
+    async remove(tx, input) {
+      const before = await providerKeyInfo(tx, input.orgId, input.spaceId)
+      await tx.query('DELETE FROM platform.provider_keys WHERE org_id = $1 AND space_id = $2', [input.orgId, input.spaceId])
+      return before
+    },
+
+    async key(orgId, spaceId) {
+      const row = await deps.platform(async (tx) => {
+        const { rows } = await tx.query<{ provider: Provider; ciphertext: Buffer; nonce: Buffer; dek_version: number }>(
+          'SELECT provider, ciphertext, nonce, dek_version FROM platform.provider_keys WHERE org_id = $1 AND space_id = $2',
+          [orgId, spaceId],
+        )
+        return rows[0]
+      })
+      if (!row) return null
+      const keys = await deps.keysFor(orgId)
+      const key = await decryptText(
+        keys.key(row.dek_version),
+        { ciphertext: new Uint8Array(row.ciphertext), nonce: new Uint8Array(row.nonce) },
+        spaceAad(orgId, spaceId, row.provider),
+      )
+      return { provider: row.provider, key }
+    },
+  }
 }
