@@ -31,7 +31,8 @@ owner or admin turns it on (Settings, the **cognee** section; the
   (docket's evaluation: a 1,044-entity workspace took more than five hours on
   a local 7B model), so a pass starts only while the server has the
   platform's own OpenRouter key (`OPENROUTER_API_KEY`; the provisioning key
-  alone is not enough), under the org's monthly AI cap, and under the
+  alone is not enough), under the org's monthly AI cap and its space's slice
+  of it, and under the
   workspace's own cognee limit ($2 a month by default, at most the cap). A refused or failed pass is retried with backoff
   (30 s doubling to 30 min) and shown on Settings → Sync with why, never
   dropped.
@@ -64,14 +65,14 @@ cognifies, and if that takes more than 6 hours Settings → Sync shows the
 workspace stuck. Clearing a workspace's cognee, when it is turned off or the
 workspace is deleted, holds the lease too, so it never deletes what a running
 cognify is filing. The gateway counts each call to the workspace holding the
-lease: refused while no one holds it, at the org's cap, or at the
-workspace's cognee limit; otherwise sent to OpenRouter on the **platform's
+lease: refused while no one holds it, at the org's cap, at its space's
+slice, or at the workspace's cognee limit; otherwise sent to OpenRouter on the **platform's
 own key** (`OPENROUTER_API_KEY`, for every org - never an org's provisioned
-key, so no org's content goes out on another's), with the org's small model
-whatever model cognee names, the privacy routing every call asks for,
+key, so no org's content goes out on another's), with the workspace's small model (its
+AI settings, resolved account › space › docket) whatever model cognee names, the privacy routing every call asks for,
 unstreamed; and metered into `platform.ai_usage` as purpose `cognify`, actor
 `cognee:<workspace>`, so each workspace's spend counts against its cognee
-limit and its org's cap. A server without `OPENROUTER_API_KEY` - including
+limit, its space's slice and its org's cap. A server without `OPENROUTER_API_KEY` - including
 one with only `OPENROUTER_PROVISIONING_KEY`, where every other AI feature
 runs on per-org keys - leaves cognee waiting in every workspace, and Settings → Sync says why. Bringing your own
 OpenRouter key for cognee is planned, not built. Search makes no model call:
