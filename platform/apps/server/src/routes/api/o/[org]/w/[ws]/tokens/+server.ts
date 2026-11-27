@@ -71,7 +71,7 @@ export const POST: RequestHandler = (event) =>
           name: (name as string | undefined) ?? null,
         })
         await runtime.router.enterTenant(tx, principal.orgId)
-        await call.audit(tx, { outcome: 'ok', target: [token.id], args: { prefix: token.prefix, readOnly, dockets: [principal.workspaceId], days } })
+        await call.audit(tx, { outcome: 'ok', target: [token.id], args: { prefix: token.prefix, readOnly: token.readOnly, dockets: [principal.workspaceId], days } })
         return token
       })
       const [record] = await runtime.router.withPlatform(async (tx) =>
@@ -81,7 +81,7 @@ export const POST: RequestHandler = (event) =>
         id: issued.id,
         token: issued.token,
         prefix: issued.prefix,
-        read_only: readOnly,
+        read_only: issued.readOnly,
         scopes: record?.scopes ?? [],
         expiresAt: issued.expiresAt.toISOString(),
       })

@@ -9,6 +9,7 @@ import {
   denyConsent,
   describeConsent,
   interactionCookieValid,
+  newGrantId,
   parseMcpResourceUrl,
   type ConsentRequest,
 } from '@docket/platform-auth'
@@ -144,35 +145,38 @@ export const actions: Actions = {
       form.get('reach') === 'all'
         ? null
         : [target.workspaceId, ...form.getAll('docket').map(String).filter((id) => id !== target.workspaceId && reachable.has(id))]
-    let approved: { continueTo: string; grantId: string }
+    // Chosen before the grant exists, so the connection it names can be written first: a grant is only ever live
+    // (reachable by a lookup) once its narrowing connection row already is, with no crash window in between.
+    const grantId = newGrantId()
     try {
-      approved = await approveConsent(runtime.oauth.provider, consent.uid, { accountId: user.id, resource: consent.resource })
+      await runtime.router.withPlatform((tx) => createConnection(tx, { grantId, orgId: target.orgId, userId: user.id, clientId: consent.clientId, name, readOnly, dockets }))
     } catch (cause) {
-      if (cause instanceof ConsentError) return fail(400, { problem: cause.message })
-      throw cause
-    }
-    try {
-      await runtime.router.withPlatform(async (tx) => {
-        await createConnection(tx, { grantId: approved.grantId, orgId: target.orgId, userId: user.id, clientId: consent.clientId, name, readOnly, dockets })
-        await runtime.router.enterTenant(tx, target.orgId)
-        await audit(
-          tx,
-          auditInput(event, {
-            action: 'oauth.grant',
-            outcome: 'ok',
-            orgId: target.orgId,
-            workspaceId: target.workspaceId,
-            target: [consent.clientId, `conn:${approved.grantId}`],
-            args: { name, readOnly, dockets, resource: consent.resource },
-          }),
-        )
-      })
-    } catch (cause) {
-      // A grant is only ever a connection: without one it goes, with anything the client was about to get from it.
-      await runtime.router.withPlatform((tx) => tx.query('DELETE FROM platform.oauth_store WHERE grant_id = $1', [approved.grantId]))
       if (cause instanceof ConnectionError) return fail(400, { problem: cause.message })
       throw cause
     }
+    let approved: { continueTo: string }
+    try {
+      approved = await approveConsent(runtime.oauth.provider, consent.uid, { accountId: user.id, resource: consent.resource, grantId })
+    } catch (cause) {
+      // The connection never gets used: nothing is live for it without a grant.
+      await runtime.router.withPlatform((tx) => tx.query('DELETE FROM platform.oauth_connections WHERE grant_id = $1', [grantId]))
+      if (cause instanceof ConsentError) return fail(400, { problem: cause.message })
+      throw cause
+    }
+    await runtime.router.withPlatform(async (tx) => {
+      await runtime.router.enterTenant(tx, target.orgId)
+      await audit(
+        tx,
+        auditInput(event, {
+          action: 'oauth.grant',
+          outcome: 'ok',
+          orgId: target.orgId,
+          workspaceId: target.workspaceId,
+          target: [consent.clientId, `conn:${grantId}`],
+          args: { name, readOnly, dockets, resource: consent.resource },
+        }),
+      )
+    })
     event.locals.audited = true
     // The page sends the browser on: a form's redirect to the client's callback would break the CSP's form-action.
     return { continueTo: approved.continueTo }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import type Provider from 'oidc-provider'
 
@@ -106,30 +106,44 @@ export async function describeConsent(provider: Provider, uid: string): Promise<
 const epochTime = () => Math.floor(Date.now() / 1000)
 
 /**
- * Approves: a fresh grant on the resource, signed in as `accountId`. The
- * grant carries every docket scope; what the client may do is the named
- * connection the caller records for `grantId` (tenancy v2 §3.4): its owner's
- * access, narrowed to read-only or some dockets. Returns where the browser
- * goes next (the provider's resume URL, which only the browser holding the
- * interaction's resume cookie can use) and the grant's id.
+ * A grant's id, picked by the caller instead of `oidc-provider`'s own random
+ * one, so the caller can write the named connection under this id *before*
+ * the grant exists at all (tenancy v2 §3.4): a grant can then never be live
+ * - reachable by `lookupAccessToken` - without its narrowing connection row
+ * already committed, closing the crash window a generate-then-link order
+ * would leave open.
+ */
+export function newGrantId(): string {
+  return randomBytes(24).toString('base64url')
+}
+
+/**
+ * Approves: a fresh grant on the resource, signed in as `accountId`, stored
+ * under the caller's `grantId` (see `newGrantId`). The grant carries every
+ * docket scope; what the client may do is the named connection the caller
+ * records for `grantId` (tenancy v2 §3.4) - and must have already recorded,
+ * before calling this - its owner's access, narrowed to read-only or some
+ * dockets. Returns where the browser goes next: the provider's resume URL,
+ * which only the browser holding the interaction's resume cookie can use.
  */
 export async function approveConsent(
   provider: Provider,
   uid: string,
-  input: { accountId: string; resource: string },
-): Promise<{ continueTo: string; grantId: string }> {
+  input: { accountId: string; resource: string; grantId: string },
+): Promise<{ continueTo: string }> {
   const interaction = await provider.Interaction.find(uid)
   if (!interaction) throw new ConsentError('This sign-in request expired. Start again from your MCP client.')
   const params = interaction.params as Record<string, unknown>
   if (typeof params.client_id !== 'string') throw new ConsentError('This sign-in request has no client.')
   const grant = new provider.Grant({ accountId: input.accountId, clientId: params.client_id })
+  grant.jti = input.grantId
   const oidc = parseOidcScopes(typeof params.scope === 'string' ? params.scope : '')
   if (oidc) grant.addOIDCScope(oidc)
   grant.addResourceScope(input.resource, SCOPES.join(' '))
   const grantId = await grant.save()
   interaction.result = { login: { accountId: input.accountId }, consent: { grantId } }
   await interaction.save(Math.max(1, interaction.exp - epochTime()))
-  return { continueTo: interaction.returnTo, grantId }
+  return { continueTo: interaction.returnTo }
 }
 
 /** Denies: the client gets `access_denied`. */

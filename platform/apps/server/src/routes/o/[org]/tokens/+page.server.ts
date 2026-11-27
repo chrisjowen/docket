@@ -120,7 +120,7 @@ export const actions: Actions = {
       return {
         action: 'tokens.create',
         target: [issued.id],
-        args: { prefix: issued.prefix, owner: userId, readOnly, dockets: all ? 'all' : chosen, days },
+        args: { prefix: issued.prefix, owner: userId, readOnly: issued.readOnly, dockets: all ? 'all' : chosen, days },
         flash: `Created ${issued.prefix}… It is shown once: copy it now.`,
         created: { token: issued.token, prefix: issued.prefix, expiresAt: issued.expiresAt.toISOString() },
       }

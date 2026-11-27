@@ -64,8 +64,9 @@ describe.skipIf(!TEST_PG_URL)('API tokens in Postgres', () => {
     await expect(elsewhere).rejects.toThrow(/not a member of this organisation/)
   })
 
-  it('forces read-only when any of its dockets is read-only for its owner, whatever was asked', async () => {
+  it('forces read-only when any of its dockets is read-only for its owner, whatever was asked, and says so in what it returns', async () => {
     const forced = await issue('u-vi', { readOnly: false })
+    expect(forced.readOnly).toBe(true)
     const { rows } = await db.superuser.query('SELECT read_only FROM platform.api_tokens WHERE id = $1', [forced.id])
     expect(rows[0]).toMatchObject({ read_only: true })
     expect(await tokenResolver({ platform }).resolveBearer(forced.token, on('ws1'))).toMatchObject({ readOnly: true, scopes: ['docket:read', 'ontology:read'] })

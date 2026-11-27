@@ -129,7 +129,7 @@ export interface IssueApiTokenInput {
 export async function issueApiToken(
   tx: Tx,
   input: IssueApiTokenInput,
-): Promise<{ token: string; id: string; prefix: string; expiresAt: Date; kind: Exclude<TokenKind, 'legacy'> }> {
+): Promise<{ token: string; id: string; prefix: string; expiresAt: Date; kind: Exclude<TokenKind, 'legacy'>; readOnly: boolean }> {
   const { rows: owners } = await tx.query<{ kind: 'human' | 'service' }>(
     `SELECT u.kind FROM platform.memberships m JOIN platform.users u ON u.id = m.user_id WHERE m.org_id = $1 AND m.user_id = $2`,
     [input.orgId, input.ownerId],
@@ -169,7 +169,7 @@ export async function issueApiToken(
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [id, tokenHash(token), prefix, input.orgId, input.ownerId, readOnly, dockets, legacy, name, input.createdBy, now, expiresAt],
   )
-  return { token, id, prefix, expiresAt, kind }
+  return { token, id, prefix, expiresAt, kind, readOnly }
 }
 
 export interface ApiTokenRecord {

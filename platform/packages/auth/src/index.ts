@@ -85,7 +85,7 @@ export {
 } from './oauth/provider.js'
 export type { OAuthEndpoint, OAuthServer, OAuthServerOptions } from './oauth/provider.js'
 export { cimdFetchAllowed, isLocalRedirect, isMetadataClientId, redirectHost } from './oauth/cimd.js'
-export { ConsentError, approveConsent, denyConsent, describeConsent, interactionCookieValid } from './oauth/consent.js'
+export { ConsentError, approveConsent, denyConsent, describeConsent, interactionCookieValid, newGrantId } from './oauth/consent.js'
 export type { ConsentRequest } from './oauth/consent.js'
 export {
   authorizationServerMetadata,

@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { parseMcpResourceUrl } from '../principal.js'
 import { tokenResolver } from '../tokens/lookup.js'
-import { approveConsent, denyConsent, describeConsent, interactionCookieValid } from './consent.js'
+import { approveConsent, denyConsent, describeConsent, interactionCookieValid, newGrantId } from './consent.js'
 import { ConnectionError, createConnection } from './connections.js'
 import { DEVICE_CODE_GRANT, PAGE_CSP, createOAuthServer, oauthCookieKeys, type OAuthEndpoint, type OAuthServer } from './provider.js'
 import { authorizationServerMetadata } from './resource-metadata.js'
@@ -173,9 +173,10 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
 
     const consent = await describeConsent(oauth.provider, uid)
     expect(consent).toMatchObject({ clientName: 'Test client', redirectHost: '127.0.0.1:9', localApp: true, resource, requested: ['docket:read', 'docket:write'] })
-    // As the consent page does: the grant is a named connection, here one that reads only.
-    const { continueTo: returnTo, grantId } = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource })
+    // As the consent page does: the named connection, here one that reads only, is written before the grant it names.
+    const grantId = newGrantId()
     await platform((tx) => createConnection(tx, { grantId, orgId: 'orga', userId: 'u-1', clientId, name: 'Test client — Mac', readOnly: true, dockets: ['ws1'] }))
+    const { continueTo: returnTo } = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource, grantId })
     const resumed = await fetch(returnTo, { redirect: 'manual', headers: { cookie: browser.header() } })
     expect(resumed.status).toBe(303)
     const back = new URL(resumed.headers.get('location') ?? '', origin)
@@ -242,6 +243,37 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
         createConnection(tx, { grantId: `g-${randomBytes(8).toString('hex')}`, orgId: 'orga', userId: 'u-1', clientId: 'test-client', name: 'Test', readOnly: false, dockets: ['ws2'] }),
       ),
     ).rejects.toBeInstanceOf(ConnectionError)
+  })
+
+  it('approves the grant under exactly the id its connection was already written for, so a grant can never go live before its narrowing row', async () => {
+    const clientId = await register()
+    const resource = `${origin}/mcp/acme/platform`
+    const verifier = randomBytes(32).toString('base64url')
+    const browser = jar()
+    const challenge = createHash('sha256').update(verifier).digest('base64url')
+    const query = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: 'http://127.0.0.1:9/callback',
+      response_type: 'code',
+      scope: 'docket:read docket:write',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource,
+      state: 'st',
+    })
+    const start = await fetch(`${origin}/oauth/authorize?${query}`, { redirect: 'manual' })
+    browser.take(start)
+    const uid = new URL(start.headers.get('location') ?? '', origin).pathname.split('/').pop() as string
+    const grantId = newGrantId()
+    // As the consent page does: the connection is written under this id before the grant that will carry it exists.
+    await platform((tx) => createConnection(tx, { grantId, orgId: 'orga', userId: 'u-1', clientId, name: 'Pre-written', readOnly: true, dockets: ['ws1'] }))
+    const { continueTo } = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource, grantId })
+    const resumed = await fetch(continueTo, { redirect: 'manual', headers: { cookie: browser.header() } })
+    const code = new URL(resumed.headers.get('location') ?? '', origin).searchParams.get('code') as string
+    const exchanged = await fetch(`${origin}/oauth/token`, form({ grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: 'http://127.0.0.1:9/callback', code_verifier: verifier, resource }))
+    const tokens = (await exchanged.json()) as { access_token: string }
+    const bound = await tokenResolver({ platform }).resolveBearer(tokens.access_token, { url: resource, orgId: 'orga', workspaceId: 'ws1' })
+    expect(bound).toMatchObject({ readOnly: true, dockets: ['ws1'], scopes: ['docket:read', 'ontology:read'], tokenId: grantId, credentialName: 'Pre-written' })
   })
 
   it('never trades a code or a refresh token granted for one workspace for a token on another (tenancy design §5.2)', async () => {
@@ -477,8 +509,9 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
       const consent = await describeConsent(oauth.provider, uid)
       expect(consent).toMatchObject({ clientId: 'docket-cli', clientName: 'docket CLI', device: true, preRegistered: true, resource: resource() })
       expect(consent?.requested).toEqual(['docket:read', 'docket:write', 'ontology:read', 'ontology:propose'])
-      const { continueTo: returnTo, grantId } = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource: resource() })
+      const grantId = newGrantId()
       await platform((tx) => createConnection(tx, { grantId, orgId: 'orga', userId: 'u-1', clientId: 'docket-cli', name: 'docket CLI', readOnly: false, dockets: ['ws1'] }))
+      const { continueTo: returnTo } = await approveConsent(oauth.provider, uid, { accountId: 'u-1', resource: resource(), grantId })
       const resumed = await fetch(returnTo, { headers: { cookie: browser.header() } })
       expect(resumed.status).toBe(200)
       expect(await resumed.text()).toContain('Your terminal is signed in')

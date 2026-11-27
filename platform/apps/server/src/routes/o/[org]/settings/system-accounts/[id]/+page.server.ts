@@ -145,7 +145,7 @@ export const actions: Actions = {
         return {
           action: 'tokens.create',
           target: [issued.id, `user:${account.id}`],
-          args: { prefix: issued.prefix, owner: account.id, readOnly, dockets: all ? 'all' : chosen, days },
+          args: { prefix: issued.prefix, owner: account.id, readOnly: issued.readOnly, dockets: all ? 'all' : chosen, days },
           flash: `Created ${issued.prefix}… for ${account.name}. It is shown once: copy it now.`,
           created: { token: issued.token, prefix: issued.prefix, expiresAt: issued.expiresAt.toISOString() },
         }
