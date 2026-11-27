@@ -228,7 +228,11 @@
   .workspace {
     display: flex;
     gap: 0.5rem;
-    align-items: center;
+    align-items: flex-start;
+  }
+  .workspace :global(svg) {
+    flex: none;
+    margin-top: 0.2rem;
   }
   fieldset {
     display: grid;
