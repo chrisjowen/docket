@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "svelte-kit sync && vite build && node scripts/manifest.mjs",
+    "build": "pnpm --dir ../../../platform/apps/server exec svelte-kit sync && svelte-kit sync && vite build && node scripts/manifest.mjs",
     "pack:standalone": "node scripts/pack.mjs",
     "standalone": "node standalone.mjs",
     "typecheck": "svelte-kit sync && node scripts/typecheck.mjs",
