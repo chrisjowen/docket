@@ -253,6 +253,13 @@ const { token } = await createToken(config, { name: 'ada', role: 'owner' })
 const running = await startServe(config)             // running.url, running.close()
 ```
 
+The same module also tells a single-tenant `docket-server.yaml` apart from a
+multi-tenant one and checks the latter: `readServerConfigFile` reads its
+`mode`, and
+`loadPlatformConfig` reads and validates its sources, secrets and sign-in,
+for docket's CLI to hand to `@docket/server-platform`. See
+[The multi-tenant server](../../docs/self-hosting.md#the-multi-tenant-server).
+
 It is the ports above, filled in for one tenant:
 
 - **Store.** With no `database`, each workspace is a project's own files,
