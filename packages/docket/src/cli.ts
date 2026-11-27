@@ -23,7 +23,7 @@ import {
 import { rebuild } from './commands/rebuild.js'
 import { runtimeDown, runtimePlan, runtimeStatus, runtimeUp } from './commands/runtime.js'
 import { DEFAULT_SEARCH_LIMIT, search } from './commands/search.js'
-import { SERVE_ROLES, loadServeModule, type ServeRole } from './commands/serve.js'
+import { SERVE_ROLES, loadPlatformModule, loadServeModule, type ServeRole } from './commands/serve.js'
 import { setup, type StepOutcome } from './commands/setup.js'
 import { failureOf, sync, SyncError, type SyncResult } from './commands/sync.js'
 import { validate } from './commands/validate.js'
@@ -388,6 +388,61 @@ program
     }
   )
 
+/** Whether the config `--config` names (or the one `docket serve` would find) is a multi-tenant server's. */
+const runsPlatform = async (file: string | undefined): Promise<boolean> => {
+  const serve = await loadServeModule()
+  if (!serve.readServerConfigFile) return false
+  return (await serve.readServerConfigFile({ file })).mode === 'multi-tenant'
+}
+
+/**
+ * Runs the multi-tenant server a docket-server.yaml describes - the API, MCP, OAuth, the web
+ * app and the worker in this process - until Ctrl-C: `docket serve` for an install, `docket open`
+ * for a local preview, which also opens the browser.
+ */
+const runPlatform = async (
+  command: 'serve' | 'open',
+  options: { config?: string | undefined; host?: string | undefined; port?: string | undefined; ui: boolean; worker?: boolean; open?: boolean }
+): Promise<void> => {
+  let port: number | undefined
+  if (options.port !== undefined) {
+    port = Number(options.port)
+    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`--port must be a port number, got "${options.port}"`)
+  }
+  const serve = await loadServeModule()
+  if (!serve.loadPlatformConfig) throw new Error('A multi-tenant docket-server.yaml needs @chrisjowen/docket-server 0.12 or later beside docket.')
+  const config = await serve.loadPlatformConfig({
+    file: options.config,
+    host: options.host,
+    port,
+    ...(options.ui ? {} : { ui: false }),
+    ...(options.worker === false ? { worker: 'off' as const } : {}),
+    command
+  })
+  const platform = await loadPlatformModule()
+  const running = await platform.startPlatform(config)
+  const local = config.auth.local
+  console.log(`docket ${command} ${running.url}  (multi-tenant, from ${config.file})`)
+  console.log(running.ui ? `  app     ${running.url}/` : '  app     off: the API, MCP, OAuth and sign-in only (--no-ui)')
+  console.log(`  MCP     ${running.url}/mcp/<account>/<docket>`)
+  console.log(`  API     ${running.url}/api`)
+  console.log(`  sign-in ${[config.auth.github ? 'GitHub' : null, local ? `one click as ${local.login}, on this machine only` : null].filter(Boolean).join('; ')}`)
+  console.log(
+    running.worker === 'inline'
+      ? `  worker  in this process, projecting into ${['graph', 'search'].map((role) => config.stores[role]?.type).filter(Boolean).join(' and ')}`
+      : '  worker  off: search, Ask and projections wait until a worker runs'
+  )
+  if (!config.ai.primary) console.log('  AI      off: no model provider configured (search needs none)')
+  console.log(`  health  ${running.url}/healthz, ${running.url}/readyz`)
+  console.log('Press Ctrl-C to stop.')
+  if (command === 'open' && options.open !== false && running.ui) openBrowser(`${running.url}/`)
+  const stop = () => {
+    void running.close().then(() => process.exit(0))
+  }
+  process.once('SIGINT', stop)
+  process.once('SIGTERM', stop)
+}
+
 program
   .command('open')
   .description('Browse, search and ask about the knowledge in a web UI')
@@ -401,7 +456,16 @@ program
     [] as string[]
   )
   .option('--init', 'start a docket here first, as docket init does, when this directory has no .docket.yaml')
-  .action(async (options: { port?: string; host: string; open: boolean; allowOrigin: string[]; init?: boolean }) => {
+  .option('-c, --config <file>', 'run the multi-tenant server a docket-server.yaml describes (mode: multi-tenant) instead of this project')
+  .option('--no-ui', 'serve the API and MCP without the web pages (and open no browser)')
+  .action(async (options: { port?: string; host: string; open: boolean; allowOrigin: string[]; init?: boolean; config?: string; ui: boolean }) => {
+    if (options.config !== undefined) {
+      if (!(await runsPlatform(options.config))) {
+        throw new Error(`docket open --config runs a multi-tenant docket-server.yaml (version: 1, mode: multi-tenant); serve ${options.config} with docket serve --config.`)
+      }
+      await runPlatform('open', { ...options, host: options.host === '127.0.0.1' ? undefined : options.host })
+      return
+    }
     let port: number | undefined
     if (options.port !== undefined) {
       port = Number(options.port)
@@ -415,7 +479,7 @@ program
       const checked = allowedOrigin(origin)
       if (!checked.ok) throw new Error(`--allow-origin: ${checked.reason}`)
     }
-    const handle = await open({ port, host, allowOrigins: options.allowOrigin, init: options.init })
+    const handle = await open({ port, host, allowOrigins: options.allowOrigin, init: options.init, ui: options.ui })
     if (handle.initialized) {
       console.log(`Initialized docket in ${handle.initialized.projectRoot}`)
       for (const path of handle.initialized.created) console.log(`  created ${path}`)
@@ -427,11 +491,11 @@ program
         : handle.host === '0.0.0.0' || handle.host === '::'
           ? 'listening on every interface: anyone who can reach this machine can read it'
           : `listening on ${handle.host}`
-    console.log(`docket UI for ${handle.resolved.projectRoot}`)
+    console.log(`docket ${options.ui ? 'UI' : 'API and MCP (no UI)'} for ${handle.resolved.projectRoot}`)
     console.log(`  ${handle.url}  (${reach})`)
     if (handle.allowOrigins.length > 0) console.log(`  also usable from ${handle.allowOrigins.join(', ')}`)
     console.log('Press Ctrl-C to stop.')
-    if (options.open) openBrowser(handle.url)
+    if (options.open && options.ui) openBrowser(handle.url)
 
     const stop = () => {
       void handle.close().then(() => process.exit(0))
@@ -462,8 +526,16 @@ const serveCommand = program
   .option('--host <address>', 'interface to listen on (default: 127.0.0.1; 0.0.0.0 for every interface)')
   .option('-p, --port <port>', 'port to listen on (default: 4390)')
   .option('--rebuild', 'reset every workspace\'s projections and project everything again before serving')
-  .action(async (options: ServeOptions & { host?: string; port?: string; rebuild?: boolean }) => {
+  .option('--no-ui', 'serve the API and MCP without the web pages')
+  .option('--no-worker', 'a multi-tenant server: run the API without the worker in this process')
+  .action(async (options: ServeOptions & { host?: string; port?: string; rebuild?: boolean; ui: boolean; worker: boolean }) => {
+    if (await runsPlatform(options.config)) {
+      if (options.rebuild) throw new Error('--rebuild is for a single-tenant server; a multi-tenant server rebuilds a docket\'s projections from its Settings.')
+      await runPlatform('serve', options)
+      return
+    }
     const { serve, config } = await serveConfig(options)
+    if (!options.ui) config.ui = false
     const running = await serve.startServe(config, { rebuild: options.rebuild === true })
     const store = running.backend.kind === 'postgres' ? `Postgres (schema ${config.database?.schema ?? 'public'})` : 'the projects\' own files - no database'
     console.log(`docket serve ${running.url}  (${store})`)

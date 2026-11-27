@@ -1,0 +1,139 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import { hashContent } from '@chrisjowen/docket'
+import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import {
+  insertWorkspace,
+  listDocuments,
+  listIngests,
+  liveSupersessions,
+  putDocument,
+  retireResource,
+  supersedeResource,
+  workspaceById,
+  workspaceGraph,
+  writeResource,
+  type SupersedeInput,
+  type Writer,
+} from './index.js'
+import { createTestOrg, readFixture, type Fixture, type TestOrg } from './testing.js'
+
+const NOW = new Date('2026-11-12T09:30:00.000Z')
+
+describe.skipIf(!TEST_PG_URL)('supersedeResource', () => {
+  let org: TestOrg
+  let fixture: Fixture
+  let workspaceId: string
+  let writer: Writer
+
+  const evidence = [{ source: 'human', note: 'Payments moved to the billing service in November.' }]
+  const supersede = (input: Partial<SupersedeInput> = {}) =>
+    org.withOrg((ctx) =>
+      supersedeResource(ctx, writer, { id: 'service.payments', by: 'service.billing', reason: 'Billing replaced Payments.', evidence, ...input }, { now: () => NOW }),
+    )
+
+  beforeAll(async () => {
+    org = await createTestOrg()
+    fixture = await readFixture()
+    workspaceId = await org.withOrg(async (ctx) => {
+      const workspace = await insertWorkspace(ctx.tx, { name: 'Platform', slug: 'platform', createdBy: org.userId })
+      await ctx.tx.query(
+        `INSERT INTO ontology_versions (workspace_id, number, status, yaml, yaml_hash, source, author, published_at, published_by)
+         VALUES ($1, 1, 'published', $2, $3, 'import', $4, now(), $4)`,
+        [workspace.id, fixture.ontology, hashContent(fixture.ontology), org.userId],
+      )
+      for (const document of fixture.documents) {
+        await putDocument(ctx, { workspaceId: workspace.id, ...document, origin: 'repo', originRef: 'conn1:.docket', actor: 'system:repo-sync' })
+      }
+      return workspace.id
+    })
+    writer = { workspaceId, actor: 'token:dkt_live_abcd1234', label: 'ci-bot (token tok_8f3a…)', channel: 'mcp', requestId: 'req-1' }
+    for (const id of ['service.billing', 'service.ledger']) {
+      await org.withOrg((ctx) =>
+        writeResource(ctx, writer, { id, type: 'service', title: id === 'service.billing' ? 'Billing' : 'Ledger', evidence: [{ source: 'human' }] }, { now: () => NOW }),
+      )
+    }
+  })
+  afterAll(() => org?.drop())
+
+  it('refuses what it cannot record, writing nothing but the refusal to the activity log', async () => {
+    const refused = async (input: Partial<SupersedeInput>) => (await supersede(input)).diagnostics.filter((d) => d.severity === 'error').map((d) => d.code)
+    expect(await refused({ by: 'service.payments' })).toEqual(['same-resource'])
+    expect(await refused({ reason: ' ' })).toEqual(['missing-reason'])
+    expect(await refused({ evidence: [] })).toEqual(['missing-evidence'])
+    expect(await refused({ by: 'service.nowhere' })).toEqual(['unknown-resource'])
+    expect(await refused({ validUntil: 'last tuesday' })).toEqual(['invalid-date'])
+    expect(await refused({ validUntil: '2027-01-01' })).toEqual(['future-date'])
+    expect(await org.withOrg((ctx) => liveSupersessions(ctx, workspaceId))).toEqual([])
+    const log = await org.withOrg((ctx) => listIngests(ctx, { workspaceId, limit: 6 }))
+    expect(log.every((event) => event.action === 'supersede' && event.outcome === 'refused')).toBe(true)
+  })
+
+  it('marks a repo record superseded by its replacement, keeping both on file with the reason, evidence and until-date', async () => {
+    const result = await supersede({ validUntil: '2026-11-01' })
+    expect(result.changed).toBe(true)
+    expect(result.diagnostics).toEqual([])
+    expect(result.supersession).toEqual(
+      expect.objectContaining({
+        resourceId: 'service.payments',
+        supersededBy: 'service.billing',
+        validUntil: new Date('2026-11-01T00:00:00.000Z'),
+        source: 'agent',
+        actorLabel: 'ci-bot (token tok_8f3a…)',
+        reason: 'Billing replaced Payments.',
+        evidence: [expect.objectContaining({ source: 'human', observedBy: 'ci-bot (token tok_8f3a…)', session: 'req-1' })],
+      }),
+    )
+    // Nothing is deleted: the repo document is still live.
+    const documents = await org.withOrg((ctx) => listDocuments(ctx.tx, workspaceId))
+    expect(documents.some((document) => document.resourceId === 'service.payments')).toBe(true)
+
+    const [event] = await org.withOrg((ctx) => listIngests(ctx, { workspaceId, limit: 1 }))
+    expect(event).toEqual(expect.objectContaining({ action: 'supersede', outcome: 'ok', evidenceCount: 1 }))
+    expect(event?.detail).toEqual(expect.objectContaining({ resourceId: 'service.payments', supersededBy: 'service.billing', reason: 'Superseded by service.billing: Billing replaced Payments.' }))
+
+    // Saying it again changes nothing.
+    expect((await supersede()).changed).toBe(false)
+  })
+
+  it('shows the graph which records are out of date and which replace them', async () => {
+    const graph = await org.withOrg(async (ctx) => {
+      const workspace = await workspaceById(ctx.tx, workspaceId)
+      if (!workspace) throw new Error('no workspace')
+      return workspaceGraph(ctx, workspace, { root: '.' })
+    })
+    expect(graph.entities.find((entity) => entity.id === 'service.payments')?.frontmatter).toEqual(
+      expect.objectContaining({
+        superseded_by: 'service.billing',
+        superseded_until: '2026-11-01',
+        superseded_reason: 'Billing replaced Payments.',
+        superseded_source: 'agent',
+      }),
+    )
+    expect(graph.entities.find((entity) => entity.id === 'service.billing')?.frontmatter.supersedes).toEqual(['service.payments'])
+  })
+
+  it('refuses a replacement that is itself out of date, and re-points a record to a new replacement, keeping the earlier in its history', async () => {
+    const stale = await org.withOrg((ctx) =>
+      supersedeResource(ctx, writer, { id: 'service.ledger', by: 'service.payments', reason: 'Merged.', evidence }, { now: () => NOW }),
+    )
+    expect(stale.diagnostics.map((d) => d.code)).toEqual(['replacement-superseded'])
+
+    const repointed = await supersede({ by: 'service.ledger', reason: 'Ledger took over payments, not Billing.' })
+    expect(repointed).toEqual(expect.objectContaining({ changed: true, replaced: 'service.billing' }))
+    expect(repointed.diagnostics.map((d) => d.code)).toEqual(['repointed'])
+    const live = await org.withOrg((ctx) => liveSupersessions(ctx, workspaceId))
+    expect(live.map((each) => [each.resourceId, each.supersededBy])).toEqual([['service.payments', 'service.ledger']])
+    const rows = await org.withOrg((ctx) => ctx.tx.query('SELECT superseded_by, lifted_at FROM supersessions WHERE workspace_id = $1 ORDER BY recorded_at, lifted_at NULLS LAST', [workspaceId]))
+    expect(rows.rows.map((row: { superseded_by: string; lifted_at: Date | null }) => [row.superseded_by, row.lifted_at !== null])).toEqual([
+      ['service.billing', true],
+      ['service.ledger', false],
+    ])
+  })
+
+  it('leaves docket_retire working as it did', async () => {
+    const retired = await org.withOrg((ctx) => retireResource(ctx, writer, { id: 'service.billing', reason: 'written by mistake' }))
+    expect(retired.retired.map((document) => document.resourceId)).toEqual(['service.billing'])
+  })
+})

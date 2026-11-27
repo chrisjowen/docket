@@ -12,12 +12,15 @@ export {
   DEFAULT_HOST,
   DEFAULT_PORT,
   PROJECTION_PRESETS,
+  SERVER_CONFIG_VERSION,
   ServeConfigError,
   loadServeConfig,
+  serverMode,
   slugOf,
   type LoadServeConfigOptions,
   type ProjectionConfig,
   type ServeConfig,
+  type ServerMode,
   type TokenRecord,
   type WorkspaceConfig
 } from './config.js'
@@ -27,3 +30,21 @@ export { filesBackend } from './files.js'
 export { ASK_OFF, postgresBackend } from './postgres.js'
 export { SERVICE, SESSION_COOKIE, serveHandler, type ServeHandlerOptions } from './http.js'
 export { startServe, type RunningServe, type StartServeOptions } from './server.js'
+export {
+  loadPlatformConfig,
+  platformConfigOf,
+  readServerConfigFile,
+  type AiProvider,
+  type CogneeSource,
+  type EmbedderSource,
+  type LoadServerConfigOptions,
+  type Neo4jSource,
+  type PlatformConfig,
+  type PostgresSource,
+  type Provisioning,
+  type QdrantSource,
+  type RerankerSource,
+  type SecretRef,
+  type Source,
+  type SourceType
+} from './platform-config.js'

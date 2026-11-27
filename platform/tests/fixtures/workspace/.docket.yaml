@@ -1,0 +1,3 @@
+# The 12-document workspace the ontology checks and the canonical store are tested over.
+version: 2
+adapters: []

@@ -1,0 +1,32 @@
+{
+  "name": "@docket/platform-consolidation",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Background consolidation (dreaming): after each enrichment run, walks every resource's neighbourhood and has the org's AI write a narrative summary of it into the resource's own summary document, superseding the last, inside the enrichment job's monthly AI limit.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude 'src/**/*.int.test.ts' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests --testTimeout 30000 --hookTimeout 30000 .int.test."
+  },
+  "dependencies": {
+    "@docket/platform-ai": "workspace:*",
+    "@docket/platform-audit": "workspace:*",
+    "@docket/platform-canonical-store": "workspace:*",
+    "@docket/platform-enrichment": "workspace:*",
+    "@docket/platform-tenancy": "workspace:*",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@docket/platform-ontology-service": "workspace:*",
+    "@docket/platform-provisioner": "workspace:*",
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

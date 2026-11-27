@@ -22,6 +22,8 @@ export interface OpenOptions {
    * `.docket.yaml` of its own; one in a parent directory does not count.
    */
   init?: boolean | undefined
+  /** False serves the API and MCP alone, without the web UI's pages. Default true. */
+  ui?: boolean | undefined
 }
 
 export interface OpenHandle extends UiServer {
@@ -44,7 +46,8 @@ export const open = async (options: OpenOptions = {}): Promise<OpenHandle> => {
   // Fail before listening when there is nothing to show.
   const resolved = await loadConfig(cwd)
   const uiDir = options.uiDir ?? defaultUiDir()
-  if (!existsSync(join(uiDir, 'index.html'))) {
+  const ui = options.ui !== false
+  if (ui && !existsSync(join(uiDir, 'index.html'))) {
     throw new Error(
       `The web UI is missing from ${uiDir}: this docket build was made without it. ` +
         'Build the workspace with `pnpm build` at the repository root.'
@@ -56,7 +59,8 @@ export const open = async (options: OpenOptions = {}): Promise<OpenHandle> => {
     uiDir,
     port: options.port,
     host: options.host,
-    allowOrigins: options.allowOrigins
+    allowOrigins: options.allowOrigins,
+    ui
   })
   return { ...server, resolved, initialized }
 }

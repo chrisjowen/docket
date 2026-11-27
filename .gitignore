@@ -18,3 +18,7 @@ packages/docket-ui/mcp-app/
 # Self-hosting secrets: Compose's .env and mounted key files, never committed.
 deploy/compose/.env
 deploy/compose/secrets/
+# The server platform's build output and Playwright reports.
+platform/apps/server/build/
+platform/playwright-report/
+platform/test-results/

@@ -100,6 +100,23 @@ export class ServeConfigError extends Error {
   override name = 'ServeConfigError'
 }
 
+/** The `docket-server.yaml` version this release reads. */
+export const SERVER_CONFIG_VERSION = 1
+
+/** How the file runs: today's single-tenant server, or the multi-tenant platform. */
+export type ServerMode = 'single' | 'multi-tenant'
+
+/** The mode a parsed `docket-server.yaml` asks for; refuses a version this release does not read. */
+export function serverMode(raw: Record<string, unknown>, file: string): ServerMode {
+  if (raw.version !== undefined && raw.version !== SERVER_CONFIG_VERSION) {
+    throw new ServeConfigError(`${file}: version ${String(raw.version)} is not one this docket reads (version: ${SERVER_CONFIG_VERSION}).`)
+  }
+  const mode = raw.mode ?? 'single'
+  if (mode !== 'single' && mode !== 'multi-tenant') throw new ServeConfigError(`${file}: mode is single (the default) or multi-tenant, not ${String(mode)}.`)
+  if (mode === 'multi-tenant' && raw.version === undefined) throw new ServeConfigError(`${file}: a multi-tenant config says which version it is written for: version: ${SERVER_CONFIG_VERSION}.`)
+  return mode
+}
+
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /** The projection modules a short name stands for, with the config each gets in a Postgres-backed server. */
@@ -199,6 +216,9 @@ export async function loadServeConfig(options: LoadServeConfigOptions = {}): Pro
     }
     const parsed: unknown = parse(text) ?? {}
     if (!isObject(parsed)) throw new ServeConfigError(`${file} is not a mapping.`)
+    if (serverMode(parsed, file) === 'multi-tenant') {
+      throw new ServeConfigError(`${file} is a multi-tenant server's config: docket serve --config runs it, and its tokens are made in its web app, not with docket serve token.`)
+    }
     raw = parsed
   }
   const base = file ? dirname(file) : cwd

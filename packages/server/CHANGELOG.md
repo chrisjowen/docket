@@ -2,6 +2,20 @@
 
 Changes to `@chrisjowen/docket-server`.
 
+## Unreleased
+
+### The multi-tenant docket-server.yaml
+
+- `loadPlatformConfig` reads and checks a `version: 1`, `mode: multi-tenant`
+  `docket-server.yaml`: named, typed sources (Postgres, Neo4j, Qdrant, an
+  embedder, a re-ranker, cognee) with who provisions each, the store each
+  role uses, model providers, GitHub and local sign-in, the GitHub App, and
+  the API-only or inline worker. Secrets are file or environment references,
+  never values; every reference is checked before anything starts.
+  `readServerConfigFile` and `serverMode` tell the two kinds of file apart.
+- `loadServeConfig` refuses a multi-tenant file and a `version` it does not
+  read; a file without either reads as before.
+
 ## 0.11.0
 
 Needs `@chrisjowen/docket` 0.16.0: confidence from policies about sources,

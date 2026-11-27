@@ -3,6 +3,22 @@
 Changes to `@chrisjowen/docket`. Earlier releases are described on the
 repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 
+## Unreleased
+
+### The multi-tenant server from `docket serve` and `docket open`
+
+- `docket serve --config docket-server.yaml` runs the multi-tenant Docket
+  server when the file says `version: 1` and `mode: multi-tenant`: the API,
+  MCP, OAuth, sign-in and the web app on one port, and the worker in the same
+  process. `--no-ui` serves it headless; `--no-worker` runs the API alone. It
+  runs on `@docket/server-platform` (`platform/`, AGPL-3.0-only), loaded only
+  for such a file.
+- `docket open --config docket-server.yaml` runs the same file as a local
+  preview, in development, and opens the browser.
+- `docket open --no-ui` and `docket serve --no-ui` serve the API and MCP
+  without the web pages. A single-tenant `docket serve` and a plain
+  `docket open` are otherwise unchanged.
+
 ## 0.16.0
 
 ### Confidence comes from policies about sources

@@ -214,8 +214,11 @@ the source of truth, and every projection is rebuilt from it the same way.
 
 ## Not included
 
-A self-hosted server is single-tenant and customer-operated. It does not
-include, and Docket Cloud keeps:
+The single-tenant server these installers run is customer-operated and does
+not include the following. The multi-tenant server, run with
+`docket serve --config` from a `mode: multi-tenant` docket-server.yaml (see
+[The multi-tenant server](self-hosting.md#the-multi-tenant-server)), has
+most of them; its Compose and Helm profiles are next.
 
 - **SSO** or any sign-in service (OIDC, SAML, GitHub). Access is by static
   tokens.

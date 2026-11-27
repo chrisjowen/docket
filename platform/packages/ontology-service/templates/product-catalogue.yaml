@@ -1,0 +1,359 @@
+# Product catalogue ontology.
+#
+# What a business sells: products and their variants, the category tree they
+# sit in, the brands and suppliers behind them and the collections they are
+# merchandised in. Remove what you never use, or extend it: adding a type
+# here is all that is required, no CLI change. A type's `icon` names the
+# Lucide icon (https://lucide.dev/icons) that `docket open` draws it with;
+# see docs/SPEC.md for the icons docket bundles.
+#
+# Read this file before performing structured memory extraction.
+
+version: 1
+
+# --- Sources and trust ---------------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming one of the sources below and the exact location - the
+# fields under a source's `locator`, or the common ones every source takes
+# (repository, path, lines, symbol, key, method, endpoint, urls, commit).
+# Confidence is computed from that evidence by the policies under `trust`,
+# never written by hand:
+#
+#   - A `score` policy prices an observation: "when the source is X (about
+#     type T, with attributes Y), it is worth S". The most specific matching
+#     policy wins - naming the type counts one, each condition one - and a tie
+#     goes to the lower score. With no match an observation is worth
+#     `fallback`.
+#   - An `adjust` policy moves that price up or down; every match applies.
+#   - Observations of one source instance do not corroborate each other: the
+#     strongest one counts. Independent sources combine, so a pod seen in code
+#     (0.3) and running in the cluster (0.9) is 1 - 0.7 * 0.1 = 0.93, and
+#     nothing goes above `cap`.
+#   - A memory with no evidence takes its `provenance.confidence`, or
+#     `unevidenced` when it has none.
+#   - `bands` name how far a confidence goes: established, probable, and below
+#     that unverified. `accept` is the score a supersede proposal needs before
+#     it replaces the record, by the replaced record's type.
+#
+# Run `docket why <id>` to see which policies priced a resource.
+
+sources:
+  person:
+    kind: identity
+    description: >
+      A person, as the people directory knows them: their role, team and
+      flags. Evidence that cites no source is from the person the writer acts
+      for; evidence naming someone else counts as the writer's person until
+      that one confirms it with evidence of their own.
+    attributes:
+      role: { type: string, setBy: directory }
+      team: { type: string, setBy: directory }
+      flags: { type: "string[]", setBy: directory }
+
+  human:
+    description: >
+      Legacy: stated by a person, as whoever wrote it said. Kept so evidence
+      written before the person source scores as it did; a write that names
+      human is recorded as person, scored by who that person is.
+
+  conversation:
+    description: >
+      Established in an agent session - the user said so. Record the session and,
+      in note, what was said.
+
+  catalogue_feed:
+    description: >
+      The product information system or a catalogue feed - PIM, ERP, a Shopify or
+      Merchant Center export. Record the feed URL or the record's key, such as the
+      SKU.
+    locator:
+      urls: {}
+      key: {}
+    requiresAny: [ urls, key ]
+
+  supplier_sheet:
+    description: |
+      A supplier's spec sheet or price list. Record the file or URL.
+    locator:
+      path: {}
+      urls: {}
+    requiresAny: [ path, urls ]
+
+  storefront:
+    description: |
+      The live product page. Record its URL.
+    locator:
+      urls: { required: true }
+
+  reviews:
+    description: >
+      Customer reviews or questions. Record the URL. A review says how a product
+      is used, not what it is - weigh it accordingly.
+    locator:
+      urls: { required: true }
+
+trust:
+  unevidenced: 0.5
+  fallback: 0.4
+  cap: 0.99
+  accept: { default: 0.75 }
+  bands: { established: 0.8, probable: 0.5 }
+  policies:
+    - name: A person said so
+      when: { source: person }
+      score: 0.7
+    - name: A lead said so
+      when: { source: person, role: lead }
+      score: 0.85
+    - name: human evidence
+      when: { source: human }
+      score: 0.9
+    - name: conversation evidence
+      when: { source: conversation }
+      score: 0.7
+    - name: catalogue_feed evidence
+      when: { source: catalogue_feed }
+      score: 0.85
+    - name: supplier_sheet evidence
+      when: { source: supplier_sheet }
+      score: 0.7
+    - name: storefront evidence
+      when: { source: storefront }
+      score: 0.75
+    - name: reviews evidence
+      when: { source: reviews }
+      score: 0.4
+
+resourceTypes:
+
+  product:
+    description: >
+      Something sold, as customers see it on a product page.
+
+    icon: package
+
+    attributes:
+      sku:
+        type: string
+
+      price:
+        type: number
+
+      rating:
+        type: number
+        description: Average customer rating, out of 5.
+
+      reviewCount:
+        type: number
+
+      status:
+        type: string
+        enum:
+          - active
+          - discontinued
+          - coming-soon
+
+    extraction:
+      instructions: >
+        Capture a product when an item for sale is named with what it is, its
+        materials, dimensions or what it is for. Put its description and
+        features in the body.
+
+      clues:
+        - product
+        - item
+        - SKU
+        - listing
+
+      doNotConfuseWith:
+        - variant
+        - category
+
+  variant:
+    description: >
+      One purchasable version of a product - a size, a colour, a finish.
+
+    icon: boxes
+
+    attributes:
+      sku:
+        type: string
+
+      options:
+        type: string[]
+
+    extraction:
+      instructions: >
+        Capture a variant when versions of a product differ in something
+        customers choose between, and the difference matters.
+
+      clues:
+        - size
+        - colour
+        - finish
+        - variant
+
+  category:
+    description: >
+      A node in the category tree products are browsed by.
+
+    icon: folder
+
+    extraction:
+      instructions: >
+        Capture a category for each level of the browse tree, linked to its
+        parent with subcategory_of.
+
+      clues:
+        - category
+        - department
+        - aisle
+        - collection of
+
+      doNotConfuseWith:
+        - collection
+
+  brand:
+    description: >
+      The brand or maker a product is sold under.
+
+    icon: tag
+
+    extraction:
+      instructions: >
+        Capture a brand when who makes a product matters to customers.
+
+      clues:
+        - brand
+        - by
+        - maker
+        - manufacturer
+
+      doNotConfuseWith:
+        - supplier
+
+  collection:
+    description: >
+      A merchandised set of products - a seasonal edit, a room set, a sale.
+
+    icon: layers
+
+    extraction:
+      instructions: >
+        Capture a collection when products are grouped for selling rather than
+        by what they are.
+
+      clues:
+        - collection
+        - edit
+        - range
+        - bundle
+
+      doNotConfuseWith:
+        - category
+
+  supplier:
+    description: >
+      Who you buy stock from.
+
+    icon: handshake
+
+    attributes:
+      leadTimeDays:
+        type: number
+
+    extraction:
+      instructions: >
+        Capture a supplier when where stock comes from matters - lead times,
+        terms, quality.
+
+      clues:
+        - supplier
+        - vendor
+        - wholesaler
+        - lead time
+
+relationships:
+
+  in_category:
+    description: >
+      The category a product is browsed under.
+
+    from:
+      - product
+
+    to:
+      - category
+
+  subcategory_of:
+    description: >
+      A category's parent in the browse tree.
+
+    from:
+      - category
+
+    to:
+      - category
+
+  variant_of:
+    description: >
+      The product a variant is a version of.
+
+    from:
+      - variant
+
+    to:
+      - product
+
+  made_by:
+    description: >
+      The brand a product is sold under.
+
+    from:
+      - product
+
+    to:
+      - brand
+
+  in_collection:
+    description: >
+      A collection a product is merchandised in.
+
+    from:
+      - product
+
+    to:
+      - collection
+
+  supplied_by:
+    description: >
+      Who supplies a product or a brand.
+
+    from:
+      - product
+      - brand
+
+    to:
+      - supplier
+
+  compatible_with:
+    description: >
+      A product works with another - a mattress for a bed frame, a cushion for
+      a chair.
+
+    from:
+      - product
+
+    to:
+      - product
+
+  related_to:
+    description: >
+      A product customers often consider alongside another.
+
+    from:
+      - product
+
+    to:
+      - product

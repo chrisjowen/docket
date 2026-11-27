@@ -254,6 +254,8 @@ docket graph --json         # every exhibit and link, read from the files, as ve
 docket open                 # browse, search, ask and chat in a web UI on 127.0.0.1 (--host to widen)
 docket open --allow-origin http://127.0.0.1:4310  # also let another page on this machine use it, such as Wheelhouse
 docket open --init          # start a docket here first, as docket init does, when this directory has none
+docket open --no-ui         # the API and MCP alone, without the web UI
+docket open --config docket-server.yaml  # a local preview of the multi-tenant server a docket-server.yaml describes
 docket ontology list        # resource types, relationships, sources and policies
 docket ontology convert     # rewrite legacy evidence settings as sources and policies
 docket why <id>             # which policies priced a resource and its links
@@ -277,6 +279,7 @@ docket cloud status         # link, sign-in, ontology against the cloud's, and w
 docket cloud token create --scopes docket:read --expires 30d  # an API token for CI (token list, token revoke <id>)
 docket serve                # serve this docket to people and agents over MCP: self-hosted, single-tenant (docs/self-hosting.md)
 docket serve token create ada --role owner  # a bearer token for it, shown once (token list, token revoke <name>)
+docket serve --config docket-server.yaml    # the multi-tenant server, when the file says mode: multi-tenant (--no-ui, --no-worker)
 ```
 
 ![A terminal: docket graph --json piped through jq to one exhibit, the Neo4j adapter, with its 0.99 confidence from code and manifest evidence and its three depends_on links, each with its own confidence and sources](docs/assets/cli-graph.png)
@@ -647,6 +650,14 @@ It also ships as an image, `ghcr.io/chrisjowen/docket`, with a Docker Compose
 stack (`deploy/compose`) and a Helm chart (`deploy/helm/docket`). Both start
 with no database and offer Postgres and the other stores as opt-ins: see
 [docs/deploy.md](docs/deploy.md).
+
+The same command runs the multi-tenant Docket server, the one Docket Cloud
+runs, from a `docket-server.yaml` with `version: 1` and `mode: multi-tenant`:
+accounts, members, GitHub sign-in, OAuth for MCP clients, the web app and the
+worker, in one process over Postgres. `docket open --config` runs the same file
+as a local preview. Its source is [`platform/`](platform), and
+[The multi-tenant server](docs/self-hosting.md#the-multi-tenant-server) covers
+its configuration.
 
 ## Evidence and confidence
 
@@ -1422,9 +1433,13 @@ pass. No separate step is needed, and it is never pushed by hand.
 
 ## Contributing and licence
 
-docket is licensed under the [Apache License, Version 2.0](LICENSE).
-Contributions are welcome under the same licence, with each commit signed off
-under the Developer Certificate of Origin; see
+The docket CLI, the server core, the UI, the contracts and the adapters
+(`packages/`) are licensed under the [Apache License, Version 2.0](LICENSE).
+The multi-tenant server platform (`platform/`) is licensed under the
+[GNU Affero General Public License, version 3 only](platform/LICENSE).
+[`LICENSING.md`](LICENSING.md) says which licence covers which package.
+Contributions are welcome under the licence of the part they change, with each
+commit signed off under the Developer Certificate of Origin; see
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---

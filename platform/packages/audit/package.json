@@ -1,0 +1,28 @@
+{
+  "name": "@docket/platform-audit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Append-only, hash-chained audit events.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude 'src/**/*.int.test.ts' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests --testTimeout 30000 --hookTimeout 30000 .int.test."
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@docket/platform-keys": "workspace:*",
+    "@docket/platform-provisioner": "workspace:*",
+    "@docket/platform-tenancy": "workspace:*",
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

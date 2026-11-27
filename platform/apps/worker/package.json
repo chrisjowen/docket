@@ -1,0 +1,52 @@
+{
+  "name": "@docket/server-worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The worker: repo sync and export PRs from GitHub (§14), and reconciliation of canonical documents to each org's Neo4j and mem0 (§6.2).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    "./run": "./dist/run.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "vite build",
+    "start": "node dist/main.js",
+    "import:docket": "vite build --logLevel error && node dist/import.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude 'src/**/*.int.test.ts' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests .int.test."
+  },
+  "dependencies": {
+    "@chrisjowen/docket": "workspace:*",
+    "@docket/platform-ai": "workspace:*",
+    "@docket/platform-audit": "workspace:*",
+    "@docket/platform-auth": "workspace:*",
+    "@docket/platform-canonical-store": "workspace:*",
+    "@docket/platform-consolidation": "workspace:*",
+    "@docket/platform-enrichment": "workspace:*",
+    "@docket/platform-github": "workspace:*",
+    "@docket/platform-keys": "workspace:*",
+    "@docket/platform-mcp-tools": "workspace:*",
+    "@docket/platform-ontology-service": "workspace:*",
+    "@docket/platform-projections": "workspace:*",
+    "@docket/platform-provisioner": "workspace:*",
+    "@docket/platform-tenancy": "workspace:*",
+    "@huggingface/tokenizers": "0.2.0",
+    "@qdrant/js-client-rest": "1.18.0",
+    "gray-matter": "^4.0.3",
+    "mem0ai": "3.3.1",
+    "neo4j-driver": "^6.3.0",
+    "ollama": "^0.5.18",
+    "onnxruntime-node": "1.30.0",
+    "pg": "^8.16.3",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}

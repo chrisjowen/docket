@@ -1,0 +1,157 @@
+# Blank: no resource types or relationships yet, and docket's default sources
+# and trust policies. Generated from docket's default-sdlc.yaml by docket-cloud
+# (packages/ontology-service/scripts/templates.mjs).
+
+version: 1
+
+# --- Sources and trust ---------------------------------------------------------
+#
+# Every captured resource and link records where it was seen, as `evidence`
+# entries naming one of the sources below and the exact location - the
+# fields under a source's `locator`, or the common ones every source takes
+# (repository, path, lines, symbol, key, method, endpoint, urls, commit).
+# Confidence is computed from that evidence by the policies under `trust`,
+# never written by hand:
+#
+#   - A `score` policy prices an observation: "when the source is X (about
+#     type T, with attributes Y), it is worth S". The most specific matching
+#     policy wins - naming the type counts one, each condition one - and a tie
+#     goes to the lower score. With no match an observation is worth
+#     `fallback`.
+#   - An `adjust` policy moves that price up or down; every match applies.
+#   - Observations of one source instance do not corroborate each other: the
+#     strongest one counts. Independent sources combine, so a pod seen in code
+#     (0.3) and running in the cluster (0.9) is 1 - 0.7 * 0.1 = 0.93, and
+#     nothing goes above `cap`.
+#   - A memory with no evidence takes its `provenance.confidence`, or
+#     `unevidenced` when it has none.
+#   - `bands` name how far a confidence goes: established, probable, and below
+#     that unverified. `accept` is the score a supersede proposal needs before
+#     it replaces the record, by the replaced record's type.
+#
+# Run `docket why <id>` to see which policies priced a resource.
+
+sources:
+  person:
+    kind: identity
+    description: >
+      A person, as the people directory knows them: their role, team and flags.
+      Evidence that cites no source is from the person the writer acts for;
+      evidence naming someone else counts as the writer's person until that one
+      confirms it with evidence of their own.
+    attributes:
+      role: { type: string, setBy: directory }
+      team: { type: string, setBy: directory }
+      flags: { type: "string[]", setBy: directory }
+
+  human:
+    description: >
+      Legacy: stated by a person, as whoever wrote it said. Kept so evidence
+      written before the person source scores as it did; a write that names
+      human is recorded as person, scored by who that person is.
+
+  conversation:
+    description: >
+      Established in an agent session - the user said so, or a decision was
+      reached. Record the session and, in note, what was said.
+
+  manifest:
+    description: >
+      A dependency or package manifest or lockfile - package.json, go.mod,
+      Cargo.toml, pom.xml, requirements.txt, Chart.yaml. Record the file and the
+      entry, as symbol or key.
+    locator:
+      path: { required: true }
+
+  code:
+    description: >
+      Source code. Record the file, the line range and the function, class or
+      constant, as symbol.
+    locator:
+      path: { required: true }
+
+  config:
+    description: >
+      Application configuration - YAML, JSON, .env and properties files,
+      CODEOWNERS. Record the file and the key.
+    locator:
+      path: { required: true }
+
+  infrastructure:
+    description: >
+      Infrastructure and deployment definitions - Terraform, Kubernetes
+      manifests, Helm values, Dockerfiles, CI pipelines. Record the file and the
+      resource, as symbol.
+    locator:
+      path: { required: true }
+
+  api:
+    description: >
+      An API - its specification (OpenAPI, GraphQL schema, protobuf) or a live
+      response. Record the method and the endpoint or route.
+    locator:
+      endpoint: { required: true }
+
+  runtime:
+    description: >
+      Seen in a running system - kubectl, a cloud console, logs, metrics or
+      traces. Record a URL, the endpoint, or the object (symbol) it showed.
+    locator:
+      urls: {}
+      endpoint: {}
+      symbol: {}
+    requiresAny: [ urls, endpoint, symbol ]
+
+  docs:
+    description: >
+      Documentation - a README, ADR, design doc, wiki page, runbook, ticket or
+      pull request. Record the file or the URL.
+    locator:
+      path: {}
+      urls: {}
+    requiresAny: [ path, urls ]
+
+trust:
+  unevidenced: 0.5
+  fallback: 0.4
+  cap: 0.99
+  accept: { default: 0.75, decision: 0.8 }
+  bands: { established: 0.8, probable: 0.5 }
+  policies:
+    - name: A person said so
+      when: { source: person }
+      score: 0.7
+    - name: A lead said so
+      when: { source: person, role: lead }
+      score: 0.85
+    - name: human evidence
+      when: { source: human }
+      score: 0.9
+    - name: conversation evidence
+      when: { source: conversation }
+      score: 0.7
+    - name: manifest evidence
+      when: { source: manifest }
+      score: 0.9
+    - name: code evidence
+      when: { source: code }
+      score: 0.6
+    - name: config evidence
+      when: { source: config }
+      score: 0.7
+    - name: infrastructure evidence
+      when: { source: infrastructure }
+      score: 0.75
+    - name: api evidence
+      when: { source: api }
+      score: 0.75
+    - name: runtime evidence
+      when: { source: runtime }
+      score: 0.85
+    - name: docs evidence
+      when: { source: docs }
+      score: 0.6
+
+resourceTypes: {}
+
+relationships: {}
