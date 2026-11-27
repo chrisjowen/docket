@@ -150,6 +150,12 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   as are existing tokens, OAuth clients and grants. On `/api/v1` a token or
   connection that still carries its old scope ceiling is read-only, and an
   OAuth grant made before named connections is refused.
+- A docket's Access tab is drawn by the server's new web UI
+  (`packages/docket-ui/cloud`, AGPL-3.0-only), a static app that calls
+  `/api/v1` alone. It is bundled with the server by default (`--no-ui` turns
+  it off with the other pages) and can also be hosted on its own in front of
+  the server, which checks the API version before serving. The other pages
+  move to it a feature at a time.
 
 ### Storage and AI per space (multi-tenant server)
 
