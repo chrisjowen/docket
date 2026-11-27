@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Tx } from '@docket/platform-tenancy'
 
-import type { McpResource, Principal } from '../principal.js'
+import type { AccountPrincipal, McpResource, Principal } from '../principal.js'
 import { credentialScopes, parseScopeString, type Scope } from '../scopes.js'
 import { isApiTokenText, parseApiToken, tokenHash } from './api-token.js'
 
@@ -40,6 +40,12 @@ export interface TokenResolver {
    * connection reaches only the dockets it names, in its own org).
    */
   resolveBearer(raw: string, resource: McpResource): Promise<Principal | null>
+  /**
+   * The caller behind `Authorization: Bearer <raw>` before any docket is
+   * chosen: at an account's MCP address and on `/api/v1`. Null when unknown,
+   * mistyped, expired or revoked; its account is the caller's to check.
+   */
+  resolveCredential(raw: string): Promise<AccountPrincipal | null>
   /**
    * Whether `raw` is a live credential for some workspace, whichever: a
    * caller whose token is valid but names another workspace is told the
@@ -100,6 +106,7 @@ type AccessTokenPayload = {
   scope?: unknown
   grantId?: unknown
   exp?: unknown
+  /** `workspace_id` is absent for a token whose resource is an account's MCP URL. */
   extra?: { org_id?: unknown; workspace_id?: unknown }
 }
 
@@ -134,11 +141,14 @@ async function lookupAccessToken(tx: Tx, raw: string, now: Date): Promise<Bound 
   if (!row || !payload) return null
   const { accountId, clientId, aud, scope, grantId, exp, extra } = payload
   if (typeof accountId !== 'string' || typeof clientId !== 'string' || typeof aud !== 'string' || typeof grantId !== 'string') return null
-  if (typeof extra?.org_id !== 'string' || typeof extra.workspace_id !== 'string' || typeof exp !== 'number') return null
+  if (typeof extra?.org_id !== 'string' || typeof exp !== 'number') return null
+  if (extra.workspace_id !== undefined && typeof extra.workspace_id !== 'string') return null
   const expiresAt = new Date(exp * 1000)
   if (expiresAt <= now) return null
   const common = { userId: accountId, orgId: extra.org_id, via: 'oauth' as const, clientId, tokenId: grantId, expiresAt }
   if (row.connection === null) {
+    // Every grant for an account's address is a named connection: one without is for a single docket.
+    if (typeof extra.workspace_id !== 'string') return null
     const scopes = parseScopeString(typeof scope === 'string' ? scope : '')
     return {
       ...common,
@@ -212,6 +222,24 @@ export function tokenResolver(options: { platform: Platform; ttlMs?: number; now
         credentialName: bound.credentialName,
         actor: bound.actor,
         expiresAt: bound.expiresAt,
+      }
+    },
+    async resolveCredential(raw) {
+      const bound = await lookup(raw.trim())
+      if (!bound || bound.expiresAt <= now()) return null
+      return {
+        userId: bound.userId,
+        orgId: bound.orgId,
+        scopes: [...bound.scopes],
+        readOnly: bound.readOnly,
+        dockets: bound.dockets ? [...bound.dockets] : null,
+        via: bound.via,
+        ...(bound.clientId ? { clientId: bound.clientId } : {}),
+        tokenId: bound.tokenId,
+        credentialName: bound.credentialName,
+        actor: bound.actor,
+        expiresAt: bound.expiresAt,
+        audience: bound.audience,
       }
     },
     async isLive(raw) {

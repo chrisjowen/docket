@@ -65,8 +65,11 @@ export interface OAuthServerOptions {
   platform: Platform
   /** Signs the authorization server's cookies; derive with `oauthCookieKeys`. */
   cookieKeys: string[]
-  /** The org and workspace a canonical MCP URL names, or null when it names none. */
-  resourceFor(url: string): Promise<{ orgId: string; workspaceId: string } | null>
+  /**
+   * The org and workspace a canonical MCP URL names, or null when it names
+   * none: a docket's, or an account's (tenancy v2 §4), whose workspace is null.
+   */
+  resourceFor(url: string): Promise<{ orgId: string; workspaceId: string | null } | null>
   /** Whether a user id is a human who may hold OAuth grants. */
   isHuman(userId: string): Promise<boolean>
   /**
@@ -445,7 +448,8 @@ export function createOAuthServer(options: OAuthServerOptions): OAuthServer {
     extraTokenClaims: async (_ctx, token) => {
       if (token.kind !== 'AccessToken' || typeof token.aud !== 'string') return undefined
       const bound = await options.resourceFor(token.aud)
-      return bound ? { org_id: bound.orgId, workspace_id: bound.workspaceId } : undefined
+      if (!bound) return undefined
+      return bound.workspaceId === null ? { org_id: bound.orgId } : { org_id: bound.orgId, workspace_id: bound.workspaceId }
     },
     fetchResponseBodyLimits: { 'client_id metadata document': 64 * 1024 },
     ...(options.fetch ? { fetch: options.fetch } : {}),
@@ -470,7 +474,7 @@ export function createOAuthServer(options: OAuthServerOptions): OAuthServer {
         useGrantedResource: async () => true,
         getResourceServerInfo: async (_ctx, resourceIndicator) => {
           if (!(await options.resourceFor(resourceIndicator))) {
-            throw new errors.InvalidTarget('resource is not a workspace MCP endpoint on this server')
+            throw new errors.InvalidTarget('resource is not an account or workspace MCP endpoint on this server')
           }
           return {
             scope: SCOPES.join(' '),

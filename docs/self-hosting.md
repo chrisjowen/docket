@@ -344,7 +344,8 @@ docket serve --config docket-server.yaml --no-worker  # the API without the work
 docket serve worker --config docket-server.yaml   # the worker alone, as a separate process
 ```
 
-One process serves the API, MCP (`/mcp/{account}/{docket}`), OAuth, sign-in
+One process serves the API (`/api/v1`), MCP (`/mcp/{account}` for every
+docket of an account, `/mcp/{account}/{docket}` for one), OAuth, sign-in
 and the web app on one port, and runs the worker beside them, which projects
 every docket into the graph and vector stores and answers `docket_search` and
 `docket_ask`. A file without `mode` is the single-tenant server, unchanged;

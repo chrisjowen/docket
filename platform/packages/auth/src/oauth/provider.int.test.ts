@@ -92,8 +92,11 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
       cookieKeys: keys,
       isHuman: async (id) => id === 'u-1',
       resourceFor: async (url) => {
-        const parsed = parseMcpResourceUrl(origin, url)
-        const workspaceId = parsed?.orgSlug === 'acme' ? workspaces[parsed.workspaceSlug] : undefined
+        const parsed = parseMcpResourceUrl(origin, url, { account: true })
+        if (parsed?.orgSlug !== 'acme') return null
+        // The account's own address (tenancy v2 §4): every docket, chosen at consent.
+        if (parsed.workspaceSlug === null) return { orgId: 'orga', workspaceId: null }
+        const workspaceId = workspaces[parsed.workspaceSlug]
         return workspaceId ? { orgId: 'orga', workspaceId } : null
       },
       devicePoll: async () => pollAllowed,
@@ -365,6 +368,31 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
     } finally {
       tokenCeiling = Infinity
     }
+  })
+
+  it("accepts the account's MCP URL as a resource, binding the token by the dockets chosen at consent (tenancy v2 §4)", async () => {
+    const clientId = await register()
+    const resource = `${origin}/mcp/acme`
+    const verifier = randomBytes(32).toString('base64url')
+    const code = await authorize(clientId, resource, verifier)
+    const exchanged = await fetch(`${origin}/oauth/token`, form({ grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: 'http://127.0.0.1:9/callback', code_verifier: verifier, resource }))
+    expect(exchanged.status).toBe(200)
+    const tokens = (await exchanged.json()) as { access_token: string }
+    const { rows } = await db.superuser.query<{ payload: { aud: string; extra: Record<string, unknown> } }>(
+      "SELECT payload FROM platform.oauth_store WHERE model = 'AccessToken' AND resource = $1",
+      [resource],
+    )
+    // Bound to the account, not to one docket.
+    expect(rows[0]?.payload).toMatchObject({ aud: resource, extra: { org_id: 'orga' } })
+    expect(rows[0]?.payload.extra).not.toHaveProperty('workspace_id')
+    const resolver = tokenResolver({ platform })
+    // The connection says which dockets: here ws1 only, read-only, as the consent page recorded it.
+    expect(await resolver.resolveCredential(tokens.access_token)).toMatchObject({ orgId: 'orga', dockets: ['ws1'], readOnly: true, audience: null, via: 'oauth' })
+    expect(await resolver.resolveBearer(tokens.access_token, { url: `${origin}/mcp/acme/platform`, orgId: 'orga', workspaceId: 'ws1' })).toMatchObject({ workspaceId: 'ws1' })
+    expect(await resolver.resolveBearer(tokens.access_token, { url: `${origin}/mcp/acme/data`, orgId: 'orga', workspaceId: 'ws2' })).toBeNull()
+    // An account's resource is still one account's: another's is no resource here.
+    const elsewhere = await fetch(`${origin}/oauth/token`, form({ grant_type: 'authorization_code', code: await authorize(clientId, resource, verifier), client_id: clientId, redirect_uri: 'http://127.0.0.1:9/callback', code_verifier: verifier, resource: `${origin}/mcp/other` }))
+    expect(elsewhere.status).toBe(400)
   })
 
   it('refuses a resource that is no workspace', async () => {

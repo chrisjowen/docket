@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@chrisjowen/docket": "workspace:*",
+    "@docket/api": "workspace:*",
     "@docket/platform-ai": "workspace:*",
     "@docket/platform-audit": "workspace:*",
     "@docket/platform-auth": "workspace:*",

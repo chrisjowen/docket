@@ -189,3 +189,23 @@ export async function recordPurge(
 export async function enqueue(tx: Tx, workspaceId: string, kind: SyncTrigger): Promise<void> {
   await tx.query('INSERT INTO outbox (workspace_id, kind) VALUES ($1, $2)', [workspaceId, kind])
 }
+
+/**
+ * Renames a workspace, or moves it to another space, whose grants then cover
+ * it instead of its old space's. Who may is the caller's to check.
+ */
+export async function updateWorkspace(tx: Tx, id: string, input: { name?: string; spaceId?: string }): Promise<Workspace> {
+  const before = await workspaceById(tx, id)
+  if (!before) throw new WorkspaceError('not-found', 'No such docket.')
+  const name = input.name === undefined ? before.name : input.name.trim()
+  if (!name || name.length > 80) throw new WorkspaceError('invalid', 'Name the docket in 1-80 characters.')
+  const spaceId = input.spaceId ?? before.spaceId
+  if (spaceId !== before.spaceId && !(await tx.query('SELECT 1 FROM spaces WHERE id = $1', [spaceId])).rowCount) {
+    throw new WorkspaceError('not-found', 'No such space.')
+  }
+  const { rows } = await tx.query<WorkspaceRow>(
+    'UPDATE workspaces SET name = $2, space_id = $3 WHERE id = $1 AND deleted_at IS NULL RETURNING *',
+    [id, name, spaceId],
+  )
+  return toWorkspace(rows[0] as WorkspaceRow)
+}

@@ -22,7 +22,7 @@ from these packages.
 
 | Path | Package | What |
 | --- | --- | --- |
-| `apps/server` | `@docket/server-platform` | The SvelteKit app (adapter-node): the API, MCP endpoints (`/mcp/{org}/{ws}`), the OAuth endpoints, sign-in, and the product's pages. `server.js` serves the build, with the OAuth authorization server in front. |
+| `apps/server` | `@docket/server-platform` | The SvelteKit app (adapter-node): the public API (`/api/v1`, defined in [`@docket/api`](../packages/api)), MCP endpoints (`/mcp/{org}` for every docket of an account, `/mcp/{org}/{ws}` for one), the OAuth endpoints, sign-in, and the product's pages. `server.js` serves the build, with the OAuth authorization server in front. |
 | `apps/worker` | `@docket/server-worker` | The worker: the outbox and projections (Neo4j, Qdrant/mem0, optional cognee), the query service behind `docket_search` and `docket_ask`, repository sync and export PRs, enrichment, consolidation, and per-account provisioning. |
 | `packages/tenancy` | `@docket/platform-tenancy` | Accounts, members, invites, capabilities, roles and grants (a role on a place, and `capsAt`, the one access resolver), the identities every sign-in provider resolves to, tenant routing, and the platform and per-account SQL migrations. |
 | `packages/auth` | `@docket/platform-auth` | GitHub, OpenID Connect and password sign-in, sessions, CSRF, the OAuth provider (`oidc-provider`), API tokens and effective scopes. |
@@ -38,7 +38,7 @@ from these packages.
 | `packages/enrichment`, `packages/consolidation` | `@docket/platform-enrichment`, `@docket/platform-consolidation` | Background enrichment and consolidation. |
 | `packages/github` | `@docket/platform-github` | The GitHub App: tokens, webhooks, trees, export PRs. |
 | `tests` | `@docket/platform-e2e` | The Playwright suite (`tests/e2e`), a fake GitHub and embedder, fixtures, and a k6 load test. |
-| `docs` | | The org admin API, cognee, and how search decides what is relevant. |
+| `docs` | | The public API and the account's MCP address, the org admin API, cognee, and how search decides what is relevant. |
 
 The product's pages still live in `apps/server` beside the routes that serve
 them. They move to `packages/docket-ui` as clients of the public API as that

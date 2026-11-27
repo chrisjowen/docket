@@ -148,6 +148,13 @@ const route: Handle = async ({ event, resolve }) => {
   if (mutation && event.locals.sessionSecret) {
     if (!verifyCsrf(event.locals.sessionSecret, await csrfTokenOf(event.request))) {
       await recordStandalone(event, { action: 'web.csrf', outcome: 'denied', orgId: null, target: [event.url.pathname] })
+      // The public API answers its own error shape: a session sends its token (GET /api/v1/me) as X-CSRF-Token.
+      if (event.url.pathname.startsWith('/api/v1/')) {
+        return new Response(
+          JSON.stringify({ error: 'csrf', error_description: `Send this session's CSRF token as ${CSRF_HEADER}; GET /api/v1/me returns it.`, request_id: event.locals.requestId }),
+          { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-request-id': event.locals.requestId } },
+        )
+      }
       return new Response('This form expired. Reload the page and try again.', {
         status: 403,
         headers: { 'content-type': 'text/plain; charset=utf-8' },

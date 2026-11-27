@@ -112,7 +112,8 @@ export interface OrgAccess {
   capsAt(place: Place): ReadonlySet<Capability>
 }
 
-function orgAccessOf(org: Org, principal: Access): OrgAccess {
+/** An account's access as every route reads it, from the principal's access there (`accessOf`), narrowed or not. */
+export function orgAccessOf(org: Org, principal: Access): OrgAccess {
   return {
     org,
     principal,

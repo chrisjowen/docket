@@ -112,6 +112,42 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   migration works out everyone's access to every docket before and after and
   stops if any answer differs.
 
+### API v1 and one MCP address per account (multi-tenant server)
+
+- `/api/v1/accounts/{account}/…` manages an account the way the app does:
+  invites, grants (give, change, adjust by single capabilities, remove),
+  roles, spaces, dockets (create from a template, a copy or YAML with initial
+  access; rename, move, delete), system accounts and their tokens, users and
+  owners, the audit log and usage. `/api/v1/me` says who is calling and
+  through what; `/api/v1/me/tokens` and `/api/v1/me/connections` manage your
+  own. Each call needs the same capability as the button in the app, held by
+  whoever the credential acts as, on the place it names.
+- A browser session (sending its CSRF token as `X-CSRF-Token`) and a bearer
+  token or OAuth connection resolve to the same person or system account and
+  the same capabilities. A read-only credential makes only reads; one limited
+  to some dockets acts only on them. A personal token is minted only from your
+  own browser session, never with a token.
+- Every operation, the credentials it takes, the capability it needs, its
+  request and response schemas and its errors are defined once in
+  `@docket/api` (`packages/api`), which the server routes and validates by and
+  the UI can import. `GET /api/v1/openapi.json` publishes them as OpenAPI 3.1.
+- `/mcp/{account}` is one MCP address for every docket you may use: each
+  docket tool takes a `docket` argument (read tools also take `dockets`, to
+  look in several at once), and `docket_list` shows the dockets and what you
+  can do in each. A connection or token limited to one docket implies it; a
+  read with one docket to choose from uses it; a write always names one.
+  `?read_only=1` drops the write tools. Each docket's own address
+  (`/mcp/{account}/{docket}`) is unchanged.
+- `?admin=1` at the account address adds `admin_*` tools - give and remove
+  access, invite, create spaces, dockets and system accounts, rename or move
+  a docket, see usage - for a caller who can manage something, checked as the
+  API checks them. No tool ever mints a token.
+- OAuth sign-in accepts the account's MCP URL as the resource. Consent then
+  asks which of the account's dockets the connection reaches (every docket by
+  default, or chosen ones) and stores them on the connection.
+- `/api/admin/o/{org}/…`, the org admin API with master keys, is unchanged,
+  as are existing tokens, OAuth clients and grants.
+
 ## 0.16.0
 
 ### Confidence comes from policies about sources

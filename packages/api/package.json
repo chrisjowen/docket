@@ -1,0 +1,23 @@
+{
+  "name": "@docket/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Docket's public HTTP API contract (/api/v1): every operation's path, method, credentials, capability, request and response schemas, errors and stream formats, shared by the server and the UI.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
