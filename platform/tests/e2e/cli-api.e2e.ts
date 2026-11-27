@@ -126,15 +126,16 @@ test('docket cloud token: an OAuth session creates, lists and revokes CI tokens;
 
   const created = await api(request, 'POST', 'tokens', session, { scopes: ['docket:read'], days: 7, description: 'ci' })
   expect(created.status()).toBe(201)
-  const token = (await created.json()) as { id: string; token: string; prefix: string; scopes: string[]; expiresAt: string }
-  expect(token).toMatchObject({ id: expect.stringMatching(/^tok_/), scopes: ['docket:read', 'ontology:read'] })
-  expect(token.token).toMatch(/^dkt_live_[0-9A-Za-z]{43}_[0-9a-f]{8}$/)
+  const token = (await created.json()) as { id: string; token: string; prefix: string; read_only: boolean; scopes: string[]; expiresAt: string }
+  // Read scopes from an older CLI make a read-only personal token for this docket.
+  expect(token).toMatchObject({ id: expect.stringMatching(/^tok_/), read_only: true, scopes: ['docket:read', 'ontology:read'] })
+  expect(token.token).toMatch(/^dkt_pat_[0-9A-Za-z]{43}_[0-9a-f]{8}$/)
   expect(token.token.startsWith(token.prefix)).toBe(true)
   expect(Math.round((Date.parse(token.expiresAt) - Date.now()) / 86_400_000)).toBe(7)
 
   const listed = (await (await api(request, 'GET', 'tokens', session)).json()) as { tokens: Record<string, unknown>[] }
   const entry = listed.tokens.find((candidate) => candidate.id === token.id)
-  expect(entry).toMatchObject({ prefix: token.prefix, owner: '@alice', mine: true, scopes: ['docket:read', 'ontology:read'], description: 'ci', status: 'live', lastUsedAt: null })
+  expect(entry).toMatchObject({ prefix: token.prefix, owner: '@alice', mine: true, readOnly: true, scopes: ['docket:read', 'ontology:read'], name: 'ci', description: 'ci', status: 'live', lastUsedAt: null })
   expect(JSON.stringify(listed)).not.toContain(token.token)
 
   // The API token works for what it carries, and gets 403 for tokens and for writes.

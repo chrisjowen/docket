@@ -193,8 +193,8 @@ test('a write is stamped with its writer, recorded once in the audit log, and sh
 
   const got = await call(request, 'docket_get', { id })
   const resource = got.result?.structuredContent as { resource: { evidence: { observedBy?: string; session?: string }[] }; documents: { origin: string }[] }
-  // The token is the observer, by its owner's login; the client's claim is kept as reportedBy in the canonical file.
-  expect(resource.resource.evidence[0]?.observedBy).toMatch(/^alice \(token tok_[a-z0-9]{4}…\)$/)
+  // The token is the observer, by its owner's login and the token's name; the client's claim is kept as reportedBy in the canonical file.
+  expect(resource.resource.evidence[0]?.observedBy).toBe(`alice with token 'e2e writer'`)
   expect(resource.documents[0]?.origin).toBe('cloud')
 
   const rows = await orgDb(async (client, schema) => {

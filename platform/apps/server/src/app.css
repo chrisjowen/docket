@@ -626,6 +626,49 @@ table.grid tbody tr:hover {
 .table-wrap {
   overflow-x: auto;
 }
+/* A table whose rows read as labelled cards on a phone: each cell names its column in `data-label`. */
+@media (max-width: 720px) {
+  table.grid.stackable thead {
+    display: none;
+  }
+  table.grid.stackable,
+  table.grid.stackable tbody,
+  table.grid.stackable tr,
+  table.grid.stackable td {
+    display: block;
+    width: 100%;
+  }
+  table.grid.stackable tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  table.grid.stackable td:first-child,
+  table.grid.stackable td:last-child {
+    grid-column: 1 / -1;
+  }
+  table.grid.stackable tr:last-child {
+    border-bottom: 0;
+  }
+  table.grid.stackable td {
+    padding: 0.2rem 0;
+    border-bottom: 0;
+    overflow-wrap: anywhere;
+  }
+  table.grid.stackable td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font: 500 10px/1.4 var(--font-mono);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--mute);
+  }
+  table.grid.stackable td:empty {
+    display: none;
+  }
+}
 
 .visually-hidden {
   position: absolute;

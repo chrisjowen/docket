@@ -2,12 +2,12 @@
 import type { Tx } from '@docket/platform-tenancy'
 
 import type { McpResource, Principal } from '../principal.js'
-import { isScope, parseScopeString, type Scope } from '../scopes.js'
-import { TOKEN_PREFIX, parseApiToken, tokenHash } from './api-token.js'
+import { credentialScopes, parseScopeString, type Scope } from '../scopes.js'
+import { isApiTokenText, parseApiToken, tokenHash } from './api-token.js'
 
 /** A cached lookup is trusted for at most this long without a revocation notice (§8.5). */
 export const LOOKUP_TTL_MS = 5_000
-/** `last_used_at` is written at most this often per token. */
+/** `last_used_at` is written at most this often per token or connection. */
 const TOUCH_EVERY_MS = 60_000
 const MAX_CACHED = 5_000
 
@@ -15,13 +15,20 @@ const MAX_CACHED = 5_000
 interface Bound {
   userId: string
   orgId: string
-  workspaceId: string
-  /** The OAuth audience: the one MCP URL the access token is for. API tokens are bound by ids. */
+  /** The dockets it reaches, by workspace id; null: every docket its owner reaches. */
+  dockets: string[] | null
+  /**
+   * The one MCP URL an OAuth access token from a grant made before named
+   * connections is for (its audience). A connection or an API token is
+   * bound by its dockets instead.
+   */
   audience: string | null
   scopes: Scope[]
+  readOnly: boolean
   via: 'oauth' | 'token'
   clientId?: string
   tokenId: string
+  credentialName: string | null
   actor: Principal['actor']
   expiresAt: Date
 }
@@ -29,8 +36,8 @@ interface Bound {
 export interface TokenResolver {
   /**
    * The principal behind `Authorization: Bearer <raw>` on `resource`, or null:
-   * unknown, mistyped, expired, revoked, or bound to another workspace (an
-   * access token's audience is one workspace's MCP URL only).
+   * unknown, mistyped, expired, revoked, or not for that docket (a token or
+   * connection reaches only the dockets it names, in its own org).
    */
   resolveBearer(raw: string, resource: McpResource): Promise<Principal | null>
   /**
@@ -45,6 +52,8 @@ export interface TokenResolver {
 
 type Platform = <T>(fn: (tx: Tx) => Promise<T>) => Promise<T>
 
+const stale = (lastUsed: Date | null, now: Date) => !lastUsed || now.getTime() - lastUsed.getTime() >= TOUCH_EVERY_MS
+
 async function lookupApiToken(tx: Tx, raw: string, now: Date): Promise<Bound | null> {
   const parsed = parseApiToken(raw)
   // A mistyped token never reaches the database (§8.3).
@@ -53,29 +62,32 @@ async function lookupApiToken(tx: Tx, raw: string, now: Date): Promise<Bound | n
     id: string
     prefix: string
     org_id: string
-    workspace_id: string
+    dockets: string[] | null
     owner_id: string
-    scopes: string[]
+    read_only: boolean
+    legacy_scopes: string[] | null
+    description: string | null
     expires_at: Date
     last_used_at: Date | null
   }>(
-    `SELECT id, prefix, org_id, workspace_id, owner_id, scopes, expires_at, last_used_at FROM platform.api_tokens
+    `SELECT id, prefix, org_id, dockets, owner_id, read_only, legacy_scopes, description, expires_at, last_used_at
+       FROM platform.api_tokens
       WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > $2`,
     [tokenHash(raw), now],
   )
   const row = rows[0]
   if (!row) return null
-  if (!row.last_used_at || now.getTime() - row.last_used_at.getTime() >= TOUCH_EVERY_MS) {
-    await tx.query('UPDATE platform.api_tokens SET last_used_at = $2 WHERE id = $1', [row.id, now])
-  }
+  if (stale(row.last_used_at, now)) await tx.query('UPDATE platform.api_tokens SET last_used_at = $2 WHERE id = $1', [row.id, now])
   return {
     userId: row.owner_id,
     orgId: row.org_id,
-    workspaceId: row.workspace_id,
+    dockets: row.dockets,
     audience: null,
-    scopes: row.scopes.filter(isScope),
+    scopes: credentialScopes({ readOnly: row.read_only, legacy: row.legacy_scopes }),
+    readOnly: row.read_only,
     via: 'token',
     tokenId: row.id,
+    credentialName: row.description,
     actor: `token:${row.prefix}`,
     expiresAt: row.expires_at,
   }
@@ -91,34 +103,64 @@ type AccessTokenPayload = {
   extra?: { org_id?: unknown; workspace_id?: unknown }
 }
 
-/** An OAuth access token, as the authorization server's adapter stored it (`platform.oauth_store`). */
+/**
+ * An OAuth access token, as the authorization server's adapter stored it
+ * (`platform.oauth_store`), with the named connection its grant is: what the
+ * connection says decides what it reaches (tenancy v2 §3.4). A grant with no
+ * connection keeps what it had: its one docket's URL and its token's scopes.
+ */
 async function lookupAccessToken(tx: Tx, raw: string, now: Date): Promise<Bound | null> {
   if (raw.length < 32 || raw.length > 128 || !/^[A-Za-z0-9_-]+$/.test(raw)) return null
-  const { rows } = await tx.query<{ payload: AccessTokenPayload }>(
-    `SELECT t.payload FROM platform.oauth_store t
+  const { rows } = await tx.query<{
+    payload: AccessTokenPayload
+    connection: string | null
+    org_id: string | null
+    name: string | null
+    read_only: boolean | null
+    dockets: string[] | null
+    legacy_scopes: string[] | null
+    last_used_at: Date | null
+  }>(
+    `SELECT t.payload, c.grant_id AS connection, c.org_id, c.name, c.read_only, c.dockets, c.legacy_scopes, c.last_used_at
+       FROM platform.oauth_store t
+       LEFT JOIN platform.oauth_connections c ON c.grant_id = t.grant_id
       WHERE t.model = 'AccessToken' AND t.id_hash = $1 AND (t.expires_at IS NULL OR t.expires_at > $2)
         AND EXISTS (SELECT 1 FROM platform.oauth_store g WHERE g.model = 'Grant' AND g.grant_id = t.grant_id
                       AND (g.expires_at IS NULL OR g.expires_at > $2))`,
     [tokenHash(raw), now],
   )
-  const payload = rows[0]?.payload
-  if (!payload) return null
+  const row = rows[0]
+  const payload = row?.payload
+  if (!row || !payload) return null
   const { accountId, clientId, aud, scope, grantId, exp, extra } = payload
   if (typeof accountId !== 'string' || typeof clientId !== 'string' || typeof aud !== 'string' || typeof grantId !== 'string') return null
   if (typeof extra?.org_id !== 'string' || typeof extra.workspace_id !== 'string' || typeof exp !== 'number') return null
   const expiresAt = new Date(exp * 1000)
   if (expiresAt <= now) return null
+  const common = { userId: accountId, orgId: extra.org_id, via: 'oauth' as const, clientId, tokenId: grantId, expiresAt }
+  if (row.connection === null) {
+    const scopes = parseScopeString(typeof scope === 'string' ? scope : '')
+    return {
+      ...common,
+      dockets: [extra.workspace_id],
+      audience: aud,
+      scopes,
+      readOnly: !scopes.some((value) => value !== 'docket:read' && value !== 'ontology:read'),
+      credentialName: null,
+      actor: `oauth:${clientId}/user:${accountId}`,
+    }
+  }
+  // A connection belongs to one account: a token whose audience is another's reaches nothing.
+  if (row.org_id !== extra.org_id) return null
+  if (stale(row.last_used_at, now)) await tx.query('UPDATE platform.oauth_connections SET last_used_at = $2 WHERE grant_id = $1', [grantId, now])
   return {
-    userId: accountId,
-    orgId: extra.org_id,
-    workspaceId: extra.workspace_id,
-    audience: aud,
-    scopes: parseScopeString(typeof scope === 'string' ? scope : ''),
-    via: 'oauth',
-    clientId,
-    tokenId: grantId,
-    actor: `oauth:${clientId}/user:${accountId}`,
-    expiresAt,
+    ...common,
+    dockets: row.dockets,
+    audience: null,
+    scopes: credentialScopes({ readOnly: row.read_only === true, legacy: row.legacy_scopes }),
+    readOnly: row.read_only === true,
+    credentialName: row.name,
+    actor: `oauth:${clientId}/conn:${grantId}/user:${accountId}`,
   }
 }
 
@@ -134,16 +176,15 @@ export function tokenResolver(options: { platform: Platform; ttlMs?: number; now
   const cache = new Map<string, { bound: Bound; until: number }>()
 
   const lookup = async (raw: string): Promise<Bound | null> => {
+    const apiToken = isApiTokenText(raw)
     // A mistyped API token is turned away before any database call (§8.3).
-    if (raw.startsWith(TOKEN_PREFIX) && !parseApiToken(raw).ok) return null
+    if (apiToken && !parseApiToken(raw).ok) return null
     const at = now()
     const key = tokenHash(raw)
     const hit = cache.get(key)
     if (hit && hit.until > at.getTime()) return hit.bound
     cache.delete(key)
-    const bound = await options.platform((tx) =>
-      raw.startsWith(TOKEN_PREFIX) ? lookupApiToken(tx, raw, at) : lookupAccessToken(tx, raw, at),
-    )
+    const bound = await options.platform((tx) => (apiToken ? lookupApiToken(tx, raw, at) : lookupAccessToken(tx, raw, at)))
     if (bound) {
       if (cache.size >= MAX_CACHED) cache.clear()
       cache.set(key, { bound, until: Math.min(at.getTime() + ttlMs, bound.expiresAt.getTime()) })
@@ -155,16 +196,20 @@ export function tokenResolver(options: { platform: Platform; ttlMs?: number; now
     async resolveBearer(raw, resource) {
       const bound = await lookup(raw.trim())
       if (!bound || bound.expiresAt <= now()) return null
-      if (bound.orgId !== resource.orgId || bound.workspaceId !== resource.workspaceId) return null
+      if (bound.orgId !== resource.orgId) return null
+      if (bound.dockets !== null && !bound.dockets.includes(resource.workspaceId)) return null
       if (bound.audience !== null && bound.audience !== resource.url) return null
       return {
         userId: bound.userId,
         orgId: bound.orgId,
-        workspaceId: bound.workspaceId,
+        workspaceId: resource.workspaceId,
         scopes: [...bound.scopes],
+        readOnly: bound.readOnly,
+        dockets: bound.dockets ? [...bound.dockets] : null,
         via: bound.via,
         ...(bound.clientId ? { clientId: bound.clientId } : {}),
         tokenId: bound.tokenId,
+        credentialName: bound.credentialName,
         actor: bound.actor,
         expiresAt: bound.expiresAt,
       }

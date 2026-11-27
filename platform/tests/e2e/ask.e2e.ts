@@ -316,8 +316,8 @@ test('the command menu finds records and the rest, jumps to pages, and hands the
 
   // A page by its name, with the keyboard: outside a docket, the casebook's pages.
   await page.keyboard.press('ControlOrMeta+k')
-  await menu.getByRole('combobox').fill('members')
-  await expect(options.first()).toHaveText(/Members & roles/)
+  await menu.getByRole('combobox').fill('users')
+  await expect(options.first()).toHaveText(/Users/)
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(`/o/${org}/members`)
 

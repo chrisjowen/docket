@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { CapError, MAX_MONTHLY_CAP_USD, capOf, modelAllowlist, modelChoices, setCap, type ModelUse } from '@docket/platform-ai'
-import { fail } from '@sveltejs/kit'
+import { fail, redirect } from '@sveltejs/kit'
 
 import { authorise, orgAccess, recordAudit } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 
 import type { Actions, PageServerLoad } from './$types'
 
-/** The org's settings: its monthly AI cap and model choices (§11). Owners only (§4). */
+/**
+ * The org's settings: its monthly AI cap and model choices (§11), owners
+ * only (§4). Those who manage access but do not own the account go straight
+ * to the settings they do have: System accounts.
+ */
 export const load: PageServerLoad = async (event) => {
   const access = await orgAccess(event)
+  if (!access.can('org.administer') && access.can('members.manage')) redirect(303, `/o/${access.org.slug}/settings/system-accounts`)
   authorise(access, 'org.administer')
   const { router, caps } = getRuntime()
   const [status, models] = await Promise.all([caps.status(access.org.id), router.withPlatform((tx) => modelChoices(tx, access.org.id))])

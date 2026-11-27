@@ -10,9 +10,12 @@ export interface Crumb {
 /** What org-level pages read as in the breadcrumbs, by route. */
 const ORG_PAGES: Record<string, string> = {
   '/o/[org]/ask': 'Ask',
-  '/o/[org]/members': 'Members & roles',
+  '/o/[org]/members': 'Users',
+  '/o/[org]/tokens': 'Your tokens & connections',
   '/o/[org]/audit': 'Audit log',
   '/o/[org]/settings': 'Settings',
+  '/o/[org]/settings/system-accounts': 'System accounts',
+  '/o/[org]/settings/system-accounts/[id]': 'System account',
   '/o/[org]/workspaces/new': 'New docket',
 }
 

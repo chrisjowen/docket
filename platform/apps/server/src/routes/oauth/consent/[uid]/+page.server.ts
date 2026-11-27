@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { audit } from '@docket/platform-audit'
 import {
+  ConnectionError,
   ConsentError,
-  SCOPES,
-  SCOPE_LABELS,
   approveConsent,
+  connectionName,
+  createConnection,
   denyConsent,
   describeConsent,
   interactionCookieValid,
-  isScope,
-  namespaceScopes,
+  newGrantId,
   parseMcpResourceUrl,
   type ConsentRequest,
 } from '@docket/platform-auth'
-import { workspaceBySlug, type Workspace } from '@docket/platform-canonical-store'
-import { membershipBySlug, namespaceAccess, type NamespaceAccess } from '@docket/platform-tenancy'
+import { listWorkspaces, workspaceBySlug } from '@docket/platform-canonical-store'
+import { membershipBySlug, namespaceAccess, namespaceGrantsOf, namespacePermission, type NamespaceAccess } from '@docket/platform-tenancy'
 import { error, fail, type RequestEvent } from '@sveltejs/kit'
 
 import { auditInput, requireUser, type SignedIn } from '$lib/server/request'
@@ -23,10 +23,13 @@ import { getRuntime } from '$lib/server/runtime'
 import type { Actions, PageServerLoad } from './$types'
 
 /**
- * The consent screen of the MCP OAuth flow (§8.2 step 4): who is asking, the
- * host the code will be sent to, the workspace, and each scope capped at the
- * user's permission on that workspace (tenancy design §5.1): a member with
- * no access to it cannot let a client in. Only the browser that started the
+ * The consent screen of the MCP OAuth flow (§8.2 step 4; tenancy v2 §3.4):
+ * who is asking, the host the code will be sent to, and the docket. Allowing
+ * it makes a named connection, which acts as the user: they name it
+ * (prefilled from the client's name and where it signs in from), choose the
+ * dockets it reaches - the one it asked for, more of the account's, or every
+ * docket they reach - and whether it only reads. A member with no access to
+ * the docket cannot let a client in. Only the browser that started the
  * request sees it.
  */
 
@@ -38,8 +41,8 @@ type Target = {
   workspaceSlug: string
   workspaceName: string
   access: NamespaceAccess
-  /** The roles the workspace lets change its ontology over MCP: `ontology:write` is offered only to them. */
-  ontologyWriters: Workspace['ontologyMcpRoles']
+  /** The account's dockets the user reaches, the asked-for one first. */
+  dockets: { id: string; slug: string; name: string; readOnly: boolean }[]
 }
 
 async function consentOf(event: RequestEvent, user: SignedIn): Promise<{ consent: ConsentRequest; target: Target | null }> {
@@ -53,10 +56,21 @@ async function consentOf(event: RequestEvent, user: SignedIn): Promise<{ consent
   if (!named) return { consent, target: null }
   const membership = await runtime.router.withPlatform((tx) => membershipBySlug(tx, named.orgSlug, user.id))
   if (!membership) return { consent, target: null }
-  const workspace = await runtime.router.withTenant(membership.org.id, (tx) => workspaceBySlug(tx, named.workspaceSlug))
+  const { workspace, all } = await runtime.router.withTenant(membership.org.id, async (tx) => ({
+    workspace: await workspaceBySlug(tx, named.workspaceSlug),
+    all: await listWorkspaces(tx),
+  }))
   if (!workspace) return { consent, target: null }
-  const access = await runtime.router.withPlatform((tx) => namespaceAccess(tx, membership.org.id, workspace.id, user.id))
+  const { access, grants } = await runtime.router.withPlatform(async (tx) => ({
+    access: await namespaceAccess(tx, membership.org.id, workspace.id, user.id),
+    grants: await namespaceGrantsOf(tx, membership.org.id, user.id),
+  }))
   if (!access?.permission) return { consent, target: null }
+  const reachable = all.flatMap((docket) => {
+    const grant = grants.get(docket.id)
+    const permission = namespacePermission(access.accountRole, grant ? [grant] : [])
+    return permission ? [{ id: docket.id, slug: docket.slug, name: docket.name, readOnly: permission === 'read' }] : []
+  })
   return {
     consent,
     target: {
@@ -67,15 +81,27 @@ async function consentOf(event: RequestEvent, user: SignedIn): Promise<{ consent
       workspaceSlug: workspace.slug,
       workspaceName: workspace.name,
       access,
-      ontologyWriters: workspace.ontologyMcpRoles,
+      dockets: [...reachable.filter((docket) => docket.id === workspace.id), ...reachable.filter((docket) => docket.id !== workspace.id)],
     },
   }
+}
+
+/** Where the browser signs in from, as a connection's name says it: "Mac", "Windows", "Linux"... */
+function deviceOf(userAgent: string | null): string | null {
+  const agent = userAgent ?? ''
+  if (/iPhone|iPad/.test(agent)) return 'iPhone'
+  if (/Android/.test(agent)) return 'Android'
+  if (/Mac OS X|Macintosh/.test(agent)) return 'Mac'
+  if (/Windows/.test(agent)) return 'Windows'
+  if (/CrOS/.test(agent)) return 'Chromebook'
+  if (/Linux/.test(agent)) return 'Linux'
+  return null
 }
 
 export const load: PageServerLoad = async (event) => {
   const user = requireUser(event)
   const { consent, target } = await consentOf(event, user)
-  const allowed = new Set(namespaceScopes(target?.access ?? null, target?.ontologyWriters))
+  const device = deviceOf(event.request.headers.get('user-agent'))
   return {
     csrf: event.locals.csrf,
     client: {
@@ -90,12 +116,17 @@ export const load: PageServerLoad = async (event) => {
       preRegistered: consent.preRegistered,
     },
     resource: consent.resource,
-    target: target && { orgName: target.orgName, orgSlug: target.orgSlug, workspaceName: target.workspaceName, workspaceSlug: target.workspaceSlug, role: target.access.role },
-    scopes: SCOPES.filter((scope) => consent.requested.includes(scope)).map((scope) => ({
-      scope,
-      label: SCOPE_LABELS[scope],
-      allowed: allowed.has(scope),
-    })),
+    suggestedName: connectionName(device ? `${consent.clientName} — ${device}` : consent.clientName, consent.clientId),
+    target: target && {
+      orgName: target.orgName,
+      orgSlug: target.orgSlug,
+      workspaceName: target.workspaceName,
+      workspaceSlug: target.workspaceSlug,
+      workspaceId: target.workspaceId,
+      role: target.access.role,
+      readOnlyHere: target.access.permission === 'read',
+      dockets: target.dockets,
+    },
   }
 }
 
@@ -105,22 +136,50 @@ export const actions: Actions = {
     const runtime = getRuntime()
     const { consent, target } = await consentOf(event, user)
     if (!target || !consent.resource) return fail(403, { problem: 'You do not have access to that docket, so you cannot allow access to it.' })
-    const allowed = new Set(namespaceScopes(target.access, target.ontologyWriters))
-    const ticked = (await event.request.formData()).getAll('scope').filter(isScope)
-    const scopes = ticked.filter((scope) => consent.requested.includes(scope) && allowed.has(scope))
-    let continueTo: string
+    const form = await event.request.formData()
+    const name = connectionName(String(form.get('name') ?? ''), consent.clientName)
+    const readOnly = form.get('readOnly') === 'on'
+    const reachable = new Set(target.dockets.map((docket) => docket.id))
+    // The docket it asked for is always among them; others only of those the user reaches now.
+    const dockets =
+      form.get('reach') === 'all'
+        ? null
+        : [target.workspaceId, ...form.getAll('docket').map(String).filter((id) => id !== target.workspaceId && reachable.has(id))]
+    // Chosen before the grant exists, so the connection it names can be written first: a grant is only ever live
+    // (reachable by a lookup) once its narrowing connection row already is, with no crash window in between.
+    const grantId = newGrantId()
     try {
-      continueTo = await approveConsent(runtime.oauth.provider, consent.uid, { accountId: user.id, resource: consent.resource, scopes })
+      await runtime.router.withPlatform((tx) => createConnection(tx, { grantId, orgId: target.orgId, userId: user.id, clientId: consent.clientId, name, readOnly, dockets }))
     } catch (cause) {
+      if (cause instanceof ConnectionError) return fail(400, { problem: cause.message })
+      throw cause
+    }
+    let approved: { continueTo: string }
+    try {
+      approved = await approveConsent(runtime.oauth.provider, consent.uid, { accountId: user.id, resource: consent.resource, grantId })
+    } catch (cause) {
+      // The connection never gets used: nothing is live for it without a grant.
+      await runtime.router.withPlatform((tx) => tx.query('DELETE FROM platform.oauth_connections WHERE grant_id = $1', [grantId]))
       if (cause instanceof ConsentError) return fail(400, { problem: cause.message })
       throw cause
     }
-    await runtime.router.withTenant(target.orgId, (tx) =>
-      audit(tx, auditInput(event, { action: 'oauth.grant', outcome: 'ok', orgId: target.orgId, workspaceId: target.workspaceId, target: [consent.clientId], args: { scopes, resource: consent.resource } })),
-    )
+    await runtime.router.withPlatform(async (tx) => {
+      await runtime.router.enterTenant(tx, target.orgId)
+      await audit(
+        tx,
+        auditInput(event, {
+          action: 'oauth.grant',
+          outcome: 'ok',
+          orgId: target.orgId,
+          workspaceId: target.workspaceId,
+          target: [consent.clientId, `conn:${grantId}`],
+          args: { name, readOnly, dockets, resource: consent.resource },
+        }),
+      )
+    })
     event.locals.audited = true
     // The page sends the browser on: a form's redirect to the client's callback would break the CSP's form-action.
-    return { continueTo }
+    return { continueTo: approved.continueTo }
   },
 
   deny: async (event) => {

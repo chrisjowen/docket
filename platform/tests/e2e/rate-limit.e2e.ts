@@ -61,7 +61,7 @@ test("a token's 121st call in a minute is a 429 with Retry-After, an MCP tool er
   expect(body.result.structuredContent).toMatchObject({ error: 'rate_limited', scope: 'token', limitPerMinute: 120 })
 
   expect(await deniedEvents()).toEqual([
-    { actor: `token:${token.slice(0, 17)}`, action: 'mcp.tools/call docket_ontology', target: ['rate-limit:calls-per-token'] },
+    { actor: `token:${token.slice(0, 16)}`, action: 'mcp.tools/call docket_ontology', target: ['rate-limit:calls-per-token'] },
   ])
 
   // Another token in the same org still gets through: the org allows 600 a minute.

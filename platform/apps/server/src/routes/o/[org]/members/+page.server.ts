@@ -6,13 +6,11 @@ import {
   assignableRoles,
   changeRole,
   createInvite,
-  createServiceAccount,
   isRole,
   listMembers,
   openInvitesOf,
   removeMember,
   revokeInvite,
-  setAccountable,
   type Tx,
 } from '@docket/platform-tenancy'
 import { fail, type RequestEvent } from '@sveltejs/kit'
@@ -35,6 +33,7 @@ export const load: PageServerLoad = async (event) => {
     assignable: access.can('members.manage') ? assignableRoles(access.role) : [],
     limit: LIMITS.membersPerOrg,
     seats: members.length + invites.length,
+    systemAccounts: members.filter((member) => member.kind === 'service').length,
     people: members
       .filter((member) => member.kind === 'human')
       .map((member) => ({
@@ -45,16 +44,6 @@ export const load: PageServerLoad = async (event) => {
         role: member.role,
         joinedAt: iso(member.joinedAt),
         lastSeenAt: iso(member.lastSeenAt),
-      })),
-    services: members
-      .filter((member) => member.kind === 'service')
-      .map((member) => ({
-        id: member.id,
-        name: member.login,
-        description: member.description,
-        role: member.role,
-        actsFor: member.actsFor,
-        joinedAt: iso(member.joinedAt),
       })),
     invites: invites.map((invite) => ({
       id: invite.id,
@@ -157,37 +146,6 @@ export const actions: Actions = {
         inOrg: async (tenant) => {
           if (await removeMemberAttributes({ tx: tenant }, userId)) await trustChanged(tenant)
         },
-      }
-    }),
-
-  actsFor: (event) =>
-    manage(event, async (tx, access, form) => {
-      const serviceId = String(form.get('member') ?? '')
-      const changed = await setAccountable(tx, { orgId: access.org.id, serviceId, accountableLogin: String(form.get('person') ?? '') })
-      return {
-        action: 'members.service-account.acts-for',
-        target: [`user:${serviceId}`],
-        args: { from: changed.before, to: changed.after },
-        flash: `${changed.service} now acts for @${changed.after}.`,
-      }
-    }),
-
-  addService: (event) =>
-    manage(event, async (tx, access, form, actorId) => {
-      const name = String(form.get('name') ?? '').trim().toLowerCase()
-      const description = String(form.get('description') ?? '').trim().slice(0, 200) || null
-      const account = await createServiceAccount(tx, {
-        orgId: access.org.id,
-        name,
-        description,
-        role: roleFrom(form),
-        actorId,
-        actorRole: access.role,
-      })
-      return {
-        action: 'members.service-account.create',
-        target: [`user:${account.id}`],
-        flash: `Service account ${account.login} added. Create its API tokens on a docket's MCP page.`,
       }
     }),
 }

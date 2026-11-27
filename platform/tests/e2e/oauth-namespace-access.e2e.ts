@@ -5,13 +5,12 @@ import type { AddressInfo } from 'node:net'
 
 import { expect, test, type APIRequestContext } from '@playwright/test'
 
-import { acmeWorkspace, createOrg, signIn, unique } from './helpers'
+import { acmeWorkspace, createOrg, mcp, signIn, unique } from './helpers'
 
 /**
- * MCP OAuth consent is capped at the signed-in member's namespace permission
- * (tenancy design §5.1, phase 2b), not just their org role: a read-only
- * member's consent screen offers no write scope, however much the client
- * asks for, and approving carries only what was offered.
+ * An MCP OAuth connection acts as the member who approved it (tenancy v2
+ * §3.4), at their permission on the docket, not just their org role: a
+ * read-only member's connection only reads, however much the client asks for.
  */
 
 async function register(request: APIRequestContext, redirectUri: string, name: string): Promise<string> {
@@ -28,7 +27,7 @@ async function register(request: APIRequestContext, redirectUri: string, name: s
   return ((await response.json()) as { client_id: string }).client_id
 }
 
-test('a read-only member is offered docket:read only over MCP OAuth, even when the client asks for docket:write', async ({
+test('a read-only member’s connection only reads over MCP OAuth, even when the client asks for docket:write', async ({
   browser,
   request,
   baseURL,
@@ -74,15 +73,9 @@ test('a read-only member is offered docket:read only over MCP OAuth, even when t
     await danaPage.goto(`/oauth/authorize?${query}`)
     await expect(danaPage.getByRole('heading', { name: 'Allow readonly e2e client?' })).toBeVisible()
 
-    // docket:write and ontology:propose are offered but unticked and disabled; docket:read and ontology:read are checked.
-    const write = danaPage.getByRole('checkbox', { name: /docket:write/ })
-    const propose = danaPage.getByRole('checkbox', { name: /ontology:propose/ })
-    const read = danaPage.getByRole('checkbox', { name: /docket:read/ })
-    await expect(write).toBeDisabled()
-    await expect(write).not.toBeChecked()
-    await expect(propose).toBeDisabled()
-    await expect(read).toBeChecked()
-    await expect(read).toBeEnabled()
+    // No scopes to choose: the consent says she only reads this docket, so the connection does too.
+    await expect(danaPage.getByText('You only read this docket anyway.')).toBeVisible()
+    await expect(danaPage.getByRole('checkbox', { name: /docket:write/ })).toHaveCount(0)
 
     await danaPage.getByRole('button', { name: 'Allow' }).click()
     await danaPage.waitForURL(backAtCallback())
@@ -96,8 +89,12 @@ test('a read-only member is offered docket:read only over MCP OAuth, even when t
     })
     expect(exchanged.status()).toBe(200)
     const tokens = (await exchanged.json()) as { access_token: string; scope: string }
-    // Only what the read-only member's permission allows made it into the grant, however much was requested.
-    expect(tokens.scope.split(' ').sort()).toEqual(['docket:read', 'ontology:read'])
+    // The connection acts as her: only her reading tools, and a write is refused, however much was requested.
+    const listed = await mcp(request, `/mcp/${org}/${ws}`, tokens.access_token, 'tools/list')
+    const names = ((await listed.json()) as { result: { tools: { name: string }[] } }).result.tools.map((tool) => tool.name)
+    expect(names).toEqual(['docket_search', 'docket_get', 'docket_ask', 'docket_ontology'])
+    const write = await mcp(request, `/mcp/${org}/${ws}`, tokens.access_token, 'tools/call', { name: 'docket_remember', arguments: {} })
+    expect(write.status()).toBe(403)
   } finally {
     callback.close()
   }

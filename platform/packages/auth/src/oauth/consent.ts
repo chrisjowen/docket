@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import type Provider from 'oidc-provider'
 
-import { parseScopeString, type Scope } from '../scopes.js'
+import { SCOPES, parseScopeString, type Scope } from '../scopes.js'
 import { isLocalRedirect, isMetadataClientId, redirectHost } from './cimd.js'
 import { CLI_CLIENT_ID } from './provider.js'
 
@@ -11,8 +11,8 @@ import { CLI_CLIENT_ID } from './provider.js'
  * The consent step of the MCP OAuth flow (§8.2 step 4). The authorization
  * server sends the browser to `/oauth/consent/{uid}`; the web app shows who
  * is asking (the client's name and, prominently, the host its redirect goes
- * to), for which workspace, and the scopes, each capped at the user's role.
- * Approving records a grant for exactly the scopes left ticked.
+ * to) and for which docket. Approving makes a named connection: the user
+ * names it, picks the dockets it reaches and whether it only reads.
  */
 
 /** The interaction cookie `oidc-provider` sets for `/oauth/consent/{uid}`, and its signature cookie. */
@@ -106,32 +106,44 @@ export async function describeConsent(provider: Provider, uid: string): Promise<
 const epochTime = () => Math.floor(Date.now() / 1000)
 
 /**
- * Approves: a fresh grant for `scopes` on the resource (the rest of what
- * the client asked for is refused), signed in as
- * `accountId`. Returns where the browser goes next (the provider's resume
- * URL, which only the browser holding the interaction's resume cookie can use).
+ * A grant's id, picked by the caller instead of `oidc-provider`'s own random
+ * one, so the caller can write the named connection under this id *before*
+ * the grant exists at all (tenancy v2 §3.4): a grant can then never be live
+ * - reachable by `lookupAccessToken` - without its narrowing connection row
+ * already committed, closing the crash window a generate-then-link order
+ * would leave open.
+ */
+export function newGrantId(): string {
+  return randomBytes(24).toString('base64url')
+}
+
+/**
+ * Approves: a fresh grant on the resource, signed in as `accountId`, stored
+ * under the caller's `grantId` (see `newGrantId`). The grant carries every
+ * docket scope; what the client may do is the named connection the caller
+ * records for `grantId` (tenancy v2 §3.4) - and must have already recorded,
+ * before calling this - its owner's access, narrowed to read-only or some
+ * dockets. Returns where the browser goes next: the provider's resume URL,
+ * which only the browser holding the interaction's resume cookie can use.
  */
 export async function approveConsent(
   provider: Provider,
   uid: string,
-  input: { accountId: string; resource: string; scopes: readonly Scope[] },
-): Promise<string> {
-  if (input.scopes.length === 0) throw new ConsentError('Tick at least one permission, or deny the request.')
+  input: { accountId: string; resource: string; grantId: string },
+): Promise<{ continueTo: string }> {
   const interaction = await provider.Interaction.find(uid)
   if (!interaction) throw new ConsentError('This sign-in request expired. Start again from your MCP client.')
   const params = interaction.params as Record<string, unknown>
   if (typeof params.client_id !== 'string') throw new ConsentError('This sign-in request has no client.')
   const grant = new provider.Grant({ accountId: input.accountId, clientId: params.client_id })
+  grant.jti = input.grantId
   const oidc = parseOidcScopes(typeof params.scope === 'string' ? params.scope : '')
   if (oidc) grant.addOIDCScope(oidc)
-  grant.addResourceScope(input.resource, input.scopes.join(' '))
-  // What the client asked for and the user left unticked is refused, not asked again.
-  const refused = parseScopeString(typeof params.scope === 'string' ? params.scope : '').filter((scope) => !input.scopes.includes(scope))
-  if (refused.length) grant.rejectResourceScope(input.resource, refused.join(' '))
+  grant.addResourceScope(input.resource, SCOPES.join(' '))
   const grantId = await grant.save()
   interaction.result = { login: { accountId: input.accountId }, consent: { grantId } }
   await interaction.save(Math.max(1, interaction.exp - epochTime()))
-  return interaction.returnTo
+  return { continueTo: interaction.returnTo }
 }
 
 /** Denies: the client gets `access_denied`. */

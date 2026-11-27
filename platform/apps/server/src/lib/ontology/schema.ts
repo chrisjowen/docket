@@ -60,7 +60,7 @@ type Attested = Record<string, unknown>
 
 /** What the org attests about sources, as the Sources and Policies tabs show it. */
 export interface TrustData {
-  people: { login: string; name: string | null; role: string; attributes: Attested; agents: { name: string; role: string }[] }[]
+  people: { login: string; name: string | null; role: string; attributes: Attested }[]
   registered: { source: string; instance: string; attributes: Attested }[]
   repositories: { fullName: string; attributes: Attested }[]
   manage: boolean

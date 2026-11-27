@@ -27,6 +27,28 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   platform, and calls OpenRouter or any OpenAI-compatible model endpoint; the
   start-up lines say which.
 
+### Users, system accounts, tokens and named connections (multi-tenant server)
+
+- Two kinds of identity: users (people) and system accounts (anything that
+  is not a person). Settings › System accounts is the one place to create a
+  system account, choose what it may do, and issue, rename and revoke its
+  tokens. No person acts for a system account: its writes are its own, so
+  its evidence cites a source. Its tokens last up to a year, and the
+  account's owners are told two weeks before one expires.
+- A token or OAuth connection acts as its owner and can only be narrowed: to
+  read-only, and to every docket the owner reaches or chosen ones. There are
+  no scopes to choose. Personal tokens start `dkt_pat_`, system account
+  tokens `dkt_sys_`; `dkt_live_` tokens keep working.
+- Every OAuth sign-in is a named connection, prefilled at consent from the
+  client's name and the device ("Claude Code — Mac"), with its dockets and
+  read-only chosen there. *Your tokens & connections* lists them with your
+  personal tokens, to rename or revoke.
+- Activity and evidence record who and through what: "alice via 'Claude Code
+  — work laptop'", "github-sync with token 'actions'".
+- Existing tokens and OAuth grants keep exactly what they could do: each
+  stays on its one docket, read-only when it only read, with any narrower
+  scopes kept as its ceiling.
+
 ## 0.16.0
 
 ### Confidence comes from policies about sources

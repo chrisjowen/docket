@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { audit, listAudit, type AuditEventInput, type Outcome } from '@docket/platform-audit'
-import { ApiTokenError, issueApiToken, listApiTokens, mcpResourceUrl, revokeApiToken, revokeWorkspaceCredentials, TokenRevocationError } from '@docket/platform-auth'
+import { ApiTokenError, impliedScopes, issueApiToken, listApiTokens, mcpResourceUrl, revokeApiToken, revokeWorkspaceCredentials, TokenRevocationError } from '@docket/platform-auth'
 import { hashContent, lockOntologyHead, WorkspaceError, workspaceSlugProblem, type StoreContext } from '@docket/platform-canonical-store'
 import { perMinute, rateLimitMessage, type Limit } from '@docket/platform-limits'
 import {
@@ -145,7 +145,7 @@ async function getDatabase(call: AdminCall, slug: string): Promise<Response> {
   const row = await database(call, slug)
   const head = await call.tenant(({ tx }) => headOf(tx, row.id))
   const { rows } = await call.tx.query<{ count: string }>(
-    'SELECT count(*) FROM platform.api_tokens WHERE org_id = $1 AND workspace_id = $2 AND revoked_at IS NULL AND expires_at > now()', [call.principal.orgId, row.id],
+    'SELECT count(*) FROM platform.api_tokens WHERE org_id = $1 AND (dockets IS NULL OR $2 = ANY (dockets)) AND revoked_at IS NULL AND expires_at > now()', [call.principal.orgId, row.id],
   )
   return cliJson(200, { ...databaseView(row), created_by: row.created_by, ontology: head ? { version: head.number, yaml: head.yaml, published_at: head.publishedAt } : null, key_count: Number(rows[0]?.count ?? 0) })
 }
@@ -179,7 +179,7 @@ async function keys(call: AdminCall, slug: string, keyId?: string): Promise<Resp
   const row = await database(call, slug)
   const { tx, principal } = call
   if (call.event.request.method === 'GET') {
-    const records = await listApiTokens(tx, { orgId: principal.orgId, workspaceId: row.id, all: true })
+    const records = await listApiTokens(tx, { orgId: principal.orgId, pinnedTo: row.id, all: true })
     return cliJson(200, { keys: records.map((key) => ({ id: key.id, prefix: key.prefix, scopes: key.scopes, description: key.description,
       created_at: key.createdAt, expires_at: key.expiresAt, last_used_at: key.lastUsedAt, revoked_at: key.revokedAt })) })
   }
@@ -199,8 +199,10 @@ async function keys(call: AdminCall, slug: string, keyId?: string): Promise<Resp
   const now = new Date()
   // The key belongs to this database's account at its level, never to org-admin, which holds no grant.
   const ownerId = await databaseAccount(tx, { orgId: principal.orgId, workspaceId: row.id, permission: scopes.includes('docket:write') ? 'write' : 'read' })
-  const issued = await issueApiToken(tx, { orgId: principal.orgId, workspaceId: row.id, ownerId, createdBy: principal.adminId,
-    scopes, expiresInDays: days, description: body.description as string | undefined, now })
+  // Read keys read; write keys keep exactly what this API has always given them (no ontology proposals), as a ceiling.
+  const write = scopes.includes('docket:write')
+  const issued = await issueApiToken(tx, { orgId: principal.orgId, dockets: [row.id], ownerId, createdBy: principal.adminId,
+    readOnly: !write, legacyScopes: write ? impliedScopes(scopes) : null, expiresInDays: days, name: body.description as string | undefined, now })
   call.target.push(`key:${issued.id}`)
   return cliJson(201, { id: issued.id, prefix: issued.prefix, key: issued.token, created_at: now, expires_at: issued.expiresAt })
 }

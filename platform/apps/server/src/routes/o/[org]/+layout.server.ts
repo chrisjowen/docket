@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { listWorkspaces } from '@docket/platform-canonical-store'
-import { ACTIONS, can } from '@docket/platform-tenancy'
+import { ACTIONS, can, tokenNotices } from '@docket/platform-tenancy'
 
 import { docketNumbers } from '$lib/docket'
 import { orgAccess, permissionOn, seesDocket } from '$lib/server/request'
@@ -11,7 +11,12 @@ import type { LayoutServerLoad } from './$types'
 export const load: LayoutServerLoad = async (event) => {
   const access = await orgAccess(event)
   const { router, caps } = getRuntime()
-  const [all, ai] = await Promise.all([router.withTenant(access.org.id, listWorkspaces), caps.status(access.org.id)])
+  const [all, ai, notices] = await Promise.all([
+    router.withTenant(access.org.id, listWorkspaces),
+    caps.status(access.org.id),
+    // System accounts' token notices go to the account's owners: there is no steward (tenancy v2 §3.3).
+    access.can('org.administer') ? router.withPlatform((tx) => tokenNotices(tx, access.org.id)) : Promise.resolve([]),
+  ])
   // Numbered across the org, so a docket keeps its number whoever is looking; listed only for those who may see it.
   const numbers = docketNumbers(all)
   const workspaces = all.filter((workspace) => seesDocket(access, workspace.id))
@@ -33,6 +38,7 @@ export const load: LayoutServerLoad = async (event) => {
       docketNo: numbers.get(workspace.slug) ?? '',
       open: permissionOn(access, workspace.id) !== null,
     })),
+    tokenNotices: { expiring: notices.filter((notice) => !notice.expired).length, expired: notices.filter((notice) => notice.expired).length },
     ai: { spentUsd: ai.spentUsd, capUsd: ai.capUsd, fraction: Number.isFinite(ai.fraction) ? ai.fraction : 1, warned: ai.warnedAt !== null },
   }
 }

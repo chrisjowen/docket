@@ -25,9 +25,11 @@
     workspace: { slug: string; name: string } | null
     dockets: { slug: string; name: string; docketNo: string }[]
     canAdminister: boolean
+    /** Owners and admins: who makes system accounts. */
+    canManageAccess?: boolean
   }
 
-  let { open = $bindable(), org, workspace, dockets, canAdminister }: Props = $props()
+  let { open = $bindable(), org, workspace, dockets, canAdminister, canManageAccess = false }: Props = $props()
 
   /** Results of each kind listed. */
   const PER_GROUP = 3
@@ -75,10 +77,12 @@
       )
     }
     list.push(
-      { group: 'Pages', label: 'Members & roles', meta: '', href: resolve('/o/[org]/members', { org: org.slug }) },
+      { group: 'Pages', label: 'Users', meta: '', href: resolve('/o/[org]/members', { org: org.slug }) },
+      { group: 'Pages', label: 'Your tokens & connections', meta: '', href: resolve('/o/[org]/tokens', { org: org.slug }) },
       { group: 'Pages', label: 'Audit log', meta: '', href: resolve('/o/[org]/audit', { org: org.slug }) },
     )
     if (canAdminister) list.push({ group: 'Pages', label: 'Casebook settings', meta: '', href: resolve('/o/[org]/settings', { org: org.slug }) })
+    if (canManageAccess) list.push({ group: 'Pages', label: 'System accounts', meta: '', href: resolve('/o/[org]/settings/system-accounts', { org: org.slug }) })
     for (const docket of dockets) {
       if (docket.slug !== workspace?.slug) {
         list.push({ group: 'Dockets', label: docket.name, meta: docket.docketNo, href: resolve('/o/[org]/w/[ws]/overview', { org: org.slug, ws: docket.slug }), icon: FolderOpen })

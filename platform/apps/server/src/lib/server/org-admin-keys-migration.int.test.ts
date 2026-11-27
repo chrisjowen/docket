@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { crc32 } from 'node:zlib'
 
-import { effectiveScopes, issueApiToken, tokenResolver, type McpResource } from '@docket/platform-auth'
+import { effectiveScopes, tokenResolver, type McpResource } from '@docket/platform-auth'
 import { insertWorkspace, workspaceBySlug } from '@docket/platform-canonical-store'
 import { createTestOrg, type TestOrg } from '@docket/platform-canonical-store/testing'
 import { memoryBucketStore, rateLimiter } from '@docket/platform-limits'
@@ -11,6 +12,7 @@ import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import down0014 from '../../../../../packages/tenancy/migrations/platform/0014_database_accounts.down.sql?raw'
+import down0016 from '../../../../../packages/tenancy/migrations/platform/0016_tokens_and_connections.down.sql?raw'
 import { rateLimiter as addressLimiter } from './rate-limit'
 import type { Runtime } from './runtime'
 
@@ -53,12 +55,20 @@ describe.skipIf(!TEST_PG_URL)('org admin keys move to database accounts (platfor
     const alice = (await org.withOrg(({ tx }) => workspaceBySlug(tx, 'alice')))!
     const handbook = await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Handbook', slug: 'handbook', createdBy: org.userId }))
 
-    // Back to before 0014: org-admin owns the keys again and, as a developer, may write every docket.
-    await transaction(org.db.admin, (tx) => tx.query(down0014))
+    // Back to before 0014 (and 0016, which follows it): org-admin owns the keys again and, as a developer, may write every docket.
+    await transaction(org.db.admin, async (tx) => {
+      await tx.query(down0016)
+      await tx.query(down0014)
+    })
     expect(await platform((tx) => namespaceAccess(tx, org.orgId, handbook.id, master.orgAdminId))).toMatchObject({ accountRole: 'developer', permission: 'write' })
     // What a master key could do then: a write key for a docket a person made in the UI.
-    const legacy = await platform((tx) => issueApiToken(tx, { orgId: org.orgId, workspaceId: handbook.id, ownerId: master.orgAdminId,
-      createdBy: master.orgAdminId, scopes: ['docket:read', 'docket:write'], expiresInDays: 90 }))
+    const body = 'legacy'.padEnd(43, '0')
+    const legacy = { token: `dkt_live_${body}_${crc32(`dkt_live_${body}`).toString(16).padStart(8, '0')}` }
+    await org.db.admin.query(
+      `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, workspace_id, owner_id, scopes, created_by, expires_at)
+       VALUES ('tok_legacykey001', $1, $2, $3, $4, $5, ARRAY['docket:read', 'docket:write', 'ontology:read'], $5, now() + interval '90 days')`,
+      [createHash('sha256').update(legacy.token).digest('hex'), legacy.token.slice(0, 17), org.orgId, handbook.id, master.orgAdminId],
+    )
     const { rows: revoked } = await org.db.admin.query<{ id: string }>(
       `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, workspace_id, owner_id, scopes, created_by, expires_at, revoked_at)
        VALUES ('tok_revokedold01', $1, 'dkt_live_y', $2, $3, $4, ARRAY['docket:read'], $4, now() + interval '1 day', now()) RETURNING id`,
@@ -76,13 +86,12 @@ describe.skipIf(!TEST_PG_URL)('org admin keys move to database accounts (platfor
       const principal = await resolver.resolveBearer(key, at)
       return { owner: principal?.userId, scopes: principal ? await effectiveScopes(principal, { platform }) : null }
     }))
-    const before = await can()
-    expect(before.every((key) => key.owner === master.orgAdminId)).toBe(true)
-    expect(before.map((key) => key.scopes)).toEqual([
-      ['docket:read', 'docket:write', 'ontology:read'], ['docket:read', 'ontology:read'], ['docket:read', 'docket:write', 'ontology:read'],
-    ])
+    // What each could do then (this build's resolver reads only the shape 0016 makes): its scopes, all owned by org-admin.
+    const { rows: owners } = await org.db.admin.query<{ owner_id: string }>('SELECT DISTINCT owner_id FROM platform.api_tokens WHERE revoked_at IS NULL')
+    expect(owners).toEqual([{ owner_id: master.orgAdminId }])
+    const before = [['docket:read', 'docket:write', 'ontology:read'], ['docket:read', 'ontology:read'], ['docket:read', 'docket:write', 'ontology:read']].map((scopes) => ({ scopes }))
 
-    expect(await migratePlatform(org.db.admin, { appRole: org.db.appRole })).toBe(1)
+    expect(await migratePlatform(org.db.admin, { appRole: org.db.appRole })).toBe(2)
 
     // The same key text resolves, to a database account now, and can do exactly what it could.
     const after = await can()
@@ -106,9 +115,12 @@ describe.skipIf(!TEST_PG_URL)('org admin keys move to database accounts (platfor
     expect((await resolver.resolveBearer(fresh.key, resource(alice.id, 'alice')))?.userId).toBe(after[0]!.owner)
 
     // The rollback is clean too.
-    await transaction(org.db.admin, (tx) => tx.query(down0014))
+    await transaction(org.db.admin, async (tx) => {
+      await tx.query(down0016)
+      await tx.query(down0014)
+    })
     const { rows: tables } = await org.db.admin.query("SELECT to_regclass('platform.database_accounts') AS at")
     expect(tables).toEqual([{ at: null }])
-    expect(await migratePlatform(org.db.admin, { appRole: org.db.appRole })).toBe(1)
+    expect(await migratePlatform(org.db.admin, { appRole: org.db.appRole })).toBe(2)
   })
 })

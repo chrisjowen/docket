@@ -26,7 +26,7 @@ vi.mock('@docket/platform-auth', async (actual) => ({
   describeConsent: async () => consents.request,
   approveConsent: async (_provider: unknown, _uid: string, approved: unknown) => {
     consents.approved.push(approved)
-    return 'https://docket.example/oauth/resume'
+    return { continueTo: 'https://docket.example/oauth/resume', grantId: `grant-${consents.approved.length}-${Math.random().toString(36).slice(2)}` }
   },
 }))
 const { handleMcp } = await import('./mcp')
@@ -174,9 +174,9 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
     const token = newApiToken()
     const id = `tok_${randomBytes(6).toString('hex')}`
     await org.db.admin.query(
-      `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, workspace_id, owner_id, scopes, created_by, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $6, now() + interval '1 day')`,
-      [id, tokenHash(token), token.slice(0, 17), orgId, workspaceId, ownerId, EVERY_SCOPE],
+      `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, dockets, owner_id, legacy_scopes, created_by, expires_at)
+       VALUES ($1, $2, $3, $4, ARRAY[$5], $6, $7, $6, now() + interval '1 day')`,
+      [id, tokenHash(token), token.slice(0, 16), orgId, workspaceId, ownerId, EVERY_SCOPE],
     )
     return { id, token }
   }
@@ -452,8 +452,9 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
         consents.approved.length = 0
         const url = new URL('https://docket.example/oauth/consent/uid')
         const body = new FormData()
-        body.append('scope', 'docket:read')
-        body.append('scope', 'docket:write')
+        body.append('name', 'Sweep client')
+        // A connection may name more of the account's dockets, never one the member was not granted.
+        body.append('docket', docket.beta)
         const event = {
           params: { uid: 'uid' },
           url,
@@ -472,8 +473,10 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
         expect(await approve(member.name, elsewhere), member.name).toEqual({ status: 403, approved: [] })
       }
       for (const name of ['owner', 'admin']) expect(await approve(name, elsewhere), name).toEqual({ status: 403, approved: [] })
-      // The control: alpha is approved, within the member's permission there.
-      expect(await approve('readonly-read', `https://docket.example/mcp/${slug}/alpha`)).toMatchObject({ status: 200, approved: [{ scopes: ['docket:read'] }] })
+      // The control: alpha is approved, as a connection that reaches alpha alone, beta though it was asked for.
+      expect(await approve('readonly-read', `https://docket.example/mcp/${slug}/alpha`)).toMatchObject({ status: 200, approved: [{ resource: `https://docket.example/mcp/${slug}/alpha` }] })
+      const { rows } = await org.db.admin.query<{ dockets: string[] }>("SELECT dockets FROM platform.oauth_connections WHERE name = 'Sweep client'")
+      expect(rows).toEqual([{ dockets: [docket.alpha] }])
     })
   })
 

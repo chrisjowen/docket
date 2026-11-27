@@ -17,6 +17,8 @@ export function workspaceScope(workspaceId: string): string {
 const SECRETS: readonly [RegExp, string][] = [
   [/\bdmk_[A-Za-z0-9]+/g, 'dmk_[redacted]'],
   [/\bdkt_live_[A-Za-z0-9_]+/g, 'dkt_live_[redacted]'],
+  [/\bdkt_pat_[A-Za-z0-9_]+/g, 'dkt_pat_[redacted]'],
+  [/\bdkt_sys_[A-Za-z0-9_]+/g, 'dkt_sys_[redacted]'],
   [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]'],
   [/\b(gh[opsur]_|github_pat_)[A-Za-z0-9_]+/g, '$1[redacted]'],
   [/\bsk-or-[A-Za-z0-9-]+/g, 'sk-or-[redacted]'],

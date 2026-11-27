@@ -167,12 +167,14 @@ test('a registered document is attested; an agent’s claim about it is not', as
   expect(await confidence()).toBe(0.4)
 })
 
-test('a service account acts for whoever made it, shown and changed on the members page', async () => {
-  await page.goto(`/o/${org}/members`)
+test('a system account is made in Settings › System accounts, and no person acts for it', async () => {
+  await page.goto(`/o/${org}/settings/system-accounts`)
   await page.getByLabel('Name', { exact: true }).fill('ci-bot')
-  await page.getByRole('button', { name: 'Add service account' }).click()
-  const row = page.locator('[data-service="ci-bot"]')
-  await expect(row.getByLabel('Who ci-bot acts for')).toHaveValue('alice')
+  await page.getByRole('button', { name: 'Create system account' }).click()
+  await expect(page.getByText('Created ci-bot. Issue it a token below.')).toBeVisible()
+  await page.goto(`/o/${org}/settings/system-accounts`)
+  await expect(page.locator('[data-service="ci-bot"]')).toContainText('Reader: reads every docket')
   const people = await api('GET', `/api/o/${org}/people`)
-  expect(people.body?.people).toEqual([expect.objectContaining({ login: 'alice', agents: [{ name: 'ci-bot', role: 'viewer' }] })])
+  expect(people.body?.people).toEqual([expect.objectContaining({ login: 'alice' })])
+  expect(people.body?.people?.[0]).not.toHaveProperty('agents')
 })

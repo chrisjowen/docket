@@ -35,6 +35,7 @@ import platform0012 from '../migrations/platform/0012_namespace_grants.sql?raw'
 import platform0013 from '../migrations/platform/0013_namespace_access.sql?raw'
 import platform0014 from '../migrations/platform/0014_database_accounts.sql?raw'
 import platform0015 from '../migrations/platform/0015_identities.sql?raw'
+import platform0016 from '../migrations/platform/0016_tokens_and_connections.sql?raw'
 
 export interface Migration {
   version: number
@@ -63,6 +64,7 @@ export const PLATFORM_MIGRATIONS: readonly Migration[] = [
   { version: 13, name: '0013_namespace_access', sql: platform0013 },
   { version: 14, name: '0014_database_accounts', sql: platform0014 },
   { version: 15, name: '0015_identities', sql: platform0015 },
+  { version: 16, name: '0016_tokens_and_connections', sql: platform0016 },
 ]
 
 export const ORG_MIGRATIONS: readonly Migration[] = [

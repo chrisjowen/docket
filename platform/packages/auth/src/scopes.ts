@@ -49,6 +49,30 @@ export function namespaceScopes(
   return ontologyWriters.includes(access.role) ? SCOPES : WRITE
 }
 
+/**
+ * The most a token or connection lets its owner do (tenancy v2 §3.4): what
+ * read-only leaves (reading), or everything, cut to a credential's
+ * `legacy` scopes when it kept a ceiling read-only cannot express. The owner's
+ * permission on the docket then cuts this again on every call
+ * (`effectiveScopes`), so a credential never does more than its owner.
+ */
+export function credentialScopes(credential: { readOnly: boolean; legacy?: readonly string[] | null }): Scope[] {
+  const ceiling = credential.legacy ? new Set(impliedScopes(credential.legacy.filter(isScope))) : null
+  return (credential.readOnly ? READ : SCOPES).filter((scope) => ceiling === null || ceiling.has(scope))
+}
+
+/**
+ * What legacy scopes become: read-only when they write nothing, and a ceiling
+ * kept only when read-only or full access would say something else (platform
+ * migration 0015 does the same to stored credentials).
+ */
+export function fromLegacyScopes(scopes: readonly Scope[]): { readOnly: boolean; legacy: Scope[] | null } {
+  const implied = impliedScopes(scopes)
+  const readOnly = !implied.some((scope) => !READ.includes(scope))
+  const exact = readOnly ? implied.includes('docket:read') : SCOPES.every((scope) => implied.includes(scope))
+  return { readOnly, legacy: exact ? null : implied }
+}
+
 /** `docket:read` implies `ontology:read` (§8.4). */
 export function impliedScopes(scopes: readonly Scope[]): Scope[] {
   const all = new Set(scopes)

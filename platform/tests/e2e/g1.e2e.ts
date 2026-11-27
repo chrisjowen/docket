@@ -15,7 +15,7 @@ test('G1: create an org, invite an editor who can write but not publish', async 
   const alice = await (await browser.newContext()).newPage()
   await signIn(alice, 'alice', { name: 'Alice Archer' })
   const slug = await createOrg(alice, `Acme ${suffix}`)
-  await expect(alice.getByRole('heading', { name: 'Members & roles' })).toBeVisible()
+  await expect(alice.getByRole('heading', { name: 'Users' })).toBeVisible()
   await expect(alice.locator(`tr[data-login="alice"] [data-testid="role"]`)).toHaveText('owner')
 
   await alice.getByLabel('GitHub login or email').fill(`@${bob}`)
@@ -86,13 +86,16 @@ test('an admin manages roles, removals and service accounts, and an org keeps an
   await row.getByRole('button', { name: 'Save' }).click()
   await expect(owner.getByText('Role changed from viewer to admin.')).toBeVisible()
 
-  // The new admin adds a service account, but cannot touch the owner.
+  // The new admin adds a system account in Settings › System accounts, but cannot touch the owner.
   await danaPage.goto(`/o/${slug}/members`)
   await expect(danaPage.locator('tr[data-login="alice"] [data-testid="role"]')).toHaveText('owner')
-  await danaPage.getByPlaceholder('ci-bot').fill('ci-bot')
-  await danaPage.getByRole('button', { name: 'Add service account' }).click()
-  await expect(danaPage.getByText('Service account ci-bot added.')).toBeVisible()
-  await expect(danaPage.locator('[data-service="ci-bot"]')).toContainText('viewer')
+  await danaPage.goto(`/o/${slug}/settings`)
+  await expect(danaPage).toHaveURL(new RegExp(`/o/${slug}/settings/system-accounts$`))
+  await danaPage.getByPlaceholder('github-sync').fill('ci-bot')
+  await danaPage.getByRole('button', { name: 'Create system account' }).click()
+  await expect(danaPage.getByText('Created ci-bot. Issue it a token below.')).toBeVisible()
+  await danaPage.goto(`/o/${slug}/settings/system-accounts`)
+  await expect(danaPage.locator('[data-service="ci-bot"]')).toContainText('Reader')
 
   const aliceRow = await (await danaPage.request.get(`/api/o/${slug}/members`)).json()
   expect(aliceRow.members.map((member: { login: string }) => member.login)).toContain('ci-bot')

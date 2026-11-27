@@ -51,7 +51,7 @@ const CREDENTIAL_PARAM = /token|secret|api[-_]?key|password/i
  * with a token prefix the deployment issues. Such a request is refused, since
  * the URL ends up in proxy and browser logs.
  */
-export function credentialInUrl(url: URL, tokenPrefixes: readonly string[] = ['dkt_live_', 'dmk_']): boolean {
+export function credentialInUrl(url: URL, tokenPrefixes: readonly string[] = ['dkt_live_', 'dkt_pat_', 'dkt_sys_', 'dmk_']): boolean {
   for (const [name, value] of url.searchParams) {
     if (CREDENTIAL_PARAM.test(name) || tokenPrefixes.some((prefix) => value.includes(prefix))) return true
   }

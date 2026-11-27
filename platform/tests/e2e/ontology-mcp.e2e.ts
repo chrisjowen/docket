@@ -66,11 +66,10 @@ test.afterAll(async () => {
   await bob?.context().close()
 })
 
-test('only the owner changes the setting, and ontology:write is offered only to the roles it names', async () => {
-  // Off by default: an editor can propose, and cannot take ontology:write.
-  await bob.goto(`${ws()}/mcp`)
-  await expect(bob.locator('input[name="scope"][value="ontology:write"]')).toBeDisabled()
-  await expect(bob.getByTestId('ontology-write-off')).toBeVisible()
+test('only the owner changes the setting, and a token publishes only while it names its owner’s role', async ({ request }) => {
+  // Off by default: an editor's token proposes, and cannot publish.
+  const editors = await createToken(bob, org, 'acme', { scopes: ['docket:read', 'docket:write'], description: 'e2e editor' })
+  expect(await tools(request, editors)).not.toContain('docket_publish_ontology_change')
   await bob.goto(`${ws()}/settings`)
   await expect(bob.getByTestId('ontology-mcp').getByLabel('Editors')).toBeDisabled()
   await expect(bob.getByText("Only the organisation's owner changes this.")).toBeVisible()
@@ -85,10 +84,10 @@ test('only the owner changes the setting, and ontology:write is offered only to 
   await alice.reload()
   await expect(alice.getByTestId('ontology-mcp').getByLabel('Editors')).toBeChecked()
   await expect(alice.getByTestId('ontology-mcp').getByLabel('Owners')).not.toBeChecked()
-  await alice.goto(`${ws()}/mcp`)
-  await expect(alice.locator('input[name="scope"][value="ontology:write"]')).toBeDisabled()
-  await bob.goto(`${ws()}/mcp`)
-  await expect(bob.locator('input[name="scope"][value="ontology:write"]')).toBeEnabled()
+  // A token acts as its owner: the editor's same token publishes from its next call, the owner's does not.
+  expect(await tools(request, editors)).toContain('docket_publish_ontology_change')
+  const owners = await createToken(alice, org, 'acme', { scopes: ['docket:read', 'docket:write'], description: 'e2e owner' })
+  expect(await tools(request, owners)).not.toContain('docket_publish_ontology_change')
 })
 
 test("an editor's ontology:write token publishes and migrates over MCP, rolls back from the history, and stops when the owner turns it off", async ({ request }) => {

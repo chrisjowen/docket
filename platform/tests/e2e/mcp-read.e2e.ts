@@ -150,7 +150,7 @@ test('every call writes one audit event with a digest of its arguments, never th
   const events = (await auditEvents()).slice(before)
   expect(events.map((event) => event.action)).toEqual(['mcp.tools/call docket_get', 'mcp.tools/list', 'mcp.tools/call docket_ontology'])
   for (const event of events) {
-    expect(event.actor).toBe(`token:${token.slice(0, 17)}`)
+    expect(event.actor).toBe(`token:${token.slice(0, 16)}`)
     expect(event.args_digest).toMatch(/^sha256:[0-9a-f]{64}$/)
   }
   // The id asked for is the event's target (§10); nothing else of the arguments is kept.
