@@ -41,6 +41,7 @@ import platform0016 from '../migrations/platform/0016_tokens_and_connections.sql
 import platform0017 from '../migrations/platform/0017_capabilities_and_grants.sql?raw'
 import platform0018 from '../migrations/platform/0018_spaces.sql?raw'
 import platform0019 from '../migrations/platform/0019_place_settings_and_stores.sql?raw'
+import platform0020 from '../migrations/platform/0020_ai_usage_paid_by.sql?raw'
 
 export interface Migration {
   version: number
@@ -79,6 +80,7 @@ export const PLATFORM_MIGRATIONS: readonly Migration[] = [
   { version: 17, name: '0017_capabilities_and_grants', sql: platform0017 },
   { version: 18, name: '0018_spaces', sql: platform0018 },
   { version: 19, name: '0019_place_settings_and_stores', sql: platform0019 },
+  { version: 20, name: '0020_ai_usage_paid_by', sql: platform0020 },
 ]
 
 export const ORG_MIGRATIONS: readonly Migration[] = [

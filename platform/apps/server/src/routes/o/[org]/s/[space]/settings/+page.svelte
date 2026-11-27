@@ -44,8 +44,12 @@
     <legend><Wallet size={15} aria-hidden="true" /> Monthly AI budget</legend>
     <p class="muted small">
       {data.org.name}'s cap is <strong>{money(data.budget.accountCapUsd)}</strong> a month ({money(data.budget.accountSpentUsd)} spent in {data.budget.month}).
-      {data.space.name}'s dockets spent <strong>{money(data.budget.spentUsd)}</strong> of it. Give {data.space.name} a slice to stop its dockets
+      {data.space.name}'s dockets spent <strong>{money(data.budget.spentUsd)}</strong> this month. Give {data.space.name} a slice to stop its dockets
       before they spend more than that; it can never be more than the account's cap.
+    </p>
+    <p class="muted small">
+      The slice holds spend on {data.org.name}'s key and on an OpenRouter key of {data.space.name}'s own. Anthropic and OpenAI keys report no cost,
+      so calls on them are recorded but not held to the slice.
     </p>
     <label>
       Slice for {data.space.name} (US dollars, empty for none)
@@ -67,7 +71,9 @@
     </p>
     <p class="muted small">
       {data.space.name}'s dockets call {data.key.providerLabel} with this key; {data.org.name}'s key is not used for them. Docket never shows the key
-      again. Calls are still metered here, and the slice above still holds.
+      again. Calls are still metered here and do not count toward {data.org.name}'s cap.
+      {#if data.key.provider === 'openrouter'}The slice above still holds.{:else}{data.key.providerLabel} reports no cost, so the slice above does
+        not hold calls on this key.{/if}
     </p>
     <form method="POST" action="?/removeKey" class="inline">
       <Csrf token={data.csrf} />

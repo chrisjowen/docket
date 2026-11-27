@@ -104,7 +104,7 @@ async function record(
   fields: { status: Status; target?: string | null; credentialsSecret?: string | null; lastError?: string | null; used?: boolean },
 ): Promise<void> {
   await tx.query(
-    `UPDATE platform.stores SET status = $2,
+    `UPDATE platform.stores SET status = CASE WHEN status = 'retiring' THEN status ELSE $2 END,
        target = coalesce($3, target),
        credentials_secret = coalesce($4, credentials_secret),
        last_error = $5,
@@ -324,8 +324,7 @@ export function orgStores(options: OrgStoresOptions): OrgStores {
       }
       const [neo4j, qdrant] = await Promise.all([neo4jCredentials(orgId, mine.neo4j), options.qdrant.access(qdrantRef(orgId, mine.qdrant), 3_600)])
       await platform(async (tx) => {
-        // A retiring instance stays retiring while its dockets still use it.
-        await record(tx, mine.neo4j.id, { status: mine.neo4j.status === 'retiring' ? 'retiring' : 'ready', used: true })
+        await record(tx, mine.neo4j.id, { status: 'ready', used: true })
         await record(tx, mine.qdrant.id, { status: 'ready', used: true })
       })
       return { neo4j, qdrant, embedder: options.embedder }

@@ -163,7 +163,13 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   the cap), and takes its own OpenRouter, Anthropic or OpenAI key. The key is
   sealed with the account's own encryption key; only its last four characters
   are ever shown or recorded again. Calls for the space's dockets go to that
-  provider on that key, are still metered, and stop at the space's slice.
+  provider on that key and are still metered. Spend on a space's own key
+  never counts toward the account's cap or its owner warning, and a spent
+  account cap does not stop it; it counts toward the space's slice, as spend
+  on the account's key does. Anthropic and OpenAI report no cost, so calls on
+  those keys are recorded but not held to a slice; an OpenRouter key's are.
+  Cognify for a docket stops at its space's slice too, and uses the docket's
+  models.
 - A space can have its own Neo4j instance (one more pod on the box): its
   Settings tab shows how many pods are left (`DOCKET_NEO4J_POD_CAPACITY`,
   default 8). Its dockets move there once it is up and are rebuilt from their

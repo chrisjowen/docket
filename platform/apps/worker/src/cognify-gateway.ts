@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { createServer as createHttpsServer } from 'node:https'
 
-import { AiCapReached, OPENROUTER_API, PRIVACY_ROUTING, actorMonthSpend, modelChoices, monthOf, recordUsage, type AiDeps, type UsageRecord } from '@docket/platform-ai'
+import { AiCapReached, OPENROUTER_API, PRIVACY_ROUTING, actorMonthSpend, modelChoices, monthOf, recordUsage, spaceOfDocket, type AiDeps, type UsageRecord } from '@docket/platform-ai'
 import { cogneeAiActor } from '@docket/platform-canonical-store'
 import type { TenantRouter } from '@docket/platform-tenancy'
 
@@ -32,12 +32,13 @@ export interface GatewayDeps {
   lease(): Promise<CognifyLease | null>
   /** The org's metered, capped AI on the platform's key; null when AI is off or the platform has no key of its own. */
   ai: {
-    assertWithinCap(orgId: string): Promise<void>
+    /** Refuses at the org's cap or the slice of the space the workspace is in. */
+    assertWithinCap(orgId: string, workspaceId: string): Promise<void>
     spent(orgId: string, actor: string): Promise<number>
     /** The platform's OpenRouter key, which every cognee model call goes on. */
     apiKey: string
-    /** The org's small model, the one Cypher and enrichment use. */
-    model(orgId: string): Promise<string>
+    /** The workspace's small model, the one Cypher and enrichment use. */
+    model(orgId: string, workspaceId: string): Promise<string>
     record(usage: UsageRecord): Promise<void>
   } | null
   fetch?: typeof fetch
@@ -72,7 +73,7 @@ export async function gatewayCall(deps: GatewayDeps, call: { method: string; pat
   const { ai } = deps
   if (!ai) return refuse(503, "AI is not set up on this server: cognee's model calls go on the platform's OpenRouter key, OPENROUTER_API_KEY, which is not configured.")
   try {
-    await ai.assertWithinCap(lease.orgId)
+    await ai.assertWithinCap(lease.orgId, lease.workspaceId)
   } catch (cause) {
     if (cause instanceof AiCapReached) return refuse(429, cause.message)
     throw cause
@@ -89,7 +90,7 @@ export async function gatewayCall(deps: GatewayDeps, call: { method: string; pat
   } catch {
     return refuse(400, 'Send one JSON object.')
   }
-  const model = await ai.model(lease.orgId)
+  const model = await ai.model(lease.orgId, lease.workspaceId)
   // Whatever model cognee names, the org's own is used, on the platform's key, never streamed so every call is metered.
   const forwarded = { ...request, model, stream: false, ...(deps.dialect === 'openai' ? {} : { provider: PRIVACY_ROUTING, usage: { include: true } }) }
   const response = await (deps.fetch ?? fetch)(`${(deps.apiBase ?? OPENROUTER_API).replace(/\/+$/, '')}/chat/completions`, {
@@ -140,10 +141,11 @@ export function gatewayDeps(
     key,
     lease: () => router.withPlatform((tx) => currentLease(tx)),
     ai: ai && platformKey ? {
-      assertWithinCap: (orgId) => ai.caps.assertWithinCap(orgId),
+      assertWithinCap: async (orgId, workspaceId) =>
+        ai.caps.assertWithinCap(orgId, { spaceId: await router.withPlatform((tx) => spaceOfDocket(tx, orgId, workspaceId)) }),
       spent: (orgId, actor) => router.withPlatform((tx) => actorMonthSpend(tx, orgId, actor, monthOf(now()))),
       apiKey: platformKey,
-      model: async (orgId) => (await router.withPlatform((tx) => modelChoices(tx, orgId))).cypher,
+      model: async (orgId, workspaceId) => (await router.withPlatform((tx) => modelChoices(tx, orgId, workspaceId))).cypher,
       record: (usage) => router.withPlatform((tx) => recordUsage(tx, usage)),
     } : null,
     ...(options.appUrl ? { appUrl: options.appUrl } : {}),

@@ -5,7 +5,7 @@ import type { AiCaps } from './caps.js'
 import { AiNotConfigured, type OrgAiKeys, type SpaceAiKeys } from './keys.js'
 import type { ChatMessage, ChatUsage, OpenRouterClient, TurnMessage, TurnResult, TurnTool } from './openrouter-client.js'
 import { PROVIDER_INFO, providerModel, resolveAiSettings, type Provider } from './settings.js'
-import { recordUsage, type Purpose } from './usage.js'
+import { recordUsage, type PaidBy, type Purpose } from './usage.js'
 
 /** docket's `ModelClient` (`AdapterServices.models`): a chat model an adapter may use. */
 export interface ModelClient {
@@ -106,6 +106,8 @@ interface Route {
   apiKey: string
   model: string
   spaceId: string | null
+  /** Whose key the call goes on: the account's (Docket's, capped) or the space's own. */
+  paidBy: PaidBy
 }
 
 /**
@@ -124,10 +126,10 @@ async function routeOf(deps: AiDeps, orgId: string, docketId: string | null, use
     if (!own || !deps.providerClient) throw new AiNotConfigured(orgId, `This space pays for AI with its own ${label} key, which this server cannot use yet`)
     const named = model === null ? null : providerModel(own.provider, model)
     if (!named) throw new AiNotConfigured(orgId, `None of the models this space may choose is served by its ${label} key — choose one in the space's Settings`)
-    return { client: deps.providerClient(own.provider), apiKey: own.key, model: named, spaceId }
+    return { client: deps.providerClient(own.provider), apiKey: own.key, model: named, spaceId, paidBy: 'space' }
   }
   if (model === null) throw new AiNotConfigured(orgId)
-  return { client: deps.client, apiKey: await deps.keys.key(orgId), model, spaceId }
+  return { client: deps.client, apiKey: await deps.keys.key(orgId), model, spaceId, paidBy: 'account' }
 }
 
 /**
@@ -144,7 +146,7 @@ async function metered<T extends { model: string; generationId: string | null; u
   call: (client: OpenRouterClient, apiKey: string, model: string) => Promise<T>,
 ): Promise<T> {
   const route = await routeOf(deps, orgId, context.workspaceId ?? null, use)
-  await deps.caps.assertWithinCap(orgId, { spaceId: route.spaceId })
+  await deps.caps.assertWithinCap(orgId, { spaceId: route.spaceId, ownKey: route.paidBy === 'space' })
   const result = await call(route.client, route.apiKey, route.model)
   await deps.platform((tx) =>
     recordUsage(tx, {
@@ -155,6 +157,7 @@ async function metered<T extends { model: string; generationId: string | null; u
       model: result.model,
       generationId: result.generationId,
       ...result.usage,
+      paidBy: route.paidBy,
     }),
   )
   context.onUsage?.({ purpose, model: result.model, ...result.usage })

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { CanonicalInput, CanonicalReader, InputKind, MemoryAdapter } from '@chrisjowen/docket/contracts'
 import { canonicalState } from '@chrisjowen/docket/sync/inputs'
-import { AiCapReached, actorMonthSpend, monthOf, type AiDeps } from '@docket/platform-ai'
+import { AiCapReached, actorMonthSpend, monthOf, spaceOfDocket, type AiDeps } from '@docket/platform-ai'
 import { redactSecrets } from '@docket/platform-audit'
 import {
   COGNEE,
@@ -189,9 +189,13 @@ export function cogneeLoop(options: CogneeLoopOptions): CogneeLoop {
     const { ai } = options
     if (!ai) return "AI is not set up on this server: cognee cognifies on the platform's own OpenRouter key, which is not configured, so it waits"
     try {
-      await ai.caps.assertWithinCap(orgId)
+      await ai.caps.assertWithinCap(orgId, { spaceId: await router.withPlatform((tx) => spaceOfDocket(tx, orgId, workspaceId)) })
     } catch (cause) {
-      if (cause instanceof AiCapReached) return "The org's AI budget for this month is spent, so cognee waits; search still works"
+      if (cause instanceof AiCapReached) {
+        return cause.spaceId
+          ? "The space's AI budget for this month is spent, so cognee waits; search still works"
+          : "The org's AI budget for this month is spent, so cognee waits; search still works"
+      }
       throw cause
     }
     const spent = await router.withPlatform((tx) => actorMonthSpend(tx, orgId, cogneeAiActor(workspaceId), monthOf(now())))

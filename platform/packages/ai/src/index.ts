@@ -65,4 +65,4 @@ export type {
   TurnTool,
 } from './openrouter-client.js'
 export { actorMonthSpend, monthOf, monthSpend, recordUsage, spaceMonthSpend } from './usage.js'
-export type { Purpose, UsageRecord } from './usage.js'
+export type { PaidBy, Purpose, UsageRecord } from './usage.js'

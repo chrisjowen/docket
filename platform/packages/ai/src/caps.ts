@@ -74,9 +74,11 @@ export interface AiCaps {
    * Refuses an AI call once the month's spend reaches the cap, and sends the
    * owners one warning when it first passes 80%. Called before every model
    * call - never on the search path, which needs no model (§11). With a
-   * space, it also refuses once that space's dockets spent its slice.
+   * space, it also refuses once that space's dockets spent its slice. A call
+   * on the space's own key (`ownKey`) is held only to the slice: the
+   * account's cap and its warning are for Docket's key.
    */
-  assertWithinCap(orgId: string, at?: { spaceId?: string | null }): Promise<void>
+  assertWithinCap(orgId: string, at?: { spaceId?: string | null; ownKey?: boolean }): Promise<void>
 }
 
 /** The org's monthly cap in US dollars: its own, or the beta default. */
@@ -136,25 +138,31 @@ async function spaceStatusIn(tx: Tx, orgId: string, spaceId: string, now: Date):
 
 export function aiCaps(deps: CapsDeps): AiCaps {
   const now = deps.now ?? (() => new Date())
+
+  /** Refuses once Docket's key spent the account's cap, warning the owners once at 80%. */
+  async function accountWithinCap(orgId: string): Promise<void> {
+    const status = await deps.platform(async (tx) => {
+      const current = await statusIn(tx, orgId, now())
+      if (current.fraction >= WARN_AT && !current.warnedAt) {
+        const { rowCount } = await tx.query(
+          `INSERT INTO platform.ai_cap_warnings (org_id, month, threshold, spent_usd, cap_usd) VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [orgId, current.month, Math.round(WARN_AT * 100), current.spentUsd, current.capUsd],
+        )
+        // Concurrent calls race to the insert; only the one that made the row tells the owners.
+        if (rowCount) await deps.notifyOwners(tx, { orgId, month: current.month, spentUsd: current.spentUsd, capUsd: current.capUsd })
+      }
+      return current
+    })
+    if (status.fraction >= 1) throw new AiCapReached(orgId, status.spentUsd, status.capUsd)
+  }
+
   return {
     status: (orgId) => deps.platform((tx) => statusIn(tx, orgId, now())),
     spaceStatus: (orgId, spaceId) => deps.platform((tx) => spaceStatusIn(tx, orgId, spaceId, now())),
 
     async assertWithinCap(orgId, at = {}) {
-      const status = await deps.platform(async (tx) => {
-        const current = await statusIn(tx, orgId, now())
-        if (current.fraction >= WARN_AT && !current.warnedAt) {
-          const { rowCount } = await tx.query(
-            `INSERT INTO platform.ai_cap_warnings (org_id, month, threshold, spent_usd, cap_usd) VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT DO NOTHING`,
-            [orgId, current.month, Math.round(WARN_AT * 100), current.spentUsd, current.capUsd],
-          )
-          // Concurrent calls race to the insert; only the one that made the row tells the owners.
-          if (rowCount) await deps.notifyOwners(tx, { orgId, month: current.month, spentUsd: current.spentUsd, capUsd: current.capUsd })
-        }
-        return current
-      })
-      if (status.fraction >= 1) throw new AiCapReached(orgId, status.spentUsd, status.capUsd)
+      if (!at.ownKey) await accountWithinCap(orgId)
       if (at.spaceId) {
         const space = await deps.platform((tx) => spaceStatusIn(tx, orgId, at.spaceId as string, now()))
         if (space.capUsd !== null && space.spentUsd >= space.capUsd) throw new AiCapReached(orgId, space.spentUsd, space.capUsd, space.spaceId)

@@ -187,6 +187,56 @@ describe.skipIf(!TEST_PG_URL)('orgStores: each docket on its stores (tenancy v2 
     expect(cleared).toHaveLength(1)
   })
 
+  it("keeps a space's request to go back to the account's Neo4j when a use or provisioning of its instance ends after it", async () => {
+    const fake = fakes()
+    let retireDuring: string | null = null
+    const retire = async (ref: Neo4jRef) => {
+      if (ref.storeId && ref.storeId === retireDuring) {
+        await org.router.withPlatform((tx) => tx.query("UPDATE platform.stores SET status = 'retiring' WHERE id = $1", [ref.storeId]))
+      }
+    }
+    const neo4j: Neo4jPodProvisioner = {
+      ...fake.neo4j,
+      async provision(ref) {
+        const binding = await fake.neo4j.provision(ref)
+        await retire(ref)
+        return binding
+      },
+      async credentials(ref) {
+        await retire(ref)
+        return fake.neo4j.credentials(ref)
+      },
+    }
+    const stores = orgStores({ router: org.router, neo4j, qdrant: fake.qdrant, embedder, log })
+    await stores.ensure(org.orgId)
+    const accountNeo4j = await assigned(generalDocket, 'neo4j')
+
+    // Engineering's instance is in use when its lead asks to go back: the use ending does not undo that.
+    const own = newStoreId()
+    await org.router.withPlatform((tx) =>
+      tx.query("INSERT INTO platform.stores (id, org_id, kind, space_id, status) VALUES ($1, $2, 'neo4j', $3, 'requested')", [own, org.orgId, engineering]),
+    )
+    await stores.ensure(org.orgId)
+    expect(await assigned(engineeringDocket, 'neo4j')).toBe(own)
+    retireDuring = own
+    await stores.access(org.orgId, engineeringDocket)
+    expect((await storeRows()).find((row) => row.id === own)?.status).toBe('retiring')
+    await stores.ensure(org.orgId)
+    expect(await assigned(engineeringDocket, 'neo4j')).toBe(accountNeo4j)
+    expect((await storeRows()).some((row) => row.id === own)).toBe(false)
+
+    // Asked for again, and given back while it is still being made: it is not recorded as ready, and is removed.
+    const again = newStoreId()
+    await org.router.withPlatform((tx) =>
+      tx.query("INSERT INTO platform.stores (id, org_id, kind, space_id, status) VALUES ($1, $2, 'neo4j', $3, 'requested')", [again, org.orgId, engineering]),
+    )
+    retireDuring = again
+    await stores.ensure(org.orgId)
+    expect(await assigned(engineeringDocket, 'neo4j')).toBe(accountNeo4j)
+    expect((await storeRows()).some((row) => row.id === again)).toBe(false)
+    expect(fake.neo4j.deprovision).toHaveBeenCalledWith({ orgId: org.orgId, storeId: again }, 'shred')
+  })
+
   it('suspends a Neo4j pod idle past the threshold, and wakes it on the next use', async () => {
     const { neo4j, qdrant, replicas } = fakes()
     let now = new Date(Date.now() + 2 * 3_600_000)
