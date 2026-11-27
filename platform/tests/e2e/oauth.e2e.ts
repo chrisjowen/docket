@@ -145,10 +145,11 @@ test('code + PKCE + resource gives a token for this workspace only', async ({ br
 
   // Your tokens & connections lists it, and renames it.
   await page.goto(`/o/${org}/tokens`)
-  const row = page.getByTestId('connection-row').filter({ hasText: 'e2e laptop' })
-  await row.getByRole('button', { name: 'Rename e2e laptop' }).click()
-  await row.getByLabel('New name').fill('e2e desk')
-  await row.getByRole('button', { name: 'Save' }).click()
+  await page.getByTestId('connection-row').getByRole('button', { name: 'Rename e2e laptop' }).click()
+  // Renaming, the name is in the field: the row no longer reads it as text.
+  const renaming = page.getByTestId('connection-row').filter({ has: page.getByLabel('New name') })
+  await renaming.getByLabel('New name').fill('e2e desk')
+  await renaming.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('Renamed to ‘e2e desk’.')).toBeVisible()
 
   // Revoking the connection ends its tokens on the next call.
