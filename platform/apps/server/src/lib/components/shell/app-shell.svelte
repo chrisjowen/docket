@@ -925,6 +925,10 @@
     .drawer-open .side {
       transform: none;
     }
+    /* The drawer scrolls as a whole: its links keep their height, however many spaces and dockets they list. */
+    .nav {
+      flex: none;
+    }
     .drawer-open .scrim {
       display: block;
       position: fixed;
