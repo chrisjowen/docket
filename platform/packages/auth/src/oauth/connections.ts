@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import type { Tx } from '@docket/platform-tenancy'
+import { namespaceAccess, type Tx } from '@docket/platform-tenancy'
 
 import { credentialScopes, fromLegacyScopes, parseScopeString, type Scope } from '../scopes.js'
 import { notifyRevoked } from '../tokens/revocation.js'
@@ -53,6 +53,10 @@ export async function createConnection(
   input: { grantId: string; orgId: string; userId: string; clientId: string; name: string; readOnly: boolean; dockets: readonly string[] | null },
 ): Promise<void> {
   if (input.dockets && input.dockets.length === 0) throw new ConnectionError('Choose at least one docket, or every docket.')
+  for (const docket of input.dockets ?? []) {
+    const access = await namespaceAccess(tx, input.orgId, docket, input.userId)
+    if (!access?.permission) throw new ConnectionError('You do not have access to one of those dockets.')
+  }
   await tx.query(
     `INSERT INTO platform.oauth_connections (grant_id, org_id, user_id, client_id, name, read_only, dockets)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,

@@ -148,11 +148,13 @@ export async function issueApiToken(
 
   const dockets = input.dockets ? [...new Set(input.dockets)] : null
   if (dockets && dockets.length === 0) throw new ApiTokenError('invalid', 'Choose at least one docket, or every docket.')
+  let readOnly = input.readOnly ?? false
   for (const docket of dockets ?? []) {
     const access = await namespaceAccess(tx, input.orgId, docket, input.ownerId)
     if (!access?.permission) throw new ApiTokenError('forbidden', 'The token owner has no access to one of those dockets.')
+    if (access.permission === 'read') readOnly = true
   }
-  if (legacy && credentialScopes({ readOnly: input.readOnly ?? false, legacy }).length === 0) {
+  if (legacy && credentialScopes({ readOnly, legacy }).length === 0) {
     throw new ApiTokenError('invalid', 'A token must be able to read.')
   }
 
@@ -165,7 +167,7 @@ export async function issueApiToken(
     `INSERT INTO platform.api_tokens (id, token_hash, prefix, org_id, owner_id, read_only, dockets, legacy_scopes, description,
                                       created_by, created_at, expires_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-    [id, tokenHash(token), prefix, input.orgId, input.ownerId, input.readOnly ?? false, dockets, legacy, name, input.createdBy, now, expiresAt],
+    [id, tokenHash(token), prefix, input.orgId, input.ownerId, readOnly, dockets, legacy, name, input.createdBy, now, expiresAt],
   )
   return { token, id, prefix, expiresAt, kind }
 }

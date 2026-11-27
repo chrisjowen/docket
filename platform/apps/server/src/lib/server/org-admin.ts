@@ -145,7 +145,7 @@ async function getDatabase(call: AdminCall, slug: string): Promise<Response> {
   const row = await database(call, slug)
   const head = await call.tenant(({ tx }) => headOf(tx, row.id))
   const { rows } = await call.tx.query<{ count: string }>(
-    'SELECT count(*) FROM platform.api_tokens WHERE org_id = $1 AND $2 = ANY (dockets) AND revoked_at IS NULL AND expires_at > now()', [call.principal.orgId, row.id],
+    'SELECT count(*) FROM platform.api_tokens WHERE org_id = $1 AND (dockets IS NULL OR $2 = ANY (dockets)) AND revoked_at IS NULL AND expires_at > now()', [call.principal.orgId, row.id],
   )
   return cliJson(200, { ...databaseView(row), created_by: row.created_by, ontology: head ? { version: head.number, yaml: head.yaml, published_at: head.publishedAt } : null, key_count: Number(rows[0]?.count ?? 0) })
 }

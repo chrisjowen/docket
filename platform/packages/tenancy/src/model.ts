@@ -451,9 +451,9 @@ export async function changeRole(
   tx: Tx,
   input: { orgId: string; userId: string; role: Role; actorRole: Role },
 ): Promise<Role> {
-  const { rows } = await tx.query<{ role: string; org_admin: boolean; database_account: boolean }>(
-    `SELECT m.role, (m.user_id = o.org_admin_id) IS TRUE AS org_admin, ${DATABASE_ACCOUNT('m')} AS database_account
-       FROM platform.memberships m JOIN platform.orgs o ON o.id = m.org_id
+  const { rows } = await tx.query<{ role: string; kind: string; org_admin: boolean; database_account: boolean }>(
+    `SELECT m.role, u.kind, (m.user_id = o.org_admin_id) IS TRUE AS org_admin, ${DATABASE_ACCOUNT('m')} AS database_account
+       FROM platform.memberships m JOIN platform.users u ON u.id = m.user_id JOIN platform.orgs o ON o.id = m.org_id
       WHERE m.org_id = $1 AND m.user_id = $2 FOR UPDATE OF m`,
     [input.orgId, input.userId],
   )
@@ -461,6 +461,9 @@ export async function changeRole(
   if (!isRole(from)) throw new TenancyError('not-found', 'No such member.')
   if (rows[0]?.org_admin) throw new TenancyError('forbidden', ORG_ADMIN_MANAGED)
   if (rows[0]?.database_account) throw new TenancyError('forbidden', DATABASE_ACCOUNT_MANAGED)
+  if (rows[0]?.kind === 'service' && input.role === 'owner') {
+    throw new TenancyError('forbidden', 'Your role cannot give a system account that role.')
+  }
   if (!canChangeRole(input.actorRole, from, input.role)) {
     throw new TenancyError('forbidden', 'Your role cannot make that change.')
   }

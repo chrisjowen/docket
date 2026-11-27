@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { parseMcpResourceUrl } from '../principal.js'
 import { tokenResolver } from '../tokens/lookup.js'
 import { approveConsent, denyConsent, describeConsent, interactionCookieValid } from './consent.js'
-import { createConnection } from './connections.js'
+import { ConnectionError, createConnection } from './connections.js'
 import { DEVICE_CODE_GRANT, PAGE_CSP, createOAuthServer, oauthCookieKeys, type OAuthEndpoint, type OAuthServer } from './provider.js'
 import { authorizationServerMetadata } from './resource-metadata.js'
 
@@ -81,6 +81,7 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
       INSERT INTO platform.users (id, kind, github_id, login) VALUES ('u-1', 'human', 1, 'alice');
       INSERT INTO platform.orgs (id, slug, name, status, created_by) VALUES ('orga', 'acme', 'Acme', 'active', 'u-1');
       INSERT INTO platform.memberships (org_id, user_id, role) VALUES ('orga', 'u-1', 'editor');
+      INSERT INTO platform.namespace_grants (org_id, namespace_id, principal_id, permission) VALUES ('orga', 'ws1', 'u-1', 'write');
     `)
     server = createServer((req, res) => oauth.callback(req, res))
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -233,6 +234,14 @@ describe.skipIf(!TEST_PG_URL)('the OAuth authorization server', () => {
     const revoked = await fetch(`${origin}/oauth/revoke`, form({ token: next.access_token, client_id: clientId }))
     expect(revoked.status).toBe(200)
     expect(await fresh.resolveBearer(next.access_token, { url: resource, orgId: 'orga', workspaceId: 'ws1' })).toBeNull()
+  })
+
+  it('refuses a connection naming a docket its owner cannot reach', async () => {
+    await expect(
+      platform((tx) =>
+        createConnection(tx, { grantId: `g-${randomBytes(8).toString('hex')}`, orgId: 'orga', userId: 'u-1', clientId: 'test-client', name: 'Test', readOnly: false, dockets: ['ws2'] }),
+      ),
+    ).rejects.toBeInstanceOf(ConnectionError)
   })
 
   it('never trades a code or a refresh token granted for one workspace for a token on another (tenancy design §5.2)', async () => {

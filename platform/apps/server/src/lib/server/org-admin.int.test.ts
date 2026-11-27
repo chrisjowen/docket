@@ -184,6 +184,13 @@ describe.skipIf(!TEST_PG_URL)('org admin HTTP endpoints', () => {
     }
   })
 
+  it("counts a personal token that reaches every docket of the account toward a database's key_count", async () => {
+    const before = await (await call('GET', 'databases/alice')).json()
+    await org.router.withPlatform((tx) => issueApiToken(tx, { orgId: org.orgId, ownerId: org.userId, createdBy: org.userId, dockets: null }))
+    const after = await (await call('GET', 'databases/alice')).json()
+    expect(after.key_count).toBe(before.key_count + 1)
+  })
+
   it('issues no key for a database made in Docket Cloud, and org-admin holds no grant to issue one with', async () => {
     const workspace = await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Team handbook', slug: 'ui-handbook', createdBy: org.userId }))
     for (const body of [{}, { scopes: ['docket:read'] }]) {

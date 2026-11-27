@@ -216,6 +216,21 @@ describe.skipIf(!TEST_PG_URL)('the tenancy model', () => {
     ).rejects.toMatchObject({ code: 'forbidden' })
   })
 
+  it('never lets a system account become owner, even through the role-change action an owner could otherwise use on themselves', async () => {
+    const owner = await human('owner10')
+    const acme = await org(owner)
+    const bot = await router.withPlatform((tx) =>
+      createServiceAccount(tx, { orgId: acme.id, name: 'ci-bot', description: null, role: 'editor', actorId: owner.id, actorRole: 'owner' }),
+    )
+    await expect(
+      router.withPlatform((tx) => changeRole(tx, { orgId: acme.id, userId: bot.id, role: 'owner', actorRole: 'owner' })),
+    ).rejects.toMatchObject({ code: 'forbidden' })
+    const [listed] = await router.withPlatform((tx) => listSystemAccounts(tx, acme.id))
+    expect(listed).toMatchObject({ role: 'editor' })
+    // Its seat in the beta goes back for the next test.
+    await db.admin.query("UPDATE platform.orgs SET status = 'deleted' WHERE id = $1", [acme.id])
+  })
+
   it('makes a system account owned by the account, with no person acting for it, and lists it with its tokens', async () => {
     const owner = await human('owner9')
     const acme = await org(owner)
