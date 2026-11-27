@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 
 import { env } from '$env/dynamic/private'
-import { aiCaps, auditCapWarning, type AiCaps } from '@docket/platform-ai'
+import { aiCaps, auditCapWarning, configureModels, type AiCaps } from '@docket/platform-ai'
 import { audit } from '@docket/platform-audit'
 import { githubApp, githubAppConfigFromEnv, readOptionalFile, type GitHubApp } from '@docket/platform-github'
 import {
@@ -13,9 +13,11 @@ import {
   listenForRevocations,
   oauthCookieKeys,
   parseMcpResourceUrl,
+  syncPasswordUsers,
   tokenResolver,
   type GitHubOAuthConfig,
   type OAuthServer,
+  type OidcProviderConfig,
   type TokenResolver,
 } from '@docket/platform-auth'
 import { keyring, workspaceBySlug, type Keyring } from '@docket/platform-canonical-store'
@@ -39,6 +41,7 @@ import {
   allowlist,
   migrateBehindOrgs,
   migratePlatform,
+  replaceSigninAllowlist,
   tenantRouter,
   userById,
   type TenantRouter,
@@ -50,6 +53,7 @@ import type { ReadinessProbes } from './health'
 import { startJobs } from './jobs'
 import { bindMetrics, countRefusal, startMetricsServer } from './metrics'
 import { demoLogin, frameAncestors, type DemoLogin } from './preview'
+import { oidcProviders, passwordUsers, signinAllowList } from './providers'
 import { rateLimiter, type RateLimiter } from './rate-limit'
 
 const DEFAULT_KEK_FILE = '/etc/docket/kek/kek'
@@ -66,6 +70,10 @@ export interface Runtime {
   caps: AiCaps
   /** Null until the GitHub OAuth app's id and secret are configured. */
   github: GitHubOAuthConfig | null
+  /** The OpenID Connect providers people may sign in with, by name (`DOCKET_OIDC_PROVIDERS`). */
+  oidc: ReadonlyMap<string, OidcProviderConfig>
+  /** Whether the operator lists password users (`DOCKET_PASSWORD_USERS`): then the sign-in page asks for a login and password. */
+  password: boolean
   /** The GitHub App repo sync runs as (§14.1); null until its id, slug and private key are configured. */
   githubApp: GitHubApp | null
   /** The secret GitHub signs webhook deliveries with; null until configured, and then every delivery is refused. */
@@ -94,7 +102,7 @@ export interface Runtime {
   limiter: BucketLimiter
   /** Sign-in requests per client address; `DOCKET_SIGNIN_PER_MINUTE` overrides it for local test runs. */
   signInRule: BucketRule
-  /** The GitHub logins (lowercase) that run the platform: they review the beta waitlist (`DOCKET_PLATFORM_ADMINS`). */
+  /** The logins and emails (lowercase) of the people who run the platform: they review the beta waitlist (`DOCKET_PLATFORM_ADMINS`). */
   platformAdmins: ReadonlySet<string>
   /** Whether a cognee service runs beside the worker (`DOCKET_COGNEE_ENABLED`): only then can a workspace turn cognee on. */
   cognee: boolean
@@ -254,6 +262,16 @@ async function boot(key: Uint8Array, requests: pg.Pool, attempt = 1): Promise<vo
 
     const origin = env.ORIGIN ?? 'http://127.0.0.1:3000'
     const local = { origin, production: env.NODE_ENV === 'production' }
+
+    // Sign-in beside GitHub: the config is the source of the allowlist and the password users, so each start replaces them.
+    // The models orgs may choose from: the operator's, when their provider is not OpenRouter.
+    configureModels(env.DOCKET_AI_MODELS)
+    const oidc = oidcProviders(env.DOCKET_OIDC_PROVIDERS, local)
+    const allowed = signinAllowList(env.DOCKET_SIGNIN_ALLOW)
+    await router.withPlatform((tx) => replaceSigninAllowlist(tx, allowed))
+    const listed = passwordUsers(env.DOCKET_PASSWORD_USERS)
+    const synced = await router.withPlatform((tx) => syncPasswordUsers(tx, listed))
+    for (const [what, logins] of Object.entries(synced)) if (logins.length) console.log(`password sign-in: ${what} ${logins.join(', ')}`)
     const platform = <T>(fn: (tx: pg.ClientBase) => Promise<T>) => router.withPlatform(fn)
 
     const tokens = tokenResolver({ platform })
@@ -314,6 +332,8 @@ async function boot(key: Uint8Array, requests: pg.Pool, attempt = 1): Promise<vo
       keyring: keyring({ keys, platform: (fn) => router.withPlatform(fn) }),
       caps: aiCaps({ platform: (fn) => router.withPlatform(fn), notifyOwners: auditCapWarning(router) }),
       github: githubConfig(origin),
+      oidc,
+      password: listed.length > 0,
       githubApp: appConfig ? githubApp(appConfig) : null,
       webhookSecret: webhookSecret(),
       origin,
@@ -338,7 +358,9 @@ async function boot(key: Uint8Array, requests: pg.Pool, attempt = 1): Promise<vo
     startupError = undefined
     bindMetrics({ router, ready: () => kek !== undefined && runtime !== undefined })
     startJobs(requests, router)
-    if (!runtime.github) console.warn('GitHub sign-in is not configured: set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET')
+    if (!runtime.github && !oidc.size && !runtime.password && !runtime.demo) {
+      console.warn('No sign-in is configured: set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, DOCKET_OIDC_PROVIDERS, or DOCKET_PASSWORD_USERS')
+    }
     if (!runtime.githubApp || !runtime.webhookSecret) {
       console.warn('Repo sync is not configured: set GITHUB_APP_ID, GITHUB_APP_SLUG, the app private key and the webhook secret')
     }

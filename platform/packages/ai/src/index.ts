@@ -18,7 +18,7 @@ export type { AiCaps, CapStatus, CapWarning, CapsDeps } from './caps.js'
 export { AiNotConfigured, openRouterKeys, orgAiKeys } from './keys.js'
 export type { AiKeyMode, KeyOutcome, OrgAiKeys, OrgAiKeysDeps, OrgKeys } from './keys.js'
 export { auditCapWarning } from './notify.js'
-export { MODEL_ALLOWLIST, chatOf, meteredModel, meteredTurns, modelChoices, openRouterModels } from './models.js'
+export { MODEL_ALLOWLIST, chatOf, configureModels, meteredModel, meteredTurns, modelAllowlist, modelChoices, openRouterModels } from './models.js'
 export type { AiDeps, MeteredCall, ModelClient, ModelUse, Models, TurnModel } from './models.js'
 export { OPENROUTER_API, OpenRouterError, PRIVACY_ROUTING, openRouterClient } from './openrouter-client.js'
 export type {

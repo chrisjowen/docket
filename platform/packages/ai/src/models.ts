@@ -23,12 +23,51 @@ export const MODEL_ALLOWLIST = {
 
 export type ModelUse = keyof typeof MODEL_ALLOWLIST
 
+let configured: Readonly<Record<ModelUse, readonly string[]>> | null = null
+
+/**
+ * The models orgs may choose from: the server's own list when the operator
+ * gave one (`DOCKET_AI_MODELS`, from docket-server.yaml's `ai.models`: the
+ * names their provider serves), else `MODEL_ALLOWLIST` (OpenRouter's names).
+ */
+export function modelAllowlist(): Readonly<Record<ModelUse, readonly string[]>> {
+  return configured ?? MODEL_ALLOWLIST
+}
+
+/**
+ * Sets the server's model list from `DOCKET_AI_MODELS`, a JSON object with a
+ * non-empty list of model names for each use; unset or empty restores the
+ * default. A malformed value is an error, so the server does not start on it.
+ */
+export function configureModels(raw: string | undefined): void {
+  if (!raw?.trim()) {
+    configured = null
+    return
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error('DOCKET_AI_MODELS is a JSON object: { "cypher": [...], "synthesis": [...] }')
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('DOCKET_AI_MODELS is a JSON object of model lists')
+  const value = parsed as Record<string, unknown>
+  const list = (use: ModelUse): string[] => {
+    const models = value[use]
+    if (!Array.isArray(models) || !models.length || !models.every((model) => typeof model === 'string' && model.trim())) {
+      throw new Error(`DOCKET_AI_MODELS.${use} is a non-empty list of model names, the default first`)
+    }
+    return models.map((model: string) => model.trim())
+  }
+  configured = { cypher: list('cypher'), synthesis: list('synthesis') }
+}
+
 /** The org's model for each use: its own choice when the allowlist still has it, else the default. */
 export async function modelChoices(tx: Tx, orgId: string): Promise<Record<ModelUse, string>> {
   const { rows } = await tx.query<{ models: Partial<Record<string, string>> }>('SELECT models FROM platform.ai_caps WHERE org_id = $1', [orgId])
   const chosen = rows[0]?.models ?? {}
   const pick = (use: ModelUse) => {
-    const allowed: readonly string[] = MODEL_ALLOWLIST[use]
+    const allowed: readonly string[] = modelAllowlist()[use]
     const choice = chosen[use]
     return choice && allowed.includes(choice) ? choice : (allowed[0] as string)
   }

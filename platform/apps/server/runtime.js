@@ -81,15 +81,41 @@ export async function platformEnv(config, { env = process.env, origin }) {
   if (!pg.tls) out.PGSSLMODE = 'disable'
   if (pg.tlsCa) out.PGSSLROOTCERT = pg.tlsCa
 
-  const { github, local, access } = config.auth
+  const { github, oidc, password, local, access } = config.auth
   if (github) {
     out.GITHUB_CLIENT_ID = github.clientId
     out.GITHUB_CLIENT_SECRET = await secret(github.clientSecret, env)
     if (github.oauthUrl) out.GITHUB_OAUTH_URL = github.oauthUrl
     if (github.apiUrl) out.GITHUB_API_URL = github.apiUrl
   }
+  // Each sign-in kind stays off unless the config turns it on, whatever the shell holds.
+  out.DOCKET_OIDC_PROVIDERS = JSON.stringify(
+    await Promise.all(
+      Object.entries(oidc ?? {}).map(async ([name, provider]) => ({
+        name,
+        label: provider.label,
+        issuer: provider.issuer,
+        clientId: provider.clientId,
+        scopes: provider.scopes,
+        ...('file' in provider.clientSecret ? { clientSecretFile: provider.clientSecret.file } : { clientSecret: await secret(provider.clientSecret, env) }),
+      })),
+    ),
+  )
+  out.DOCKET_PASSWORD_USERS = JSON.stringify(
+    await Promise.all(
+      (password?.users ?? []).map(async (user) => ({
+        login: user.login,
+        name: user.name,
+        email: user.email,
+        ...('file' in user.password ? { passwordFile: user.password.file } : { password: await secret(user.password, env) }),
+      })),
+    ),
+  )
   if (local) out.DOCKET_DEMO_LOGIN = local.login
-  out.DOCKET_BETA_ALLOWLIST = access.allow.join(',')
+  // GitHub logins go to the beta allowlist as before; emails, @domains and other providers' logins to the sign-in allowlist.
+  const githubLogin = (entry) => /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(entry)
+  out.DOCKET_BETA_ALLOWLIST = access.allow.filter(githubLogin).join(',')
+  out.DOCKET_SIGNIN_ALLOW = access.allow.filter((entry) => !githubLogin(entry)).join(',')
   out.DOCKET_PLATFORM_ADMINS = access.admins.join(',')
 
   const app = config.integrations.githubApp
@@ -105,8 +131,12 @@ export async function platformEnv(config, { env = process.env, origin }) {
 
   // AI stays off without a provider, whatever keys the shell holds.
   const ai = config.ai.primary
-  out.OPENROUTER_API_KEY = ai?.apiKey ? await secret(ai.apiKey, env) : ''
-  out.OPENROUTER_PROVISIONING_KEY = ai?.provisioningKey ? await secret(ai.provisioningKey, env) : ''
+  out.DOCKET_AI_PROVIDER = ai?.kind ?? ''
+  out.DOCKET_AI_URL = ai?.kind === 'openai-compatible' ? ai.url : ''
+  out.OPENROUTER_API_KEY = ai?.kind === 'openrouter' && ai.apiKey ? await secret(ai.apiKey, env) : ''
+  out.OPENROUTER_PROVISIONING_KEY = ai?.kind === 'openrouter' && ai.provisioningKey ? await secret(ai.provisioningKey, env) : ''
+  out.DOCKET_AI_API_KEY = ai?.kind === 'openai-compatible' && ai.apiKey ? await secret(ai.apiKey, env) : ''
+  out.DOCKET_AI_MODELS = config.ai.models ? JSON.stringify(config.ai.models) : ''
 
   if (config.limits.accounts !== null) out.DOCKET_BETA_ORG_LIMIT = String(config.limits.accounts)
   if (config.proxy.addressHeader) out.ADDRESS_HEADER = config.proxy.addressHeader

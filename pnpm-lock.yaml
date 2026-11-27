@@ -774,6 +774,9 @@ importers:
       '@docket/platform-tenancy':
         specifier: workspace:*
         version: link:../tenancy
+      jose:
+        specifier: 6.2.18
+        version: 6.2.18
       oidc-provider:
         specifier: 9.13.3
         version: 9.13.3

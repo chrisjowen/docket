@@ -95,6 +95,13 @@ export interface OpenRouterOptions {
   /** The management key that creates per-org keys. Without it, keys cannot be provisioned. */
   provisioningKey?: string | undefined
   apiBase?: string | undefined
+  /**
+   * `openrouter` (the default) adds OpenRouter's privacy routing and usage
+   * accounting to every request; `openai` sends plain OpenAI-style chat
+   * completions, for any compatible endpoint (OpenAI, Ollama, vLLM, LiteLLM),
+   * which reports tokens but no cost.
+   */
+  dialect?: 'openrouter' | 'openai' | undefined
   fetch?: typeof fetch
   /** Shown on OpenRouter's activity page. */
   appUrl?: string | undefined
@@ -132,6 +139,7 @@ export function openRouterClient(options: OpenRouterOptions = {}): OpenRouterCli
   const fetchImpl = options.fetch ?? fetch
   const base = (options.apiBase ?? OPENROUTER_API).replace(/\/+$/, '')
   const timeoutMs = options.timeoutMs ?? 60_000
+  const routing = options.dialect === 'openai' ? {} : { usage: { include: true }, provider: PRIVACY_ROUTING }
 
   async function call(method: string, path: string, bearer: string, body?: unknown, signal?: AbortSignal) {
     const timeout = AbortSignal.timeout(timeoutMs)
@@ -175,8 +183,7 @@ export function openRouterClient(options: OpenRouterOptions = {}): OpenRouterCli
           model: request.model,
           messages: request.messages,
           temperature: 0,
-          usage: { include: true },
-          provider: PRIVACY_ROUTING,
+          ...routing,
         },
         request.signal,
       )) as Completion
@@ -206,8 +213,7 @@ export function openRouterClient(options: OpenRouterOptions = {}): OpenRouterCli
             : {}),
           ...(request.maxTokens ? { max_tokens: request.maxTokens } : {}),
           temperature: 0,
-          usage: { include: true },
-          provider: PRIVACY_ROUTING,
+          ...routing,
         },
         request.signal,
       )) as Completion

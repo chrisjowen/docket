@@ -326,7 +326,8 @@ signed in on the server), or an Ollama model
 
 Everything above is the single-tenant server. The same two commands also run
 the multi-tenant Docket server, the one the hosted Docket Cloud runs: accounts
-with their dockets and members, GitHub sign-in, Docket's own OAuth for MCP
+with their dockets and members, sign-in with GitHub, any OpenID Connect
+provider or a password, Docket's own OAuth for MCP
 clients and the CLI's device sign-in, per-account encryption keys, the
 hash-chained audit log, rate limits and AI budgets, enrichment and
 consolidation, repository sync, and the web app. Its source is in
@@ -390,10 +391,24 @@ defaults:
 ai:
   providers:
     primary: { kind: openrouter, apiKey: { file: /run/secrets/docket/openrouter-key } }  # or provisioningKey: a key per account
+    # local: { kind: openai-compatible, url: http://ollama:11434/v1 }   # OpenAI, Ollama, vLLM, LiteLLM...
+  # primary: local                 # which one the server calls, when there are several
+  # models: { cypher: [qwen2.5:7b], synthesis: [llama3.1:8b] }   # what accounts may choose; needed for openai-compatible
 
 auth:
   github: { clientId: Iv1.example, clientSecret: { file: /run/secrets/docket/github-client-secret } }
-  access: { allow: [ada, grace], admins: [ada] }   # who may sign in besides members and invitees; platform admins
+  oidc:
+    sso:                           # any OpenID Connect provider; the name is in its callback URL
+      issuer: https://identity.example.com
+      clientId: docket
+      clientSecret: { file: /run/secrets/docket/oidc-client-secret }
+      label: Example SSO           # "Continue with Example SSO"
+  password:
+    users:                         # people you give a password; the list is the config's
+      - { login: ops.admin, email: ops@example.com, password: { file: /run/secrets/docket/ops-admin-password } }
+  access:
+    allow: [ada, '@example.com', ops.admin]   # besides members and invitees: GitHub logins, emails, @domains, other logins
+    admins: [ada, ops.admin]                  # platform administrators: logins or emails
 
 integrations:
   github:
@@ -408,18 +423,21 @@ integrations:
 | `sources.<name>` | `postgres` (required: every account lives in it), `neo4j`, `qdrant`, `embedder`, `reranker`, `cognee`. `provisioning` says who runs it: `external` (you), `bundled` (your installer, beside the server) or `managed` (the server makes one per account: Neo4j on Kubernetes). |
 | `defaults.stores` | Which source each role uses: `records`, `graph`, `search`, `embedder`, `reranker`, `cognee`. Needed only when there are two sources of a type. |
 | `worker.mode` | `inline` needs a graph, a search and an embedder source. `off` runs the API alone; search, Ask and projections wait for a worker. |
-| `ai.providers` | `openrouter`, with a shared `apiKey` and/or a `provisioningKey` that gives each account a key capped at its budget. Without one, AI is off and search still works. Other providers are planned. |
+| `ai.providers` | `openrouter`, with a shared `apiKey` and/or a `provisioningKey` that gives each account a key capped at its budget; or `openai-compatible`, any OpenAI-style chat completions API at a `url`, with an optional `apiKey`. `ai.primary` picks one when there are several. Without one, AI is off and search still works. |
+| `ai.models` | The models accounts may choose from, for `cypher` (graph queries, extraction) and `synthesis` (answers), the first of each the default. Optional for OpenRouter, which has its own list; needed for `openai-compatible`. |
 | `auth.github` | Sign-in with a GitHub OAuth App of your own, called back at `<publicUrl>/auth/github/callback`. |
+| `auth.oidc.<name>` | Sign-in with an OpenID Connect provider: `issuer`, `clientId`, `clientSecret`, and optionally `label` and `scopes` (default `profile email`). Called back at `<publicUrl>/auth/oidc/<name>/callback`. |
+| `auth.password.users` | People who sign in with a login and a password you give them: `login`, `password`, and optionally `name` and `email`. |
 | `auth.local` | `{ login }`: one-click sign-in as that login, with no provider: on loopback and outside production only, for a local preview. |
-| `auth.access` | `allow`: GitHub logins that may sign in; members and anyone invited may too. `admins`: platform administrators. |
+| `auth.access` | `allow`: who may sign in and create accounts besides members and invitees: GitHub logins, emails, `@domain`s and other providers' logins. `admins`: platform administrators, by login or email. |
 | `integrations.github.app` | The GitHub App repository sync and export pull requests run as; separate from sign-in. |
 
 The documented deployment keys `DOCKET_SERVE_CONFIG`, `DOCKET_SERVE_HOST`,
 `DOCKET_SERVE_PORT`, `DOCKET_PUBLIC_URL` and `DOCKET_SERVE_UI` override the
 file, and the command line overrides both.
 
-**Production** refuses plaintext Postgres, a shared Neo4j and the local
-sign-in. For a local preview, a Postgres container, one Neo4j and Qdrant
+**Production** refuses plaintext Postgres, a shared Neo4j, an OIDC issuer
+over plain HTTP and the local sign-in. For a local preview, a Postgres container, one Neo4j and Qdrant
 (`isolation: shared`), `tls: false` and `auth.local` are fine under
 `docket open --config`, or with `environment: development`:
 
@@ -437,6 +455,77 @@ sources:
   # graph: { type: neo4j, isolation: shared, url: bolt://127.0.0.1:7687, password: { file: ./neo4j-password } }
 auth:
   local: { login: ada }
+```
+
+### Sign-in
+
+Every way of signing in leads to the same users: memberships, roles, tokens,
+OAuth grants and the audit log do not care how someone signed in. A person's
+identity is the provider's own stable id for them (GitHub's account id, an
+OIDC issuer and `sub`, a password login), never their email. A new identity
+is a new user: two identities are never joined because their emails match,
+so moving a person from one provider to another is an explicit step, not a
+guess.
+
+- **GitHub** works as before. Create an OAuth App with the callback
+  `<publicUrl>/auth/github/callback`.
+- **OpenID Connect** works with any provider that publishes a discovery
+  document, such as Okta, Entra ID, Google, Keycloak, Authentik or Dex. Register a confidential web client with the callback
+  `<publicUrl>/auth/oidc/<name>/callback`, and give its issuer exactly as the
+  provider's discovery document states it. Docket uses the authorization
+  code flow with PKCE, a state and a nonce, and checks the ID token's
+  signature against the provider's keys. Someone signing in for the first
+  time gets the login `<username>.<name>`, from their preferred username or
+  email, with a number added if that is taken. Only an email the provider
+  says is verified is kept. List an email under `admins` only for a provider
+  you trust to verify emails.
+- **Passwords** are for the people you list. Each password is a secret
+  reference, and the server stores only a salted scrypt hash. The list is
+  the config's: the server makes each listed user on first start, sets a new
+  hash when you change their secret and restart, and stops the password of
+  anyone you take off the list. A password login has a `.` or `_` in it, like
+  `jo.bloggs` or `ops_admin`, so no GitHub account can ever have it. Attempts
+  are limited per address and per login. There is no self-service sign-up.
+
+Who may sign in: members of an account, anyone with an open invite (by
+GitHub login, or by an email a provider has verified), and whoever
+`auth.access.allow` names. Everyone on `allow` may also create accounts.
+
+```yaml
+# Single sign-on only, for a company's own install.
+auth:
+  oidc:
+    sso: { issuer: https://identity.example.com, clientId: docket, clientSecret: { env: DOCKET_OIDC_SECRET }, label: Example SSO }
+  access:
+    allow: ['@example.com']        # everyone with a verified example.com email
+    admins: [it-admin@example.com]
+```
+
+### Data stores and models
+
+Each source says who runs it. The server never runs a container itself
+except for `managed` sources, which it makes through the Kubernetes API.
+
+| Source | Bring your own (`external`) | Provisioned |
+| --- | --- | --- |
+| `postgres` (required) | A Postgres you run, over TLS. Give the request role's URL and the migration role's URL. | `bundled`: the installer's own Postgres. The server makes each account's schema, role and data key either way. |
+| `neo4j` | One Neo4j for every account (`isolation: shared`), kept apart by docket scope: for local and evaluation installs, refused in production. | `managed` with `driver: kubernetes`: a Neo4j pod, credentials and volume for each account. |
+| `qdrant` | Your Qdrant URL and API key. | `bundled`: the installer's Qdrant. |
+| `embedder` | An Ollama endpoint: `model` and `dimensions` must match what it serves. | `bundled`: the installer's Ollama. |
+| `reranker` | A cross-encoder endpoint. It is optional. | `bundled`. |
+| `cognee` | A cognee service URL, its API key, and the gateway key it calls models through. | `bundled`. |
+
+For models, `openrouter` meters every call's cost against each account's
+budget. A `provisioningKey` also gives each account an OpenRouter key capped
+at that budget. An `openai-compatible` endpoint is called with plain OpenAI
+requests. The server records the tokens of every call, but such an endpoint
+reports no cost, so budgets in dollars do not bind there. For a local model:
+
+```yaml
+ai:
+  providers:
+    local: { kind: openai-compatible, url: http://ollama:11434/v1 }
+  models: { cypher: [qwen2.5:7b], synthesis: [llama3.1:8b, qwen2.5:14b] }
 ```
 
 ### Its database
@@ -463,8 +552,9 @@ rebuilds from Postgres.
 - **The UI as its own deployment.** `--no-ui` turns the product's pages off,
   but they are still served by the same app; a separately deployed UI follows
   once the public API covers every page.
-- **Sign-in** is GitHub (or the local one); OIDC and passwords are planned.
-  Who may sign in is the allow list, members and invitees: there is no open
-  registration yet.
-- **Model providers** are OpenRouter only; local and other hosted providers
-  are planned.
+- **Linking identities.** A person who signs in with a second provider is a
+  second user until an account settings page can link the two.
+- **Password changes** happen in the config. There is no page for changing
+  your own password or resetting it by email yet.
+- **Per-space stores and models.** Every account uses the stores and models
+  in the config. Choosing them per space comes with Spaces.

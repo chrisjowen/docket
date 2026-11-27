@@ -15,6 +15,17 @@ Changes to `@chrisjowen/docket-server`.
   `readServerConfigFile` and `serverMode` tell the two kinds of file apart.
 - `loadServeConfig` refuses a multi-tenant file and a `version` it does not
   read; a file without either reads as before.
+- Sign-in beside GitHub: `auth.oidc` names OpenID Connect providers (issuer,
+  client id, a client secret reference, a label, scopes), `auth.password`
+  lists the people who sign in with a password the operator gives them (each
+  a secret reference, and a login with a `.` or `_` so it is never a GitHub
+  login), and `auth.access` takes emails, `@domain`s and those logins beside
+  GitHub logins. `OidcProvider` and `PasswordUser` describe them.
+- Model providers: `openai-compatible` (OpenAI, Ollama, vLLM, LiteLLM or any
+  OpenAI-style chat completions API, at a `url`, with an optional key) beside
+  `openrouter`, and `ai.models`, the models accounts may choose from for each
+  use (`MODEL_USES`: `cypher`, `synthesis`), required for an
+  `openai-compatible` provider.
 
 ## 0.11.0
 

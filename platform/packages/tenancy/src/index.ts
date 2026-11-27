@@ -47,6 +47,7 @@ export type { TenantRouter } from './router.js'
 export { INVITE_TTL_MS, LIMITS, PROVISIONING_TIMEOUT_MS } from './limits.js'
 export * from './model.js'
 export * from './waitlist.js'
+export * from './identity.js'
 export { lookupMasterKey } from './master-key.js'
 export type { MasterKeyPrincipal } from './master-key.js'
 

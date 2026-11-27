@@ -17,6 +17,8 @@ export const RATE_LIMITS = {
   writesPerToken: perMinute(30),
   /** Sign-in requests (the sign-in page, GitHub redirect and callback) per client address. */
   signInPerAddress: perMinute(30),
+  /** Password attempts per login, from anywhere: 10, then one every 6 minutes, so guessing one person's password is slow even from many addresses. */
+  passwordPerLogin: { capacity: 10, perSecond: 1 / 360 },
   /**
    * Token requests per pending device code (RFC 8628 §3.5): one every 5
    * seconds, the interval the device response advertises, with one poll of
@@ -63,6 +65,11 @@ export function writeLimits(caller: Caller): Limit[] {
 /** The limit a sign-in request counts against. */
 export function signInLimits(address: string, rule: BucketRule = RATE_LIMITS.signInPerAddress): Limit[] {
   return [{ scope: 'address', what: 'requests', key: `signin:${address}`, rule }]
+}
+
+/** The limit a password attempt counts against, beside its address's sign-in limit. */
+export function passwordLimits(login: string): Limit[] {
+  return [{ scope: 'login', what: 'password attempts', key: `password:${login.toLowerCase()}`, rule: RATE_LIMITS.passwordPerLogin }]
 }
 
 /** The OAuth limits' rules, each overridable. */

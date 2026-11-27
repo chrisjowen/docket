@@ -9,7 +9,7 @@ import {
   newSecret,
   sessionCookieOptions,
 } from '@docket/platform-auth'
-import { claimWaitlistInvite, joinWaitlistWithGitHub, mayEnterBeta, upsertGitHubUser } from '@docket/platform-tenancy'
+import { claimWaitlistInvite, joinWaitlistWithGitHub, mayEnter, resolveIdentity } from '@docket/platform-tenancy'
 import { redirect } from '@sveltejs/kit'
 
 import { completeLink, pendingLinkOf } from '$lib/server/github-link'
@@ -22,8 +22,9 @@ import type { RequestHandler } from './$types'
 /**
  * GitHub's redirect back (§8.1), for sign-in and for linking an installation
  * of the GitHub App to an org. The state must match the cookie set when
- * sign-in started. An identity on the beta list, or holding an open invite,
- * gets a session; anyone else joins the beta waitlist and sees the
+ * sign-in started. An identity on the beta list, with a verified email on the
+ * sign-in allowlist, or holding an open invite, gets a session as the user
+ * every sign-in provider resolves to; anyone else joins the beta waitlist and sees the
  * invite-only page. An invited waitlist entry with one of the identity's
  * verified emails puts its login on the beta list first.
  */
@@ -65,7 +66,7 @@ export const GET: RequestHandler = async (event) => {
     if (await claimWaitlistInvite(tx, identity)) {
       await audit(tx, auditInput(event, { action: 'waitlist.claim', outcome: 'ok', orgId: null, target: [`github:${identity.login}`] }))
     }
-    if (!(await mayEnterBeta(tx, identity))) {
+    if (!(await mayEnter(tx, { provider: 'github', github: identity }))) {
       const pending = newSecret()
       await tx.query(
         `INSERT INTO platform.access_requests (id_hash, github_id, github_login, email) VALUES ($1, $2, $3, $4)`,
@@ -85,7 +86,7 @@ export const GET: RequestHandler = async (event) => {
       )
       return { kind: 'pending' as const, pending }
     }
-    const user = await upsertGitHubUser(tx, identity)
+    const user = await resolveIdentity(tx, { provider: 'github', github: identity })
     const session = await createSession(tx, {
       userId: user.id,
       ip: clientAddress(event),

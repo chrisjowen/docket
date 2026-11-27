@@ -121,7 +121,10 @@ export function normaliseEmail(value: string): string | null {
 
 // --- Users and the beta allowlist ---------------------------------------------
 
-/** Creates or refreshes the user behind a GitHub identity, keyed by GitHub's numeric id. */
+/**
+ * Creates or refreshes the user behind a GitHub identity, keyed by GitHub's
+ * numeric id, and records it as their GitHub identity (`resolveIdentity`).
+ */
 export async function upsertGitHubUser(tx: Tx, identity: GitHubIdentity): Promise<User> {
   const { rows } = await tx.query<UserRow>(
     `INSERT INTO platform.users (id, kind, github_id, login, name, email, emails, avatar_url, last_seen_at)
@@ -140,7 +143,13 @@ export async function upsertGitHubUser(tx: Tx, identity: GitHubIdentity): Promis
       identity.avatarUrl,
     ],
   )
-  return toUser(rows[0] as UserRow)
+  const user = toUser(rows[0] as UserRow)
+  await tx.query(
+    `INSERT INTO platform.identities (provider, issuer, subject, user_id, last_seen_at) VALUES ('github', 'github', $1, $2, now())
+     ON CONFLICT (provider, issuer, subject) DO UPDATE SET last_seen_at = now()`,
+    [String(identity.id), user.id],
+  )
+  return user
 }
 
 export async function userById(tx: Tx, id: string): Promise<User | null> {
@@ -157,10 +166,21 @@ export async function isAllowlisted(tx: Tx, githubId: number): Promise<boolean> 
   return (rowCount ?? 0) > 0
 }
 
-/** Whether the user's GitHub account is on the beta allowlist. */
+/**
+ * Whether the user is on an allowlist, which lets them create an account: their
+ * GitHub account on the beta allowlist, or one of their verified emails (or
+ * its domain), or their non-GitHub login, on the sign-in allowlist.
+ */
 export async function isUserAllowlisted(tx: Tx, userId: string): Promise<boolean> {
   const { rowCount } = await tx.query(
-    'SELECT 1 FROM platform.users u JOIN platform.beta_allowlist a ON a.github_id = u.github_id WHERE u.id = $1',
+    `SELECT 1 FROM platform.users u
+      WHERE u.id = $1 AND (
+        EXISTS (SELECT 1 FROM platform.beta_allowlist a WHERE a.github_id = u.github_id)
+        OR EXISTS (
+          SELECT 1 FROM platform.signin_allowlist s
+           WHERE (s.kind = 'email' AND s.value = ANY(u.emails))
+              OR (s.kind = 'domain' AND s.value = ANY(ARRAY(SELECT split_part(e, '@', 2) FROM unnest(u.emails) e)))
+              OR (s.kind = 'login' AND u.github_id IS NULL AND s.value = u.login_lower)))`,
     [userId],
   )
   return (rowCount ?? 0) > 0

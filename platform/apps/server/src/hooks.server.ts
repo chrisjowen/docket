@@ -22,7 +22,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 /** Routes that answer without the runtime: probes, and the sign-in page's static parts. */
 const PROBES = new Set(['/healthz', '/readyz'])
 /** The sign-in flow, rate limited per client address (§19). */
-const SIGN_IN = /^\/(?:signin(?:\/|$)|auth\/github(?:\/|$))/
+const SIGN_IN = /^\/(?:signin(?:\/|$)|auth\/(?:github|oidc)(?:\/|$))/
 /**
  * The body a route takes. The server's BODY_SIZE_LIMIT is GitHub's 25 MB
  * payload cap, for its webhook alone: a push that deletes or renames many

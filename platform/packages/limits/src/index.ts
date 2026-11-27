@@ -9,7 +9,7 @@ export {
 export type { Decision, Limit, RateLimiter, Refusal } from './limiter.js'
 export { mcpAction, mcpRateLimit, mcpRateLimitedResponse, toolName } from './mcp.js'
 export type { McpMessage, McpRateLimitOptions, McpRefusal } from './mcp.js'
-export { RATE_LIMITS, askLimits, devicePollLimits, mcpLimits, oauthLimits, signInLimits, tokenCreateLimits, writeLimits } from './quotas.js'
+export { RATE_LIMITS, askLimits, devicePollLimits, mcpLimits, oauthLimits, passwordLimits, signInLimits, tokenCreateLimits, writeLimits } from './quotas.js'
 export type { Caller, OAuthRules } from './quotas.js'
 export {
   memoryBucketStore,

@@ -653,8 +653,8 @@ with no database and offer Postgres and the other stores as opt-ins: see
 
 The same command runs the multi-tenant Docket server, the one Docket Cloud
 runs, from a `docket-server.yaml` with `version: 1` and `mode: multi-tenant`:
-accounts, members, GitHub sign-in, OAuth for MCP clients, the web app and the
-worker, in one process over Postgres. `docket open --config` runs the same file
+accounts, members, sign-in with GitHub, OpenID Connect or a password, OAuth
+for MCP clients, the web app and the worker, in one process over Postgres. `docket open --config` runs the same file
 as a local preview. Its source is [`platform/`](platform), and
 [The multi-tenant server](docs/self-hosting.md#the-multi-tenant-server) covers
 its configuration.
