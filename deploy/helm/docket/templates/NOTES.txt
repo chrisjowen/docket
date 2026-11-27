@@ -1,3 +1,12 @@
+{{- if .Values.multiTenant.enabled }}
+docket serve is running the multi-tenant API{{ if .Values.ui }} and web UI{{ end }}.
+{{- if .Values.multiTenant.worker.enabled }}
+The query and projection worker runs in its own Deployment.
+{{- end }}
+
+Sign in at the configured public origin. For an evaluation install:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "docket.fullname" . }} {{ .Values.service.port }}
+{{- else }}
 docket serve is running: workspace "{{ .Values.workspace }}", {{ if .Values.postgres.enabled }}over Postgres{{ else }}from the docket's own files (no database){{ end }}.
 
 {{- if .Values.auth.existingSecret }}
@@ -38,4 +47,5 @@ Embedder: http://{{ include "docket.storeName" (dict "root" . "store" "embedder"
 {{- if .Values.cognee.enabled }}
 
 cognee: http://{{ include "docket.storeName" (dict "root" . "store" "cognee") }}:8000. Make it an API key and add it to the Secret {{ include "docket.cogneeSecret" . }} as apiKey (docs/deploy.md).
+{{- end }}
 {{- end }}

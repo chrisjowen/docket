@@ -8,10 +8,10 @@
 // run the same code.
 import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { createServer as createNetServer } from 'node:net'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { frontListener } from './front.js'
@@ -43,9 +43,19 @@ function freePort(host) {
 async function ensureKek(encryptionKey, log) {
   if (existsSync(encryptionKey.file)) return
   if (!encryptionKey.create) throw new Error(`the platform key ${encryptionKey.file} does not exist`)
-  await mkdir(dirname(encryptionKey.file), { recursive: true })
-  await writeFile(encryptionKey.file, `${randomBytes(32).toString('base64')}\n`, { mode: 0o600, flag: 'wx' })
-  log(`made a new platform key at ${encryptionKey.file}: back it up with the database, which cannot be read without it`)
+  const directory = dirname(encryptionKey.file)
+  await mkdir(directory, { recursive: true })
+  const temporary = await mkdtemp(join(directory, '.docket-kek-'))
+  try {
+    const file = join(temporary, 'key')
+    await writeFile(file, `${randomBytes(32).toString('base64')}\n`, { mode: 0o600, flag: 'wx' })
+    await link(file, encryptionKey.file)
+    log(`made a new platform key at ${encryptionKey.file}: back it up with the database, which cannot be read without it`)
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
 }
 
 /**
@@ -53,19 +63,24 @@ async function ensureKek(encryptionKey, log) {
  * here, server-side; a file the app reads itself (the KEK, the CA, the GitHub App's key)
  * is passed by path.
  */
-export async function platformEnv(config, { env = process.env, origin }) {
+export async function platformEnv(config, { env = process.env, origin, workerOnly = false }) {
   const out = { NODE_ENV: config.environment, ORIGIN: origin }
   const pg = config.stores.records
   const request = new URL(await secret(pg.url, env))
-  const migration = new URL(await secret(pg.migrationUrl, env))
-  for (const url of [request, migration]) {
-    if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') throw new Error('the Postgres source\'s url and migrationUrl are postgres:// URLs')
-  }
   const database = (url) => decodeURIComponent(url.pathname.replace(/^\//, ''))
-  if (request.hostname !== migration.hostname || (request.port || '5432') !== (migration.port || '5432') || database(request) !== database(migration)) {
-    throw new Error('the Postgres source\'s migrationUrl is the same server and database as its url, with the migration role\'s name and password')
+  const postgres = (url) => url.protocol === 'postgres:' || url.protocol === 'postgresql:'
+  if (!postgres(request) || !request.username) throw new Error('the Postgres source url must name the request role in a postgres:// URL')
+  if (!workerOnly) {
+    const migration = new URL(await secret(pg.migrationUrl, env))
+    if (!postgres(migration) || !migration.username) throw new Error('the Postgres source migrationUrl must name the migration role in a postgres:// URL')
+    if (request.hostname !== migration.hostname || (request.port || '5432') !== (migration.port || '5432') || database(request) !== database(migration)) {
+      throw new Error("the Postgres source's migrationUrl is the same server and database as its url, with the migration role's name and password")
+    }
+    const adminUser = decodeURIComponent(migration.username)
+    if (adminUser === decodeURIComponent(request.username)) throw new Error('the Postgres request and migration roles must be distinct')
+    out.DOCKET_PG_ADMIN_USER = adminUser
+    out.DOCKET_PG_ADMIN_PASSWORD = decodeURIComponent(migration.password)
   }
-  if (!request.username || !migration.username) throw new Error('the Postgres source\'s url and migrationUrl each name their role')
   Object.assign(out, {
     PGHOST: request.hostname,
     PGPORT: request.port || '5432',
@@ -73,8 +88,6 @@ export async function platformEnv(config, { env = process.env, origin }) {
     PGUSER: decodeURIComponent(request.username),
     PGPASSWORD: decodeURIComponent(request.password),
     DOCKET_PG_APP_ROLE: decodeURIComponent(request.username),
-    DOCKET_PG_ADMIN_USER: decodeURIComponent(migration.username),
-    DOCKET_PG_ADMIN_PASSWORD: decodeURIComponent(migration.password),
     DOCKET_KEK_FILE: pg.encryptionKey.file,
     DOCKET_KEK_ID: pg.encryptionKey.id,
   })
@@ -144,6 +157,7 @@ export async function platformEnv(config, { env = process.env, origin }) {
 
   // The worker's stores.
   const { graph, search, embedder, reranker, cognee } = config.stores
+  out.DOCKET_BUNDLED_GRAPH = graph?.provisioning === 'bundled' ? 'true' : ''
   if (graph?.isolation === 'shared') {
     out.DOCKET_NEO4J_URL = graph.url
     out.DOCKET_NEO4J_PASSWORD = await secret(graph.password, env)
@@ -151,7 +165,7 @@ export async function platformEnv(config, { env = process.env, origin }) {
     const kube = graph.kubernetes
     out.DOCKET_NAMESPACE = kube.namespace
     if (kube.image) out.DOCKET_NEO4J_IMAGE = kube.image
-    if (kube.storageClass) out.DOCKET_NEO4J_STORAGE_CLASS = kube.storageClass
+    out.DOCKET_NEO4J_STORAGE_CLASS = kube.storageClass ?? ''
     if (kube.storageSize) out.DOCKET_NEO4J_STORAGE_SIZE = kube.storageSize
     if (kube.issuer) out.DOCKET_NEO4J_ISSUER = kube.issuer
     if (kube.labelDomain) out.DOCKET_K8S_LABEL_DOMAIN = kube.labelDomain
@@ -190,7 +204,7 @@ export async function startPlatform(config, { env = process.env, log = (line) =>
   const settings = await platformEnv(config, { env, origin })
   const inline = config.worker.mode === 'inline'
   if (inline) {
-    // The worker's query service, on loopback in this process: plain HTTP, sealed with the KEK.
+    // The in-process query listener stays on loopback, with a key derived from the KEK.
     const queryPort = await freePort('127.0.0.1')
     Object.assign(settings, { DOCKET_QUERY_HOST: '127.0.0.1', DOCKET_QUERY_PORT: String(queryPort), DOCKET_QUERY_URL: `http://127.0.0.1:${queryPort}` })
   }
@@ -236,4 +250,14 @@ export async function startPlatform(config, { env = process.env, log = (line) =>
     ui: config.ui,
     close,
   }
+}
+
+/** Runs the same worker on its own. The API owns migrations and creates the KEK if configured. */
+export async function startPlatformWorker(config) {
+  const { host, port } = config.listen
+  const origin = config.publicUrl ?? `http://${host.includes(':') ? `[${host}]` : host}:${port}`
+  const settings = await platformEnv(config, { origin, workerOnly: true })
+  Object.assign(process.env, settings)
+  const { startWorker } = await import('@docket/server-worker/run')
+  return startWorker()
 }

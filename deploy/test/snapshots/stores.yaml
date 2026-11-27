@@ -794,9 +794,9 @@ spec:
           image: "neo4j:5.26-community"
           imagePullPolicy: IfNotPresent
           env:
-            - name: NEO4J_PASSWORD
+            - name: DOCKET_NEO4J_PASSWORD
               valueFrom: { secretKeyRef: { name: docket-neo4j, key: password } }
-            - { name: NEO4J_AUTH, value: neo4j/$(NEO4J_PASSWORD) }
+            - { name: NEO4J_AUTH, value: neo4j/$(DOCKET_NEO4J_PASSWORD) }
             - { name: NEO4J_server_default__listen__address, value: 0.0.0.0 }
           ports:
             - { name: bolt, containerPort: 7687 }

@@ -1,4 +1,4 @@
-# ghcr.io/chrisjowen/docket: the docket CLI with docket-server, running
+# ghcr.io/chrisjowen/docket: the docket CLI with both server runtimes, running
 # `docket serve` by default. Build from the repository root:
 #
 #   docker build -f deploy/image/Dockerfile -t ghcr.io/chrisjowen/docket:dev .
@@ -23,7 +23,8 @@ RUN pnpm install --frozen-lockfile --offline \
  && (cd packages/docket && npm pack --ignore-scripts --pack-destination /pack) \
  && (cd packages/server && npm pack --ignore-scripts --pack-destination /pack) \
  && mv /pack/chrisjowen-docket-server-*.tgz /pack/docket-server.tgz \
- && mv /pack/chrisjowen-docket-*.tgz /pack/docket.tgz
+ && mv /pack/chrisjowen-docket-*.tgz /pack/docket.tgz \
+ && pnpm --filter @docket/server-platform deploy --legacy --prod /platform
 
 # The packed packages and the store drivers, installed as npm installs them for
 # a user. better-sqlite3 uses its prebuilt binary, or compiles with the
@@ -41,13 +42,20 @@ RUN npm install --omit=dev --legacy-peer-deps --no-audit --no-fund \
  && rm -rf node_modules/better-sqlite3/deps node_modules/better-sqlite3/src node_modules/better-sqlite3/build/Release/obj* \
  && mkdir -p /skel/data/docket /skel/data/state
 COPY deploy/image/docket /opt/docket/bin/docket
+COPY --from=build /platform /opt/docket/platform
+RUN mkdir -p node_modules/@docket \
+ && ln -s ../../platform node_modules/@docket/server-platform
 
 FROM gcr.io/distroless/nodejs22-debian13:nonroot
 LABEL org.opencontainers.image.title="docket" \
-      org.opencontainers.image.description="docket serve: a self-hosted, single-tenant Docket server" \
+      org.opencontainers.image.description="docket serve: the self-hosted Docket server" \
       org.opencontainers.image.source="https://github.com/chrisjowen/docket" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.licenses="Apache-2.0 AND AGPL-3.0-only"
 COPY --from=runtime /opt/docket /opt/docket
+COPY LICENSE /opt/docket/licenses/Apache-2.0.txt
+COPY platform/LICENSE /opt/docket/licenses/AGPL-3.0-only.txt
+COPY LICENSING.md /opt/docket/licenses/LICENSING.md
+COPY deploy/image/bootstrap-postgres.mjs /opt/docket/bootstrap-postgres.mjs
 COPY --from=runtime --chmod=0755 /opt/docket/bin/docket /usr/local/bin/docket
 # /data/docket: the workspace's project (its documents and ontology).
 # /data/state: the server's own state (tokens, the audit log, a Postgres

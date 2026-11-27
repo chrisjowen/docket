@@ -64,6 +64,7 @@ export interface ServerConfigOptions {
   port?: number | undefined
   ui?: boolean | undefined
   worker?: 'inline' | 'off' | undefined
+  workerOnly?: boolean | undefined
   /** The command running it: production for serve, development for open, unless the file says. */
   command?: 'serve' | 'open' | undefined
 }
@@ -89,6 +90,7 @@ export interface PlatformConfigView {
 
 /** What docket calls of `@docket/server-platform/runtime`. */
 export interface PlatformModule {
+  startPlatformWorker(config: PlatformConfigView): Promise<{ stop(): Promise<void> }>
   startPlatform(
     config: PlatformConfigView,
     options?: { log?: (line: string) => void }

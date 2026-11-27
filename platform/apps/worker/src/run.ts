@@ -2,6 +2,7 @@
 import type { Server } from 'node:http'
 
 import { aiCaps, auditCapWarning, configureModels, meteredTurns, openRouterClient, openRouterKeys, openRouterModels, type AiDeps } from '@docket/platform-ai'
+import { redactConsole } from '@docket/platform-audit'
 import { keyring } from '@docket/platform-canonical-store'
 import { githubApp, githubAppConfigFromEnv } from '@docket/platform-github'
 import { platformKeyService, readKekFile } from '@docket/platform-keys'
@@ -14,7 +15,7 @@ import {
 } from '@docket/platform-provisioner'
 import { queryKey } from '@docket/platform-mcp-tools/query'
 import { CogneeUnavailable, type CogneeAccess } from '@docket/platform-projections'
-import { PLATFORM_MIGRATIONS, tenantRouter } from '@docket/platform-tenancy'
+import { PLATFORM_MIGRATIONS, countLiveOrgs, tenantRouter } from '@docket/platform-tenancy'
 import pg from 'pg'
 
 import { aiProviderOf } from './ai-provider.js'
@@ -113,12 +114,17 @@ export interface RunningWorker {
 
 /** Starts the worker: its loops, the query service and, unless `healthPort` is null, the probe port. */
 export async function startWorker(options: WorkerOptions = {}): Promise<RunningWorker> {
+  redactConsole()
   const env = options.env ?? process.env
   const log = options.log ?? consoleLog
   const kek = await readKekFile(env.DOCKET_KEK_FILE ?? '/etc/docket/kek/kek')
   const pool = createPool(Number(env.DOCKET_WORKER_PG_POOL ?? 6), log.error)
   await waitForMigrations(pool, log)
   const router = tenantRouter(pool)
+  if (env.DOCKET_BUNDLED_GRAPH === 'true' && await router.withPlatform(countLiveOrgs) > 1) {
+    await pool.end()
+    throw new Error('the database has multiple accounts; a bundled Neo4j can serve only one. Configure a managed graph.')
+  }
   const others =
     env.DOCKET_KEK_OTHER_FILE && env.DOCKET_KEK_OTHER_ID
       ? [{ kek: await readKekFile(env.DOCKET_KEK_OTHER_FILE), kekId: env.DOCKET_KEK_OTHER_ID }]
@@ -246,7 +252,7 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
     port: Number(env.DOCKET_QUERY_PORT ?? 8443),
     host: env.DOCKET_QUERY_HOST ?? (tls ? '0.0.0.0' : '127.0.0.1'),
     tls,
-    production: env.NODE_ENV === 'production',
+    production: env.NODE_ENV === 'production' && options.healthPort !== null,
     log,
   })
 
@@ -301,7 +307,7 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
         port: Number(env.DOCKET_COGNIFY_GATEWAY_PORT ?? 8445),
         host: env.DOCKET_QUERY_HOST ?? (tls ? '0.0.0.0' : '127.0.0.1'),
         tls,
-        production: env.NODE_ENV === 'production',
+        production: env.NODE_ENV === 'production' && options.healthPort !== null,
         log,
       })
     : null

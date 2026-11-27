@@ -51,13 +51,14 @@ API grows to cover them.
 a local preview: the API, MCP, OAuth, sign-in and the product's pages on one
 port, with the worker in the same process (`apps/server/runtime.js`, which
 `docket` loads only for such a file). `--no-ui` runs it headless and
-`--no-worker` runs the API alone. The config, its sources and secrets, and
+`--no-worker` runs the API alone. Use `docket serve worker --config` to
+start a separate worker with the same file. The config, its sources and secrets, and
 the database it needs are in
 [The multi-tenant server](../docs/self-hosting.md#the-multi-tenant-server).
 
-A container can also run the two processes on their own, configured by
-environment: `apps/server/server.js` (the API) and `apps/worker/dist/main.js`
-(the worker), with the variables those files and `tests/e2e/serve.mjs` set.
+The [Compose and Helm profiles](../docs/deploy.md#multi-tenant-installs)
+mount the file and run the commands from the same image. The standalone
+worker uses the Postgres request role and shares the API’s KEK.
 
 ## Develop
 

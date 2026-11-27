@@ -5,6 +5,7 @@
   "description": "The Docket Cloud web app and JSON API (SvelteKit, adapter-node).",
   "license": "AGPL-3.0-only",
   "type": "module",
+  "files": ["build", "runtime.js", "front.js"],
   "scripts": {
     "dev": "vite dev",
     "build": "svelte-kit sync && vite build && vite build --config vite.mcp-app.config.ts",

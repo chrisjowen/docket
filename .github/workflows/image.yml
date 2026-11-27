@@ -6,7 +6,7 @@ name: Image
 # On every pull request and push to main: check the chart and the Compose
 # files (deploy/test/check.mjs), build the image for linux/amd64, and run
 # docket serve's gates against it under Compose (no database, then the
-# postgres profile) and the Helm chart on a kind cluster (the same two).
+# postgres profile and multi-tenant mode) and the Helm chart on a kind cluster.
 # Nothing is pushed.
 #
 # On a `v<version>` tag - the tag publish.yml publishes docket to npm from - it
@@ -62,6 +62,8 @@ jobs:
         run: deploy/test/compose-e2e.sh
       - name: Compose, the postgres profile
         run: deploy/test/compose-e2e.sh postgres
+      - name: Compose, the multi-tenant profile
+        run: deploy/test/platform-smoke.sh compose
       - uses: azure/setup-helm@v4
         with:
           version: v4.3.2
@@ -74,6 +76,11 @@ jobs:
           DOCKET_SMOKE_CLUSTER: docket-smoke
       - name: Helm on kind, the bundled Postgres
         run: deploy/test/kind-smoke.sh postgres
+        env:
+          DOCKET_SMOKE_CLUSTER: docket-smoke
+
+      - name: Helm on kind, the multi-tenant profile
+        run: deploy/test/platform-smoke.sh helm
         env:
           DOCKET_SMOKE_CLUSTER: docket-smoke
 

@@ -3,13 +3,13 @@
 [`docket serve`](self-hosting.md) ships as an image,
 `ghcr.io/chrisjowen/docket`, with a Docker Compose stack
 ([`deploy/compose`](../deploy/compose)) and a Helm chart
-([`deploy/helm/docket`](../deploy/helm/docket)). Both start with no database:
+([`deploy/helm/docket`](../deploy/helm/docket)). The single-tenant defaults start with no database:
 one container, serving a docket kept as files on a volume. Postgres, SQLite,
 Neo4j, Qdrant with mem0, an Ollama embedder and cognee are opt-ins. You need
 no Docket Cloud account.
 
-The image is docket's CLI and `@chrisjowen/docket-server`, built from this
-repository, on a distroless Node 22 base: no shell or package manager, and it
+The image is docket's CLI, `@chrisjowen/docket-server` and the AGPL multi-tenant
+platform, built from this repository, on a distroless Node 22 base: no shell or package manager, and it
 runs as `nonroot` (uid 65532). It carries the drivers the opt-in stores load
 (`pg`, `better-sqlite3`, `neo4j-driver`, `mem0ai`). Its entrypoint is
 `docket` and its command `serve`, so `docker run … ghcr.io/chrisjowen/docket
@@ -20,6 +20,132 @@ linux/amd64 and linux/arm64 at each docket release (`0.16.0`, `0.16`,
 ```bash
 docker build -f deploy/image/Dockerfile -t ghcr.io/chrisjowen/docket:dev .
 ```
+
+## Multi-tenant installs
+
+Use the same [versioned server config](self-hosting.md#the-multi-tenant-server)
+for either installer. Both run `docket serve --config` in the same image. By
+default the API, browser UI and worker share one process. Set `ui: false` in
+the config for a headless API. Run the worker separately when it needs its
+own CPU or memory allocation.
+
+The evaluation profile bundles Postgres, Neo4j, Qdrant and an Ollama
+embedder on private service addresses, with a volume for each. It supports
+one Docket account with multiple dockets. The server enforces the account
+limit whenever its selected graph is bundled. The driver for a separate
+Neo4j per account is available on Kubernetes.
+
+### Docker Compose
+
+Use an image built from this checkout or a release that includes the
+multi-tenant platform. From the repository root:
+
+```bash
+docker build -f deploy/image/Dockerfile -t docket:local .
+cd deploy/compose
+cp .env.multi-tenant.example .env
+cp docket-server.example.yaml docket-server.yaml
+mkdir -p secrets
+(umask 077; openssl rand -base64 32 > secrets/kek)
+```
+
+Set `DOCKET_IMAGE=docket:local` in `.env` and fill in its independent
+database, Neo4j and Qdrant credentials. Give uid 65532 read access to
+`secrets/kek` and traversal access to its directory. Keep the file private
+to the operator and the server process. Use URL-safe, randomly generated
+database passwords. Register a GitHub OAuth App with callback
+`http://127.0.0.1:4390/auth/github/callback`, supply its secret in `.env`,
+then replace the example client ID and sign-in allowlist in
+`docket-server.yaml`.
+
+```bash
+docker compose -f compose.multi-tenant.yaml pull --policy missing
+docker compose -f compose.multi-tenant.yaml up -d --wait
+```
+
+Open `http://127.0.0.1:4390/` and sign in. Ollama downloads its embedding
+model on first start. Postgres initializes a restricted request login
+`docket_app` once, and Docket applies migrations under a database lock.
+Keep the `docket-platform` project's volumes, generated credentials and KEK
+across restarts. Back up the database and the KEK separately.
+
+Change which services are bundled via `COMPOSE_PROFILES` in `.env`. To
+use external Postgres, drop the `postgres` profile and set both Postgres
+URL references to the external database and its separate request and
+migration logins. For an API-only evaluation, remove the graph, search and
+embedder sources and their profiles, and set `worker.mode: off`.
+Set `DOCKET_SECRETS_DIR` or extend the manifest to mount other config
+references.
+
+To split the worker, supply a PEM certificate valid for `worker`, its
+private key, and the issuing CA as `worker.crt`, `worker.key` and `ca.crt`
+in `worker-tls/`. Set their filesystem permissions for uid 65532. Both
+processes read the same server config and KEK. The API verifies the
+worker's certificate before sending a query.
+
+```bash
+docker compose -f compose.multi-tenant.yaml -f compose.worker.yaml \
+  --profile split-worker up -d --wait
+```
+
+To return to inline mode, stop the `worker` service with the same two
+files and profile, then bring up the base file on its own.
+
+### Helm
+
+From the repository root, copy
+[`deploy/compose/docket-server.example.yaml`](../deploy/compose/docket-server.example.yaml)
+to an operator-owned file named `docket-server.yaml`. Use the same GitHub
+OAuth App setup as Compose. Set `auth.github.clientSecret` to
+`{ file: /etc/docket/secrets/github-client-secret }` and supply that file
+and your 32-byte base64 KEK through an existing Secret:
+
+```bash
+kubectl create namespace docket
+kubectl -n docket create secret generic docket-platform \
+  --from-file=kek=./kek --from-file=github-client-secret=./github-client-secret
+helm upgrade --install docket deploy/helm/docket -n docket \
+  -f deploy/helm/multi-tenant-values.yaml \
+  --set-file multiTenant.config=./docket-server.yaml \
+  --set multiTenant.existingSecret=docket-platform \
+  --set image.repository=docket,image.tag=local \
+  --wait --timeout 10m
+kubectl -n docket port-forward svc/docket 4390:4390
+```
+
+The image must be available to the cluster. Load it into kind or set
+`image.repository` and `image.tag` to a registry image. The evaluation
+values expect release name `docket` and a default StorageClass. For a
+different release name, update the service names in the config. If the
+bundled Postgres or Qdrant uses an existing Secret, its keys are
+`password` and `appPassword` for Postgres, and `apiKey` for Qdrant.
+Otherwise Helm generates them on first install and reuses them on upgrade.
+
+Set `multiTenant.worker.enabled=true` to run the worker in its own
+Deployment. Set `multiTenant.worker.tlsSecret` to an existing Secret with
+`tls.crt`, `tls.key` and `ca.crt`. The certificate must be valid for
+`docket-worker` with release name `docket`. Keep the KEK in the mounted
+Secret so both Deployments use the same key across nodes. For external
+Postgres, set `postgres.bundled.enabled=false` and point the server file
+at your database. If it uses `DOCKET_PG_URL` and `DOCKET_PG_MIGRATION_URL`
+environment references, set `multiTenant.postgresSecret` to a Secret
+with `url` and `migrationUrl` keys.
+
+For a production multi-account install, set `environment: production`,
+use TLS-verified external Postgres with separate roles, and put the API
+behind an Ingress or gateway with TLS and a matching public URL. Select a
+Neo4j source with `provisioning: managed` and `driver: kubernetes`, then
+enable `multiTenant.managedGraph` and leave `neo4j.enabled` off. Use a
+dedicated release namespace and specify it in the source. The driver
+requires a namespace-local cert-manager Issuer and persistent storage, and
+in production the source must name `kubernetes.storageClass` explicitly
+(no default is assumed, since the cluster may have none by that name);
+evaluation installs may leave it out and get the cluster's default class.
+Point `NODE_EXTRA_CA_CERTS` on the worker at the mounted CA that signs
+the graph certificates. Use a CNI that enforces NetworkPolicies.
+The chart grants the worker a namespaced Role for the graph resources.
+The worker creates one credential, certificate, volume and StatefulSet
+per account. Select the account limit in the server file.
 
 ## Docker Compose
 
@@ -218,7 +344,8 @@ The single-tenant server these installers run is customer-operated and does
 not include the following. The multi-tenant server, run with
 `docket serve --config` from a `mode: multi-tenant` docket-server.yaml (see
 [The multi-tenant server](self-hosting.md#the-multi-tenant-server)), has
-most of them; its Compose and Helm profiles are next.
+most of them; see [Multi-tenant installs](#multi-tenant-installs) for its
+Compose and Helm profiles.
 
 - **SSO** or any sign-in service (OIDC, SAML, GitHub). Access is by static
   tokens.

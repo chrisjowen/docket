@@ -39,6 +39,7 @@ import { queryClient, queryKey, type QueryClient } from '@docket/platform-mcp-to
 import {
   LIMITS,
   allowlist,
+  countLiveOrgs,
   migrateBehindOrgs,
   migratePlatform,
   replaceSigninAllowlist,
@@ -254,6 +255,9 @@ async function boot(key: Uint8Array, requests: pg.Pool, attempt = 1): Promise<vo
     }
 
     const router = tenantRouter(requests)
+    if (env.DOCKET_BUNDLED_GRAPH === 'true' && await router.withPlatform(countLiveOrgs) > 1) {
+      throw new Error('the database has multiple accounts; a bundled Neo4j can serve only one. Configure a managed graph.')
+    }
     const seed = (env.DOCKET_BETA_ALLOWLIST ?? '')
       .split(',')
       .map((login) => login.trim())

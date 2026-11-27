@@ -102,6 +102,27 @@ describe('the multi-tenant docket-server.yaml', () => {
     expect(config.integrations.githubApp).toMatchObject({ id: '42', slug: 'docket-example', privateKey: { file: join(dir, 'app.pem') } })
   })
 
+  it('needs an explicit StorageClass for a managed graph in production, but not for evaluation', async () => {
+    await writeFile(join(dir, 'gh-secret'), 'x')
+    const withManagedGraph = (storageClass?: string) => ({
+      ...minimal(),
+      environment: 'production',
+      sources: {
+        pg: { type: 'postgres', url: { env: 'PG_URL' }, migrationUrl: { env: 'PG_ADMIN_URL' }, encryptionKey: { file: './kek' } },
+        graph: { type: 'neo4j', provisioning: 'managed', driver: 'kubernetes', kubernetes: { namespace: 'docket', ...(storageClass ? { storageClass } : {}) } }
+      },
+      auth: { github: { clientId: 'Iv1.example', clientSecret: { file: './gh-secret' } } }
+    })
+    await refuses(
+      withManagedGraph(),
+      /sources\.graph\.kubernetes\.storageClass is not set, required in production .*: name the cluster's StorageClass/
+    )
+    const config = await load(withManagedGraph('fast'))
+    expect(config.stores.graph).toMatchObject({ kubernetes: { storageClass: 'fast' } })
+    const evaluation = await load({ ...withManagedGraph(), environment: 'development' })
+    expect(evaluation.stores.graph).toMatchObject({ kubernetes: { storageClass: null } })
+  })
+
   it('takes the deployment keys from the environment over the file, and the command line over both', async () => {
     const fromEnv = await load(minimal(), { env: { ...env, DOCKET_SERVE_PORT: '9000', DOCKET_SERVE_UI: 'false', DOCKET_PUBLIC_URL: 'http://localhost:9000' } })
     expect(fromEnv).toMatchObject({ listen: { port: 9000 }, ui: false, publicUrl: 'http://localhost:9000' })
@@ -153,6 +174,22 @@ describe('the multi-tenant docket-server.yaml', () => {
     await refuses({ ...overTls, environment: 'production' }, /auth\.local is refused in production/)
     await refuses({ ...minimal(), listen: { host: '0.0.0.0' }, publicUrl: 'https://docket.example.com' }, /auth\.local is for a server on this machine only/)
     await refuses({ ...minimal(), listen: { host: '0.0.0.0' } }, /publicUrl is needed when the server listens beyond this machine/)
+  })
+
+  it('allows only one account when Neo4j is bundled', async () => {
+    const config = minimal()
+    const sources = config.sources as Record<string, unknown>
+    sources.graph = { type: 'neo4j', provisioning: 'bundled', isolation: 'shared', url: 'bolt://graph:7687', password: { env: 'NEO4J_PASSWORD' } }
+    const options = { env: { ...env, NEO4J_PASSWORD: 'example' } }
+    expect((await load(config, options)).limits.accounts).toBe(1)
+    await refuses({ ...config, limits: { accounts: 2 } }, /limits.accounts must be 1 with a bundled Neo4j/, options)
+  })
+
+  it('does not need the migration credential in a split worker', async () => {
+    const requestOnly = { env: { PG_URL: env.PG_URL } }
+    await refuses(minimal(), /PG_ADMIN_URL, which is not set/, requestOnly)
+    const { stores } = await load(minimal(), { ...requestOnly, workerOnly: true })
+    expect(stores.records.migrationUrl).toEqual({ env: 'PG_ADMIN_URL' })
   })
 
   it('picks the one source of a kind for its role, and asks which when there are several', async () => {

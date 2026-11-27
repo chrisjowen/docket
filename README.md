@@ -657,7 +657,8 @@ accounts, members, sign-in with GitHub, OpenID Connect or a password, OAuth
 for MCP clients, the web app and the worker, in one process over Postgres. `docket open --config` runs the same file
 as a local preview. Its source is [`platform/`](platform), and
 [The multi-tenant server](docs/self-hosting.md#the-multi-tenant-server) covers
-its configuration.
+its configuration. [The multi-tenant Compose and Helm profiles](docs/deploy.md#multi-tenant-installs)
+install it with its optional stores and an optional separate worker.
 
 ## Evidence and confidence
 

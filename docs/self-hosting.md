@@ -341,6 +341,7 @@ docket serve --config docket-server.yaml          # an install: production unles
 docket open  --config docket-server.yaml          # a local preview: development, and opens the browser
 docket serve --config docket-server.yaml --no-ui  # headless: the API, MCP, OAuth and sign-in, no product pages
 docket serve --config docket-server.yaml --no-worker  # the API without the worker in this process
+docket serve worker --config docket-server.yaml   # the worker alone, as a separate process
 ```
 
 One process serves the API, MCP (`/mcp/{account}/{docket}`), OAuth, sign-in
@@ -348,6 +349,9 @@ and the web app on one port, and runs the worker beside them, which projects
 every docket into the graph and vector stores and answers `docket_search` and
 `docket_ask`. A file without `mode` is the single-tenant server, unchanged;
 `docket open` without `--config` is unchanged too.
+
+The [multi-tenant Compose and Helm profiles](deploy.md#multi-tenant-installs)
+run the same file with backing services and an optional separate worker.
 
 ### Its configuration
 
@@ -422,7 +426,8 @@ integrations:
 | --- | --- |
 | `sources.<name>` | `postgres` (required: every account lives in it), `neo4j`, `qdrant`, `embedder`, `reranker`, `cognee`. `provisioning` says who runs it: `external` (you), `bundled` (your installer, beside the server) or `managed` (the server makes one per account: Neo4j on Kubernetes). |
 | `defaults.stores` | Which source each role uses: `records`, `graph`, `search`, `embedder`, `reranker`, `cognee`. Needed only when there are two sources of a type. |
-| `worker.mode` | `inline` needs a graph, a search and an embedder source. `off` runs the API alone; search, Ask and projections wait for a worker. |
+| `worker.mode` | `inline` needs a graph, a search and an embedder source. `off` runs the API alone; search, Ask and projections wait for a worker. Use `docket serve worker --config docket-server.yaml` and a TLS-protected query listener when the worker runs separately. |
+| `limits.accounts` | The account limit. A bundled Neo4j enforces a limit of one. |
 | `ai.providers` | `openrouter`, with a shared `apiKey` and/or a `provisioningKey` that gives each account a key capped at its budget; or `openai-compatible`, any OpenAI-style chat completions API at a `url`, with an optional `apiKey`. `ai.primary` picks one when there are several. Without one, AI is off and search still works. |
 | `ai.models` | The models accounts may choose from, for `cypher` (graph queries, extraction) and `synthesis` (answers), the first of each the default. Optional for OpenRouter, which has its own list; needed for `openai-compatible`. |
 | `auth.github` | Sign-in with a GitHub OAuth App of your own, called back at `<publicUrl>/auth/github/callback`. |
@@ -547,8 +552,6 @@ rebuilds from Postgres.
 
 ### Not yet
 
-- **Installers.** The image, Compose stack and Helm chart above run the
-  single-tenant server. Their multi-tenant profiles are next.
 - **The UI as its own deployment.** `--no-ui` turns the product's pages off,
   but they are still served by the same app; a separately deployed UI follows
   once the public API covers every page.

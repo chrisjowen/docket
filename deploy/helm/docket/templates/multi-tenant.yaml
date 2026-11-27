@@ -1,0 +1,231 @@
+{{- if .Values.multiTenant.enabled }}
+{{- $root := . }}
+{{- $mt := .Values.multiTenant }}
+{{- $pg := .Values.postgres }}
+{{- $name := include "docket.fullname" . }}
+{{- $worker := include "docket.storeName" (dict "root" . "store" "worker") }}
+{{- $config := fromYaml $mt.config }}
+{{- if ne $config.mode "multi-tenant" }}
+{{- fail "multiTenant.config must be a docket-server.yaml with mode: multi-tenant." }}
+{{- end }}
+{{- if and $pg.bundled.enabled (not $pg.enabled) }}
+{{- fail "Set postgres.enabled=true to deploy bundled Postgres." }}
+{{- end }}
+{{- if and $mt.worker.enabled (not $mt.worker.tlsSecret) }}
+{{- fail "multiTenant.worker.enabled requires multiTenant.worker.tlsSecret (tls.crt, tls.key, ca.crt)." }}
+{{- end }}
+{{- $managed := dict }}
+{{- $graphName := dig "defaults" "stores" "graph" "" $config }}
+{{- range $key, $source := $config.sources }}
+  {{- if and (or (not $graphName) (eq $key $graphName)) (eq $source.type "neo4j") (eq $source.provisioning "managed") }}
+    {{- $managed = $source }}
+  {{- end }}
+{{- end }}
+{{- $domain := "docket.dev" }}
+{{- if $mt.managedGraph }}
+  {{- if or .Values.neo4j.enabled (not $managed) }}
+    {{- fail "multiTenant.managedGraph requires a managed Neo4j source and neo4j.enabled=false." }}
+  {{- end }}
+  {{- $kube := $managed.kubernetes | default dict }}
+  {{- if or (ne $managed.driver "kubernetes") (ne $kube.namespace .Release.Namespace) (not $kube.issuer) }}
+    {{- fail "The managed Neo4j source must use driver: kubernetes and name the release namespace and a cert-manager Issuer." }}
+  {{- end }}
+  {{- $domain = $kube.labelDomain | default $domain }}
+{{- else if $managed }}
+  {{- fail "The managed Neo4j source requires multiTenant.managedGraph=true." }}
+{{- end }}
+{{- $inlineWorker := eq (dig "worker" "mode" "inline" $config | toString) "inline" }}
+{{- $components := list "server" }}
+{{- if $mt.worker.enabled }}{{ $components = append $components "worker" }}{{ end }}
+{{- range $component := $components }}
+{{- $isWorker := eq $component "worker" }}
+{{- $runsWorker := or $isWorker (and (not $mt.worker.enabled) $inlineWorker) }}
+{{- $podName := ternary $worker $name $isWorker }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $podName }}
+  labels:
+    {{- include "docket.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy: { type: Recreate }
+  selector:
+    matchLabels:
+      {{- include "docket.selector" (dict "root" $root "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "docket.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $component }}
+        {{- if and $runsWorker $mt.managedGraph }}
+        {{ printf "%s/neo4j-client" $domain }}: "true"
+        {{- end }}
+      annotations:
+        checksum/config: {{ $mt.config | sha256sum }}
+        {{- with $root.Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: {{ and $runsWorker $mt.managedGraph }}
+      {{- if and $runsWorker $mt.managedGraph }}
+      serviceAccountName: {{ $worker }}
+      {{- end }}
+      enableServiceLinks: false
+      {{- with $root.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      {{- if and (not $isWorker) $pg.enabled $pg.bundled.enabled }}
+      initContainers:
+        - name: bootstrap-postgres
+          image: {{ include "docket.image" $root }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          command: [/nodejs/bin/node, /opt/docket/bootstrap-postgres.mjs]
+          env:
+            {{- include "docket.platformPostgresEnv" (dict "root" $root "worker" false) | nindent 12 }}
+          securityContext:
+            {{- include "docket.containerSecurity" $root | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: docket
+          image: {{ include "docket.image" $root }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          {{- if $isWorker }}
+          args: [serve, worker, --config, /etc/docket/docket-server.yaml]
+          {{- else }}
+          args: [serve, --config, /etc/docket/docket-server.yaml{{ if $mt.worker.enabled }}, --no-worker{{ end }}{{ if not $root.Values.ui }}, --no-ui{{ end }}]
+          {{- end }}
+          env:
+            - { name: DOCKET_SERVE_PORT, value: {{ $root.Values.service.port | quote }} }
+            {{- with $root.Values.publicUrl }}
+            - { name: DOCKET_PUBLIC_URL, value: {{ . | quote }} }
+            {{- end }}
+            {{- include "docket.platformPostgresEnv" (dict "root" $root "worker" $isWorker) | nindent 12 }}
+            {{- if $root.Values.neo4j.enabled }}
+            - name: NEO4J_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "docket.neo4jSecret" $root }}, key: password } }
+            {{- end }}
+            {{- if $root.Values.qdrant.enabled }}
+            - name: QDRANT_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "docket.qdrantSecret" $root }}, key: apiKey } }
+            {{- end }}
+            {{- if $root.Values.cognee.enabled }}
+            - name: COGNEE_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "docket.cogneeSecret" $root }}, key: apiKey, optional: true } }
+            {{- end }}
+            {{- if $isWorker }}
+            - { name: DOCKET_QUERY_HOST, value: "0.0.0.0" }
+            - { name: DOCKET_QUERY_TLS_CERT, value: /etc/docket/query/tls.crt }
+            - { name: DOCKET_QUERY_TLS_KEY, value: /etc/docket/query/tls.key }
+            {{- else if $mt.worker.enabled }}
+            - { name: DOCKET_QUERY_URL, value: "https://{{ $worker }}:8443" }
+            - { name: NODE_EXTRA_CA_CERTS, value: /etc/docket/query/ca.crt }
+            {{- end }}
+            {{- with $root.Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            {{- if $isWorker }}
+            - { name: query, containerPort: 8443 }
+            {{- end }}
+            - { name: http, containerPort: {{ ternary 8080 $root.Values.service.port $isWorker }} }
+          startupProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 2
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources:
+            {{- toYaml $root.Values.resources | nindent 12 }}
+          securityContext:
+            {{- include "docket.containerSecurity" $root | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/docket/docket-server.yaml, subPath: docket-server.yaml, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+            {{- if not $isWorker }}
+            - { name: data, mountPath: /data }
+            {{- end }}
+            {{- if $mt.existingSecret }}
+            - { name: secrets, mountPath: /etc/docket/secrets, readOnly: true }
+            {{- end }}
+            {{- if $mt.worker.enabled }}
+            - { name: query, mountPath: /etc/docket/query, readOnly: true }
+            {{- end }}
+          {{- if not $isWorker }}
+          workingDir: /data
+          {{- end }}
+      volumes:
+        - name: config
+          configMap: { name: {{ $name }} }
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+        {{- if not $isWorker }}
+        - name: data
+          {{- if $root.Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $root.Values.persistence.existingClaim | default $name }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+        {{- if $mt.existingSecret }}
+        - name: secrets
+          secret:
+            secretName: {{ $mt.existingSecret }}
+            defaultMode: 0440
+        {{- end }}
+        {{- if $mt.worker.enabled }}
+        - name: query
+          secret:
+            secretName: {{ $mt.worker.tlsSecret }}
+            defaultMode: 0440
+            items:
+              {{- if $isWorker }}
+              - { key: tls.crt, path: tls.crt }
+              - { key: tls.key, path: tls.key }
+              {{- else }}
+              - { key: ca.crt, path: ca.crt }
+              {{- end }}
+        {{- end }}
+      {{- with $root.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- if $mt.worker.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $worker }}
+  labels:
+    {{- include "docket.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "docket.selector" (dict "root" . "component" "worker") | nindent 4 }}
+  ports:
+    - { name: query, port: 8443, targetPort: query }
+{{- end }}
+{{- end }}

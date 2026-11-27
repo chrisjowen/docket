@@ -1,0 +1,36 @@
+version: 1
+mode: multi-tenant
+environment: development
+sources:
+  records:
+    type: postgres
+    provisioning: bundled
+    tls: false
+    url: { env: DOCKET_PG_URL }
+    migrationUrl: { env: DOCKET_PG_MIGRATION_URL }
+    encryptionKey: { file: /etc/docket/secrets/kek }
+  graph:
+    type: neo4j
+    provisioning: bundled
+    isolation: shared
+    url: bolt://docket-neo4j:7687
+    password: { env: NEO4J_PASSWORD }
+  search:
+    type: qdrant
+    provisioning: bundled
+    url: http://docket-qdrant:6333
+    apiKey: { env: QDRANT_API_KEY }
+  embedder:
+    type: embedder
+    provisioning: bundled
+    url: http://docket-embedder:11434
+    model: nomic-embed-text
+    dimensions: 768
+auth:
+  github:
+    clientId: replace-me
+    clientSecret: { env: DOCKET_GITHUB_CLIENT_SECRET }
+  access:
+    allow: [example-user]
+limits:
+  accounts: 1

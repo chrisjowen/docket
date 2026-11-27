@@ -2754,6 +2754,7 @@ LoadServerConfigOptions
       port?: number | undefined;
       ui?: boolean | undefined;
       worker?: 'inline' | 'off' | undefined;
+      workerOnly?: boolean | undefined;
       command?: 'serve' | 'open' | undefined;
   }
 

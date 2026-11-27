@@ -5,6 +5,7 @@
   "description": "The worker: repo sync and export PRs from GitHub (§14), and reconciliation of canonical documents to each org's Neo4j and mem0 (§6.2).",
   "license": "AGPL-3.0-only",
   "type": "module",
+  "files": ["dist"],
   "exports": {
     "./run": "./dist/run.js",
     "./package.json": "./package.json"
