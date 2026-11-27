@@ -99,7 +99,7 @@ export interface ResolvedAiSettings {
   spaceId: string | null
   /** The model each use runs on here, and whose choice it is. */
   models: Record<ModelUse, ResolvedModel>
-  /** What the place above offers for each use: what "the same as above" means here. */
+  /** What runs here for each use if this place chooses nothing: what "the same as above" means here. */
   inherited: Record<ModelUse, ResolvedModel>
   /** The models this place may choose from for each use: the platform's list, narrowed by every limit above it and by its key. */
   choices: Record<ModelUse, readonly string[]>
@@ -139,12 +139,13 @@ export function resolveChain(chain: SettingsChain, allowlist: Readonly<Record<Mo
   const accountOffers = perUse((use) => narrow(allowlist[use], chain.account.allowed[use]))
   const spaceOffers = perUse((use) => narrow(accountOffers[use], chain.space?.settings.allowed[use]))
 
-  const resolveAt = (at: AiPlace): { choices: Record<ModelUse, readonly string[]>; models: Record<ModelUse, ResolvedModel> } => {
+  // `ownChoice: false` leaves the place's own choice out: what runs there if it chooses nothing.
+  const resolveAt = (at: AiPlace, ownChoice = true): { choices: Record<ModelUse, readonly string[]>; models: Record<ModelUse, ResolvedModel> } => {
     const choices = perUse((use) => (at === 'account' ? allowlist[use] : served(at === 'space' ? accountOffers[use] : spaceOffers[use])))
     const models = perUse((use) =>
       pick(choices[use], [
-        ...(at === 'docket' ? [['docket', chain.docket?.settings.models[use]] as [SettingsSource, string | undefined]] : []),
-        ...(at !== 'account' ? [['space', chain.space?.settings.models[use]] as [SettingsSource, string | undefined]] : []),
+        ...(at === 'docket' && ownChoice ? [['docket', chain.docket?.settings.models[use]] as [SettingsSource, string | undefined]] : []),
+        ...(at === 'docket' || (at === 'space' && ownChoice) ? [['space', chain.space?.settings.models[use]] as [SettingsSource, string | undefined]] : []),
         ['account', chain.account.models[use]],
       ]),
     )
@@ -152,7 +153,7 @@ export function resolveChain(chain: SettingsChain, allowlist: Readonly<Record<Mo
   }
 
   const here = resolveAt(place)
-  const above = place === 'docket' ? (chain.space ? resolveAt('space') : resolveAt('account')) : place === 'space' ? resolveAt('account') : here
+  const above = resolveAt(place, false)
   const spaceCap = chain.space?.settings.monthlyUsd ?? null
   return {
     place,

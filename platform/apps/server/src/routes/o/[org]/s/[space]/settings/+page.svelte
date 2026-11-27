@@ -88,7 +88,7 @@
       </select>
     </label>
     <label class="grow">
-      {data.key ? 'Replace the key' : 'Key'}
+      {data.key ? 'New key' : 'Key'}
       <input name="key" type="password" required minlength="8" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Paste the key" />
     </label>
     <button class="button primary" type="submit">{data.key ? 'Replace key' : 'Use this key'}</button>
@@ -126,8 +126,9 @@
           <td data-label="Component">Search</td>
           <td data-label="Engine">Qdrant</td>
           <td data-label="Uses">
-            A collection per docket{#if data.storage.dockets}: {data.storage.ownCollections} of {data.storage.dockets}{#if data.storage.sharedCollection}, and
-                {data.storage.sharedCollection} older docket{data.storage.sharedCollection === 1 ? '' : 's'} on {data.org.name}'s shared collection{/if}{/if}
+            A collection of its own for each docket{#if data.storage.sharedCollection}, except {data.storage.sharedCollection} older docket{data.storage.sharedCollection === 1
+                ? ''
+                : 's'}, which keep{data.storage.sharedCollection === 1 ? 's' : ''} {data.org.name}'s shared collection{/if}
           </td>
         </tr>
         <tr>
@@ -228,7 +229,8 @@
   }
   .grow {
     flex: 1;
-    min-width: min(100%, 14rem);
+    /* On a phone the key takes a line of its own. */
+    min-width: min(100%, 16rem);
   }
   .inline {
     display: inline;

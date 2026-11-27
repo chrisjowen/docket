@@ -74,6 +74,8 @@ describe('AI settings resolve account -> space -> docket (tenancy v2 §5)', () =
     expect(resolved.choices.cypher).toEqual(['anthropic/claude-haiku-5.5'])
     expect(resolved.models.cypher).toEqual({ model: 'anthropic/claude-haiku-5.5', from: 'platform' })
     expect(resolved.key).toEqual({ from: 'space', spaceId: 'eng', provider: 'anthropic', hint: 'abcd' })
+    // "The same as above" is what would run here: the space's key narrows it too.
+    expect(resolved.inherited.synthesis).toEqual({ model: 'anthropic/claude-sonnet-5.5', from: 'platform' })
     // An OpenRouter key serves the whole list.
     const openrouter = resolveChain(chain({ space: { id: 'eng', settings: NO_SETTINGS, key: key('openrouter') } }), LIST)
     expect(openrouter.choices.synthesis).toEqual(LIST.synthesis)

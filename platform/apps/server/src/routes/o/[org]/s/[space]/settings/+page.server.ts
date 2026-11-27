@@ -62,17 +62,6 @@ export const load: PageServerLoad = async (event) => {
         [orgId, space.id],
       )
     ).rows[0]
-    const ownCollections = dockets.length
-      ? Number(
-          (
-            await tx.query<{ count: string }>(
-              `SELECT count(*) FROM platform.docket_stores d JOIN platform.stores s ON s.id = d.store_id
-                WHERE d.org_id = $1 AND d.kind = 'qdrant' AND s.docket_id = d.docket_id AND d.docket_id = ANY($2)`,
-              [orgId, dockets.map((each) => each.id)],
-            )
-          ).rows[0]?.count ?? 0,
-        )
-      : 0
     const shared = dockets.length
       ? Number(
           (
@@ -84,7 +73,7 @@ export const load: PageServerLoad = async (event) => {
           ).rows[0]?.count ?? 0,
         )
       : 0
-    return { resolved, own, key: keyView(key, keyBy), pods, graph, ownCollections, shared }
+    return { resolved, own, key: keyView(key, keyBy), pods, graph, shared }
   })
   const spend = await caps.spaceStatus(orgId, space.id)
   const accountCap = await caps.status(orgId)
@@ -111,7 +100,6 @@ export const load: PageServerLoad = async (event) => {
         : null,
       pods: view.pods,
       dockets: dockets.length,
-      ownCollections: view.ownCollections,
       sharedCollection: view.shared,
     },
   }
