@@ -20,7 +20,7 @@ export interface CloudToolContext {
   inTenant<T>(fn: (ctx: StoreContext) => Promise<T>): Promise<T>
   /** The worker's query service, which reaches the projections. */
   query: QueryClient
-  /** Throws `AiCapReached` when the org's AI budget is spent (§11). Only `docket_ask` calls it. */
+  /** Throws `AiCapReached` when the budget this workspace's calls are held to is spent (§11). Only `docket_ask` calls it. */
   assertWithinCap(): Promise<void>
   /** Who is calling, for AI metering. */
   actor: string

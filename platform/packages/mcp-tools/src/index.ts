@@ -85,7 +85,7 @@ export const SERVER_INSTRUCTIONS =
   'the older one as current; until then the older one is current and the answer says what would carry it. Never present a ' +
   'result marked out of date as current, and say so when a result has a pending replacement. Read existing notes with docket_get, then use docket_update_notes with only your new prose and supporting evidence to extend them safely. It appends to the latest notes with a dated separator; repeating the call appends again.'
 
-export { ASK_SCHEMA, CAP_MESSAGE } from './ask.js'
+export { ASK_SCHEMA, CAP_MESSAGE, capMessage } from './ask.js'
 export type { AuditOutcome, CloudTool, CloudToolContext } from './context.js'
 export { RESOURCE_SCHEMA } from './get.js'
 export { ONTOLOGY_SCHEMA } from './ontology.js'

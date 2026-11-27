@@ -102,6 +102,21 @@ describe('asking several workspaces', () => {
     expect(ask).not.toHaveBeenCalled()
     expect(answers.map((answer) => answer.error)).toEqual([CAP_MESSAGE, CAP_MESSAGE])
   })
+
+  it("still asks a docket whose own budget holds when another docket's is spent", async () => {
+    const ask = vi.fn(async () => Promise.reject(new QueryError(503, 'asked')))
+    const spent = Object.assign(new Error('spent'), { name: 'AiCapReached' })
+    const sliced = Object.assign(new Error("This space's AI budget for this month is spent"), { name: 'AiCapReached', spaceId: 'research' })
+    const capped = (workspaceId: string) => Promise.reject(workspaceId === platform.id ? spent : sliced)
+    const answers = await askAcross(deps({ ask }, { assertWithinCap: async (workspaceId) => (workspaceId === data.id ? undefined : capped(workspaceId)) }), [platform, data], 'q')
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: data.id }))
+    expect(answers[0]?.error).toBe(CAP_MESSAGE)
+    expect(answers[1]?.error).toBe('The docket could not answer: asked')
+
+    const bySlice = await askAcross(deps({ ask }, { assertWithinCap: async () => Promise.reject(sliced) }), [platform], 'q')
+    expect(bySlice[0]?.error).toBe("This space's AI budget for this month is spent")
+  })
 })
 
 describe('searching several workspaces', () => {

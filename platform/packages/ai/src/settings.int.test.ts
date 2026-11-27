@@ -9,7 +9,7 @@ import { AiCapReached, aiCaps, setCap } from './caps.js'
 import { AiNotConfigured, ProviderKeyError, orgAiKeys, spaceAiKeys } from './keys.js'
 import { MODEL_ALLOWLIST, openRouterModels, type AiDeps } from './models.js'
 import type { OpenRouterClient } from './openrouter-client.js'
-import { SettingsError, modelChoices, providerKeyInfo, resolveAiSettings, saveAiSettings } from './settings.js'
+import { SettingsError, docketCapScope, modelChoices, providerKeyInfo, resolveAiSettings, saveAiSettings } from './settings.js'
 import { recordUsage } from './usage.js'
 
 function fakeClient(model = 'm'): OpenRouterClient {
@@ -256,6 +256,11 @@ describe.skipIf(!TEST_PG_URL)("who pays: the account's cap holds Docket's key, a
     expect((capped as AiCapReached).spaceId).toBeNull()
     expect(await refusal(on(otherDocket).synthesis?.chat(ask))).toBeInstanceOf(AiCapReached)
     expect(await on(ownDocket).synthesis?.chat(ask)).toBe('ok')
+    // The Ask page's and MCP's check before asking a docket holds it to the same budget its calls are.
+    const before = (docketId: string) => refusal(platform((tx) => docketCapScope(tx, mixed.orgId, docketId)).then((scope) => caps.assertWithinCap(mixed.orgId, scope)))
+    expect(await before(ownDocket)).toBeNull()
+    expect(await before(otherDocket)).toBeInstanceOf(AiCapReached)
+    expect(await before(accountDocket)).toBeInstanceOf(AiCapReached)
     expect(await paidBy(mixed)).toEqual([
       ['account', 10],
       ['space', 12],

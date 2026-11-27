@@ -24,6 +24,7 @@ export {
   PROVIDERS,
   PROVIDER_INFO,
   SettingsError,
+  docketCapScope,
   isProvider,
   modelChoices,
   placeAiSettings,

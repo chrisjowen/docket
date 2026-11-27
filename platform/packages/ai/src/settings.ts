@@ -249,6 +249,15 @@ export async function modelChoices(tx: Tx, orgId: string, docketId?: string | nu
   return perUse((use) => resolved.models[use].model ?? (fallback[use][0] as string))
 }
 
+/**
+ * What a call for one docket is held to, as `metered()` routes it: its
+ * space's slice, and the account's cap unless it goes on the space's own key.
+ */
+export async function docketCapScope(tx: Tx, orgId: string, docketId: string): Promise<{ spaceId: string | null; ownKey: boolean }> {
+  const resolved = await resolveAiSettings(tx, orgId, { docketId })
+  return { spaceId: resolved.spaceId, ownKey: resolved.key.from === 'space' }
+}
+
 export class SettingsError extends Error {
   override name = 'SettingsError'
 }
