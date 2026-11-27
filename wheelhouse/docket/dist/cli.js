@@ -518,6 +518,22 @@ const serveCommand = program
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
 });
+serveCommand
+    .command('worker')
+    .description('Run the multi-tenant worker as a separate process')
+    .option('-c, --config <file>', 'the multi-tenant server config')
+    .action(async (options) => {
+    const { config: parentConfig } = serveCommand.opts();
+    const serve = await loadServeModule();
+    if (!serve.loadPlatformConfig)
+        throw new Error('docket serve worker needs multi-tenant support in @chrisjowen/docket-server.');
+    const config = await serve.loadPlatformConfig({ file: options.config ?? parentConfig, worker: 'inline', workerOnly: true });
+    const platform = await loadPlatformModule();
+    const worker = await platform.startPlatformWorker(config);
+    const stop = () => { void worker.stop().then(() => process.exit(0)); };
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+});
 const serveTokenCommand = serveCommand.command('token').description('Manage the bearer tokens docket serve accepts');
 /** `--config` given on `docket serve` or on the token command itself. */
 const serveConfigOf = (options) => serveConfig({ ...serveCommand.opts(), ...(options.config ? { config: options.config } : {}) });
