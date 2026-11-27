@@ -1,6 +1,6 @@
 # Docket server platform
 
-The multi-tenant Docket server: accounts (orgs) and their dockets
+The multi-tenant Docket server: accounts (orgs), their spaces and dockets
 (workspaces), members and roles, sign-in with GitHub, OpenID Connect or a
 password, Docket's own OAuth authorization server for MCP clients and the
 CLI's device sign-in, the web app and its JSON API, each docket's MCP
@@ -29,7 +29,7 @@ from these packages.
 | `packages/keys` | `@docket/platform-keys` | `KeyService`: envelope encryption of per-account data keys under the platform key (KEK). |
 | `packages/audit` | `@docket/platform-audit` | The append-only, hash-chained audit log. |
 | `packages/limits` | `@docket/platform-limits` | Rate limits and quotas shared by every replica. |
-| `packages/canonical-store` | `@docket/platform-canonical-store` | Dockets and their canonical documents in Postgres, writes with evidence, trust, proposals, saved chats, the activity log. |
+| `packages/canonical-store` | `@docket/platform-canonical-store` | Spaces, dockets and their canonical documents in Postgres, writes with evidence, trust, proposals, saved chats, the activity log. |
 | `packages/ontology-service` | `@docket/platform-ontology-service` | Templates, drafts, versions, the change check, migrations, import and export. |
 | `packages/mcp-tools` | `@docket/platform-mcp-tools` | The MCP read and write tools, on docket's own tool surface. |
 | `packages/projections` | `@docket/platform-projections` | Each docket's projections on its account's stores. |

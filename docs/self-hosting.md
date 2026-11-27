@@ -560,4 +560,4 @@ rebuilds from Postgres.
 - **Password changes** happen in the config. There is no page for changing
   your own password or resetting it by email yet.
 - **Per-space stores and models.** Every account uses the stores and models
-  in the config. Choosing them per space comes with Spaces.
+  in the config. Choosing them per space is not built yet.
