@@ -76,8 +76,14 @@ export interface PlatformConfigView {
   ui: boolean
   worker: { mode: 'inline' | 'off' }
   stores: Record<string, { type: string } | null>
-  ai: { primary: unknown }
-  auth: { github: unknown; local: { login: string } | null }
+  ai: { primary: { kind: string } | null }
+  auth: {
+    github: unknown
+    /** Absent before docket-server 0.12's OIDC sign-in. */
+    oidc?: Record<string, { label: string }>
+    password?: { users: unknown[] } | null
+    local: { login: string } | null
+  }
   integrations: { githubApp: unknown }
 }
 

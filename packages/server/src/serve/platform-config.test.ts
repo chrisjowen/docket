@@ -69,8 +69,8 @@ describe('the multi-tenant docket-server.yaml', () => {
         graph: null,
         search: null
       },
-      ai: { providers: {}, primary: null },
-      auth: { github: null, local: { login: 'alice' }, access: { allow: ['alice'], admins: ['alice'] } },
+      ai: { providers: {}, primary: null, models: null },
+      auth: { github: null, oidc: {}, password: null, local: { login: 'alice' }, access: { allow: ['alice'], admins: ['alice'] } },
       integrations: { githubApp: null }
     })
   })
@@ -126,7 +126,7 @@ describe('the multi-tenant docket-server.yaml', () => {
     await refuses({ ...minimal(), version: undefined }, /says which version it is written for: version: 1/)
     await refuses({ ...minimal(), version: 2 }, /version 2 is not one this docket reads/)
     await refuses({ ...minimal(), sources: { ...(minimal().sources as object), cache: { type: 'redis' } } }, /sources\.cache\.type is one of postgres, neo4j/)
-    await refuses({ ...minimal(), ai: { providers: { local: { kind: 'ollama', url: 'http://localhost:11434' } } } }, /ollama is planned, not yet supported/)
+    await refuses({ ...minimal(), ai: { providers: { local: { kind: 'anthropic' } } } }, /kind is openrouter or openai-compatible .*, not anthropic/)
   })
 
   it('needs every store the worker uses before running it inline, and says how to run the API alone', async () => {
@@ -170,5 +170,73 @@ describe('the multi-tenant docket-server.yaml', () => {
     await writeFile(file, stringify({ version: 1, listen: { port: 4390 } }))
     expect((await readServerConfigFile({ file, cwd: dir, env })).mode).toBe('single')
     expect((await readServerConfigFile({ cwd: join(dir, 'nowhere'), env: {} })).mode).toBe('single')
+  })
+
+  it('reads an OpenAI-compatible model provider, and the models accounts may choose from', async () => {
+    await writeFile(join(dir, 'openai-key'), 'x')
+    const config = await load({
+      ...minimal(),
+      ai: {
+        providers: {
+          local: { kind: 'openai-compatible', url: 'http://ollama:11434/v1/' },
+          openai: { kind: 'openai-compatible', url: 'https://api.openai.com/v1', apiKey: { file: './openai-key' } }
+        },
+        primary: 'local',
+        models: { cypher: 'qwen2.5:7b', synthesis: ['llama3.1:8b', 'qwen2.5:14b'] }
+      }
+    })
+    expect(config.ai.primary).toEqual({ kind: 'openai-compatible', url: 'http://ollama:11434/v1', apiKey: null })
+    expect(config.ai.providers.openai).toEqual({ kind: 'openai-compatible', url: 'https://api.openai.com/v1', apiKey: { file: join(dir, 'openai-key') } })
+    expect(config.ai.models).toEqual({ cypher: ['qwen2.5:7b'], synthesis: ['llama3.1:8b', 'qwen2.5:14b'] })
+
+    const unnamed = { ...minimal(), ai: { providers: { local: { kind: 'openai-compatible', url: 'http://ollama:11434/v1' } } } }
+    await refuses(unnamed, /ai\.models is needed for an openai-compatible provider/)
+    await refuses({ ...unnamed, ai: { ...unnamed.ai, models: { cypher: ['a'] } } }, /ai\.models\.synthesis is needed beside the other uses/)
+    await refuses({ ...unnamed, ai: { ...unnamed.ai, models: { cypher: [], synthesis: ['b'] } } }, /ai\.models\.cypher lists at least one model/)
+    await refuses({ ...minimal(), ai: { providers: { local: { kind: 'openai-compatible' } } } }, /ai\.providers\.local\.url is a string/)
+  })
+
+  it('reads OIDC providers and password users, with every secret a reference', async () => {
+    for (const name of ['okta-secret', 'ops-password']) await writeFile(join(dir, name), 'x')
+    const config = await load({
+      ...minimal(),
+      auth: {
+        oidc: { okta: { issuer: 'https://login.example.com/oauth2/default', clientId: 'docket', clientSecret: { file: './okta-secret' }, label: 'Okta' } },
+        password: { users: [{ login: 'Ops.Admin', password: { file: './ops-password' }, name: 'Operations', email: 'Ops@Example.com' }] },
+        access: { allow: ['ada', '@Example.com', 'jo@example.com', 'ops.admin'], admins: ['ops.admin', 'boss@example.com'] }
+      }
+    })
+    expect(config.auth.oidc).toEqual({
+      okta: { issuer: 'https://login.example.com/oauth2/default', clientId: 'docket', clientSecret: { file: join(dir, 'okta-secret') }, label: 'Okta', scopes: ['profile', 'email'] }
+    })
+    expect(config.auth.password).toEqual({ users: [{ login: 'ops.admin', name: 'Operations', email: 'ops@example.com', password: { file: join(dir, 'ops-password') } }] })
+    expect(config.auth.access).toEqual({ allow: ['ada', '@example.com', 'jo@example.com', 'ops.admin'], admins: ['ops.admin', 'boss@example.com'] })
+  })
+
+  it('keeps an OIDC issuer exactly as written, trailing slash and all', async () => {
+    await writeFile(join(dir, 's'), 'x')
+    const config = await load({ ...minimal(), auth: { oidc: { auth0: { issuer: 'https://tenant.example.com/', clientId: 'c', clientSecret: { file: './s' } } } } })
+    expect(config.auth.oidc.auth0?.issuer).toBe('https://tenant.example.com/')
+  })
+
+  it('refuses sign-in settings that could take a GitHub user\'s place, leak a secret, or run unsafely', async () => {
+    await writeFile(join(dir, 's'), 'x')
+    const oidc = (entry: Record<string, unknown>, name = 'okta') => ({ ...minimal(), auth: { oidc: { [name]: { issuer: 'https://idp.example.com', clientId: 'c', clientSecret: { file: './s' }, ...entry } } } })
+    await refuses(oidc({ clientSecret: 'plain' }), /auth\.oidc\.okta\.clientSecret is a secret/)
+    await refuses(oidc({}, 'github'), /auth\.oidc\.github is not github/)
+    await refuses(oidc({}, 'Okta Corp'), /auth\.oidc\.Okta Corp is named in lowercase/)
+    await refuses(oidc({ issuer: 'http://idp.example.com' }), /auth\.oidc\.okta\.issuer is https:\/\/ \(plain http:\/\/ only for a provider on this machine\)/)
+    expect((await load(oidc({ issuer: 'http://127.0.0.1:8080/realms/dev' }))).auth.oidc.okta?.issuer).toBe('http://127.0.0.1:8080/realms/dev')
+    await refuses({ ...oidc({ issuer: 'http://127.0.0.1:8080' }), environment: 'production', sources: { pg: { ...(minimal().sources as Record<string, Record<string, unknown>>).pg, tls: true } } }, /auth\.oidc\.okta\.issuer is https:\/\/, in production/)
+
+    const password = (users: unknown) => ({ ...minimal(), auth: { password: { users } } })
+    await refuses(password([{ login: 'alice', password: { file: './s' } }]), /users\[0\]\.login is a login with a "\." or "_"/)
+    await refuses(password([{ login: 'jo.b', password: 'hunter2hunter2' }]), /users\[0\]\.password is a secret/)
+    await refuses(password([{ login: 'jo.b', password: { file: './s' } }, { login: 'JO.B', password: { file: './s' } }]), /users\[1\]\.login lists jo\.b twice/)
+    await refuses(password([]), /auth\.password\.users lists the people/)
+
+    await refuses({ ...minimal(), auth: { local: { login: 'alice' }, access: { admins: ['@example.com'] } } }, /admins\[0\] is a person/)
+    await refuses({ ...minimal(), auth: { local: { login: 'alice' }, access: { allow: ['not a login'] } } }, /allow\[0\] is one of GitHub logins/)
+    await refuses({ ...minimal(), auth: {} }, /auth says how people sign in: github .*, oidc .*, password/)
   })
 })

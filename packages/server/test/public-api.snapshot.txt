@@ -2643,11 +2643,15 @@ workspaceScope
 ## ./serve (./dist/serve/index.d.ts)
 
 AiProvider
-  export interface AiProvider {
+  export type AiProvider = {
       kind: 'openrouter';
       apiKey: SecretRef | null;
       provisioningKey: SecretRef | null;
-  }
+  } | {
+      kind: 'openai-compatible';
+      url: string;
+      apiKey: SecretRef | null;
+  };
 
 ASK_OFF
   export declare const ASK_OFF = "docket_ask is off on this server: it has no model to answer with. Use docket_search, which needs none.";
@@ -2753,6 +2757,15 @@ LoadServerConfigOptions
       command?: 'serve' | 'open' | undefined;
   }
 
+MODEL_USES
+  export declare const MODEL_USES: readonly [
+      "cypher",
+      "synthesis"
+  ];
+
+ModelUse
+  export type ModelUse = (typeof MODEL_USES)[number];
+
 Neo4jSource
   export interface Neo4jSource {
       type: 'neo4j';
@@ -2772,6 +2785,23 @@ Neo4jSource
 
 newToken
   export declare const newToken: () => string;
+
+OidcProvider
+  export interface OidcProvider {
+      label: string;
+      issuer: string;
+      clientId: string;
+      clientSecret: SecretRef;
+      scopes: string[];
+  }
+
+PasswordUser
+  export interface PasswordUser {
+      login: string;
+      name: string | null;
+      email: string | null;
+      password: SecretRef;
+  }
 
 PlatformConfig
   export interface PlatformConfig {
@@ -2800,6 +2830,7 @@ PlatformConfig
       ai: {
           providers: Record<string, AiProvider>;
           primary: AiProvider | null;
+          models: Record<ModelUse, string[]> | null;
       };
       auth: {
           github: {
@@ -2807,6 +2838,10 @@ PlatformConfig
               clientSecret: SecretRef;
               oauthUrl: string | null;
               apiUrl: string | null;
+          } | null;
+          oidc: Record<string, OidcProvider>;
+          password: {
+              users: PasswordUser[];
           } | null;
           local: {
               login: string;

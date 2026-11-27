@@ -426,13 +426,19 @@ const runPlatform = async (
   console.log(running.ui ? `  app     ${running.url}/` : '  app     off: the API, MCP, OAuth and sign-in only (--no-ui)')
   console.log(`  MCP     ${running.url}/mcp/<account>/<docket>`)
   console.log(`  API     ${running.url}/api`)
-  console.log(`  sign-in ${[config.auth.github ? 'GitHub' : null, local ? `one click as ${local.login}, on this machine only` : null].filter(Boolean).join('; ')}`)
+  const signIn = [
+    config.auth.github ? 'GitHub' : null,
+    ...Object.values(config.auth.oidc ?? {}).map((provider) => `${provider.label} (OIDC)`),
+    config.auth.password ? `password, for ${config.auth.password.users.length} listed ${config.auth.password.users.length === 1 ? 'person' : 'people'}` : null,
+    local ? `one click as ${local.login}, on this machine only` : null
+  ]
+  console.log(`  sign-in ${signIn.filter(Boolean).join('; ')}`)
   console.log(
     running.worker === 'inline'
       ? `  worker  in this process, projecting into ${['graph', 'search'].map((role) => config.stores[role]?.type).filter(Boolean).join(' and ')}`
       : '  worker  off: search, Ask and projections wait until a worker runs'
   )
-  if (!config.ai.primary) console.log('  AI      off: no model provider configured (search needs none)')
+  console.log(config.ai.primary ? `  AI      ${config.ai.primary.kind}` : '  AI      off: no model provider configured (search needs none)')
   console.log(`  health  ${running.url}/healthz, ${running.url}/readyz`)
   console.log('Press Ctrl-C to stop.')
   if (command === 'open' && options.open !== false && running.ui) openBrowser(`${running.url}/`)

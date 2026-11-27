@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Server } from 'node:http'
 
-import { aiCaps, auditCapWarning, meteredTurns, openRouterClient, openRouterKeys, openRouterModels, type AiDeps } from '@docket/platform-ai'
+import { aiCaps, auditCapWarning, configureModels, meteredTurns, openRouterClient, openRouterKeys, openRouterModels, type AiDeps } from '@docket/platform-ai'
 import { keyring } from '@docket/platform-canonical-store'
 import { githubApp, githubAppConfigFromEnv } from '@docket/platform-github'
 import { platformKeyService, readKekFile } from '@docket/platform-keys'
@@ -17,6 +17,7 @@ import { CogneeUnavailable, type CogneeAccess } from '@docket/platform-projectio
 import { PLATFORM_MIGRATIONS, tenantRouter } from '@docket/platform-tenancy'
 import pg from 'pg'
 
+import { aiProviderOf } from './ai-provider.js'
 import { cogneeLeases, cogneeLoop, openCogneeToClear } from './cognee.js'
 import { gatewayDeps, startGatewayServer } from './cognify-gateway.js'
 import { consolidationLoop } from './consolidation.js'
@@ -195,24 +196,31 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
   const provisionAll = async () => {
     for (const orgId of await activeOrgs(router)) await stores.ensure(orgId).catch(() => undefined)
   }
+  configureModels(env.DOCKET_AI_MODELS)
+  const provider = aiProviderOf(env)
+  const client = (options: { provisioningKey?: string | undefined; appUrl?: string | undefined }) =>
+    openRouterClient({ ...options, apiBase: provider?.apiBase, dialect: provider?.dialect })
   const ai = openRouterKeys(
     { platform: (fn) => router.withPlatform(fn), keysFor: (orgId) => ring.forOrg(orgId) },
-    { provisioningKey: env.OPENROUTER_PROVISIONING_KEY, apiKey: env.OPENROUTER_API_KEY, appUrl: env.ORIGIN },
-    openRouterClient,
+    { provisioningKey: provider?.provisioningKey, apiKey: provider?.sharedKey, appUrl: env.ORIGIN },
+    client,
   )
   log.info(
-    {
-      'per-org': 'AI: each org gets its own OpenRouter key with a credit limit equal to its cap',
-      shared: 'AI: every org shares the platform OpenRouter key; caps are enforced from recorded usage',
-      off: 'AI: no OpenRouter key is configured, so AI stays off (search works)',
-    }[ai.mode],
+    provider?.kind === 'openai-compatible'
+      ? `AI: every org calls the OpenAI-compatible endpoint at ${provider.apiBase}; caps are enforced from recorded usage, which counts tokens but no cost`
+      : {
+          'per-org': 'AI: each org gets its own OpenRouter key with a credit limit equal to its cap',
+          shared: 'AI: every org shares the platform OpenRouter key; caps are enforced from recorded usage',
+          off: 'AI: no model provider is configured, so AI stays off (search works)',
+        }[ai.mode],
   )
   const aiDeps: AiDeps | null = ai.keys && {
     platform: (fn) => router.withPlatform(fn),
     caps: aiCaps({ platform: (fn) => router.withPlatform(fn), notifyOwners: auditCapWarning(router) }),
     keys: ai.keys,
-    client: openRouterClient({ appUrl: env.ORIGIN }),
+    client: client({ appUrl: env.ORIGIN }),
   }
+  const platformKey = provider?.sharedKey
 
   // docket_search re-ranks its candidates with the cross-encoder in the re-ranker pod (reranker.ts).
   const reranker = env.DOCKET_RERANKER_URL
@@ -284,12 +292,12 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
 
   // cognee's pass and the gateway its cognify calls the org's model through, where a cognee service runs.
   const cogneePass = cognee
-    ? cogneeLoop({ router, keyring: ring, access: cognee, ai: env.OPENROUTER_API_KEY ? aiDeps : null, log, intervalMs: Number(env.DOCKET_COGNEE_POLL_MS ?? 60_000) })
+    ? cogneeLoop({ router, keyring: ring, access: cognee, ai: platformKey ? aiDeps : null, log, intervalMs: Number(env.DOCKET_COGNEE_POLL_MS ?? 60_000) })
     : null
   cogneePass?.start()
   const gateway = cognee
     ? startGatewayServer({
-        deps: gatewayDeps(router, aiDeps, required(env, 'DOCKET_COGNIFY_GATEWAY_KEY'), { appUrl: env.ORIGIN, platformKey: env.OPENROUTER_API_KEY }),
+        deps: gatewayDeps(router, aiDeps, required(env, 'DOCKET_COGNIFY_GATEWAY_KEY'), { appUrl: env.ORIGIN, platformKey, apiBase: provider?.apiBase, dialect: provider?.dialect }),
         port: Number(env.DOCKET_COGNIFY_GATEWAY_PORT ?? 8445),
         host: env.DOCKET_QUERY_HOST ?? (tls ? '0.0.0.0' : '127.0.0.1'),
         tls,
@@ -298,7 +306,7 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
       })
     : null
   if (!cognee) log.info('DOCKET_COGNEE_URL is not set: cognee stays off for every workspace')
-  else if (!env.OPENROUTER_API_KEY) log.info("OPENROUTER_API_KEY is not set: cognee cognifies on the platform's own OpenRouter key, so it waits in every workspace")
+  else if (!platformKey) log.info("No shared model key is configured (OPENROUTER_API_KEY, or an openai-compatible provider): cognee cognifies on the platform's own key, so it waits in every workspace")
 
   // The probe port: the kubelet's /healthz and /readyz only; the network policies admit no pod to it.
   const healthPort = options.healthPort === undefined ? Number(env.PORT ?? 8080) : options.healthPort

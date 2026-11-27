@@ -31,6 +31,7 @@ export { ASK_OFF, postgresBackend } from './postgres.js'
 export { SERVICE, SESSION_COOKIE, serveHandler, type ServeHandlerOptions } from './http.js'
 export { startServe, type RunningServe, type StartServeOptions } from './server.js'
 export {
+  MODEL_USES,
   loadPlatformConfig,
   platformConfigOf,
   readServerConfigFile,
@@ -38,7 +39,10 @@ export {
   type CogneeSource,
   type EmbedderSource,
   type LoadServerConfigOptions,
+  type ModelUse,
   type Neo4jSource,
+  type OidcProvider,
+  type PasswordUser,
   type PlatformConfig,
   type PostgresSource,
   type Provisioning,

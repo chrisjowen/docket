@@ -42,6 +42,8 @@ export interface GatewayDeps {
   } | null
   fetch?: typeof fetch
   apiBase?: string
+  /** `openai`: a plain OpenAI-style endpoint, sent no OpenRouter routing or usage fields. */
+  dialect?: 'openrouter' | 'openai'
   appUrl?: string
   timeoutMs?: number
 }
@@ -89,7 +91,7 @@ export async function gatewayCall(deps: GatewayDeps, call: { method: string; pat
   }
   const model = await ai.model(lease.orgId)
   // Whatever model cognee names, the org's own is used, on the platform's key, never streamed so every call is metered.
-  const forwarded = { ...request, model, stream: false, provider: PRIVACY_ROUTING, usage: { include: true } }
+  const forwarded = { ...request, model, stream: false, ...(deps.dialect === 'openai' ? {} : { provider: PRIVACY_ROUTING, usage: { include: true } }) }
   const response = await (deps.fetch ?? fetch)(`${(deps.apiBase ?? OPENROUTER_API).replace(/\/+$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -130,7 +132,7 @@ export function gatewayDeps(
   router: TenantRouter,
   ai: AiDeps | null,
   key: string,
-  options: { platformKey: string | undefined; appUrl?: string | undefined; now?: () => Date },
+  options: { platformKey: string | undefined; appUrl?: string | undefined; apiBase?: string | undefined; dialect?: 'openrouter' | 'openai' | undefined; now?: () => Date },
 ): GatewayDeps {
   const now = options.now ?? (() => new Date())
   const { platformKey } = options
@@ -145,6 +147,8 @@ export function gatewayDeps(
       record: (usage) => router.withPlatform((tx) => recordUsage(tx, usage)),
     } : null,
     ...(options.appUrl ? { appUrl: options.appUrl } : {}),
+    ...(options.apiBase ? { apiBase: options.apiBase } : {}),
+    ...(options.dialect ? { dialect: options.dialect } : {}),
   }
 }
 

@@ -18,6 +18,10 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 - `docket open --no-ui` and `docket serve --no-ui` serve the API and MCP
   without the web pages. A single-tenant `docket serve` and a plain
   `docket open` are otherwise unchanged.
+- The multi-tenant server signs people in with GitHub, any OpenID Connect
+  provider, or a password the operator gives them, all as users of the same
+  platform, and calls OpenRouter or any OpenAI-compatible model endpoint; the
+  start-up lines say which.
 
 ## 0.16.0
 

@@ -2,7 +2,7 @@
   "name": "@docket/platform-auth",
   "version": "0.0.0",
   "private": true,
-  "description": "GitHub sign-in, sessions, the OAuth 2.1 authorization server, API tokens and scope checks.",
+  "description": "GitHub, OpenID Connect and password sign-in, sessions, the OAuth 2.1 authorization server, API tokens and scope checks.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "exports": {
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@docket/platform-tenancy": "workspace:*",
+    "jose": "6.2.18",
     "oidc-provider": "9.13.3",
     "pg": "^8.16.3"
   },

@@ -87,12 +87,46 @@ export type Source = PostgresSource | Neo4jSource | QdrantSource | EmbedderSourc
 export type SourceType = Source['type']
 
 /** A model provider the server calls for Ask, enrichment, consolidation and drafting. */
-export interface AiProvider {
-  kind: 'openrouter'
-  /** The platform key every account shares, metered against each account's cap. */
-  apiKey: SecretRef | null
-  /** A provisioning key: each account gets a key of its own with a credit limit equal to its cap. */
-  provisioningKey: SecretRef | null
+export type AiProvider =
+  | {
+      kind: 'openrouter'
+      /** The platform key every account shares, metered against each account's cap. */
+      apiKey: SecretRef | null
+      /** A provisioning key: each account gets a key of its own with a credit limit equal to its cap. */
+      provisioningKey: SecretRef | null
+    }
+  | {
+      /** Any OpenAI-style chat completions API: OpenAI, a local Ollama or vLLM, LiteLLM, or another gateway. */
+      kind: 'openai-compatible'
+      /** Its base URL, the one `/chat/completions` hangs off: `https://api.openai.com/v1`, `http://ollama:11434/v1`. */
+      url: string
+      /** The key every account shares; null for an endpoint that takes none (a local Ollama). */
+      apiKey: SecretRef | null
+    }
+
+/** The model uses an account chooses a model for: `cypher` (graph queries and extraction) and `synthesis` (answers). */
+export const MODEL_USES = ['cypher', 'synthesis'] as const
+export type ModelUse = (typeof MODEL_USES)[number]
+
+/** A provider people sign in with through OpenID Connect. */
+export interface OidcProvider {
+  /** What the sign-in button says: "Continue with <label>". */
+  label: string
+  /** The issuer URL, exactly as the provider's discovery document gives it. */
+  issuer: string
+  clientId: string
+  clientSecret: SecretRef
+  /** Asked for beside `openid`. */
+  scopes: string[]
+}
+
+/** A person who signs in with a login and password the operator gives them. */
+export interface PasswordUser {
+  /** Not a GitHub login: it has a `.` or `_` (`jo.bloggs`, `ops_admin`), so no GitHub account can ever be it. */
+  login: string
+  name: string | null
+  email: string | null
+  password: SecretRef
 }
 
 export interface PlatformConfig {
@@ -119,13 +153,26 @@ export interface PlatformConfig {
     reranker: RerankerSource | null
     cognee: CogneeSource | null
   }
-  ai: { providers: Record<string, AiProvider>; primary: AiProvider | null }
+  ai: {
+    providers: Record<string, AiProvider>
+    primary: AiProvider | null
+    /** The models accounts may choose from for each use, the first the default; null: the release's own list (OpenRouter's names). */
+    models: Record<ModelUse, string[]> | null
+  }
   auth: {
     /** GitHub sign-in (an OAuth App of the operator's own). */
     github: { clientId: string; clientSecret: SecretRef; oauthUrl: string | null; apiUrl: string | null } | null
+    /** OpenID Connect providers, by name: the name is in their callback (`/auth/oidc/<name>/callback`) and the logins they give (`jo.<name>`). */
+    oidc: Record<string, OidcProvider>
+    /** Password sign-in for the people listed: the config is the list, so someone taken off it can no longer sign in this way. */
+    password: { users: PasswordUser[] } | null
     /** One-click sign-in as one login, without a provider: loopback and development only. */
     local: { login: string } | null
-    /** Who may sign in (GitHub logins; members and invitees always may), and who administers the platform. */
+    /**
+     * Who may sign in besides members and invitees: GitHub logins, emails,
+     * `@domain`s (every verified email there) and other providers' logins.
+     * Who administers the platform: logins and emails.
+     */
     access: { allow: string[]; admins: string[] }
   }
   integrations: {
@@ -140,7 +187,11 @@ export interface PlatformConfig {
 const SOURCE_TYPES: readonly SourceType[] = ['postgres', 'neo4j', 'qdrant', 'embedder', 'reranker', 'cognee']
 const STORE_ROLES = { records: 'postgres', graph: 'neo4j', search: 'qdrant', embedder: 'embedder', reranker: 'reranker', cognee: 'cognee' } as const
 const LOGIN = /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/
+/** Another provider's login: parts joined by `.` or `_`, which a GitHub login never has. */
+const OTHER_LOGIN = /^(?=.{3,64}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:[._][a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const NAME = /^[a-z][a-zA-Z0-9_-]{0,39}$/
+const PROVIDER_NAME = /^[a-z][a-z0-9-]{0,19}$/
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -251,6 +302,28 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
         value.map((login, index) => {
           const text = typeof login === 'string' ? login.trim().replace(/^@/, '').toLowerCase() : ''
           return LOGIN.test(text) ? text : fail(`${key}[${index}]`, 'is a GitHub login, like alice.')
+        })
+      )
+    ]
+  }
+  /** GitHub logins, other providers' logins and emails, and (for allow) `@domain`s: lowercase, without a login's leading `@`. */
+  const accessEntries = (value: unknown, key: string, { domains }: { domains: boolean }): string[] => {
+    if (value === undefined || value === null) return []
+    const what = domains ? 'GitHub logins (ada), emails (ada@example.com), @domains (@example.com) and other providers\' logins (jo.okta)' : 'GitHub logins (ada), emails (ada@example.com) and other providers\' logins (jo.okta)'
+    if (!Array.isArray(value)) return fail(key, `is a list of ${what}.`)
+    return [
+      ...new Set(
+        value.map((entry, index) => {
+          const text = typeof entry === 'string' ? entry.trim().toLowerCase() : ''
+          if (text.startsWith('@')) {
+            // A leading @ on something with a dot is a domain; on a GitHub login, just the login.
+            if (EMAIL.test(`x${text}`)) return domains ? text : fail(`${key}[${index}]`, 'is a person: a login or an email, not a whole domain.')
+            const login = text.slice(1)
+            if (LOGIN.test(login)) return login
+          } else if (LOGIN.test(text) || OTHER_LOGIN.test(text) || EMAIL.test(text)) {
+            return text
+          }
+          return fail(`${key}[${index}]`, `is one of ${what}.`)
         })
       )
     ]
@@ -398,31 +471,52 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
   if (environment === 'production' && stores.graph?.isolation === 'shared') fail(`sources.${nameOf(stores.graph)}.isolation`, `is shared, refused ${inProduction}: use provisioning: managed, a Neo4j per account.`)
 
   // Model providers.
-  const aiRaw = raw.ai === undefined ? {} : isObject(raw.ai) ? raw.ai : fail('ai', 'is { providers, primary }.')
-  known(aiRaw, 'ai', ['providers', 'primary'])
-  const providersRaw = aiRaw.providers === undefined ? {} : isObject(aiRaw.providers) ? aiRaw.providers : fail('ai.providers', 'is a map of named providers: { <name>: { kind: openrouter, apiKey } }.')
+  const aiRaw = raw.ai === undefined ? {} : isObject(raw.ai) ? raw.ai : fail('ai', 'is { providers, primary, models }.')
+  known(aiRaw, 'ai', ['providers', 'primary', 'models'])
+  const providersRaw = aiRaw.providers === undefined ? {} : isObject(aiRaw.providers) ? aiRaw.providers : fail('ai.providers', 'is a map of named providers: { <name>: { kind: openrouter | openai-compatible, ... } }.')
   const providers: Record<string, AiProvider> = {}
   for (const [name, value] of Object.entries(providersRaw)) {
     const key = `ai.providers.${name}`
-    if (!isObject(value)) fail(key, 'is { kind, apiKey }.')
+    if (!isObject(value)) fail(key, 'is { kind, ... }.')
     const provider = value as Record<string, unknown>
-    if (provider.kind !== 'openrouter') {
-      fail(`${key}.kind`, `is openrouter: the provider this release's multi-tenant server calls${typeof provider.kind === 'string' ? ` (${provider.kind} is planned, not yet supported)` : ''}.`)
+    if (provider.kind === 'openrouter') {
+      known(provider, key, ['kind', 'apiKey', 'provisioningKey'])
+      const apiKey = provider.apiKey === undefined ? null : secret(provider.apiKey, `${key}.apiKey`)
+      const provisioningKey = provider.provisioningKey === undefined ? null : secret(provider.provisioningKey, `${key}.provisioningKey`)
+      if (!apiKey && !provisioningKey) fail(key, 'needs an apiKey (one key every account shares), a provisioningKey (a key per account), or both.')
+      providers[name] = { kind: 'openrouter', apiKey, provisioningKey }
+    } else if (provider.kind === 'openai-compatible') {
+      known(provider, key, ['kind', 'url', 'apiKey'])
+      providers[name] = { kind: 'openai-compatible', url: url(provider.url, `${key}.url`), apiKey: provider.apiKey === undefined ? null : secret(provider.apiKey, `${key}.apiKey`) }
+    } else {
+      fail(`${key}.kind`, `is openrouter or openai-compatible (OpenAI, Ollama, vLLM, LiteLLM and any other OpenAI-style chat completions API)${typeof provider.kind === 'string' ? `, not ${provider.kind}` : ''}.`)
     }
-    known(provider, key, ['kind', 'apiKey', 'provisioningKey'])
-    const apiKey = provider.apiKey === undefined ? null : secret(provider.apiKey, `${key}.apiKey`)
-    const provisioningKey = provider.provisioningKey === undefined ? null : secret(provider.provisioningKey, `${key}.provisioningKey`)
-    if (!apiKey && !provisioningKey) fail(key, 'needs an apiKey (one key every account shares), a provisioningKey (a key per account), or both.')
-    providers[name] = { kind: 'openrouter', apiKey, provisioningKey }
   }
   const names = Object.keys(providers)
   if (names.length > 1 && aiRaw.primary === undefined) fail('ai.primary', `names the provider the server calls: ${names.join(', ')}.`)
   const primaryName = aiRaw.primary === undefined ? names[0] : string(aiRaw.primary, 'ai.primary')
   const primary = primaryName === undefined ? null : (providers[primaryName] ?? fail('ai.primary', `names a provider in ai.providers, not ${primaryName}.`))
+  let models: PlatformConfig['ai']['models'] = null
+  if (aiRaw.models !== undefined) {
+    const modelsRaw = isObject(aiRaw.models) ? aiRaw.models : fail('ai.models', `is { ${MODEL_USES.join(', ')} }: for each, the models accounts may choose from, the first the default.`)
+    known(modelsRaw, 'ai.models', MODEL_USES)
+    const list = (use: ModelUse): string[] => {
+      const value = modelsRaw[use]
+      const key = `ai.models.${use}`
+      if (value === undefined) return fail(key, `is needed beside the other uses: list the models for ${use}, the first the default.`)
+      const entries = typeof value === 'string' ? [value] : Array.isArray(value) ? value : fail(key, 'is a model name, or a list of them with the default first.')
+      if (!entries.length) fail(key, 'lists at least one model.')
+      return [...new Set(entries.map((entry, index) => string(entry, `${key}[${index}]`)))]
+    }
+    models = { cypher: list('cypher'), synthesis: list('synthesis') }
+  }
+  if (primary?.kind === 'openai-compatible' && !models) {
+    fail('ai.models', `is needed for an openai-compatible provider: the model names its endpoint serves, for each of ${MODEL_USES.join(' and ')} (cypher: [qwen2.5:7b], synthesis: [llama3.1:8b]).`)
+  }
 
   // Sign-in.
-  const authRaw = raw.auth === undefined ? {} : isObject(raw.auth) ? raw.auth : fail('auth', 'is { github, local, access }.')
-  known(authRaw, 'auth', ['github', 'local', 'access'])
+  const authRaw = raw.auth === undefined ? {} : isObject(raw.auth) ? raw.auth : fail('auth', 'is { github, oidc, password, local, access }.')
+  known(authRaw, 'auth', ['github', 'oidc', 'password', 'local', 'access'])
   let github: PlatformConfig['auth']['github'] = null
   if (authRaw.github !== undefined && authRaw.github !== null) {
     const value = isObject(authRaw.github) ? authRaw.github : fail('auth.github', 'is { clientId, clientSecret }: the GitHub OAuth App people sign in with.')
@@ -434,6 +528,52 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
       apiUrl: value.apiUrl === undefined ? null : url(value.apiUrl, 'auth.github.apiUrl')
     }
   }
+  const oidc: PlatformConfig['auth']['oidc'] = {}
+  if (authRaw.oidc !== undefined && authRaw.oidc !== null) {
+    const value = isObject(authRaw.oidc) ? authRaw.oidc : fail('auth.oidc', 'is a map of named OpenID Connect providers: { <name>: { issuer, clientId, clientSecret } }.')
+    for (const [name, entry] of Object.entries(value)) {
+      const key = `auth.oidc.${name}`
+      if (!PROVIDER_NAME.test(name)) fail(key, 'is named in lowercase letters, digits and "-", up to 20: it is in the callback URL and in the logins it gives (jo.<name>).')
+      if (name === 'github') fail(key, 'is not github: GitHub sign-in is auth.github.')
+      const provider = isObject(entry) ? entry : fail(key, 'is { issuer, clientId, clientSecret, label, scopes }.')
+      known(provider, key, ['issuer', 'clientId', 'clientSecret', 'label', 'scopes'])
+      const issuer = url(provider.issuer, `${key}.issuer`)
+      const issuerHost = new URL(issuer).hostname
+      const localIssuer = issuerHost === '127.0.0.1' || issuerHost === 'localhost' || issuerHost === '[::1]'
+      if (!issuer.startsWith('https://') && (environment === 'production' || !localIssuer)) {
+        fail(`${key}.issuer`, `is https://${environment === 'production' ? `, ${inProduction}` : ' (plain http:// only for a provider on this machine)'}.`)
+      }
+      const scopes = provider.scopes === undefined ? ['profile', 'email'] : Array.isArray(provider.scopes) ? provider.scopes.map((scope, index) => string(scope, `${key}.scopes[${index}]`)) : fail(`${key}.scopes`, 'is a list of scope names, like [profile, email].')
+      oidc[name] = {
+        // Exactly as written, trailing slash and all: every ID token's issuer is compared with it exactly.
+        issuer: (provider.issuer as string).trim(),
+        clientId: string(provider.clientId, `${key}.clientId`),
+        clientSecret: secret(provider.clientSecret, `${key}.clientSecret`),
+        label: provider.label === undefined ? name : string(provider.label, `${key}.label`),
+        scopes
+      }
+    }
+  }
+  let password: PlatformConfig['auth']['password'] = null
+  if (authRaw.password !== undefined && authRaw.password !== null) {
+    const value = isObject(authRaw.password) ? authRaw.password : fail('auth.password', 'is { users: [{ login, password, name, email }] }.')
+    known(value, 'auth.password', ['users'])
+    if (!Array.isArray(value.users) || !value.users.length) fail('auth.password.users', 'lists the people who sign in with a password: [{ login: jo.bloggs, password: { file: <path> } }].')
+    const seen = new Set<string>()
+    const users = (value.users as unknown[]).map((entry, index): PasswordUser => {
+      const key = `auth.password.users[${index}]`
+      const user = isObject(entry) ? entry : fail(key, 'is { login, password, name, email }.')
+      known(user, key, ['login', 'password', 'name', 'email'])
+      const login = typeof user.login === 'string' ? user.login.trim().toLowerCase() : ''
+      if (!OTHER_LOGIN.test(login)) fail(`${key}.login`, 'is a login with a "." or "_" between its parts (jo.bloggs, ops_admin), so no GitHub account can ever be it.')
+      if (seen.has(login)) fail(`${key}.login`, `lists ${login} twice.`)
+      seen.add(login)
+      const email = user.email === undefined ? null : string(user.email, `${key}.email`).toLowerCase()
+      if (email !== null && !EMAIL.test(email)) fail(`${key}.email`, 'is an email address.')
+      return { login, name: optionalString(user.name, `${key}.name`), email, password: secret(user.password, `${key}.password`) }
+    })
+    password = { users }
+  }
   let local: PlatformConfig['auth']['local'] = null
   if (authRaw.local !== undefined && authRaw.local !== null) {
     const value = isObject(authRaw.local) ? authRaw.local : fail('auth.local', 'is { login }: one-click sign-in as that login, on this machine only.')
@@ -443,11 +583,13 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
     if (environment === 'production') fail('auth.local', `is refused ${inProduction}.`)
     local = { login: login as string }
   }
-  if (!github && !local) fail('auth', 'says how people sign in: github (an OAuth App of your own), or local (one login, on this machine only).')
+  if (!github && !Object.keys(oidc).length && !password && !local) {
+    fail('auth', 'says how people sign in: github (an OAuth App of your own), oidc (any OpenID Connect provider), password (people you list), or local (one login, on this machine only).')
+  }
   const accessRaw = authRaw.access === undefined ? {} : isObject(authRaw.access) ? authRaw.access : fail('auth.access', 'is { allow, admins }.')
   known(accessRaw, 'auth.access', ['allow', 'admins'])
-  const allow = logins(accessRaw.allow, 'auth.access.allow')
-  const admins = logins(accessRaw.admins, 'auth.access.admins')
+  const allow = accessEntries(accessRaw.allow, 'auth.access.allow', { domains: true })
+  const admins = accessEntries(accessRaw.admins, 'auth.access.admins', { domains: false })
   if (local) {
     if (!allow.includes(local.login)) allow.push(local.login)
     if (!admins.includes(local.login)) admins.push(local.login)
@@ -488,8 +630,8 @@ export function platformConfigOf(raw: Record<string, unknown>, options: LoadServ
     worker: { mode: workerMode },
     sources,
     stores,
-    ai: { providers, primary },
-    auth: { github, local, access: { allow, admins } },
+    ai: { providers, primary, models },
+    auth: { github, oidc, password, local, access: { allow, admins } },
     integrations: { githubApp },
     limits: { accounts: limitsRaw.accounts === undefined ? null : positive(limitsRaw.accounts, 'limits.accounts') },
     proxy: {

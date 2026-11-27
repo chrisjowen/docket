@@ -26,7 +26,7 @@ export interface SignedIn {
   name: string | null
   avatarUrl: string | null
   emails: string[]
-  /** On the beta allowlist: may create orgs. */
+  /** On the beta or sign-in allowlist: may create orgs. */
   allowlisted: boolean
 }
 
@@ -85,9 +85,11 @@ export function requireUser(event: RequestEvent): SignedIn {
   return user
 }
 
-/** Whether the user runs the platform (`DOCKET_PLATFORM_ADMINS`), which no org role grants. */
-export function isPlatformAdmin(user: Pick<SignedIn, 'login'> | null): boolean {
-  return user !== null && getRuntime().platformAdmins.has(user.login.toLowerCase())
+/** Whether the user runs the platform (`DOCKET_PLATFORM_ADMINS`: their login or a verified email), which no org role grants. */
+export function isPlatformAdmin(user: Pick<SignedIn, 'login' | 'emails'> | null): boolean {
+  if (user === null) return false
+  const admins = getRuntime().platformAdmins
+  return admins.has(user.login.toLowerCase()) || user.emails.some((email) => admins.has(email.toLowerCase()))
 }
 
 /** The signed-in platform admin. Anyone else signed in gets 404, so the admin pages do not show that they exist. */

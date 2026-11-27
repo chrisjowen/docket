@@ -30,6 +30,19 @@ describe('openRouterClient', () => {
     expect(PRIVACY_ROUTING).toEqual({ data_collection: 'deny', zdr: true })
   })
 
+  it('sends plain OpenAI-style requests to an OpenAI-compatible endpoint: no OpenRouter routing or usage fields', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      reply(200, { id: 'chatcmpl-1', model: 'qwen2.5:7b', choices: [{ message: { content: 'hi' } }], usage: { prompt_tokens: 3, completion_tokens: 1 } }),
+    )
+    const client = openRouterClient({ fetch: fetchImpl, apiBase: 'http://ollama:11434/v1/', dialect: 'openai' })
+    const result = await client.chat('none', { model: 'qwen2.5:7b', messages: [{ role: 'user', content: 'hi' }] })
+    expect(result.usage).toEqual({ promptTokens: 3, completionTokens: 1, costUsd: 0 })
+    const [url, init] = fetchImpl.mock.calls[0] ?? []
+    expect(url).toBe('http://ollama:11434/v1/chat/completions')
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    expect(body).toEqual({ model: 'qwen2.5:7b', messages: [{ role: 'user', content: 'hi' }], temperature: 0 })
+  })
+
   it('runs an agent turn with tools: the calls the model asks for, and the conversation in the wire format', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       reply(200, {

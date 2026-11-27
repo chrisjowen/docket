@@ -10,7 +10,11 @@ describe('loginList', () => {
     expect(loginList('X', '')).toEqual([])
   })
 
-  it('refuses a value that is not a GitHub login', () => {
-    expect(() => loginList('DOCKET_PLATFORM_ADMINS', 'alice,not a login')).toThrow('DOCKET_PLATFORM_ADMINS lists GitHub logins, and "not a login" is not one')
+  it('reads other providers\' logins and emails too', () => {
+    expect(loginList('X', 'jo.okta, Ops_Admin, Ada@Example.com')).toEqual(['jo.okta', 'ops_admin', 'ada@example.com'])
+  })
+
+  it('refuses a value that is neither a login nor an email', () => {
+    expect(() => loginList('DOCKET_PLATFORM_ADMINS', 'alice,not a login')).toThrow('DOCKET_PLATFORM_ADMINS lists logins and emails, and "not a login" is neither')
   })
 })

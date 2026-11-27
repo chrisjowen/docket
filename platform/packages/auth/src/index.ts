@@ -8,6 +8,10 @@ export {
   newAuthorization,
 } from './github.js'
 export type { GitHubOAuthConfig } from './github.js'
+export { OidcSignInError, discoverOidc, newOidcAuthorization, oidcAuthorizeUrl, oidcSignIn } from './oidc.js'
+export type { OidcIdentity, OidcMetadata, OidcProviderConfig } from './oidc.js'
+export { MIN_PASSWORD, hashPassword, passwordSignIn, syncPasswordUsers, verifyPassword } from './password.js'
+export type { PasswordUser } from './password.js'
 export {
   SESSION_ABSOLUTE_MS,
   SESSION_COOKIE,

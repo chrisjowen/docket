@@ -4,7 +4,9 @@
 // DOCKET_TEST_NEO4J_URL and DOCKET_TEST_QDRANT_URL, the worker in the same process. Needs
 // `pnpm build` first.
 import { spawn, type ChildProcess } from 'node:child_process'
+import { generateKeyPairSync, sign } from 'node:crypto'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -72,6 +74,39 @@ async function ready(url: string): Promise<void> {
   throw new Error(`${url}/readyz never answered ready`)
 }
 
+/**
+ * A fake OpenID provider on loopback: discovery, its key, and a token endpoint
+ * that answers with an RS256 ID token for whoever the test says signed in.
+ */
+async function fakeOidcProvider(): Promise<{ issuer: string; server: Server; next: Record<string, unknown> }> {
+  const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'k1', alg: 'RS256', use: 'sig' }
+  const idp = { issuer: '', server: createServer(), next: {} as Record<string, unknown> }
+  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url')
+  idp.server.on('request', (req, res) => {
+    const json = (body: unknown) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(body))
+    }
+    if (req.url === '/.well-known/openid-configuration') {
+      return json({ issuer: idp.issuer, authorization_endpoint: `${idp.issuer}/authorize`, token_endpoint: `${idp.issuer}/token`, jwks_uri: `${idp.issuer}/jwks` })
+    }
+    if (req.url === '/jwks') return json({ keys: [jwk] })
+    if (req.url === '/token' && req.method === 'POST') {
+      const now = Math.floor(Date.now() / 1000)
+      const input = `${part({ alg: 'RS256', kid: 'k1', typ: 'JWT' })}.${part({ iss: idp.issuer, aud: 'docket', iat: now, exp: now + 300, ...idp.next })}`
+      return json({ access_token: 'unused', token_type: 'Bearer', id_token: `${input}.${sign('sha256', Buffer.from(input), privateKey).toString('base64url')}` })
+    }
+    res.writeHead(404).end()
+  })
+  await new Promise<void>((done) => idp.server.listen(0, '127.0.0.1', done))
+  const address = idp.server.address()
+  idp.issuer = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`
+  return idp
+}
+
+const cookieOf = (response: Response, name: string) => response.headers.getSetCookie().find((cookie) => cookie.startsWith(`${name}=`))?.split(';')[0]
+
 const stop = (child: ChildProcess) =>
   new Promise<void>((done) => {
     if (child.exitCode !== null) return done()
@@ -83,6 +118,7 @@ describe.skipIf(!superuser)('docket serve --config, multi-tenant', () => {
   let dir: string
   let env: NodeJS.ProcessEnv
   let embedder: Awaited<ReturnType<typeof startFakeEmbedder>> | undefined
+  let idp: Awaited<ReturnType<typeof fakeOidcProvider>>
 
   beforeAll(async () => {
     await admin(async (client) => {
@@ -94,6 +130,9 @@ describe.skipIf(!superuser)('docket serve --config, multi-tenant', () => {
       await client.query(`CREATE DATABASE "${db}" OWNER "${db}_owner"`)
     })
     dir = await mkdtemp(join(tmpdir(), 'docket-smoke-'))
+    idp = await fakeOidcProvider()
+    await writeFile(join(dir, 'ops-password'), 'a smoke-test passphrase\n')
+    await writeFile(join(dir, 'oidc-secret'), 'smoke-client-secret')
     env = {
       SMOKE_PG_URL: withDatabase(superuser as string, db, `${db}_app`),
       SMOKE_PG_ADMIN_URL: withDatabase(superuser as string, db, `${db}_owner`),
@@ -126,12 +165,19 @@ sources:
     encryptionKey: { file: ./kek, create: true }
 ${workerSources}auth:
   local: { login: alice }
+  oidc:
+    dev: { issuer: ${idp.issuer}, clientId: docket, clientSecret: { file: ./oidc-secret }, label: Dev SSO }
+  password:
+    users:
+      - { login: ops.admin, password: { file: ./ops-password }, email: ops@example.com }
+  access: { allow: ['@example.com'] }
 `,
     )
   }, 60_000)
 
   afterAll(async () => {
     embedder?.server.close()
+    idp?.server.close()
     if (dir) await rm(dir, { recursive: true, force: true })
     await admin(async (client) => {
       await client.query(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`)
@@ -179,6 +225,70 @@ ${workerSources}auth:
       }
       expect((await fetch(`${url}/signin`)).status).toBe(200)
       expect((await fetch(`${url}/.well-known/oauth-authorization-server`)).status).toBe(200)
+    } finally {
+      await stop(child)
+    }
+  }, 120_000)
+
+  it('signs people in with a password and with OIDC, each a user of the same platform', async () => {
+    const { child, url } = await serve(['serve', '--config', join(dir, 'docket-server.yaml'), '--no-worker'], env)
+    try {
+      await ready(url)
+      const page = await (await fetch(`${url}/signin`)).text()
+      expect(page).toContain('Continue with Dev SSO')
+      expect(page).toContain('Sign in with password')
+
+      const password = (login: string, secret: string) =>
+        fetch(`${url}/signin?/password`, {
+          method: 'POST',
+          redirect: 'manual',
+          // As a browser posts the form: SvelteKit answers a script's post with JSON instead.
+          headers: { origin: url, accept: 'text/html', 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ login, password: secret, next: '/' }),
+        })
+      const wrong = await password('ops.admin', 'not the passphrase')
+      expect(wrong.status).toBe(403)
+      expect(cookieOf(wrong, 'docket_session')).toBeUndefined()
+      const right = await password('ops.admin', 'a smoke-test passphrase')
+      expect(right.status).toBe(303)
+      const session = cookieOf(right, 'docket_session')
+      expect(session).toBeDefined()
+      const home = await fetch(`${url}/`, { redirect: 'manual', headers: { cookie: session as string } })
+      expect(home.headers.get('location')).not.toBe('/signin')
+
+      // OIDC: off to the provider with a state and nonce, and back with a code.
+      const oidc = async (claims: Record<string, unknown>) => {
+        const start = await fetch(`${url}/auth/oidc/dev?next=/`, { redirect: 'manual' })
+        expect(start.status).toBe(302)
+        const authorize = new URL(start.headers.get('location') as string)
+        expect(authorize.origin).toBe(idp.issuer)
+        idp.next = { ...claims, nonce: authorize.searchParams.get('nonce') }
+        return fetch(`${url}/auth/oidc/dev/callback?code=smoke&state=${authorize.searchParams.get('state')}`, {
+          redirect: 'manual',
+          headers: { cookie: cookieOf(start, 'docket_oidc') as string },
+        })
+      }
+      const admitted = await oidc({ sub: 'sso-jo', email: 'jo@example.com', email_verified: true, preferred_username: 'jo', name: 'Jo' })
+      expect(admitted.headers.get('location')).toBe('/')
+      expect(cookieOf(admitted, 'docket_session')).toBeDefined()
+      // Outside the allowed domain, and not invited.
+      const refused = await oidc({ sub: 'sso-stranger', email: 'stranger@elsewhere.example', email_verified: true })
+      expect(refused.headers.get('location')).toBe('/signin?error=not-invited')
+      expect(cookieOf(refused, 'docket_session')).toBeUndefined()
+
+      const rows = await admin(async () => {
+        const client = new pg.Client({ connectionString: withDatabase(superuser as string, db) })
+        await client.connect()
+        try {
+          return (await client.query<{ login: string; provider: string }>('SELECT u.login, i.provider FROM platform.users u JOIN platform.identities i ON i.user_id = u.id ORDER BY u.login')).rows
+        } finally {
+          await client.end()
+        }
+      })
+      expect(rows).toEqual([
+        { login: 'jo.dev', provider: 'oidc' },
+        { login: 'ops.admin', provider: 'password' },
+      ])
     } finally {
       await stop(child)
     }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 /** The cookie that carries GitHub sign-in's state and PKCE verifier between redirect and callback. */
 export const OAUTH_COOKIE = 'docket_oauth'
+/** The cookie that carries an OIDC sign-in's provider, state, nonce and PKCE verifier between redirect and callback. */
+export const OIDC_COOKIE = 'docket_oidc'
 /** The cookie that remembers a GitHub identity not on the beta list, for the request-access form. */
 export const PENDING_COOKIE = 'docket_pending'
 

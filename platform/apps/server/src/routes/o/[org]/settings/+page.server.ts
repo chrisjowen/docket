@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { CapError, MAX_MONTHLY_CAP_USD, MODEL_ALLOWLIST, capOf, modelChoices, setCap } from '@docket/platform-ai'
+import { CapError, MAX_MONTHLY_CAP_USD, capOf, modelAllowlist, modelChoices, setCap, type ModelUse } from '@docket/platform-ai'
 import { fail } from '@sveltejs/kit'
 
 import { authorise, orgAccess, recordAudit } from '$lib/server/request'
@@ -16,12 +16,12 @@ export const load: PageServerLoad = async (event) => {
   return {
     ai: { capUsd: status.capUsd, spentUsd: status.spentUsd, month: status.month, warnedAt: status.warnedAt?.toISOString() ?? null },
     models,
-    allowlist: MODEL_ALLOWLIST,
+    allowlist: modelAllowlist(),
     maxCapUsd: MAX_MONTHLY_CAP_USD,
   }
 }
 
-const isAllowed = (use: keyof typeof MODEL_ALLOWLIST, model: string) => (MODEL_ALLOWLIST[use] as readonly string[]).includes(model)
+const isAllowed = (use: ModelUse, model: string) => modelAllowlist()[use].includes(model)
 
 export const actions: Actions = {
   /** Sets the cap and models. The worker moves the org's OpenRouter key limit to match within minutes. */
