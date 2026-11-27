@@ -115,6 +115,7 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 ### API v1 and one MCP address per account (multi-tenant server)
 
 - `/api/v1/accounts/{account}/…` manages an account the way the app does:
+  the account itself (rename, transfer ownership, delete: owners only),
   invites, grants (give, change, adjust by single capabilities, remove),
   roles, spaces, dockets (create from a template, a copy or YAML with initial
   access; rename, move, delete), system accounts and their tokens, users and
@@ -146,7 +147,9 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   asks which of the account's dockets the connection reaches (every docket by
   default, or chosen ones) and stores them on the connection.
 - `/api/admin/o/{org}/…`, the org admin API with master keys, is unchanged,
-  as are existing tokens, OAuth clients and grants.
+  as are existing tokens, OAuth clients and grants. On `/api/v1` a token or
+  connection that still carries its old scope ceiling is read-only, and an
+  OAuth grant made before named connections is refused.
 
 ## 0.16.0
 
