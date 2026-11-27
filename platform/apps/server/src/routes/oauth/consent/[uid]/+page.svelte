@@ -12,12 +12,12 @@
   let reach = $state<'chosen' | 'all'>(data.target?.account ? 'all' : 'chosen')
   /** The dockets to choose from, under their space's name at the account's address. */
   const groups = $derived.by(() => {
-    const out: { space: string; dockets: NonNullable<typeof data.target>['dockets'] }[] = []
+    const out: { key: string; space: string; dockets: NonNullable<typeof data.target>['dockets'] }[] = []
     for (const docket of data.target?.dockets ?? []) {
       const last = out.at(-1)
-      if (data.target?.account && last?.space !== docket.space) out.push({ space: docket.space, dockets: [docket] })
+      if (data.target?.account && last?.key !== docket.spaceId) out.push({ key: docket.spaceId, space: docket.space, dockets: [docket] })
       else if (last) last.dockets.push(docket)
-      else out.push({ space: '', dockets: [docket] })
+      else out.push({ key: '', space: '', dockets: [docket] })
     }
     return out
   })
@@ -130,7 +130,7 @@
           </label>
           {#if reach === 'chosen'}
             <div class="dockets" data-testid="consent-dockets">
-              {#each groups as group (group.space)}
+              {#each groups as group (group.key)}
                 {#if group.space}<p class="space">{group.space}</p>{/if}
                 {#each group.dockets as docket (docket.id)}
                   <label class="choice">

@@ -25,6 +25,12 @@ those dockets and nothing on the account or any space. Personal tokens are
 minted only from the person's own browser session; nothing mints a token over
 MCP.
 
+A credential made before scopes went keeps what it had, never more. An API
+token or connection that still carries its old scope ceiling (platform
+migration 0015) is read-only here, whatever that ceiling lets it write
+through MCP. An OAuth grant made before named connections is bound to its one
+docket's MCP address and is refused here (`invalid_token`).
+
 ## Operations
 
 Every operation - its method and path, the credentials it takes, the
@@ -37,7 +43,7 @@ UI imports it, and `GET /api/v1/openapi.json` publishes it as OpenAPI 3.1
 | Area | Operations |
 | --- | --- |
 | You | `GET /me`; `GET/POST /me/tokens`, `PATCH/DELETE /me/tokens/{id}`; `GET /me/connections`, `PATCH/DELETE /me/connections/{id}` |
-| Accounts | `GET/POST /accounts`; `GET/PATCH /accounts/{acct}` |
+| Accounts | `GET/POST /accounts`; `GET/PATCH/DELETE /accounts/{acct}` (rename, transfer ownership with `{ owner }`, delete: owners only) |
 | Users | `GET …/members`, `PATCH/DELETE …/members/{user}`; `GET/POST …/invites`, `DELETE …/invites/{id}` |
 | Access | `GET …/access?place=`; `GET/POST …/grants`, `PUT/PATCH/DELETE …/grants/{id}` |
 | Roles | `GET/POST …/roles`, `PUT/DELETE …/roles/{id}` |
@@ -48,8 +54,16 @@ UI imports it, and `GET /api/v1/openapi.json` publishes it as OpenAPI 3.1
 
 `…` is `/api/v1/accounts/{acct}`. A place is named `account`,
 `space:<slug>` or `docket:<slug>`; a person by login, a system account by
-name, or `everyone`; a role by id or name. Account settings, and models and
-background agents per space or docket, come with storage and AI per space.
+name, or `everyone`; a role by id or name.
+
+Not here yet, from the management tasks of tenancy v2 §3.5:
+
+- Billing (`PATCH /accounts/{acct}`): the product has no billing to manage.
+- Account storage, AI provider and models (`PATCH …/settings`); models and
+  background agents for a space or docket (`PATCH …/{place}/settings`, MCP
+  `admin_update_settings`); and a space's storage or AI alternatives on
+  `PATCH …/spaces/{space}`. These follow the settings resolver of tenancy v2
+  phase 5, which lands separately.
 
 An account the caller is not in, a docket or space they cannot see, and a
 grant they neither hold nor manage all answer 404; one they see but may not
@@ -75,12 +89,12 @@ beside each docket's own (`/mcp/{acct}/{docket}`), which is unchanged.
   the only one it reaches; else the call fails and lists the choices. A write
   never falls back to a default.
 - `?read_only=1` drops the write tools.
-- `?admin=1` opts in to the management tools - `admin_access`,
-  `admin_set_access`, `admin_invite`, `admin_create_space`,
+- `?admin=1` opts in to the management tools - `admin_set_access`, `admin_invite`, `admin_create_space`,
   `admin_create_docket`, `admin_update_docket`,
   `admin_create_system_account`, `admin_usage` - each offered only when the
   caller holds its capability somewhere, and each making the same call, with
-  the same checks and audit, as `/api/v1`. None mints a token.
+  the same checks and audit, as `/api/v1`. None mints a token, and none is
+  offered to a read-only credential or one made before scopes went.
 
 OAuth clients sign in for it with the account's MCP URL as the resource
 indicator (RFC 8707). The consent screen then asks which of the account's

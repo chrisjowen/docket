@@ -45,7 +45,7 @@ type Target = {
   caps: ReadonlySet<Capability>
   owner: boolean
   /** The account's dockets the user reaches, the asked-for one first, then by space. */
-  dockets: { id: string; slug: string; name: string; space: string; readOnly: boolean }[]
+  dockets: { id: string; slug: string; name: string; spaceId: string; space: string; readOnly: boolean }[]
 }
 
 async function consentOf(event: RequestEvent, user: SignedIn): Promise<{ consent: ConsentRequest; target: Target | null }> {
@@ -73,7 +73,7 @@ async function consentOf(event: RequestEvent, user: SignedIn): Promise<{ consent
     .flatMap((docket) => {
       const here = capsAt(access, docketPlace(docket.id))
       const space = spaceOrder.get(docket.spaceId)
-      return here.has('read') ? [{ id: docket.id, slug: docket.slug, name: docket.name, space: space?.name ?? '', order: space?.index ?? 0, readOnly: !here.has('write') }] : []
+      return here.has('read') ? [{ id: docket.id, slug: docket.slug, name: docket.name, spaceId: docket.spaceId, space: space?.name ?? '', order: space?.index ?? 0, readOnly: !here.has('write') }] : []
     })
     .sort((a, b) => a.order - b.order)
     .map(({ order: _order, ...docket }) => docket)

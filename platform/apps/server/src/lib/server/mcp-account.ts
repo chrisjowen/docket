@@ -10,7 +10,7 @@ import { ACCOUNT, accessOf, mayCreateSpace, placeKey, userById, type Tx } from '
 import type { RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'
 
-import { accountCaller, type AccountCaller, type Caller } from './api/caller'
+import { accountCaller, readsOnly, type AccountCaller, type Caller } from './api/caller'
 import { HANDLERS, recordCall, type ApiCall } from './api/handlers'
 import { errorOf } from './api/v1'
 import { placeFromRef } from './api/views'
@@ -119,13 +119,6 @@ interface AdminTool {
 const bodyOf = (id: OperationId) => operation(id).body as z.ZodObject
 
 const ADMIN_TOOLS: AdminTool[] = [
-  {
-    name: 'admin_access',
-    description: "Lists grants (a role on a place): everyone's where you manage access, otherwise your own. Filter by place (account, space:<slug>, docket:<slug>) or who.",
-    schema: operation('grants.list').query as z.ZodObject,
-    offered: (acct) => acct.canAnywhere('access') || acct.canAnywhere('system'),
-    run: (_acct, args, call) => call('grants.list', { query: args }),
-  },
   {
     name: 'admin_set_access',
     description:
@@ -269,7 +262,7 @@ export async function handleAccountMcp(event: RequestEvent): Promise<Response> {
   const caller: Caller | null = user
     ? { user: { id: user.id, login: user.login, name: user.name, kind: user.kind }, via: principal.via, session: null, credential: principal, actor: principal.actor }
     : null
-  const wantsAdmin = truthy(event.url.searchParams.get('admin')) && !readOnly && !principal.readOnly
+  const wantsAdmin = truthy(event.url.searchParams.get('admin')) && !readOnly && !readsOnly(principal)
   const acct = wantsAdmin && caller && access ? await accountCaller(caller, orgSlug).catch(() => null) : null
   const admin = acct ? ADMIN_TOOLS.filter((tool) => tool.offered(acct)) : []
 
@@ -406,7 +399,7 @@ export async function handleAccountMcp(event: RequestEvent): Promise<Response> {
   let adminAudited = false
   for (const tool of admin) {
     registry[tool.name] = {
-      definition: { name: tool.name, description: tool.description, inputSchema: jsonSchemaOf(tool.schema), annotations: { readOnlyHint: tool.name === 'admin_access' || tool.name === 'admin_usage' } },
+      definition: { name: tool.name, description: tool.description, inputSchema: jsonSchemaOf(tool.schema), annotations: { readOnlyHint: tool.name === 'admin_usage' } },
       async call(given) {
         const checked = tool.schema.safeParse(given ?? {})
         if (!checked.success) throw new InvalidArgumentsError(`${tool.name}: ${checked.error.issues.map((issue) => `${issue.path.join('.') || 'arguments'} ${issue.message}`).join('; ')}`)

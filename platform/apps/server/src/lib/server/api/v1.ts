@@ -11,7 +11,7 @@ import type { z } from 'zod'
 import { credentialInUrl, refusedCredentials } from '../bearer'
 import { clientAddress } from '../request'
 import { getRuntime } from '../runtime'
-import { ApiFailure, authenticate } from './caller'
+import { ApiFailure, authenticate, readsOnly } from './caller'
 import { HANDLERS, recordCall, type ApiCall } from './handlers'
 
 /**
@@ -140,7 +140,7 @@ export async function handleApiV1(event: RequestEvent): Promise<Response> {
       throw new ApiFailure('forbidden', operation.auth.length === 1 && operation.auth[0] === 'session' ? 'Only your own browser session can do this, never a token.' : 'This credential cannot make this call.')
     }
     // A read-only token or connection reads, and nothing else (tenancy v2 §3.4).
-    if (caller.credential?.readOnly && !operation.readOnly) throw new ApiFailure('read_only', 'This token or connection is read-only.')
+    if (caller.credential && readsOnly(caller.credential) && !operation.readOnly) throw new ApiFailure('read_only', 'This token or connection is read-only.')
     const decision = await runtime.limiter.check([{ scope: caller.credential ? 'token' : 'person', key: `api:${caller.credential?.tokenId ?? caller.user.id}`, rule: perMinute(CALLS_PER_MINUTE) }])
     if (!decision.allowed) throw new ApiFailure('rate_limited', rateLimitMessage(decision), undefined, { 'retry-after': String(decision.retryAfterSeconds) })
 

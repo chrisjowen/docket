@@ -236,12 +236,26 @@ export const OPERATIONS = [
     method: 'PATCH',
     path: '/api/v1/accounts/{acct}',
     tag: 'Accounts',
-    summary: "Changes the account's name.",
+    summary: "Renames the account, or transfers its ownership to another member (who becomes an owner, and you no longer one).",
     params: acct,
-    body: z.object({ name }),
+    body: z.object({
+      name: name.optional(),
+      owner: z.string().min(1).max(80).optional().describe('The login or id of the person who becomes owner in your place'),
+    }),
     needs: { capability: 'owner', on: 'account', text: 'Owner' },
     response: Account,
     status: 200,
+  }),
+  op({
+    id: 'accounts.delete',
+    method: 'DELETE',
+    path: '/api/v1/accounts/{acct}',
+    tag: 'Accounts',
+    summary: 'Deletes the account: it stops being served, and every token and connection in it stops working.',
+    params: acct,
+    needs: { capability: 'owner', on: 'account', text: 'Owner' },
+    response: null,
+    status: 204,
   }),
 
   // --- Users -------------------------------------------------------------------

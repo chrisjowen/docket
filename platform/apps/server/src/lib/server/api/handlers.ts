@@ -73,7 +73,7 @@ import { accountRoles } from '../members'
 import { becauseLabel } from '../place-access'
 import { getRuntime } from '../runtime'
 import { mayChangeAccount, mayManageSystemAccounts } from '../system-accounts'
-import { accountCaller, ApiFailure, type AccountCaller, type Caller } from './caller'
+import { accountCaller, ApiFailure, readsOnly, type AccountCaller, type Caller } from './caller'
 import {
   accountView,
   connectionView,
@@ -320,7 +320,7 @@ export const HANDLERS: Record<string, Handler> = {
           ? {
               id: caller.credential.tokenId,
               name: caller.credential.credentialName ?? null,
-              read_only: caller.credential.readOnly ?? false,
+              read_only: readsOnly(caller.credential),
               dockets: caller.credential.dockets ?? null,
               account: credentialOrg,
             }
@@ -466,13 +466,34 @@ export const HANDLERS: Record<string, Handler> = {
   'accounts.update': async (call) => {
     const acct = await account(call)
     if (!acct.owner) refuse('Only an owner of the account can do that.')
-    const name = String(call.body.name).trim()
+    const name = str(call.body.name)?.trim() ?? acct.org.name
+    const heir = str(call.body.owner)
+    if (str(call.body.name) === undefined && heir === undefined) throw new ApiFailure('invalid_request', 'Send a name, an owner, or both.')
+    const next = heir === undefined ? null : await granteeFrom(acct, heir)
+    if (next && next.kind !== 'human') throw new ApiFailure('invalid_request', 'Only a person can own the account.')
+    const transfer = next !== null && next.who.kind === 'user' && next.who.id !== call.caller.user.id ? next.who.id : null
     await inPlatform(call, acct, async (tx) => {
       await tx.query('UPDATE platform.orgs SET name = $2 WHERE id = $1', [acct.org.id, name])
-      call.audit.target = [`org:${acct.org.id}`]
-      call.audit.args = { from: acct.org.name, to: name }
+      if (transfer) {
+        await setOwner(tx, { orgId: acct.org.id, userId: transfer, owner: true, actor: acct.principal })
+        await setOwner(tx, { orgId: acct.org.id, userId: call.caller.user.id, owner: false, actor: acct.principal })
+      }
+      call.audit.target = [`org:${acct.org.id}`, ...(transfer ? [`user:${transfer}`] : [])]
+      call.audit.args = { from: acct.org.name, to: name, ...(transfer ? { owner: transfer } : {}) }
     })
-    return { body: accountView({ ...acct.org, name }, acct.principal, acct.capsAt(ACCOUNT), { owner: acct.owner, guest: acct.principal.guest }) }
+    const owner = transfer === null && acct.owner
+    return { body: accountView({ ...acct.org, name }, acct.principal, acct.capsAt(ACCOUNT), { owner, guest: acct.principal.guest }) }
+  },
+
+  'accounts.delete': async (call) => {
+    const acct = await account(call)
+    if (!acct.owner) refuse('Only an owner of the account can do that.')
+    call.audit.target = [`org:${acct.org.id}`, `slug:${acct.org.slug}`]
+    await runtime().provisioner.deprovision({ orgId: acct.org.id }, 'soft')
+    // The account's own log is no longer served: its deletion is recorded in the platform's.
+    await platform((tx) => audit(tx, auditFields(call, 'ok')))
+    call.audit.written = true
+    return { body: null }
   },
 
   // --- Users -------------------------------------------------------------------

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { randomInt } from 'node:crypto'
+import { randomBytes, randomInt, randomUUID } from 'node:crypto'
 
 import { OPERATIONS, operation, type Operation, type OperationId } from '@docket/api'
-import { SESSION_COOKIE, createSession, csrfToken, issueApiToken, tokenResolver } from '@docket/platform-auth'
+import { SESSION_COOKIE, createSession, csrfToken, issueApiToken, tokenHash, tokenResolver } from '@docket/platform-auth'
 import { insertSpace, insertWorkspace } from '@docket/platform-canonical-store'
 import { createTestOrg, type TestOrg } from '@docket/platform-canonical-store/testing'
 import { memoryBucketStore, rateLimiter } from '@docket/platform-limits'
+import { postgresProvisioner } from '@docket/platform-provisioner'
 import { upsertGitHubUser } from '@docket/platform-tenancy'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
@@ -125,6 +126,7 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
       tokens: tokenResolver({ platform: (fn) => org.router.withPlatform(fn), ttlMs: 0 }),
       frameAncestors: "'none'",
       maxOrgs: 100,
+      provisioner: postgresProvisioner({ admin: org.db.admin, keys: {} as never, appRole: org.db.appRole }),
     } as unknown as Runtime
   })
   beforeEach(() => {
@@ -226,6 +228,45 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
     expect(onIt.status).toBe(201)
     expect((await api(limited, 'DELETE', `/api/v1/accounts/${slug()}/grants/${onIt.body?.id}`)).status).toBe(204)
     expect((await api(limited, 'PATCH', `/api/v1/accounts/${slug()}`, { name: 'Renamed' })).status).toBe(403)
+  })
+
+  it('keeps a credential made before scopes went to what it had: reads only, and a docket address grant off the API', async () => {
+    // An API token from before platform migration 0015, capped at reading and writing content.
+    const legacy = await token(org.userId, { dockets: [payments] })
+    await org.db.admin.query("UPDATE platform.api_tokens SET legacy_scopes = ARRAY['docket:read', 'docket:write'] WHERE token_hash = $1", [tokenHash(legacy)])
+    const me = await api({ bearer: legacy }, 'GET', '/api/v1/me')
+    expect(me.body?.credential).toMatchObject({ read_only: true })
+    expect((await api({ bearer: legacy }, 'GET', `/api/v1/accounts/${slug()}/dockets/payments`)).status).toBe(200)
+    for (const [method, path, body] of [
+      ['DELETE', `/api/v1/accounts/${slug()}/dockets/payments`, undefined],
+      ['POST', `/api/v1/accounts/${slug()}/grants`, { who: 'everyone', place: 'docket:payments', role: 'reader' }],
+      ['POST', `/api/v1/accounts/${slug()}/invites`, { to: 'someone@example.com', place: 'docket:payments', role: 'reader' }],
+    ] as const) {
+      const refused = await api({ bearer: legacy }, method, path, body)
+      expect(refused.status, `${method} ${path}`).toBe(403)
+      expect(refused.body).toMatchObject({ error: 'read_only' })
+    }
+    // An OAuth grant made before named connections is bound to one docket's MCP address, not to the API.
+    const raw = randomBytes(32).toString('base64url')
+    const grantId = randomUUID()
+    const resource = `https://docket.example/mcp/${slug()}/payments`
+    await org.db.admin.query(
+      `INSERT INTO platform.oauth_store (model, id_hash, payload, grant_id, account_id, client_id, resource, expires_at) VALUES
+         ('Grant', $1, '{}', $2, $3, 'client', $4, now() + interval '1 day'),
+         ('AccessToken', $5, $6, $2, $3, 'client', $4, now() + interval '15 minutes')`,
+      [
+        tokenHash(`grant:${grantId}`),
+        grantId,
+        org.userId,
+        resource,
+        tokenHash(raw),
+        { accountId: org.userId, clientId: 'client', aud: resource, scope: 'docket:read docket:write', grantId, exp: Math.floor(Date.now() / 1000) + 900, extra: { org_id: org.orgId, workspace_id: payments } },
+      ],
+    )
+    const bound = await api({ bearer: raw }, 'GET', `/api/v1/accounts/${slug()}/dockets/payments`)
+    expect(bound.status).toBe(401)
+    expect(bound.body).toMatchObject({ error: 'invalid_token' })
+    expect((await api({ bearer: raw }, 'DELETE', `/api/v1/accounts/${slug()}/dockets/payments`)).status).toBe(401)
   })
 
   it('keeps every account to its own members and its own tokens (cross-account isolation)', async () => {
@@ -352,5 +393,43 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
     expect((await api(asSession('owner'), 'PATCH', `/api/v1/accounts/${slug()}/members/${ids.admin}`, { owner: false })).body).toMatchObject({ owner: false })
     const renamed = await api(asSession('owner'), 'PATCH', `/api/v1/accounts/${slug()}`, { name: 'Acme Corp' })
     expect(renamed.body).toMatchObject({ name: 'Acme Corp', owner: true })
+  })
+
+  it('lets an owner alone transfer the account to another person, or delete it', async () => {
+    const third = await org.addOrg()
+    const acct = `o-${third.orgId}`
+    const heir = await human(`heir${third.orgId.slice(0, 6)}`)
+    await org.db.admin.query('INSERT INTO platform.memberships (org_id, user_id) VALUES ($1, $2)', [third.orgId, heir.id])
+    await org.db.admin.query(
+      "INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id) VALUES ($1, $2, $3, 'account', NULL, 'admin')",
+      [`g_heir_${third.orgId}`, third.orgId, heir.id],
+    )
+    const founder: Credential = { session: await session(third.userId) }
+    const admin: Credential = { session: await session(heir.id) }
+    const adminToken: Credential = { bearer: await token(heir.id, { orgId: third.orgId }) }
+
+    // An admin who is not an owner may do neither, by session or by token.
+    for (const as of [admin, adminToken]) {
+      const taken = await api(as, 'PATCH', `/api/v1/accounts/${acct}`, { owner: heir.login })
+      expect(taken.status).toBe(403)
+      expect(taken.body).toMatchObject({ error: 'forbidden' })
+      expect((await api(as, 'DELETE', `/api/v1/accounts/${acct}`)).status).toBe(403)
+    }
+    expect((await api(founder, 'PATCH', `/api/v1/accounts/${acct}`, {})).status).toBe(400)
+
+    const handed = await api(founder, 'PATCH', `/api/v1/accounts/${acct}`, { owner: heir.login })
+    expect(handed.status).toBe(200)
+    conforms('accounts.update', handed.body)
+    expect(handed.body).toMatchObject({ owner: false })
+    expect((await api(admin, 'GET', `/api/v1/accounts/${acct}`)).body).toMatchObject({ owner: true })
+    expect((await api(founder, 'GET', `/api/v1/accounts/${acct}`)).body).toMatchObject({ owner: false })
+    expect((await api(founder, 'DELETE', `/api/v1/accounts/${acct}`)).status).toBe(403)
+
+    const deleted = await api(admin, 'DELETE', `/api/v1/accounts/${acct}`)
+    expect(deleted.status).toBe(204)
+    expect((await api(admin, 'GET', `/api/v1/accounts/${acct}`)).status).toBe(404)
+    expect((await api(adminToken, 'GET', `/api/v1/accounts/${acct}`)).status).toBe(404)
+    const { rows } = await org.db.admin.query<{ status: string }>('SELECT status FROM platform.orgs WHERE id = $1', [third.orgId])
+    expect(rows[0]?.status).toBe('deleted')
   })
 })

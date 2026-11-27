@@ -245,10 +245,16 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
   it('offers the admin tools only when asked for, and only to a caller who can manage, never one that mints tokens', async () => {
     expect((await tools(tokens.owner as string)).some((tool) => tool.name.startsWith('admin_'))).toBe(false)
     const admin = (await tools(tokens.owner as string, '?admin=1')).map((tool) => tool.name).filter((name) => name.startsWith('admin_'))
-    expect(admin.sort()).toEqual(['admin_access', 'admin_create_docket', 'admin_create_space', 'admin_create_system_account', 'admin_invite', 'admin_set_access', 'admin_update_docket', 'admin_usage'])
+    expect(admin.sort()).toEqual(['admin_create_docket', 'admin_create_space', 'admin_create_system_account', 'admin_invite', 'admin_set_access', 'admin_update_docket', 'admin_usage'])
     expect(admin.some((name) => /token/.test(name))).toBe(false)
     expect((await tools(tokens.writer as string, '?admin=1')).some((tool) => tool.name.startsWith('admin_'))).toBe(false)
     expect((await tools(tokens.owner as string, '?admin=1&read_only=1')).some((tool) => tool.name.startsWith('admin_'))).toBe(false)
+    // A token made before scopes went, still capped at reading and writing content, never manages.
+    const legacy = await token(org.userId)
+    await org.db.admin.query("UPDATE platform.api_tokens SET legacy_scopes = ARRAY['docket:read', 'docket:write'] WHERE token_hash = $1", [tokenHash(legacy)])
+    const offered = (await tools(legacy, '?admin=1')).map((tool) => tool.name)
+    expect(offered).toContain('docket_remember')
+    expect(offered.some((name) => name.startsWith('admin_'))).toBe(false)
   })
 
   it('lets a system account that manages without content set things up over MCP, as the API checks it, and read nothing', async () => {

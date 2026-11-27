@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { ApiErrorCode } from '@docket/api'
-import type { AccountPrincipal } from '@docket/platform-auth'
+import { SCOPES, type AccountPrincipal } from '@docket/platform-auth'
 import {
   accessOf,
   capsAt,
@@ -63,7 +63,8 @@ export async function authenticate(event: RequestEvent): Promise<Caller> {
   if (bearer) {
     const credential = await runtime.tokens.resolveCredential(bearer)
     const user = credential && (await runtime.router.withPlatform((tx) => userById(tx, credential.userId)))
-    if (!credential || !user) {
+    // A grant made before named connections is for its one docket's MCP address only.
+    if (!credential || !user || credential.audience !== null) {
       throw new ApiFailure('invalid_token', 'This token is not valid: unknown, expired or revoked.', undefined, { 'www-authenticate': 'Bearer error="invalid_token"' })
     }
     return {
@@ -83,6 +84,15 @@ export async function authenticate(event: RequestEvent): Promise<Caller> {
     credential: null,
     actor: `user:${session.id}`,
   }
+}
+
+/**
+ * Whether a credential may only read here: a read-only one, or one that still
+ * carries a ceiling from before scopes went (an API token or connection made
+ * before platform migration 0015), which never covers management.
+ */
+export function readsOnly(credential: Pick<AccountPrincipal, 'readOnly' | 'scopes'>): boolean {
+  return credential.readOnly === true || !SCOPES.every((scope) => credential.scopes.includes(scope))
 }
 
 const CREDENTIAL_ROLE: Omit<Role, 'caps'> = { id: 'credential', name: 'This token or connection', description: null, builtin: false }
