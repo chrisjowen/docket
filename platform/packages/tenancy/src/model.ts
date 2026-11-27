@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 
 import type { Tx } from './db.js'
 import { INVITE_TTL_MS, LIMITS, PROVISIONING_TIMEOUT_MS } from './limits.js'
-import { ACCOUNT, BUILTIN_ROLES, CAPABILITIES, grantCaps, isCapability, mayGrant, type Access, type Capability, type Place } from './roles.js'
+import { ACCOUNT, BUILTIN_ROLES, CAPABILITIES, grantCaps, isCapability, mayGrant, placeFromRow, placeIdOf, type Access, type Capability, type Place } from './roles.js'
 
 /**
  * The tenancy model over the platform schema (§4, §5.1). Every function runs
@@ -802,7 +802,7 @@ type InviteRow = {
   email: string | null
   role_id: string
   role_name: string
-  place_kind: 'account' | 'docket'
+  place_kind: 'account' | 'space' | 'docket'
   place_id: string | null
   owner: boolean
   guest: boolean
@@ -820,7 +820,7 @@ function toInvite(row: InviteRow): Invite {
     email: row.email,
     roleId: row.role_id,
     roleName: row.role_name,
-    place: row.place_kind === 'docket' ? { kind: 'docket', id: row.place_id as string } : ACCOUNT,
+    place: placeFromRow(row.place_kind, row.place_id),
     owner: row.owner,
     guest: row.guest,
     invitedBy: row.invited_by,
@@ -891,7 +891,7 @@ export async function createInvite(
         email,
         input.roleId,
         input.place.kind,
-        input.place.kind === 'docket' ? input.place.id : null,
+        placeIdOf(input.place),
         input.guest ?? false,
         input.actorId,
         now,
@@ -995,7 +995,7 @@ export async function answerInvite(
       await tx.query(
         `INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id, granted_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [`g_${randomUUID()}`, mine.orgId, input.user.id, mine.place.kind, mine.place.kind === 'docket' ? mine.place.id : null, mine.roleId, mine.invitedBy],
+        [`g_${randomUUID()}`, mine.orgId, input.user.id, mine.place.kind, placeIdOf(mine.place), mine.roleId, mine.invitedBy],
       )
     }
   }

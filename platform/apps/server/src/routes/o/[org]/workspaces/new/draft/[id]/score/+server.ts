@@ -2,7 +2,7 @@
 import { docketDraftById } from '@docket/platform-ontology-service'
 import { error, json } from '@sveltejs/kit'
 
-import { authorise, orgAccess } from '$lib/server/request'
+import { authoriseAnywhere, orgAccess } from '$lib/server/request'
 import { scoreSample, text } from '$lib/server/sample-score'
 import { inOrg, publisherOf } from '$lib/server/workspace'
 
@@ -16,7 +16,7 @@ export const POST: RequestHandler = async (event) => {
   const source = text(body.source, 64)
   if (!source) error(400, 'Choose a source.')
   const access = await orgAccess(event, { api: true })
-  authorise(access, 'create')
+  authoriseAnywhere(access, 'create')
   const { actor } = publisherOf(event)
   return inOrg(access, async (ctx) => {
     if (!(await docketDraftById(ctx.tx, event.params.id, actor))) error(404, 'Not found')

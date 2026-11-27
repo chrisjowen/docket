@@ -26,13 +26,14 @@ export {
   acceptDocketDraft,
   checkNewDocket,
   createDocketDraft,
+  initialAccessOf,
   discardDocketDraft,
   docketDraftById,
   listDocketDrafts,
   newDocketProblem,
   updateDocketDraft,
 } from './docket-drafts.js'
-export type { DocketDraft } from './docket-drafts.js'
+export type { DocketDraft, InitialAccess } from './docket-drafts.js'
 export { ATTRIBUTE_KINDS, DRAFT_TOOL, MAX_DESCRIPTION, buildDraft, draftMessages, ontologyName, readPlan } from './drafting.js'
 export type { DraftPlan, StartingPoint } from './drafting.js'
 export type { Change } from './diff.js'

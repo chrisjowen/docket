@@ -81,6 +81,37 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   in the app or over MCP, keeps Publish ontology changes; because publishing
   is now one capability, admins and owners may also publish over MCP.
 
+### Spaces, and New docket as its own page (multi-tenant server)
+
+- An account holds spaces, and a space holds dockets: a space groups dockets
+  for a team, a department or a client. Every account starts with General,
+  which everyone at the account reads unless you change that. A role on a
+  space covers every docket in it, including dockets added later; admins on a
+  space read every docket in it, so to keep something from them, put it in
+  another space.
+- The sidebar lists spaces under **Spaces +**, each with its dockets and its
+  own **+** for a new docket. Admins on the whole account make spaces. A
+  space's page lists its dockets, and its Users & system accounts tab shows
+  who reaches it and why, gives, adjusts and removes roles on it, and invites
+  people who are not in the account yet straight into it: anyone who manages
+  access on a space may.
+- New docket is its own page, opened from a space's +, with the space already
+  chosen. It searches templates by name, domain or record type, drafts an
+  ontology with AI from a description of your domain, and sets initial
+  access: who gets a role on the new docket beyond everyone the space already
+  gives access. A drafted docket keeps its space and initial access until it
+  is accepted. Creating a docket takes Create dockets on its space. The old
+  `/o/{org}/workspaces/new` address opens General's New docket page.
+- Existing dockets move to General, and so do the account-wide Writer and
+  Reader grants: with every docket in General, nobody's access to any docket
+  changes, and a docket later made in another space is no longer covered by
+  them. A Writer or Reader grant that adds a managing capability stays on the
+  account, as do Admin and the account's own roles; open invites to Writer or
+  Reader on the account invite to General. General gets Reader for everyone
+  unless that would let someone read a docket they cannot read now. The
+  migration works out everyone's access to every docket before and after and
+  stops if any answer differs.
+
 ## 0.16.0
 
 ### Confidence comes from policies about sources

@@ -10,7 +10,7 @@
   type Grant = {
     id: string
     who: { kind: 'user' | 'everyone'; id: string | null; login: string | null; name: string | null; userKind: 'human' | 'service' | null; guest: boolean }
-    place: { key: string; kind: 'account' | 'docket'; label: string }
+    place: { key: string; kind: 'account' | 'space' | 'docket'; label: string }
     role: { id: string; name: string }
     caps: string[]
     label: string

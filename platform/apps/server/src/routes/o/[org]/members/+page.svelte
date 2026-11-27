@@ -52,7 +52,7 @@
       <label>
         On
         <select name="place">
-          {#each data.invitePlaces as place (place.key)}<option value={place.key}>{place.label}</option>{/each}
+          {#each data.invitePlaces as place (place.key)}<option value={place.key} selected={place.key === 'space:general'}>{place.label}</option>{/each}
         </select>
       </label>
       <label class="check"><input type="checkbox" name="guest" /> Guest: sees only what they are given</label>

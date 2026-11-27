@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ACCOUNT, TenancyError, docketPlace, type Tx } from '@docket/platform-tenancy'
+import { ACCOUNT, TenancyError, docketPlace, spacePlace, type Tx } from '@docket/platform-tenancy'
 import { fail, type ActionFailure, type RequestEvent } from '@sveltejs/kit'
 
 import { orgAccess, recordAudit, requireUser, type OrgAccess } from './request'
@@ -25,7 +25,7 @@ export function mayManageSystemAccounts(access: OrgAccess): boolean {
 export function mayChangeAccount(access: OrgAccess, grants: readonly { place: { key: string } }[]): boolean {
   if (access.owner) return true
   const manages = (key: string) => {
-    const caps = access.capsAt(key === 'account' ? ACCOUNT : docketPlace(key.slice(7)))
+    const caps = access.capsAt(key === 'account' ? ACCOUNT : key.startsWith('space:') ? spacePlace(key.slice(6)) : docketPlace(key.slice(7)))
     return caps.has('system') || caps.has('access')
   }
   return grants.length ? grants.some((grant) => manages(grant.place.key)) : access.can('system') || access.can('access')

@@ -26,8 +26,12 @@ export interface TestOrg {
   drop(): Promise<void>
 }
 
-/** A throwaway database with one provisioned org, shaped like production. Needs `DOCKET_TEST_PG_URL`. */
-export async function createTestOrg(): Promise<TestOrg> {
+/**
+ * A throwaway database with one provisioned org, shaped like production. Needs `DOCKET_TEST_PG_URL`.
+ * Like every new account, each org starts with General, which everyone at the account reads; a test of who
+ * reaches what from nothing passes `everyoneReadsGeneral: false` to start without that grant.
+ */
+export async function createTestOrg(options: { everyoneReadsGeneral?: boolean } = {}): Promise<TestOrg> {
   const db = await createTestDatabase()
   const router = tenantRouter(db.app)
   const keys = await platformKeyService({ kek: webcrypto.getRandomValues(new Uint8Array(32)), kekId: 'test' })
@@ -40,6 +44,9 @@ export async function createTestOrg(): Promise<TestOrg> {
       return owner.id
     })
     await postgresProvisioner({ admin: db.admin, keys, appRole: db.appRole }).provision({ orgId })
+    if (options.everyoneReadsGeneral === false) {
+      await db.admin.query("DELETE FROM platform.grants WHERE org_id = $1 AND principal_id IS NULL AND place_kind = 'space' AND place_id = 'general'", [orgId])
+    }
     return { orgId, userId, login }
   }
   const { orgId, userId, login } = await addOrg()

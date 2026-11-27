@@ -53,11 +53,17 @@
     accountAdmin?: boolean
     managesAccess?: boolean
     managesSystemAccounts?: boolean
-    dockets?: { slug: string; name: string; docketNo: string; open: boolean }[]
+    dockets?: { slug: string; name: string; spaceId: string; docketNo: string; open: boolean }[]
+    /** The account's spaces the member sees, General first; `create`: they may add a docket there. */
+    spaces?: { id: string; slug: string; name: string; general: boolean; create: boolean }[]
+    /** May make a space (Spaces +). */
+    createsSpaces?: boolean
     ai?: { spentUsd: number; capUsd: number; fraction: number; warned: boolean }
     /** For the account's owners: system account tokens about to expire, or just expired. */
     tokenNotices?: { expiring: number; expired: number }
     workspace?: { slug: string; name: string }
+    /** On a space's pages: the space. */
+    space?: { slug: string; name: string }
   }
 
   let { user, orgs, csrf, theme: initialTheme, children }: Props = $props()
@@ -66,11 +72,15 @@
   const org = $derived(data.org ?? null)
   const workspace = $derived(org ? (data.workspace ?? null) : null)
   const docketNo = $derived(workspace ? (data.dockets?.find((entry) => entry.slug === workspace.slug)?.docketNo ?? null) : null)
-  const crumbs = $derived(crumbsFor({ routeId: page.route.id, pathname: page.url.pathname, org, workspace }))
+  const crumbs = $derived(crumbsFor({ routeId: page.route.id, pathname: page.url.pathname, org, workspace, space: org ? (data.space ?? null) : null }))
   const orgPath = (path: '' | '/ask' | '/members' | '/tokens' | '/audit' | '/templates' | '/settings') => (org ? `/o/${org.slug}${path}` : '/')
   const current = (href: string) => (page.url.pathname === href ? 'page' : undefined)
   /** Inside a docket, Ask opens on it. */
   const askScope = $derived(workspace ? `?ws=${encodeURIComponent(workspace.slug)}` : '')
+  /** The space the page is in: a space's own pages, or the open docket's. */
+  const openSpace = $derived(
+    page.params.space ?? (workspace ? data.spaces?.find((space) => space.id === data.dockets?.find((entry) => entry.slug === workspace.slug)?.spaceId)?.slug : undefined),
+  )
 
   // The theme: the server rendered <html data-theme> from the cookie; the toggle flips both.
   let theme = $derived<Theme>(initialTheme)
@@ -205,40 +215,68 @@
           {@render waitlist()}
         </ul>
 
-        <span class="label section" id="open-dockets">Open dockets</span>
-        <ul class="dockets" aria-label="Dockets">
-          {#each data.dockets ?? [] as entry (entry.slug)}
-            <li>
-              {#if entry.open}
-                <a
-                  href={resolve('/o/[org]/w/[ws]/overview', { org: org.slug, ws: entry.slug })}
-                  aria-current={workspace?.slug === entry.slug ? 'page' : undefined}
-                >
-                  <span class="sdot" aria-hidden="true"></span>
-                  <span class="docket-name">{entry.name}</span>
-                  <span class="mono no">{entry.docketNo}</span>
-                </a>
-              {:else}
-                <span class="closed" title="You have no access to this docket.">
-                  <span class="docket-name">{entry.name}</span>
-                  <span class="mono no">No access</span>
-                </span>
-              {/if}
-            </li>
-          {:else}
-            <li class="muted none">No dockets yet.</li>
-          {/each}
-          {#if data.permissions?.create}
-            <li>
-              <a
-                href={resolve('/o/[org]/workspaces/new', { org: org.slug })}
-                class="new"
-                aria-current={current(`/o/${org.slug}/workspaces/new`)}
-              >
-                <Plus size={15} aria-hidden="true" /> New docket
-              </a>
-            </li>
+        <div class="section spaces-head">
+          <span class="label" id="spaces-label">Spaces</span>
+          {#if data.createsSpaces}
+            <a
+              class="add"
+              href={resolve('/o/[org]/spaces/new', { org: org.slug })}
+              aria-label="New space"
+              title="New space"
+              data-testid="new-space"
+              aria-current={current(`/o/${org.slug}/spaces/new`)}><Plus size={15} aria-hidden="true" /></a
+            >
           {/if}
+        </div>
+        <ul class="spaces" aria-labelledby="spaces-label">
+          {#each data.spaces ?? [] as space (space.id)}
+            {@const inSpace = (data.dockets ?? []).filter((entry) => entry.spaceId === space.id)}
+            <li class="space" data-space={space.slug}>
+              <div class="space-row" class:here={openSpace === space.slug}>
+                <a
+                  class="space-name"
+                  href={resolve('/o/[org]/s/[space]', { org: org.slug, space: space.slug })}
+                  aria-current={page.url.pathname === `/o/${org.slug}/s/${space.slug}` ? 'page' : undefined}
+                >
+                  <span class="space-mark" aria-hidden="true">{space.name.slice(0, 1).toUpperCase()}</span>
+                  <span class="docket-name">{space.name}</span>
+                </a>
+                {#if space.create}
+                  <a
+                    class="add"
+                    href={resolve('/o/[org]/s/[space]/new', { org: org.slug, space: space.slug })}
+                    aria-label="New docket in {space.name}"
+                    title="New docket in {space.name}"
+                    data-testid="new-docket-in-{space.slug}"
+                    aria-current={current(`/o/${org.slug}/s/${space.slug}/new`)}><Plus size={15} aria-hidden="true" /></a
+                  >
+                {/if}
+              </div>
+              <ul class="dockets" aria-label="Dockets in {space.name}">
+                {#each inSpace as entry (entry.slug)}
+                  <li>
+                    {#if entry.open}
+                      <a
+                        href={resolve('/o/[org]/w/[ws]/overview', { org: org.slug, ws: entry.slug })}
+                        aria-current={workspace?.slug === entry.slug ? 'page' : undefined}
+                      >
+                        <span class="sdot" aria-hidden="true"></span>
+                        <span class="docket-name">{entry.name}</span>
+                        <span class="mono no">{entry.docketNo}</span>
+                      </a>
+                    {:else}
+                      <span class="closed" title="You have no access to this docket.">
+                        <span class="docket-name">{entry.name}</span>
+                        <span class="mono no">No access</span>
+                      </span>
+                    {/if}
+                  </li>
+                {:else}
+                  <li class="muted none">No dockets yet.</li>
+                {/each}
+              </ul>
+            </li>
+          {/each}
         </ul>
       {:else}
         <ul class="primary" aria-label="Casebooks">
@@ -607,15 +645,83 @@
     background: var(--ok);
     box-shadow: none;
   }
-  .dockets .new {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--mute);
-  }
   .none {
     padding: 4px 10px;
     font-size: 13px;
+  }
+  /* Spaces +, then each space with its own + and its dockets beneath it. */
+  .spaces-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 4px;
+  }
+  .spaces {
+    gap: 6px;
+  }
+  .space-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border-radius: 8px;
+  }
+  .space-name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: var(--ink-2);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .space-name:hover {
+    background: color-mix(in oklab, var(--sunk) 80%, transparent);
+  }
+  .space-name[aria-current='page'] {
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: var(--shadow-1);
+  }
+  .space-mark {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    background: var(--sunk);
+    color: var(--ink-2);
+    font: 600 10px/1 var(--font-mono);
+  }
+  .space-row.here .space-mark {
+    background: var(--ink);
+    color: var(--bg);
+  }
+  .add {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    color: var(--mute);
+  }
+  .add:hover,
+  .add[aria-current='page'] {
+    background: color-mix(in oklab, var(--sunk) 80%, transparent);
+    color: var(--ink);
+  }
+  .space .dockets {
+    margin-left: 18px;
+    padding-left: 4px;
+    border-left: 1px solid var(--rule);
+  }
+  .space .dockets a[aria-current='page']::before {
+    left: -5px;
   }
   .foot {
     display: grid;

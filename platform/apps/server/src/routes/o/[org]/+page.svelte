@@ -17,6 +17,7 @@
     })),
   )
   const details = $derived(new Map(data.casebook.map((docket) => [docket.slug, docket])))
+  const spaceOf = $derived(new Map(data.spaces.map((space) => [space.id, space])))
   const updated = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 </script>
 
@@ -35,13 +36,13 @@
     </p>
     <h1>The <em>casebook</em></h1>
     <p class="lede">
-      Every docket {data.org.name} keeps on record. Open one to read its records, walk its evidence or ask it a question. What you can do in each comes
-      from your role on the whole casebook, or on that docket.
+      Every docket {data.org.name} keeps on record, space by space. Open one to read its records, walk its evidence or ask it a question. What you can
+      do in each comes from your role on the whole casebook, on its space, or on that docket.
     </p>
   </div>
   <div class="actions">
     <a class="button" href="{resolve('/o/[org]/ask', { org: data.org.slug })}?mode=search"><Search size={16} aria-hidden="true" /> Search the casebook</a>
-    {#if data.permissions.create}
+    {#if data.createsDockets}
       <a class="button primary" href={resolve('/o/[org]/workspaces/new', { org: data.org.slug })}><Plus size={16} aria-hidden="true" /> New docket</a>
     {/if}
   </div>
@@ -59,6 +60,7 @@
         <thead>
           <tr>
             <th scope="col">Docket</th>
+            <th scope="col" class="hide-sm">Space</th>
             <th scope="col">Docket no.</th>
             <th scope="col">Status</th>
             <th scope="col" class="num">Documents</th>
@@ -76,6 +78,12 @@
                   <a class="docket-name" href={resolve('/o/[org]/w/[ws]/overview', { org: data.org.slug, ws: workspace.slug })}>{workspace.name}</a>
                 {:else}
                   <span class="docket-name muted">{workspace.name}</span>
+                {/if}
+              </td>
+              <td class="hide-sm">
+                {#if spaceOf.get(workspace.spaceId)}
+                  {@const space = spaceOf.get(workspace.spaceId)}
+                  <a class="space" href={resolve('/o/[org]/s/[space]', { org: data.org.slug, space: space?.slug ?? '' })}>{space?.name}</a>
                 {/if}
               </td>
               <td class="mono no">{workspace.docketNo}</td>
@@ -103,15 +111,16 @@
     </div>
   {:else}
     <p class="empty muted">
-      No dockets yet. {data.permissions.create
-        ? 'Open one from a template, an entities.yaml file, or another docket.'
+      No dockets yet. {data.createsDockets
+        ? 'Open one from a space’s +: a template, a description of your domain, an entities.yaml file, or another docket.'
         : 'Someone who can create dockets opens them.'}
     </p>
   {/if}
 </section>
 
 <section class="card perms-card" aria-labelledby="perms-title">
-  <h2 id="perms-title">What you <em>can do</em> across {data.org.name}</h2>
+  <h2 id="perms-title">What you <em>can do</em> across all of {data.org.name}</h2>
+  <p class="muted perms-note">A role on a space or on one docket adds to this there: each space's Users & system accounts, and each docket's Access tab, say what you may do and why.</p>
   <ul class="perms">
     {#each rows as row (row.action)}
       <li data-action={row.action} data-allowed={row.allowed}>
@@ -141,6 +150,14 @@
     text-decoration: none;
   }
   .docket-name:hover {
+    color: var(--signal);
+  }
+  .space {
+    color: var(--ink-2);
+    font-size: 0.875rem;
+    text-decoration: none;
+  }
+  .space:hover {
     color: var(--signal);
   }
   .num {
@@ -176,7 +193,11 @@
     max-width: 44rem;
   }
   .perms-card h2 {
+    margin: 0 0 6px;
+  }
+  .perms-note {
     margin: 0 0 12px;
+    font-size: 0.875rem;
   }
   .perms {
     list-style: none;

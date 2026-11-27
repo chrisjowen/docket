@@ -80,7 +80,7 @@ test('a docket saved as a template is offered by New docket, managed by owners a
   const bob = await (await browser.newContext()).newPage()
   await signIn(bob, bobLogin)
   await bob.getByRole('button', { name: /^Accept and join/ }).click()
-  await expect(bob.getByTestId('my-role')).toHaveText('Writer')
+  await expect(bob.getByTestId('my-role')).toHaveText('Writer on General')
   expect((await bob.request.get(`/o/${org}/templates`)).status()).toBe(403)
   await bob.goto(`/o/${org}/w/sales/settings`)
   await expect(bob.getByTestId('save-template')).toHaveCount(0)

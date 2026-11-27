@@ -13,6 +13,8 @@ export interface Workspace {
   id: string
   slug: string
   name: string
+  /** The space it is in (org 0020): what a grant on a space covers. */
+  spaceId: string
   createdBy: string
   createdAt: Date
 }
@@ -36,12 +38,13 @@ export function workspaceSlugProblem(slug: string): string | null {
 }
 
 // `ontology_mcp_roles` (org 0007) stays for the record: who may publish over MCP is the Publish capability now (platform 0017).
-type WorkspaceRow = { id: string; slug: string; name: string; created_by: string; created_at: Date }
+type WorkspaceRow = { id: string; slug: string; name: string; space_id: string; created_by: string; created_at: Date }
 
 const toWorkspace = (row: WorkspaceRow): Workspace => ({
   id: row.id,
   slug: row.slug,
   name: row.name,
+  spaceId: row.space_id,
   createdBy: row.created_by,
   createdAt: row.created_at,
 })
@@ -71,13 +74,13 @@ export async function countMemberWorkspaces(tx: Tx): Promise<number> {
 }
 
 /**
- * Records a workspace. Its first ontology version is published by the ontology service, in the same transaction.
+ * Records a workspace, in `spaceId` or else General. Its first ontology version is published by the ontology service, in the same transaction.
  * `maxWorkspaces` replaces the beta's limit for the org admin API, which holds the org to its own (docs/org-api.md),
  * counting every workspace; otherwise members' workspaces are held to the beta's (`countMemberWorkspaces`).
  */
 export async function insertWorkspace(
   tx: Tx,
-  input: { name: string; slug: string; createdBy: string; id?: string; maxWorkspaces?: number },
+  input: { name: string; slug: string; createdBy: string; id?: string; spaceId?: string; maxWorkspaces?: number },
 ): Promise<Workspace> {
   const name = input.name.trim()
   if (!name || name.length > 80) throw new WorkspaceError('invalid', 'Name the workspace in 1-80 characters.')
@@ -99,9 +102,13 @@ export async function insertWorkspace(
   }
   const taken = await tx.query('SELECT 1 FROM workspaces WHERE slug = $1', [input.slug])
   if (taken.rowCount) throw new WorkspaceError('conflict', 'A workspace already has that address.')
+  if (input.spaceId !== undefined) {
+    const space = await tx.query('SELECT 1 FROM spaces WHERE id = $1', [input.spaceId])
+    if (!space.rowCount) throw new WorkspaceError('not-found', 'That space no longer exists.')
+  }
   const { rows } = await tx.query<WorkspaceRow>(
-    'INSERT INTO workspaces (id, slug, name, created_by) VALUES ($1, $2, $3, $4) RETURNING *',
-    [input.id ?? newTenantId(), input.slug, name, input.createdBy],
+    "INSERT INTO workspaces (id, slug, name, created_by, space_id) VALUES ($1, $2, $3, $4, coalesce($5, 'general')) RETURNING *",
+    [input.id ?? newTenantId(), input.slug, name, input.createdBy, input.spaceId ?? null],
   )
   return toWorkspace(rows[0] as WorkspaceRow)
 }
