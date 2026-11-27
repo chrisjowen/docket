@@ -137,7 +137,10 @@ behind an Ingress or gateway with TLS and a matching public URL. Select a
 Neo4j source with `provisioning: managed` and `driver: kubernetes`, then
 enable `multiTenant.managedGraph` and leave `neo4j.enabled` off. Use a
 dedicated release namespace and specify it in the source. The driver
-requires a namespace-local cert-manager Issuer and persistent storage.
+requires a namespace-local cert-manager Issuer and persistent storage, and
+in production the source must name `kubernetes.storageClass` explicitly
+(no default is assumed, since the cluster may have none by that name);
+evaluation installs may leave it out and get the cluster's default class.
 Point `NODE_EXTRA_CA_CERTS` on the worker at the mounted CA that signs
 the graph certificates. Use a CNI that enforces NetworkPolicies.
 The chart grants the worker a namespaced Role for the graph resources.

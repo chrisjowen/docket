@@ -2,8 +2,9 @@
 import { AiCapReached, type UsageRecord } from '@docket/platform-ai'
 import { describe, expect, it } from 'vitest'
 
-import { gatewayCall, type GatewayDeps } from './cognify-gateway.js'
+import { gatewayCall, startGatewayServer, type GatewayDeps } from './cognify-gateway.js'
 import type { CognifyLease } from './cognify-lease.js'
+import type { Logger } from './outbox.js'
 
 const KEY = 'gateway-key-for-tests'
 const LEASE: CognifyLease = { orgId: 'orgacme', workspaceId: 'wsmain', monthlyLimitUsd: 2, startedAt: new Date(), expiresAt: new Date(Date.now() + 60_000), stuckAt: null }
@@ -95,5 +96,21 @@ describe('the cognify gateway', () => {
   it('refuses when AI is off on the server', async () => {
     const { value } = deps()
     expect((await gatewayCall({ ...value, ai: null }, call())).status).toBe(503)
+  })
+})
+
+describe('startGatewayServer', () => {
+  const log: Logger = { info: () => undefined, error: () => undefined }
+  const gateway = (production: boolean) => startGatewayServer({ deps: deps().value, port: 0, host: '127.0.0.1', tls: null, production, log })
+
+  it('serves the in-process loopback listener without TLS, the inline-worker case run.ts marks production: false for', async () => {
+    const server = gateway(false)
+    await new Promise((resolve) => server.once('listening', resolve))
+    expect(server.listening).toBe(true)
+    server.close()
+  })
+
+  it('still refuses a network-facing or standalone-worker listener without TLS, even in production', () => {
+    expect(() => gateway(true)).toThrow(/needs DOCKET_QUERY_TLS_CERT and DOCKET_QUERY_TLS_KEY/)
   })
 })
