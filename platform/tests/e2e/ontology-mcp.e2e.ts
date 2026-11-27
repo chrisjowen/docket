@@ -79,11 +79,13 @@ test('only someone who manages access gives Publish, and a token publishes only 
   await bob.goto(`${ws()}/access`)
   await expect(bob.getByTestId('your-access')).toContainText('Can write')
   await expect(bob.getByTestId('give-access')).toHaveCount(0)
-  const refused = await bob.request.post(`${ws()}/access?/give`, {
-    form: { csrf: await csrfOf(bob), who: 'everyone', role: 'admin' },
-    headers: { origin: new URL(bob.url()).origin },
+  // The Access tab gives access through the API (grants.create), which refuses him as the page does.
+  const refused = await bob.request.post(`/api/v1/accounts/${org}/grants`, {
+    data: { who: 'everyone', place: 'docket:acme', role: 'admin' },
+    headers: { 'x-csrf-token': await csrfOf(bob), origin: new URL(bob.url()).origin },
   })
   expect(refused.status()).toBe(403)
+  expect(await refused.json()).toMatchObject({ error: 'forbidden' })
 
   // The owner gives Bob alone Publish ontology changes on this docket.
   await letBobPublish(true)
@@ -133,7 +135,8 @@ test("a publisher's ontology:write token publishes and migrates over MCP, rolls 
   // Every call and every change to who may publish are in the audit log.
   await alice.goto(`/o/${org}/audit`)
   await expect(alice.getByRole('cell', { name: 'mcp.tools/call docket_publish_ontology_change' }).first()).toBeVisible()
-  await expect(alice.getByRole('cell', { name: /^access\.(grant|change)$/ }).first()).toBeVisible()
+  // The Access tab changes grants through the API, recorded as its operations.
+  await expect(alice.getByRole('cell', { name: /^api\.grants\.(create|replace)$/ }).first()).toBeVisible()
 
   // Taken away: the same token loses the tool on its very next call, and can still propose.
   await letBobPublish(false)

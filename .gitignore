@@ -20,7 +20,11 @@ deploy/compose/.env
 /deploy/compose/docket-server.yaml
 deploy/compose/secrets/
 /deploy/compose/worker-tls/
-# The server platform's build output and Playwright reports.
+# The server platform's build output (with the web UI copied in) and Playwright reports.
 platform/apps/server/build/
+platform/apps/server/ui/
+# The multi-tenant server's web UI: its build and packed artifacts.
+packages/docket-ui/cloud/build/
+packages/docket-ui/cloud/dist/
 platform/playwright-report/
 platform/test-results/

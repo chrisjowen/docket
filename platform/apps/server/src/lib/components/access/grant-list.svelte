@@ -6,6 +6,7 @@
   import Csrf from '$lib/components/csrf.svelte'
 
   import CapabilityPicker from './capability-picker.svelte'
+  import type { AccessSubmit } from './submit'
 
   type Grant = {
     id: string
@@ -18,7 +19,10 @@
     mayChange: boolean
   }
 
-  /** Grants as rows: who, which role on which place, and - for whoever may - adjust and remove. */
+  /**
+   * Grants as rows: who, which role on which place, and - for whoever may - adjust and remove. With `submit`,
+   * the forms go to it (a page that calls the API) instead of the page's `?/adjust` and `?/revoke` actions.
+   */
   let {
     grants,
     roles,
@@ -26,6 +30,7 @@
     showWho = true,
     showPlace = true,
     label,
+    submit,
   }: {
     grants: Grant[]
     roles: { id: string; name: string; caps: string[] }[]
@@ -33,7 +38,14 @@
     showWho?: boolean
     showPlace?: boolean
     label: string
+    submit?: AccessSubmit
   } = $props()
+
+  const through = (action: 'adjust' | 'revoke') => (event: SubmitEvent & { currentTarget: HTMLFormElement }) => {
+    if (!submit) return
+    event.preventDefault()
+    void submit(action, new FormData(event.currentTarget))
+  }
 </script>
 
 <ul class="grants" aria-label={label}>
@@ -55,7 +67,7 @@
         {/if}
         <span class="what"><span class="badge role" data-testid="grant-label">{grant.label}</span>{#if showPlace}<span class="muted small"> on {grant.place.label}</span>{/if}</span>
         {#if grant.mayChange}
-          <form method="POST" action="?/revoke" class="remove">
+          <form method="POST" action="?/revoke" class="remove" onsubmit={through('revoke')}>
             <Csrf token={csrf} />
             <input type="hidden" name="grant" value={grant.id} />
             <button class="button small danger" type="submit" aria-label="Remove {grant.label} on {grant.place.label} from {grant.who.login ?? 'everyone'}">
@@ -67,7 +79,7 @@
       {#if grant.mayChange}
         <details class="edit">
           <summary>Change</summary>
-          <form method="POST" action="?/adjust" class="adjust-form">
+          <form method="POST" action="?/adjust" class="adjust-form" onsubmit={through('adjust')}>
             <Csrf token={csrf} />
             <input type="hidden" name="grant" value={grant.id} />
             <CapabilityPicker {roles} role={grant.role.id} caps={grant.caps} id="g-{grant.id}" />

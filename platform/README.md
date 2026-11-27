@@ -40,9 +40,13 @@ from these packages.
 | `tests` | `@docket/platform-e2e` | The Playwright suite (`tests/e2e`), a fake GitHub and embedder, fixtures, and a k6 load test. |
 | `docs` | | The public API and the account's MCP address, the org admin API, cognee, and how search decides what is relevant. |
 
-The product's pages still live in `apps/server` beside the routes that serve
-them. They move to `packages/docket-ui` as clients of the public API as that
-API grows to cover them.
+The product's pages move, a feature at a time, to the web UI in
+[`packages/docket-ui/cloud`](../packages/docket-ui/cloud): a static app that
+calls the public API (`/api/v1`, `@docket/api`) alone. The server's
+build copies it into `apps/server/ui/` and `front.js` serves it at the pages it
+draws; the rest still live in `apps/server` beside the routes that serve them,
+sharing its components. The same build can be hosted on its own in front of
+the server (the web UI's README).
 
 ## Run it
 

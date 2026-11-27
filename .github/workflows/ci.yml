@@ -32,6 +32,13 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+      # The web UI's standalone artifact: the same files the server bundles, versioned, for hosting on its own.
+      - run: pnpm --filter @docket/cloud-ui pack:standalone
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docket-cloud-ui
+          path: packages/docket-ui/cloud/dist/*.tgz
+          if-no-files-found: error
 
   # The server platform's *.int.test.ts suites, against a real Postgres, Neo4j and Qdrant.
   platform-integration:

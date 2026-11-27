@@ -5,11 +5,13 @@
   import Csrf from '$lib/components/csrf.svelte'
 
   import CapabilityPicker from './capability-picker.svelte'
+  import type { AccessSubmit } from './submit'
 
   /**
    * Gives someone a role on a place, optionally adjusted (tenancy v2 §3.1).
    * `people` is who may be chosen (with "everyone" when offered); one place
-   * hides the place choice.
+   * hides the place choice. With `submit`, the form goes to it (a page that
+   * calls the API) instead of the page's `?/give` action.
    */
   let {
     people,
@@ -18,6 +20,7 @@
     csrf,
     title = 'Give access',
     id = 'give',
+    submit,
   }: {
     people: { id: string; label: string }[] | null
     places: { key: string; label: string }[]
@@ -25,10 +28,17 @@
     csrf: string | null
     title?: string
     id?: string
+    submit?: AccessSubmit
   } = $props()
+
+  const onsubmit = (event: SubmitEvent & { currentTarget: HTMLFormElement }) => {
+    if (!submit) return
+    event.preventDefault()
+    void submit('give', new FormData(event.currentTarget))
+  }
 </script>
 
-<form method="POST" action="?/give" class="card give" data-testid="give-access">
+<form method="POST" action="?/give" class="card give" data-testid="give-access" {onsubmit}>
   <Csrf token={csrf} />
   <h2><UserPlus size={17} aria-hidden="true" /> {title}</h2>
   <div class="fields">

@@ -5,10 +5,10 @@
   "description": "The Docket Cloud web app and JSON API (SvelteKit, adapter-node).",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "files": ["build", "runtime.js", "front.js"],
+  "files": ["build", "ui", "runtime.js", "front.js"],
   "scripts": {
     "dev": "vite dev",
-    "build": "svelte-kit sync && vite build && vite build --config vite.mcp-app.config.ts",
+    "build": "svelte-kit sync && vite build && vite build --config vite.mcp-app.config.ts && node scripts/copy-ui.mjs",
     "start": "node build",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "svelte-kit sync && vitest run --exclude 'src/**/*.int.test.ts'",
@@ -38,6 +38,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@docket/cloud-ui": "workspace:*",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0",
     "@fontsource/instrument-serif": "5.3.0",

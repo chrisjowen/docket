@@ -70,9 +70,12 @@ import {
 
 import { placeNames, type PlaceNames } from '../grants'
 import { accountRoles } from '../members'
-import { becauseLabel } from '../place-access'
+import { becauseLabel, placeAccess } from '../place-access'
+import { isPlatformAdmin } from '../request'
 import { getRuntime } from '../runtime'
+import { accountShell, commandSearch, docketFacts } from '../shell'
 import { mayChangeAccount, mayManageSystemAccounts } from '../system-accounts'
+import { actorNames, inOrg } from '../workspace'
 import { accountCaller, ApiFailure, readsOnly, type AccountCaller, type Caller } from './caller'
 import {
   accountView,
@@ -326,6 +329,7 @@ export const HANDLERS: Record<string, Handler> = {
             }
           : null,
         allowlisted: caller.session?.allowlisted ?? false,
+        platform_admin: caller.session ? isPlatformAdmin(caller.session) : false,
         accounts,
       },
     }
@@ -461,6 +465,36 @@ export const HANDLERS: Record<string, Handler> = {
   'accounts.get': async (call) => {
     const acct = await account(call)
     return { body: accountView(acct.org, acct.principal, acct.capsAt(ACCOUNT), { owner: acct.owner, guest: acct.principal.guest }) }
+  },
+
+  // The app's sidebar, as the server's account pages draw it (`accountShell`): the web UI draws it from here.
+  'accounts.navigation': async (call) => {
+    const acct = await account(call)
+    const shell = await accountShell(acct)
+    return {
+      body: {
+        account: shell.org,
+        role: shell.role,
+        caps: CAPABILITIES.filter((cap) => shell.permissions[cap]),
+        owner: shell.owner,
+        account_admin: shell.accountAdmin,
+        manages_access: shell.managesAccess,
+        manages_system_accounts: shell.managesSystemAccounts,
+        creates_spaces: shell.createsSpaces,
+        spaces: shell.spaces,
+        dockets: shell.dockets.map((docket) => ({ slug: docket.slug, name: docket.name, space_id: docket.spaceId, number: docket.docketNo, open: docket.open })),
+        token_notices: shell.tokenNotices,
+        ai: { spent_usd: shell.ai.spentUsd, cap_usd: shell.ai.capUsd, fraction: shell.ai.fraction, warned: shell.ai.warned },
+      },
+    }
+  },
+
+  // The command menu's search, as the server's own pages ask it (`commandSearch`): only the dockets the caller reads.
+  'accounts.search': async (call) => {
+    const acct = await account(call)
+    if (!acct.canAnywhere('read')) refuse()
+    const named = (str(call.query.ws) ?? '').split(',').map((each) => each.trim()).filter(Boolean)
+    return { body: await commandSearch(acct, call.caller.user.id, str(call.query.q) ?? '', named) }
   },
 
   'accounts.update': async (call) => {
@@ -607,6 +641,31 @@ export const HANDLERS: Record<string, Handler> = {
     }
   },
 
+  // Who reaches a place, as its Access tab shows whoever manages access there (`placeAccess`).
+  'access.who': async (call) => {
+    const acct = await account(call)
+    const names = await placeNames(acct.org.id)
+    const place = placeFor(acct, String(call.query.place), names)
+    const caps = acct.capsAt(place)
+    if (!caps.has('access') && !caps.has('system')) refuse('You do not manage access here.')
+    const page = await placeAccess({ access: acct, here: place, caps, names })
+    const spaceId = place.kind === 'docket' ? names.dockets.get(place.id)?.spaceId : undefined
+    // The bigger places: the whole account, and for a docket its space.
+    const covering = (await platform((tx) => listGrants(tx, acct.org.id))).filter(
+      (grant) =>
+        (place.kind !== 'account' && grant.place.kind === 'account') || (spaceId !== undefined && grant.place.kind === 'space' && grant.place.id === spaceId),
+    )
+    return {
+      body: {
+        place: placeView(place, names, acct.org),
+        reach: page.reach,
+        // Changed on the bigger place's own page, never from this one.
+        covering: covering.map((grant) => ({ ...grantView(grant, acct.principal, names, acct.org), may_change: false })),
+        candidates: page.people.map((person) => ({ ref: person.id, label: person.label })),
+      },
+    }
+  },
+
   'grants.list': async (call) => {
     const acct = await account(call)
     const names = await placeNames(acct.org.id)
@@ -742,6 +801,30 @@ export const HANDLERS: Record<string, Handler> = {
     const { workspace, names, caps } = await docketOf(acct, call.params.docket ?? '')
     if (!caps.has('read')) refuse('You have no access to this docket.')
     return { body: docketView(acct.org, workspace, names, caps) }
+  },
+
+  'dockets.summary': async (call) => {
+    const acct = await account(call)
+    const { workspace, caps } = await docketOf(acct, call.params.docket ?? '')
+    if (!caps.has('read')) refuse('You have no access to this docket.')
+    call.audit.workspaceId = workspace.id
+    const facts = await inOrg(acct, (ctx) => docketFacts(ctx, workspace))
+    const name = await actorNames(acct)
+    return {
+      body: {
+        docket: workspace.slug,
+        documents: facts.documents,
+        drafts: facts.drafts,
+        schema: facts.head
+          ? {
+              version: facts.head.number ?? 0,
+              published_at: facts.head.publishedAt?.toISOString() ?? null,
+              published_by: name(facts.head.publishedBy),
+              message: facts.head.message,
+            }
+          : null,
+      },
+    }
   },
 
   'dockets.update': async (call) => {

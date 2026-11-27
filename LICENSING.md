@@ -2,12 +2,14 @@
 
 This repository holds code under two licences. Each package states its own in
 its `package.json` `license` field, and every source file under `platform/`
-carries an `SPDX-License-Identifier` header.
+carries an `SPDX-License-Identifier` header, as does every source file under
+`packages/docket-ui/cloud/`.
 
 | Path | Licence | What it is |
 | --- | --- | --- |
 | `packages/*` (the `docket` CLI, `docket-server`, `docket-ui`, `contracts`, the public API contract `api`, `adapter-kit` and the adapters, the Claude Code plugin) | [Apache-2.0](LICENSE) | The CLI, the reusable server core, the local UI and the adapter SDK. Unchanged by the platform import. |
 | `wheelhouse/` | [Apache-2.0](LICENSE) | The Wheelhouse plugin build. |
+| `packages/docket-ui/cloud` (`@docket/cloud-ui`) | [AGPL-3.0-only](packages/docket-ui/cloud/LICENSE) | The multi-tenant server's web UI, moved out of the platform. Built and shipped with the platform (or hosted on its own), never in the Apache `docket` package. |
 | `platform/**` (`@docket/server-platform`, `@docket/server-worker`, the `@docket/platform-*` modules and the platform's tests and docs) | [AGPL-3.0-only](platform/LICENSE) | The multi-tenant Docket server: accounts and dockets, sign-in and OAuth, the web app and its API, MCP, the worker, projections, enrichment and the canonical store. |
 
 ## What this means
