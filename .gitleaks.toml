@@ -4,10 +4,11 @@
 useDefault = true
 
 [[allowlists]]
-description = "Test fixtures: made-up Docket token ids, and GitHub's documentation example of a user-to-server token"
+description = "Test fixtures: made-up Docket token ids, a made-up space store's Neo4j Secret name, and GitHub's documentation example of a user-to-server token"
 regexTarget = "match"
 regexes = [
   '''dkt_live_(abcd1234|race000[1-3])''',
   '''tok_8f3a9b2c1d0e''',
+  '''neo4j-st0123456789abcdef''',
   '''ghu_16C7e42F292c6912E7710c838347Ae178B4a''',
 ]
