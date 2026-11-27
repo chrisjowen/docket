@@ -7,6 +7,8 @@ import { getRuntime } from '$lib/server/runtime'
 
 import type { Actions, PageServerLoad } from './$types'
 
+const PLACE_LABEL = { account: '', space: ' on one space', docket: ' on one docket' } as const
+
 /** `/` is the home page for someone signed in; a visitor is sent to sign in. */
 export const load: PageServerLoad = async (event) => {
   const user = event.locals.user
@@ -18,8 +20,8 @@ export const load: PageServerLoad = async (event) => {
       id: invite.id,
       orgName: invite.orgName,
       orgSlug: invite.orgSlug,
-      // What they get: a role on the account or on one docket (they see which once they are in).
-      role: invite.owner ? 'Owner' : `${invite.roleName}${invite.place.kind === 'docket' ? ' on one docket' : ''}${invite.guest ? ', as a guest' : ''}`,
+      // What they get: a role on the account, one space or one docket (they see which once they are in).
+      role: invite.owner ? 'Owner' : `${invite.roleName}${PLACE_LABEL[invite.place.kind]}${invite.guest ? ', as a guest' : ''}`,
       invitedByLogin: invite.invitedByLogin,
       expiresAt: invite.expiresAt.toISOString(),
     })),

@@ -299,8 +299,30 @@ describe.skipIf(!TEST_PG_URL)('spaces (platform 0018, org 0020)', () => {
 
     // The down migration brings the old shape back, and nobody gains anything.
     await db.admin.query(`DELETE FROM ${ident(orgSchema(acme))}.workspaces WHERE id = $1`, [contracts])
+    // Admin on General, given after the upgrade, must not become Admin on the whole account.
+    const spaceAdmin = await human('sp-space-admin')
+    await join(acme, spaceAdmin.id)
+    await grant(acme, spaceAdmin.id, GENERAL, 'admin')
+    await db.admin.query(
+      `INSERT INTO platform.invites (id, org_id, github_login, role_id, place_kind, place_id, owner, invited_by, expires_at)
+       VALUES ($1, $2, 'sp-inv-space-admin', 'admin', 'space', 'general', false, $3, now() + interval '7 days')`,
+      [randomUUID(), acme, owner.id],
+    )
     await down()
     expect(await catalog()).toEqual(seventeen)
+    const spaceAdminAfter = await accessBeforeSpaces(acme, spaceAdmin.id)
+    expect(sorted(capsAt(spaceAdminAfter, ACCOUNT))).toEqual([])
+    for (const docket of acmeDockets) expect(sorted(capsAt(spaceAdminAfter, docketPlace(docket))).length).toBe(12)
+    const { rows: rolledBackInvites } = await db.admin.query(
+      'SELECT github_login, place_kind, revoked_at IS NOT NULL AS revoked FROM platform.invites WHERE org_id = $1 ORDER BY github_login',
+      [acme],
+    )
+    expect(rolledBackInvites).toEqual([
+      { github_login: 'sp-inv-admin', place_kind: 'account', revoked: false },
+      { github_login: 'sp-inv-owner', place_kind: 'account', revoked: false },
+      { github_login: 'sp-inv-reader', place_kind: 'account', revoked: false },
+      { github_login: 'sp-inv-space-admin', place_kind: 'account', revoked: true },
+    ])
     for (const [orgId, dockets] of live) {
       const after = await snapshot(orgId, dockets, accessBeforeSpaces)
       for (const [userId, was] of before.get(orgId) ?? []) expect(after.get(userId)?.dockets, `${userId} in ${orgId} after down`).toEqual(was.dockets)

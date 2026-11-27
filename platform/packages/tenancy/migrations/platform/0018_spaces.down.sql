@@ -2,11 +2,11 @@
 -- before spaces. Run by hand as the migration owner, in one transaction, with
 -- {{app_role}} replaced by the request role; the runner never applies it.
 -- Nobody gains access. In an org whose live dockets are all in General, a
--- grant on General goes back to the whole account, where org 0020 found it.
--- Otherwise - and for every other space - a grant on a space becomes the same
--- grant on each docket in it, unless the grantee already holds one there.
--- Open invites to General follow its grants; invites to other spaces are
--- cancelled. Every docket stays; which space it was in does not.
+-- Writer or Reader grant on General that adds nothing beyond docket work goes
+-- back to the whole account, where org 0020 found it. Every other grant on a
+-- space becomes the same grant on each docket in it, unless the grantee
+-- already holds one there. Open Writer and Reader invites to General follow
+-- its grants; every other invite to a space is cancelled. Every docket stays; which space it was in does not.
 
 DO $$
 DECLARE
@@ -25,12 +25,15 @@ BEGIN
     IF only_general THEN
       UPDATE platform.grants SET place_kind = 'account', place_id = NULL
        WHERE org_id = org.id AND place_kind = 'space' AND place_id = 'general'
+         AND role_id IN ('reader', 'writer')
+         AND add_caps <@ ARRAY['read', 'write', 'propose', 'publish', 'decide']
          AND NOT EXISTS (
            SELECT 1 FROM platform.grants a
             WHERE a.org_id = org.id AND a.place_kind = 'account'
               AND a.principal_id IS NOT DISTINCT FROM platform.grants.principal_id);
       UPDATE platform.invites SET place_kind = 'account', place_id = NULL
-       WHERE org_id = org.id AND place_kind = 'space' AND place_id = 'general';
+       WHERE org_id = org.id AND place_kind = 'space' AND place_id = 'general'
+         AND role_id IN ('reader', 'writer') AND NOT owner;
     END IF;
 
     EXECUTE format(
