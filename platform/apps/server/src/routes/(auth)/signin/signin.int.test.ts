@@ -5,7 +5,7 @@ import { syncPasswordUsers } from '@docket/platform-auth'
 import { memoryBucketStore, rateLimiter } from '@docket/platform-limits'
 import { identitiesOf, resolveIdentity, tenantRouter, type ExternalIdentity, type TenantRouter } from '@docket/platform-tenancy'
 import { TEST_PG_URL, createTestDatabase, type TestDatabase } from '@docket/platform-tenancy/testing'
-import { isRedirect, type RequestEvent } from '@sveltejs/kit'
+import { isRedirect } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Runtime } from '$lib/server/runtime'
@@ -35,7 +35,7 @@ describe.skipIf(!TEST_PG_URL)('signing in', () => {
     } as unknown as Runtime
   })
 
-  function event(login: string, password: string): RequestEvent {
+  function event(login: string, password: string): Parameters<NonNullable<typeof actions.password>>[0] {
     const form = new FormData()
     form.set('login', login)
     form.set('password', password)
@@ -47,7 +47,7 @@ describe.skipIf(!TEST_PG_URL)('signing in', () => {
       request: new Request(url, { method: 'POST', body: form }),
       getClientAddress: () => '192.0.2.1',
       cookies: { set: () => undefined },
-    } as unknown as RequestEvent
+    } as unknown as Parameters<NonNullable<typeof actions.password>>[0]
   }
 
   async function attempt(login: string, password: string) {
