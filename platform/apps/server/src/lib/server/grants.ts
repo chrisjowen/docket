@@ -144,13 +144,16 @@ export type ChangeScope = { access: OrgAccess; userId: string; form: FormData; d
  * change made in the platform schema and audited in the org's own log in the
  * same transaction (§10). A change they may not make is a 403; a mistake
  * they can fix (no such grant, an invalid choice) is a 404 or 400 the page shows.
+ * `precomputed` reuses access a caller already read (and already checked, as
+ * a docket's Access tab checks the docket first), instead of reading it again.
  */
 export async function changeAccess(
   event: RequestEvent,
   change: (tx: Tx, scope: ChangeScope) => Promise<Change>,
+  precomputed?: OrgAccess,
 ): Promise<ActionFailure<{ problem: string }> | { flash: string }> {
   const user = requireUser(event)
-  const access = await orgAccess(event)
+  const access = precomputed ?? (await orgAccess(event))
   const form = await event.request.formData()
   const dockets = await docketNames(access.org.id)
   const { router } = getRuntime()
@@ -230,12 +233,15 @@ export async function revokeChange(tx: Tx, { access, dockets }: ChangeScope, gra
  * The three access actions every page with grants offers: give, adjust and
  * remove. `only` keeps them to one grantee; `at` to one place, checked first
  * (a docket's Access tab answers 404 or 403 for a docket the member may not
- * read, as every docket route does).
+ * read, as every docket route does) - its access is then reused for the
+ * change itself, rather than read from the platform a second time.
  */
-export function grantActions(options: { only?: (event: RequestEvent) => Grantee; at?: (event: RequestEvent) => Promise<Place> } = {}) {
+export function grantActions(options: { only?: (event: RequestEvent) => Grantee; at?: (event: RequestEvent) => Promise<{ access: OrgAccess; place: Place }> } = {}) {
   const { only, at } = options
   const run = (event: RequestEvent, change: (tx: Tx, scope: ChangeScope, who: Grantee | undefined, place: Place | undefined) => Promise<Change>) =>
-    (at ? at(event) : Promise.resolve(undefined)).then((place) => changeAccess(event, (tx, scope) => change(tx, scope, only?.(event), place)))
+    (at ? at(event) : Promise.resolve(undefined)).then((pinned) =>
+      changeAccess(event, (tx, scope) => change(tx, scope, only?.(event), pinned?.place), pinned?.access),
+    )
   return {
     give: (event: RequestEvent) => run(event, (tx, scope, who, place) => giveChange(tx, scope, who, place)),
     adjust: (event: RequestEvent) => run(event, (tx, scope, who, place) => adjustChange(tx, scope, who, place)),

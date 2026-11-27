@@ -108,7 +108,7 @@ test('docket cloud login: the device flow signs in with GitHub, shows the consen
     org,
     workspace: 'platform',
     role: 'owner',
-    scopes: ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose'],
+    scopes: ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose', 'ontology:write'],
     token: { kind: 'oauth', expiresAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/) },
   })
 

@@ -97,5 +97,11 @@ export const load: PageServerLoad = async (event) => {
   }
 }
 
-// Every change here is to a grant on this docket, by someone who may read it: the docket is checked first.
-export const actions: Actions = grantActions({ at: async (event) => docketPlace((await docketAccess(event)).workspace.id) })
+// Every change here is to a grant on this docket, by someone who may read it: the docket is checked first,
+// and its access reused for the change itself rather than read from the platform a second time.
+export const actions: Actions = grantActions({
+  at: async (event) => {
+    const { access, workspace } = await docketAccess(event)
+    return { access, place: docketPlace(workspace.id) }
+  },
+})
