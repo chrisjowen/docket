@@ -192,9 +192,9 @@ export function orgStores(options: OrgStoresOptions): OrgStores {
 
   /**
    * Moves every live docket whose space's Neo4j changed (the space's own
-   * instance came up, or is retiring; not one that failed to provision) to where it belongs now, queues its
-   * rebuild there and clears it from where it was; then removes a retiring
-   * instance nothing uses any more.
+   * instance came up, or is retiring; not one that failed to provision) to
+   * where it belongs now, queues its rebuild there and clears it from where it
+   * was; then removes a retiring instance nothing uses any more.
    */
   async function converge(orgId: string): Promise<void> {
     const workspaces = await router.withTenant(orgId, listWorkspaces)
