@@ -237,6 +237,43 @@ describe.skipIf(!TEST_PG_URL)('orgStores: each docket on its stores (tenancy v2 
     expect(fake.neo4j.deprovision).toHaveBeenCalledWith({ orgId: org.orgId, storeId: again }, 'shred')
   })
 
+  it("keeps a space's dockets on its own Neo4j through a failed provisioning pass, without rebuilding them", async () => {
+    const fake = fakes()
+    let failFor: string | null = null
+    const neo4j: Neo4jPodProvisioner = {
+      ...fake.neo4j,
+      async provision(ref) {
+        if (ref.storeId && ref.storeId === failFor) throw new Error('the Kubernetes API timed out')
+        return fake.neo4j.provision(ref)
+      },
+    }
+    const stores = orgStores({ router: org.router, neo4j, qdrant: fake.qdrant, embedder, log })
+    await stores.ensure(org.orgId)
+    const own = newStoreId()
+    await org.router.withPlatform((tx) =>
+      tx.query("INSERT INTO platform.stores (id, org_id, kind, space_id, status) VALUES ($1, $2, 'neo4j', $3, 'requested')", [own, org.orgId, engineering]),
+    )
+    await stores.ensure(org.orgId)
+    expect(await assigned(engineeringDocket, 'neo4j')).toBe(own)
+    await clearRebuilds()
+
+    failFor = own
+    await expect(stores.ensure(org.orgId)).rejects.toThrow('the Kubernetes API timed out')
+    expect((await storeRows()).find((row) => row.id === own)?.status).toBe('failed')
+    expect(await assigned(engineeringDocket, 'neo4j')).toBe(own)
+    expect(await rebuilds(engineeringDocket)).toBe(0)
+
+    failFor = null
+    await stores.ensure(org.orgId)
+    expect((await storeRows()).find((row) => row.id === own)?.status).toBe('ready')
+    expect(await assigned(engineeringDocket, 'neo4j')).toBe(own)
+    expect(await rebuilds(engineeringDocket)).toBe(0)
+
+    await org.router.withPlatform((tx) => tx.query("UPDATE platform.stores SET status = 'retiring' WHERE id = $1", [own]))
+    await stores.ensure(org.orgId)
+    expect((await storeRows()).some((row) => row.id === own)).toBe(false)
+  })
+
   it('suspends a Neo4j pod idle past the threshold, and wakes it on the next use', async () => {
     const { neo4j, qdrant, replicas } = fakes()
     let now = new Date(Date.now() + 2 * 3_600_000)

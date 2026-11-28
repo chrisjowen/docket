@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { randomBytes, randomInt, randomUUID } from 'node:crypto'
 
+import { aiCaps, recordUsage, setCap, spaceAiKeys } from '@docket/platform-ai'
 import { issueApiToken, tokenHash, tokenResolver } from '@docket/platform-auth'
 import { insertSpace, insertWorkspace } from '@docket/platform-canonical-store'
 import { createTestOrg, type TestOrg } from '@docket/platform-canonical-store/testing'
 import { memoryBucketStore, rateLimiter } from '@docket/platform-limits'
 import type { SearchGraph } from '@docket/platform-mcp-tools'
-import { CONTENT_CAPABILITIES, accessOf, createServiceAccount, upsertGitHubUser, type Access } from '@docket/platform-tenancy'
+import { CONTENT_CAPABILITIES, accessOf, createServiceAccount, upsertGitHubUser, type Access, type Tx } from '@docket/platform-tenancy'
 import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -45,6 +46,7 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
   const ids: Record<string, string> = {}
   const tokens: Record<string, string> = {}
   const dockets: Record<string, string> = {}
+  let engineering = ''
   /** The docket each search was for, by the workspace the query service was asked about. */
   const searched: string[] = []
 
@@ -129,6 +131,7 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
     org = await createTestOrg({ everyoneReadsGeneral: false })
     other = await org.addOrg()
     const eng = await org.withOrg(({ tx }) => insertSpace(tx, { name: 'Engineering', slug: 'eng', createdBy: org.userId }))
+    engineering = eng.id
     dockets.payments = (await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Payments', slug: 'payments', createdBy: org.userId, spaceId: eng.id }))).id
     dockets.platform = (await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Platform', slug: 'platform', createdBy: org.userId, spaceId: eng.id }))).id
     dockets.legal = (await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Legal', slug: 'legal', createdBy: org.userId }))).id
@@ -279,6 +282,32 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
     const { rows } = await org.withOrg(({ tx }) => tx.query<{ action: string; actor: string }>("SELECT action, actor FROM audit_event WHERE action LIKE 'mcp.tools/call admin_%' ORDER BY seq"))
     expect(rows.map((row) => row.action)).toEqual(expect.arrayContaining(['mcp.tools/call admin_create_docket', 'mcp.tools/call admin_set_access']))
     expect(rows.find((row) => row.action === 'mcp.tools/call admin_create_docket')?.actor).toBe(`token:${(tokens.provisioner as string).slice(0, 16)}`)
+  })
+
+  it("asks a docket whose space pays with its own key once the account's cap is spent, and refuses the account's dockets", async () => {
+    const platform = <T,>(fn: (tx: Tx) => Promise<T>) => org.router.withPlatform(fn)
+    const stubbed = runtime.caps
+    const query = runtime.query
+    const asked: string[] = []
+    runtime.caps = aiCaps({ platform, notifyOwners: async () => undefined })
+    runtime.query = { ...query, ask: async (input: { workspaceId: string }) => (asked.push(input.workspaceId), { answer: { results: [], notice: { message: 'Nothing found.' } } }) } as unknown as Runtime['query']
+    try {
+      // Engineering pays OpenRouter with its own key; Docket's key has spent the account's whole $10 cap on Legal.
+      await platform((tx) => spaceAiKeys({ platform, keysFor: (id) => org.keyring.forOrg(id) }).set(tx, { orgId: org.orgId, spaceId: engineering, provider: 'openrouter', key: 'sk-or-eng-4321', by: org.userId }))
+      await platform((tx) => setCap(tx, org.orgId, 10, org.userId))
+      await platform((tx) => recordUsage(tx, { orgId: org.orgId, workspaceId: dockets.legal as string, actor: 'x', purpose: 'synthesis', model: 'm', promptTokens: 0, completionTokens: 0, costUsd: 10 }))
+
+      const own = await call(tokens.owner as string, 'docket_ask', { docket: 'payments', question: 'What changed?' })
+      expect(own.body?.result.isError, JSON.stringify(own.body)).toBeUndefined()
+      expect(asked).toEqual([dockets.payments])
+      const account = await call(tokens.owner as string, 'docket_ask', { docket: 'legal', question: 'What changed?' })
+      expect(account.body?.result).toMatchObject({ isError: true })
+      expect(account.body?.result.content[0].text).toMatch(/budget/i)
+      expect(asked).toEqual([dockets.payments])
+    } finally {
+      runtime.caps = stubbed
+      runtime.query = query
+    }
   })
 
   it('takes an OAuth connection made for the account, reaching only the dockets chosen at consent', async () => {

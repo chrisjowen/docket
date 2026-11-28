@@ -192,7 +192,7 @@ export function orgStores(options: OrgStoresOptions): OrgStores {
 
   /**
    * Moves every live docket whose space's Neo4j changed (the space's own
-   * instance came up, or is retiring) to where it belongs now, queues its
+   * instance came up, or is retiring; not one that failed to provision) to where it belongs now, queues its
    * rebuild there and clears it from where it was; then removes a retiring
    * instance nothing uses any more.
    */
@@ -205,6 +205,8 @@ export function orgStores(options: OrgStoresOptions): OrgStores {
       for (const workspace of workspaces) {
         const current = assigned.get(workspace.id)?.get('neo4j')
         if (!current) continue
+        const from = stores.find((store) => store.id === current)
+        if (from?.spaceId && from.spaceId === workspace.spaceId && from.status !== 'retiring') continue
         const want = neo4jFor(stores, workspace.spaceId)
         if (!want || want.id === current) continue
         await tx.query('UPDATE platform.docket_stores SET store_id = $4, assigned_at = now() WHERE org_id = $1 AND docket_id = $2 AND kind = $3', [
@@ -213,7 +215,6 @@ export function orgStores(options: OrgStoresOptions): OrgStores {
           'neo4j',
           want.id,
         ])
-        const from = stores.find((store) => store.id === current)
         if (from) moved.push({ docketId: workspace.id, from })
       }
       return moved
