@@ -204,6 +204,9 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 - `admin_update_settings` at the account's MCP address (`?admin=1`) changes
   one space's or one docket's settings, named as `space:<slug>` or
   `docket:<slug>`, with the same checks. It never takes a provider key.
+- In the app, the account's AI settings page is now open to anyone with
+  Change settings on the account, not only owners; the monthly cap field
+  stays owner-only.
 - The API's version is now 1.2.
 
 ## 0.16.0
