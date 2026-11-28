@@ -344,7 +344,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
   afterAll(() => org?.drop())
 
   describe('the web app, signed in', () => {
-    // Some 900 calls: 20 s on its own, longer beside the other suites sharing the stores.
+    // Some 900 calls: 20 s on its own, but 75-90 s in CI beside the other suites sharing the stores.
     it('refuses beta, and the other account, on every docket route: each page, action and API', async () => {
       const handlers: { route: string; name: string; call: (event: RequestEvent) => unknown; method: string; body?: 'form' | 'json' }[] = []
       for (const file of (await Promise.all(DOCKET_TREES.map(routeFiles))).flat()) {
@@ -397,7 +397,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
       }
       expect(answers).toEqual(expected)
       expect(await betaState()).toEqual(before)
-    }, 90_000)
+    }, 180_000)
 
     it('never names beta to a guest, nor the other account to anyone, in the sidebar', async () => {
       const sidebar = async (name: string, orgSlug = slug) =>
