@@ -126,7 +126,9 @@
 {#snippet waitlist()}
   {#if user.platformAdmin}
     <li>
-      <a href={resolve('/admin/waitlist')} aria-current={current('/admin/waitlist')}><ListChecks size={17} aria-hidden="true" /> Waitlist</a>
+      <a href={resolve('/admin/accounts')} aria-current={page.url.pathname.startsWith('/admin') ? 'page' : undefined}
+        ><ListChecks size={17} aria-hidden="true" /> Operator console</a
+      >
     </li>
   {/if}
 {/snippet}

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { workspaceBySlug, type StoreContext, type Workspace } from '@docket/platform-canonical-store'
+import { accountLimits } from '@docket/platform-tenancy'
 import { error, type RequestEvent } from '@sveltejs/kit'
 
 import { namespaceAccess, orgAccess, type NamespaceAccess, type OrgAccess } from './request'
@@ -11,6 +12,11 @@ export async function inOrg<T>(access: OrgAccess, fn: (ctx: StoreContext) => Pro
   const { keyring, router } = getRuntime()
   const keys = await keyring.forOrg(access.org.id)
   return router.withTenant(access.org.id, (tx) => fn({ tx, keys }))
+}
+
+/** How many dockets the account may hold: its own limit, which the platform operator sets, or the beta's. */
+export async function docketLimitOf(orgId: string): Promise<number> {
+  return (await getRuntime().router.withPlatform((tx) => accountLimits(tx, orgId))).maxDockets
 }
 
 export interface WorkspaceScope {

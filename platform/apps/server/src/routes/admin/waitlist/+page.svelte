@@ -4,6 +4,7 @@
   import { Ticket } from '@lucide/svelte'
 
   import Csrf from '$lib/components/csrf.svelte'
+  import OperatorTabs from '$lib/components/operator-tabs.svelte'
 
   let { data, form } = $props()
 
@@ -22,6 +23,7 @@
 
 <div class="admin">
   <h1>Beta waitlist</h1>
+  <OperatorTabs active="waitlist" />
   <p class="muted">
     Teams asking to join, newest first: {data.waiting} waiting. The beta holds {data.orgs.live} of {data.orgs.max} accounts.
   </p>

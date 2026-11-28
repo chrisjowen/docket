@@ -2,8 +2,8 @@
 import { removeMemberAttributes, trustChanged } from '@docket/platform-canonical-store'
 import {
   ACCOUNT,
-  LIMITS,
   TenancyError,
+  accountLimits,
   createInvite,
   listGrants,
   listMembers,
@@ -40,9 +40,10 @@ export const load: PageServerLoad = async (event) => {
   const managesAnywhere = access.canAnywhere('access')
   const managesAccount = access.can('access')
   const names = await placeNames(access.org.id)
-  const { members, invites, grants, roles, managed } = await getRuntime().router.withPlatform(async (tx) => {
+  const { members, invites, grants, roles, managed, limits } = await getRuntime().router.withPlatform(async (tx) => {
     const members = await listMembers(tx, access.org.id)
     return {
+      limits: await accountLimits(tx, access.org.id),
       members,
       invites: managesAnywhere ? await openInvitesOf(tx, access.org.id) : [],
       grants: await listGrants(tx, access.org.id),
@@ -61,7 +62,7 @@ export const load: PageServerLoad = async (event) => {
     manage: managesAnywhere,
     manageAccount: managesAccount,
     isOwner: access.owner,
-    limit: LIMITS.membersPerOrg,
+    limit: limits.maxMembers,
     seats: members.filter((member) => !managed.has(member.id)).length + invites.length,
     systemAccounts: members.filter((member) => member.kind === 'service' && !managed.has(member.id)).length,
     roles: roleList,

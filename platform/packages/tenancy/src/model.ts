@@ -374,17 +374,22 @@ export async function listMembers(tx: Tx, orgId: string): Promise<Member[]> {
   }))
 }
 
-/** Locks the org row and checks a new seat fits under the members limit. The org admin API's service accounts take no seat. */
+/**
+ * Locks the org row and checks a new seat fits under the members limit: the
+ * account's own, which the operator sets, or the beta's. The org admin API's
+ * service accounts take no seat.
+ */
 async function reserveSeat(tx: Tx, orgId: string): Promise<void> {
-  await tx.query('SELECT 1 FROM platform.orgs WHERE id = $1 FOR UPDATE', [orgId])
+  const locked = await tx.query<{ max_members: number | null }>('SELECT max_members FROM platform.orgs WHERE id = $1 FOR UPDATE', [orgId])
+  const limit = locked.rows[0]?.max_members ?? LIMITS.membersPerOrg
   const { rows } = await tx.query<{ count: string }>(
     `SELECT (SELECT count(*) FROM platform.memberships m JOIN platform.orgs o ON o.id = m.org_id
               WHERE m.org_id = $1 AND m.user_id IS DISTINCT FROM o.org_admin_id AND NOT ${DATABASE_ACCOUNT('m')})
           + (SELECT count(*) FROM platform.invites WHERE org_id = $1 AND ${OPEN_INVITE}) AS count`,
     [orgId],
   )
-  if (Number(rows[0]?.count ?? 0) >= LIMITS.membersPerOrg) {
-    throw new TenancyError('limit', `An account holds at most ${LIMITS.membersPerOrg} members and invites.`)
+  if (Number(rows[0]?.count ?? 0) >= limit) {
+    throw new TenancyError('limit', `This account holds at most ${limit} members and invites.`)
   }
 }
 

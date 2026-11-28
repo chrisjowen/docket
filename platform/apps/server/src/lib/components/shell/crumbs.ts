@@ -32,7 +32,8 @@ const SPACE_PAGES: Record<string, string | null> = {
 const OTHER_PAGES: Record<string, string> = {
   '/': 'Home',
   '/start': 'Create your account',
-  '/admin/waitlist': 'Waitlist',
+  '/admin/accounts': 'Operator console',
+  '/admin/waitlist': 'Operator console · Waitlist',
   '/oauth/consent/[uid]': 'Authorise a client',
 }
 

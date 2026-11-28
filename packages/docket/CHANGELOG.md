@@ -196,6 +196,15 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   and every MCP address are unchanged.
 - The app says account where it said organisation or casebook, Home for an
   account's own page, and Chat for asking the record.
+- The operator console (`/admin`), for the platform's operators
+  (`DOCKET_PLATFORM_ADMINS`): every account with its owners and its counts of
+  people, system accounts and open invites, never anything of its content.
+  An operator suspends or resumes an account, saying why, and sets its own
+  limits on seats and dockets in place of the beta's; `GET
+  /api/v1/operator/accounts` and `PATCH /api/v1/operator/accounts/{acct}` do
+  the same from the operator's browser session. A suspended account is not
+  served and its tokens and connections stop working; nothing in it is lost.
+  The beta waitlist is the console's second tab.
 - Signing up is seven steps: sign in (an open invite skips you ahead, into
   its account); create your account at `/start`, as its Owner, with what it
   gets spelled out (Postgres, Neo4j, Qdrant and the AI cap); General, with

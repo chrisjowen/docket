@@ -51,6 +51,7 @@ UI imports it, and `GET /api/v1/openapi.json` publishes it as OpenAPI 3.1
 | Dockets | `GET/POST …/dockets`, `GET/PATCH/DELETE …/dockets/{docket}`, `GET …/dockets/{docket}/summary` |
 | System accounts | `GET/POST …/system-accounts`, `GET/DELETE …/system-accounts/{id}`, `GET/POST …/system-accounts/{id}/tokens`, `DELETE …/tokens/{token}` |
 | Oversight | `GET …/audit`, `GET …/usage` |
+| Operator | `GET /operator/accounts`, `PATCH /operator/accounts/{acct}` |
 
 The web UI ([`packages/docket-ui/cloud`](../../packages/docket-ui/cloud))
 draws its pages from these operations alone; `navigation`, `search`,
@@ -74,6 +75,18 @@ and emails it to the invite's address, or to a GitHub login's address when
 that person has signed in before (`emailed_to`). Whoever holds the link to
 an invite by email may sign in and accept it; an invite to a GitHub login
 only that login may. `admin_invite` over MCP never returns the link.
+
+The operator operations are the operator console's (`/admin/accounts`), for
+the platform's operators (`DOCKET_PLATFORM_ADMINS`) in their own browser
+session; any token, and anyone else, is refused (403). They list every
+account with its owners, its counts of people, system accounts and open
+invites, its limits and whether it is suspended, never anything of its
+content; and they suspend or resume an account (`{ suspended, reason }`) and
+set its own limits on seats and dockets (`{ max_members, max_dockets }`, null
+for the beta's). A suspended account is not served: its pages, API and MCP
+addresses answer as if it did not exist, its tokens and connections stop
+working (401), and nothing in it is lost. Each change is recorded in the
+platform's audit log as `api.operator.accounts.update`.
 
 Not here yet, from the management tasks of tenancy v2 §3.5:
 

@@ -17,7 +17,7 @@ import { giveInitialAccess } from '$lib/server/new-docket'
 import { forgetOnboardingDraft, onboardingDraft } from '$lib/server/onboarding'
 import { authoriseAnywhere, orgAccess, recordAudit, type OrgAccess } from '$lib/server/request'
 import { directory, registry } from '$lib/server/trust'
-import { actorNames, formText, inOrg, publisherOf } from '$lib/server/workspace'
+import { actorNames, docketLimitOf, formText, inOrg, publisherOf } from '$lib/server/workspace'
 
 import type { Actions, PageServerLoad } from './$types'
 
@@ -123,6 +123,7 @@ export const actions: Actions = {
     const message = String(form.get('message') ?? '').trim() || null
     const publisher = publisherOf(event)
     let made: { workspace: { id: string; slug: string; spaceId: string }; access: DocketDraft['access'] }
+    const docketLimit = await docketLimitOf(access.org.id)
     try {
       made = await inOrg(access, async (ctx) => {
         const pending = await docketDraftById(ctx.tx, event.params.id, publisher.actor)
@@ -132,6 +133,7 @@ export const actions: Actions = {
           message,
           publisher,
           requestId: event.locals.requestId,
+          docketLimit,
         })
         await recordAudit(ctx.tx, event, {
           action: 'workspace.create',

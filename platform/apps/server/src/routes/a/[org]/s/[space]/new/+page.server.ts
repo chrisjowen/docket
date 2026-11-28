@@ -19,7 +19,7 @@ import {
   type OntologyStart,
   type StartingPoint,
 } from '@docket/platform-ontology-service'
-import { LIMITS, spacePlace } from '@docket/platform-tenancy'
+import { spacePlace } from '@docket/platform-tenancy'
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 
 import { afterFirstDocket } from '$lib/onboarding'
@@ -31,7 +31,7 @@ import { placeAccess } from '$lib/server/place-access'
 import { readsDocket, recordAudit, requireUser, type OrgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 import { spaceAccess, type SpaceAccess } from '$lib/server/spaces'
-import { formText, inOrg, publisherOf } from '$lib/server/workspace'
+import { docketLimitOf, formText, inOrg, publisherOf } from '$lib/server/workspace'
 
 import type { Actions, PageServerLoad } from './$types'
 
@@ -60,6 +60,7 @@ export const load: PageServerLoad = async (event) => {
     drafts: await listDocketDrafts(tx, actor),
   }))
   const choices = await accessChoices(access, space.id)
+  const limit = await docketLimitOf(access.org.id)
   // Who reaches every docket in the space already: shown to whoever may give more.
   const already = choices.gives ? (await placeAccess({ access, here: spacePlace(space.id), caps: access.capsAt(spacePlace(space.id)), names: await placeNames(access.org.id) })).reach : []
   return {
@@ -72,8 +73,8 @@ export const load: PageServerLoad = async (event) => {
       .map((draft) => ({ id: draft.id, name: draft.name, slug: draft.slug, updatedAt: draft.updatedAt.toISOString() })),
     manageTemplates: access.can('settings'),
     maxDescription: MAX_DESCRIPTION,
-    full: members >= LIMITS.workspacesPerOrg,
-    limit: LIMITS.workspacesPerOrg,
+    full: members >= limit,
+    limit,
     initialAccess: {
       gives: choices.gives,
       people: choices.people.map(({ id, label }) => ({ id, label })),
@@ -128,8 +129,9 @@ export const actions: Actions = {
       const described = { ...values, description }
       if (!description) return fail(400, { ...described, problem: 'Describe what the docket should keep track of.' })
       if (description.length > MAX_DESCRIPTION) return fail(400, { ...described, problem: `Describe it in at most ${MAX_DESCRIPTION} characters.` })
+      const limit = await docketLimitOf(access.org.id)
       const problem = await inOrg(access, async (ctx) =>
-        (await countMemberWorkspaces(ctx.tx)) >= LIMITS.workspacesPerOrg ? `An account holds at most ${LIMITS.workspacesPerOrg} dockets in the beta.` : newDocketProblem(ctx.tx, { name, slug }),
+        (await countMemberWorkspaces(ctx.tx)) >= limit ? `This account holds at most ${limit} dockets.` : newDocketProblem(ctx.tx, { name, slug }),
       )
       if (problem) return fail(400, { ...described, problem })
       const user = requireUser(event)
@@ -165,6 +167,7 @@ export const actions: Actions = {
     // A copy reads the other docket's ontology, so it must be one the member reaches.
     if ('copyFrom' in start && !readsDocket(access, start.copyFrom)) return fail(400, { ...values, problem: 'Choose the docket to copy.' })
     let created: { slug: string; problem: string | null }
+    const docketLimit = await docketLimitOf(access.org.id)
     try {
       const workspace = await inOrg(access, async (ctx) => {
         const { workspace, version } = await createWorkspace(ctx, {
@@ -172,6 +175,7 @@ export const actions: Actions = {
           slug,
           start,
           spaceId: space.id,
+          docketLimit,
           publisher: publisherOf(event),
           requestId: event.locals.requestId,
         })

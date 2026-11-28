@@ -448,8 +448,51 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
     const deleted = await api(admin, 'DELETE', `/api/v1/accounts/${acct}`)
     expect(deleted.status).toBe(204)
     expect((await api(admin, 'GET', `/api/v1/accounts/${acct}`)).status).toBe(404)
-    expect((await api(adminToken, 'GET', `/api/v1/accounts/${acct}`)).status).toBe(404)
+    // Its tokens stopped working: they are no longer credentials at all.
+    expect((await api(adminToken, 'GET', `/api/v1/accounts/${acct}`)).status).toBe(401)
     const { rows } = await org.db.admin.query<{ status: string }>('SELECT status FROM platform.orgs WHERE id = $1', [third.orgId])
     expect(rows[0]?.status).toBe('deleted')
+  })
+
+  it("lets the platform operator alone list accounts, set an account's limits and suspend it, by their own session", async () => {
+    runtime.platformAdmins = new Set([other.login])
+    const operator = asSession('otherOwner')
+    // Anyone else, and any token, is refused: even the operator's own.
+    expect((await api(asSession('owner'), 'GET', '/api/v1/operator/accounts')).status).toBe(403)
+    expect((await api(asToken('otherOwner'), 'GET', '/api/v1/operator/accounts')).status).toBe(403)
+
+    const listed = await api(operator, 'GET', '/api/v1/operator/accounts')
+    expect(listed.status).toBe(200)
+    conforms('operator.accounts.list', listed.body)
+    const mine = (listed.body?.accounts as { slug: string }[]).find((each) => each.slug === slug())
+    expect(mine).toMatchObject({ owners: [org.login], status: 'active', limits: { max_members: null, max_dockets: null } })
+    // Nothing of an account's content: not even its dockets' names.
+    expect(JSON.stringify(listed.body)).not.toMatch(/Payments|Platform|Engineering/)
+
+    // Its own docket limit holds it below what it has: what it has stays, nothing new is made.
+    const limited = await api(operator, 'PATCH', `/api/v1/operator/accounts/${slug()}`, { max_dockets: 1 })
+    expect(limited.status).toBe(200)
+    conforms('operator.accounts.update', limited.body)
+    const refused = await api(asToken('owner'), 'POST', `/api/v1/accounts/${slug()}/dockets`, { space: 'general', name: 'One more', template: 'blank' })
+    expect(refused.status).toBe(403)
+    expect(refused.body).toMatchObject({ error: 'forbidden', error_description: 'This account holds at most 1 dockets.' })
+    expect((await api(operator, 'PATCH', `/api/v1/operator/accounts/${slug()}`, { max_dockets: null })).body).toMatchObject({ limits: { max_dockets: null } })
+    expect((await api(operator, 'PATCH', `/api/v1/operator/accounts/${slug()}`, {})).status).toBe(400)
+    expect((await api(operator, 'PATCH', '/api/v1/operator/accounts/no-such-account', { max_members: 3 })).status).toBe(404)
+
+    // Suspended, the account is not served to anyone, its own owner's token included; resumed, it is again.
+    const suspended = await api(operator, 'PATCH', `/api/v1/operator/accounts/${otherSlug()}`, { suspended: true, reason: 'Test' })
+    expect(suspended.body).toMatchObject({ status: 'suspended', suspended: { by: other.login, reason: 'Test' } })
+    expect((await api(asToken('otherOwner'), 'GET', `/api/v1/accounts/${otherSlug()}`)).status).toBe(401)
+    expect((await api(operator, 'GET', `/api/v1/accounts/${otherSlug()}`)).status).toBe(404)
+    expect((await api(operator, 'PATCH', `/api/v1/operator/accounts/${otherSlug()}`, { suspended: false })).body).toMatchObject({ status: 'active', suspended: null })
+    expect((await api(asToken('otherOwner'), 'GET', `/api/v1/accounts/${otherSlug()}`)).status).toBe(200)
+
+    // Each change is in the platform's own log, with who made it.
+    const { rows } = await org.db.admin.query<{ action: string; actor: string }>(
+      "SELECT action, actor FROM platform.audit_event WHERE action = 'api.operator.accounts.update' AND outcome = 'ok' ORDER BY seq",
+    )
+    expect(rows.length).toBeGreaterThanOrEqual(4)
+    expect(new Set(rows.map((row) => row.actor))).toEqual(new Set([`user:${other.userId}`]))
   })
 })

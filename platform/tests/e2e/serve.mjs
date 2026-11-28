@@ -9,7 +9,7 @@
 //   E2E_DB               database name (default docket_e2e); E2E_FRESH=0 keeps an existing one, and its KEK
 //   E2E_PORT             the app's port (default 4470); E2E_GITHUB_PORT the fake GitHub's (default 4471)
 //   E2E_ALLOWLIST        beta allowlist (default alice,carol)
-//   E2E_PLATFORM_ADMINS  who may review the beta waitlist at /admin/waitlist (default alice)
+//   E2E_PLATFORM_ADMINS  who may use the operator console at /admin: accounts and the beta waitlist (default alice)
 //   E2E_HOST             the host in the app's ORIGIN (default 127.0.0.1); a preview shown through the
 //                        Wheelhouse proxy uses localhost, the Origin the proxy sends
 //   E2E_DEMO_LOGIN       <login>, like alice: a one-click demo sign-in as that user on the app's own sign-in

@@ -18,6 +18,7 @@ import {
   Me,
   Member,
   Navigation,
+  OperatorAccount,
   PlaceRef,
   QuickSearch,
   Role,
@@ -67,7 +68,7 @@ export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 /** What a call needs, as data and as words. */
 export interface Needs {
   /** A capability, held on `on`; or being signed in, a member, an owner, or on the beta list. */
-  capability: Capability | 'signed-in' | 'member' | 'owner' | 'allowlisted'
+  capability: Capability | 'signed-in' | 'member' | 'owner' | 'allowlisted' | 'operator'
   /** Where it must be held: the account, the place the call names, a space, a docket, or a place a system account reaches. */
   on?: 'account' | 'place' | 'space' | 'docket' | 'system-account' | 'anywhere'
   text: string
@@ -214,6 +215,41 @@ export const OPERATIONS = [
     needs: { capability: 'member', text: 'Your own connection' },
     response: null,
     status: 204,
+  }),
+
+  // --- The platform operator ---------------------------------------------------
+  op({
+    id: 'operator.accounts.list',
+    method: 'GET',
+    path: '/api/v1/operator/accounts',
+    tag: 'Operator',
+    summary: "Every account on the platform: owners, people, system accounts, open invites, limits and whether it is suspended. Nothing of an account's content.",
+    auth: SESSION,
+    needs: { capability: 'operator', text: 'A platform operator (DOCKET_PLATFORM_ADMINS), in their own browser session' },
+    response: z.object({
+      accounts: z.array(OperatorAccount),
+      defaults: z.object({ max_members: z.number().int(), max_dockets: z.number().int() }),
+      platform: z.object({ live: z.number().int(), max: z.number().int() }),
+    }),
+    status: 200,
+  }),
+  op({
+    id: 'operator.accounts.update',
+    method: 'PATCH',
+    path: '/api/v1/operator/accounts/{acct}',
+    tag: 'Operator',
+    summary: 'Suspends or resumes an account, and sets its own limits on seats and dockets (null: the beta’s). A suspended account is not served; nothing in it is lost.',
+    auth: SESSION,
+    params: acct,
+    body: z.object({
+      suspended: z.boolean().optional(),
+      reason: z.string().trim().max(300).optional().describe('Why it is suspended: shown to operators'),
+      max_members: z.number().int().min(1).max(10_000).nullable().optional(),
+      max_dockets: z.number().int().min(1).max(1_000).nullable().optional(),
+    }),
+    needs: { capability: 'operator', text: 'A platform operator (DOCKET_PLATFORM_ADMINS), in their own browser session' },
+    response: OperatorAccount,
+    status: 200,
   }),
 
   // --- Accounts ----------------------------------------------------------------

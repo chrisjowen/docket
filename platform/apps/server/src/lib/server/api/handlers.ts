@@ -73,12 +73,13 @@ import {
 import { placeLabel, placeNames, type PlaceNames } from '../grants'
 import { sendInvite } from '../invites'
 import { accountRoles } from '../members'
+import { changeAccount, operatorAccountView, operatorOverview } from '../operator'
 import { becauseLabel, placeAccess } from '../place-access'
-import { isPlatformAdmin } from '../request'
+import { isPlatformAdmin, type SignedIn } from '../request'
 import { getRuntime } from '../runtime'
 import { accountShell, commandSearch, docketFacts } from '../shell'
 import { mayChangeAccount, mayManageSystemAccounts } from '../system-accounts'
-import { actorNames, inOrg } from '../workspace'
+import { actorNames, docketLimitOf, inOrg } from '../workspace'
 import { accountCaller, ApiFailure, readsOnly, type AccountCaller, type Caller } from './caller'
 import {
   accountView,
@@ -195,6 +196,13 @@ async function inTenant<T>(call: ApiCall, acct: AccountCaller, fn: (ctx: StoreCo
 
 const reading = <T>(acct: AccountCaller, fn: (tx: Tx) => Promise<T>) => runtime().router.withTenant(acct.org.id, fn)
 const platform = <T>(fn: (tx: Tx) => Promise<T>) => runtime().router.withPlatform(fn)
+
+/** The platform operator making the call, in their own browser session (`DOCKET_PLATFORM_ADMINS`); anyone else is refused. */
+function mustOperate(call: ApiCall): SignedIn {
+  const session = call.caller.session
+  if (!session || !isPlatformAdmin(session)) refuse('Only a platform operator can do that.')
+  return session
+}
 
 function refuse(message = 'You do not have access to that.'): never {
   throw new ApiFailure('forbidden', message)
@@ -446,6 +454,35 @@ export const HANDLERS: Record<string, Handler> = {
       accounts.push(accountView(membership.org, acct.principal, acct.capsAt(ACCOUNT), membership))
     }
     return { body: { accounts } }
+  },
+
+  // --- The platform operator -------------------------------------------------------
+  'operator.accounts.list': async (call) => {
+    mustOperate(call)
+    const { accounts, defaults, platform: box } = await operatorOverview()
+    call.audit.target = ['operator:accounts']
+    return { body: { accounts: accounts.map(operatorAccountView), defaults: { max_members: defaults.maxMembers, max_dockets: defaults.maxDockets }, platform: box } }
+  },
+
+  'operator.accounts.update': async (call) => {
+    const operator = mustOperate(call)
+    const body = call.body as { suspended?: boolean; reason?: string; max_members?: number | null; max_dockets?: number | null }
+    const changed = await changeAccount(
+      call.params.acct ?? '',
+      {
+        ...(body.suspended !== undefined ? { suspended: body.suspended, reason: body.reason ?? null } : {}),
+        ...(body.max_members !== undefined ? { maxMembers: body.max_members } : {}),
+        ...(body.max_dockets !== undefined ? { maxDockets: body.max_dockets } : {}),
+      },
+      operator.id,
+      async (tx, entry) => {
+        call.audit.target = entry.target
+        call.audit.args = entry.args
+        await audit(tx, auditFields(call, 'ok'))
+      },
+    )
+    call.audit.written = true
+    return { body: operatorAccountView(changed) }
   },
 
   'accounts.create': async (call) => {
@@ -1137,8 +1174,9 @@ async function createDocket(call: ApiCall): Promise<Answer> {
     initial.push({ who: grantee.who, roleId: role.id, label: grantee.login })
   }
   const publisher = { actor: call.caller.actor, login: call.caller.user.login }
+  const docketLimit = await docketLimitOf(acct.org.id)
   const workspace = await inTenant(call, acct, async (ctx) => {
-    const { workspace: made, version } = await createWorkspace(ctx, { name, slug, start, spaceId: space.id, publisher, requestId: call.meta.requestId })
+    const { workspace: made, version } = await createWorkspace(ctx, { name, slug, start, spaceId: space.id, publisher, requestId: call.meta.requestId, docketLimit })
     call.audit.workspaceId = made.id
     call.audit.target = [`workspace:${made.id}`, `ontology:v${version.number}`, `space:${space.id}`]
     call.audit.args = { slug, source: version.source, space: space.slug }

@@ -172,7 +172,7 @@ export function checkNewDocket(ctx: StoreContext, yaml: string, options: { migra
 export async function acceptDocketDraft(
   ctx: StoreContext,
   id: string,
-  input: { yaml?: string; message?: string | null; publisher: Publisher; requestId?: string },
+  input: { yaml?: string; message?: string | null; publisher: Publisher; requestId?: string; docketLimit?: number },
 ): Promise<{ workspace: Workspace; version: Published; draft: DocketDraft }> {
   const draft = await openDraft(ctx.tx, id, input.publisher.actor)
   const yaml = input.yaml ? ontologyText(input.yaml) : draft.yaml
@@ -183,6 +183,7 @@ export async function acceptDocketDraft(
     start: { drafted: { yaml, source: draft.source, message: input.message ?? draft.message } },
     publisher: input.publisher,
     ...(input.requestId ? { requestId: input.requestId } : {}),
+    ...(input.docketLimit !== undefined ? { docketLimit: input.docketLimit } : {}),
   })
   await ctx.tx.query('DELETE FROM docket_drafts WHERE id = $1', [id])
   return { ...created, draft }

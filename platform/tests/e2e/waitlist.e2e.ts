@@ -61,8 +61,9 @@ test.describe('the beta waitlist', () => {
     await expect(page).toHaveURL(/\/signin\?next=%2Fadmin%2Fwaitlist$/)
     await signIn(page, 'carol')
     await expect(page.getByRole('heading', { name: /^Welcome/ })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Waitlist' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Operator console' })).toHaveCount(0)
     expect((await page.goto('/admin/waitlist'))?.status()).toBe(404)
+    expect((await page.goto('/admin/accounts'))?.status()).toBe(404)
     const csrf = await page.locator('input[name="csrf"]').first().inputValue()
     const [row] = await entry({ login })
     const forbidden = await page.request.post('/admin/waitlist?/invite', {
@@ -75,7 +76,10 @@ test.describe('the beta waitlist', () => {
 
     const admin = await (await browser.newContext()).newPage()
     await signIn(admin, 'alice')
-    await admin.getByRole('link', { name: 'Waitlist' }).click()
+    // The waitlist is a tab of the operator console, which opens on its accounts.
+    await admin.getByRole('link', { name: 'Operator console' }).click()
+    await expect(admin).toHaveURL(/\/admin\/accounts$/)
+    await admin.getByRole('navigation', { name: 'Operator console' }).getByRole('link', { name: 'Waitlist' }).click()
     await expect(admin).toHaveURL(/\/admin\/waitlist$/)
     await expect(admin.getByRole('heading', { name: 'Beta waitlist' })).toBeVisible()
     const listed = admin.getByRole('row').filter({ hasText: `@${login}` })
