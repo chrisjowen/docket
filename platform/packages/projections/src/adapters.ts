@@ -189,3 +189,20 @@ export async function openProjections(options: OpenOptions): Promise<Partial<Rec
 export async function closeAll(adapters: Partial<Record<CloudProjection, MemoryAdapter>>): Promise<void> {
   await Promise.all(Object.values(adapters).map((adapter) => adapter?.close().catch(() => undefined)))
 }
+
+/**
+ * Clears one docket's scope from a Neo4j instance it no longer projects into
+ * (tenancy v2 §5: it moved to its space's own instance, or back), so its
+ * records are left only where it projects now.
+ */
+export async function clearNeo4jScope(neo4j: Neo4jCredentials, workspaceId: string): Promise<void> {
+  // Only the Neo4j part of the access is read when opening Neo4j alone.
+  const adapter = await openNeo4j({ orgId: '', workspaceId, access: { neo4j } as StoreAccess })
+  try {
+    const port = adapter.projection
+    if (!port) throw new Error('the Neo4j adapter does not project')
+    await port.reset(workspaceScope(workspaceId))
+  } finally {
+    await adapter.close().catch(() => undefined)
+  }
+}

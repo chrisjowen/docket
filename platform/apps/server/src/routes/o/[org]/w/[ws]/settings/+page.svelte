@@ -1,11 +1,12 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
   import { resolve } from '$app/paths'
-  import { LayoutTemplate, Trash2 } from '@lucide/svelte'
+  import { Cpu, LayoutTemplate, Trash2 } from '@lucide/svelte'
 
   import Csrf from '$lib/components/csrf.svelte'
   import CogneeSettings from '$lib/components/cognee-settings.svelte'
   import EnrichmentSettings from '$lib/components/enrichment-settings.svelte'
+  import ModelSlots from '$lib/components/model-slots.svelte'
   import SettingsTabs from '$lib/components/settings-tabs.svelte'
 
   let { data, form } = $props()
@@ -51,6 +52,30 @@
     is in the audit log and the
     <a href={resolve('/o/[org]/w/[ws]/ontology/history', { org: data.org.slug, ws: data.workspace.slug })}>ontology history</a>, where any version can be rolled back.
   </p>
+</section>
+
+<section class="card section stack" aria-labelledby="models-heading" data-testid="docket-models">
+  <h2 id="models-heading"><Cpu size={16} aria-hidden="true" /> Models</h2>
+  <p class="muted">
+    What {data.workspace.name} runs on: its own choice, or the same as {data.models.space}.
+    {#if data.models.key}Its calls go on {data.models.space}'s own key (…{data.models.key.hint}).{:else}Its calls go on {data.org.name}'s key.{/if}
+  </p>
+  {#if form && 'modelsProblem' in form}<p class="alert" role="alert">{form.modelsProblem}</p>{/if}
+  {#if form && 'modelsFlash' in form}<p class="flash" role="status">{form.modelsFlash}</p>{/if}
+  {#if data.models.canChange}
+    <form method="POST" action="?/models" class="stack">
+      <Csrf token={data.csrf} />
+      <ModelSlots slots={data.models.slots} above={data.models.space} />
+      <div><button class="button primary" type="submit">Save models</button></div>
+    </form>
+  {:else}
+    <dl>
+      {#each data.models.slots as slot (slot.use)}
+        <dt>{slot.label}</dt>
+        <dd class="mono">{slot.model ?? 'none available'}</dd>
+      {/each}
+    </dl>
+  {/if}
 </section>
 
 <EnrichmentSettings

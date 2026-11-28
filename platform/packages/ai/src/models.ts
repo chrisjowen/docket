@@ -2,9 +2,10 @@
 import type { Tx } from '@docket/platform-tenancy'
 
 import type { AiCaps } from './caps.js'
-import type { OrgAiKeys } from './keys.js'
+import { AiNotConfigured, type OrgAiKeys, type SpaceAiKeys } from './keys.js'
 import type { ChatMessage, ChatUsage, OpenRouterClient, TurnMessage, TurnResult, TurnTool } from './openrouter-client.js'
-import { recordUsage, type Purpose } from './usage.js'
+import { PROVIDER_INFO, providerModel, resolveAiSettings, type Provider } from './settings.js'
+import { recordUsage, type PaidBy, type Purpose } from './usage.js'
 
 /** docket's `ModelClient` (`AdapterServices.models`): a chat model an adapter may use. */
 export interface ModelClient {
@@ -62,23 +63,16 @@ export function configureModels(raw: string | undefined): void {
   configured = { cypher: list('cypher'), synthesis: list('synthesis') }
 }
 
-/** The org's model for each use: its own choice when the allowlist still has it, else the default. */
-export async function modelChoices(tx: Tx, orgId: string): Promise<Record<ModelUse, string>> {
-  const { rows } = await tx.query<{ models: Partial<Record<string, string>> }>('SELECT models FROM platform.ai_caps WHERE org_id = $1', [orgId])
-  const chosen = rows[0]?.models ?? {}
-  const pick = (use: ModelUse) => {
-    const allowed: readonly string[] = modelAllowlist()[use]
-    const choice = chosen[use]
-    return choice && allowed.includes(choice) ? choice : (allowed[0] as string)
-  }
-  return { cypher: pick('cypher'), synthesis: pick('synthesis') }
-}
-
 export interface AiDeps {
   platform<T>(fn: (tx: Tx) => Promise<T>): Promise<T>
   caps: AiCaps
+  /** The account's key: Docket's, capped (§11). */
   keys: OrgAiKeys
   client: OpenRouterClient
+  /** Spaces' own provider keys (tenancy v2 §5); absent, a space's own key cannot be used and its calls are refused. */
+  spaceKeys?: SpaceAiKeys
+  /** A client for a provider a space brought its own key for. */
+  providerClient?(provider: Provider): OpenRouterClient
 }
 
 /** One metered call, as `onUsage` hears of it. */
@@ -106,9 +100,42 @@ export function openRouterModels(
   return { cypher: client('cypher', 'cypher'), synthesis: client('synthesis', 'synthesis') }
 }
 
+/** Where one call goes: the client and key to call with, the model as that provider names it, and the docket's space. */
+interface Route {
+  client: OpenRouterClient
+  apiKey: string
+  model: string
+  spaceId: string | null
+  /** Whose key the call goes on: the account's (Docket's, capped) or the space's own. */
+  paidBy: PaidBy
+}
+
 /**
- * One call on the org's model for `use`: the cap checked first, the org's own
- * key, and what it cost metered before `onUsage` hears of it.
+ * Where a call for `use` goes, from the docket's settings resolved account ->
+ * space -> docket (tenancy v2 §5): its model, and the space's own key when it
+ * has one, else the account's. A call with no docket runs on the account's.
+ */
+async function routeOf(deps: AiDeps, orgId: string, docketId: string | null, use: ModelUse): Promise<Route> {
+  const resolved = await deps.platform((tx) => resolveAiSettings(tx, orgId, { docketId }))
+  const { spaceId } = resolved
+  const model = resolved.models[use].model
+  if (resolved.key.from === 'space') {
+    const { provider } = resolved.key
+    const label = PROVIDER_INFO[provider].label
+    const own = deps.spaceKeys && deps.providerClient ? await deps.spaceKeys.key(orgId, resolved.key.spaceId) : null
+    if (!own || !deps.providerClient) throw new AiNotConfigured(orgId, `This space pays for AI with its own ${label} key, which this server cannot use yet`)
+    const named = model === null ? null : providerModel(own.provider, model)
+    if (!named) throw new AiNotConfigured(orgId, `None of the models this space may choose is served by its ${label} key — choose one in the space's Settings`)
+    return { client: deps.providerClient(own.provider), apiKey: own.key, model: named, spaceId, paidBy: 'space' }
+  }
+  if (model === null) throw new AiNotConfigured(orgId)
+  return { client: deps.client, apiKey: await deps.keys.key(orgId), model, spaceId, paidBy: 'account' }
+}
+
+/**
+ * One call on the docket's model for `use` (the account's, with no docket):
+ * the caps checked first, the space's own key or the account's, and what it
+ * cost metered before `onUsage` hears of it.
  */
 async function metered<T extends { model: string; generationId: string | null; usage: ChatUsage }>(
   deps: AiDeps,
@@ -116,11 +143,11 @@ async function metered<T extends { model: string; generationId: string | null; u
   context: { workspaceId?: string | null; actor: string; onUsage?: (call: MeteredCall) => void },
   use: ModelUse,
   purpose: Purpose,
-  call: (apiKey: string, model: string) => Promise<T>,
+  call: (client: OpenRouterClient, apiKey: string, model: string) => Promise<T>,
 ): Promise<T> {
-  await deps.caps.assertWithinCap(orgId)
-  const [model, apiKey] = await Promise.all([deps.platform((tx) => modelChoices(tx, orgId)).then((m) => m[use]), deps.keys.key(orgId)])
-  const result = await call(apiKey, model)
+  const route = await routeOf(deps, orgId, context.workspaceId ?? null, use)
+  await deps.caps.assertWithinCap(orgId, { spaceId: route.spaceId, ownKey: route.paidBy === 'space' })
+  const result = await call(route.client, route.apiKey, route.model)
   await deps.platform((tx) =>
     recordUsage(tx, {
       orgId,
@@ -130,6 +157,7 @@ async function metered<T extends { model: string; generationId: string | null; u
       model: result.model,
       generationId: result.generationId,
       ...result.usage,
+      paidBy: route.paidBy,
     }),
   )
   context.onUsage?.({ purpose, model: result.model, ...result.usage })
@@ -146,7 +174,7 @@ export function meteredModel(
 ): ModelClient {
   return {
     async chat(messages, options) {
-      const result = await metered(deps, orgId, context, use, purpose, (apiKey, model) => deps.client.chat(apiKey, { model, messages, signal: options?.signal }))
+      const result = await metered(deps, orgId, context, use, purpose, (client, apiKey, model) => client.chat(apiKey, { model, messages, signal: options?.signal }))
       return result.text
     },
   }
@@ -166,7 +194,7 @@ export function meteredTurns(
   purpose: Purpose,
 ): TurnModel {
   return {
-    turn: (request) => metered(deps, orgId, context, use, purpose, (apiKey, model) => deps.client.turn(apiKey, { ...request, model })),
+    turn: (request) => metered(deps, orgId, context, use, purpose, (client, apiKey, model) => client.turn(apiKey, { ...request, model })),
   }
 }
 

@@ -14,11 +14,43 @@ export {
   capOf,
   setCap,
 } from './caps.js'
-export type { AiCaps, CapStatus, CapWarning, CapsDeps } from './caps.js'
-export { AiNotConfigured, openRouterKeys, orgAiKeys } from './keys.js'
-export type { AiKeyMode, KeyOutcome, OrgAiKeys, OrgAiKeysDeps, OrgKeys } from './keys.js'
+export type { AiCaps, CapStatus, CapWarning, CapsDeps, SpaceCapStatus } from './caps.js'
+export { AiNotConfigured, ProviderKeyError, openRouterKeys, orgAiKeys, spaceAiKeys } from './keys.js'
+export type { AiKeyMode, KeyOutcome, OrgAiKeys, OrgAiKeysDeps, OrgKeys, SpaceAiKeys, SpaceAiKeysDeps, SpaceKey } from './keys.js'
+export {
+  MODEL_USES,
+  MODEL_USE_INFO,
+  NO_SETTINGS,
+  PROVIDERS,
+  PROVIDER_INFO,
+  SettingsError,
+  docketCapScope,
+  isProvider,
+  modelChoices,
+  placeAiSettings,
+  placesWithSettings,
+  providerKeyInfo,
+  providerModel,
+  resolveAiSettings,
+  resolveChain,
+  saveAiSettings,
+  settingsChain,
+  spaceOfDocket,
+} from './settings.js'
+export type {
+  AiPlace,
+  AiSettingsAt,
+  PlaceAiSettings,
+  Provider,
+  ProviderKeyInfo,
+  ResolvedAiSettings,
+  ResolvedModel,
+  SaveAiSettings,
+  SettingsChain,
+  SettingsSource,
+} from './settings.js'
 export { auditCapWarning } from './notify.js'
-export { MODEL_ALLOWLIST, chatOf, configureModels, meteredModel, meteredTurns, modelAllowlist, modelChoices, openRouterModels } from './models.js'
+export { MODEL_ALLOWLIST, chatOf, configureModels, meteredModel, meteredTurns, modelAllowlist, openRouterModels } from './models.js'
 export type { AiDeps, MeteredCall, ModelClient, ModelUse, Models, TurnModel } from './models.js'
 export { OPENROUTER_API, OpenRouterError, PRIVACY_ROUTING, openRouterClient } from './openrouter-client.js'
 export type {
@@ -33,5 +65,5 @@ export type {
   TurnResult,
   TurnTool,
 } from './openrouter-client.js'
-export { actorMonthSpend, monthOf, monthSpend, recordUsage } from './usage.js'
-export type { Purpose, UsageRecord } from './usage.js'
+export { actorMonthSpend, monthOf, monthSpend, recordUsage, spaceMonthSpend } from './usage.js'
+export type { PaidBy, Purpose, UsageRecord } from './usage.js'

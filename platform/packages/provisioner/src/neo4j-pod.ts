@@ -35,6 +35,14 @@ export interface Neo4jPodOptions {
   memory?: { heap: string; pageCache: string; request: string; limit: string }
 }
 
+/**
+ * Which Neo4j instance: the org's own (`storeId` absent), or one of the org's
+ * other instances - a space's own (tenancy v2 §5) - by its store id.
+ */
+export interface Neo4jRef extends OrgRef {
+  storeId?: string
+}
+
 /** What a client needs to reach an org's Neo4j: its URL and password. Never logged. */
 export interface Neo4jCredentials {
   url: string
@@ -43,18 +51,35 @@ export interface Neo4jCredentials {
 }
 
 export interface Neo4jPodProvisioner extends TenantProvisioner {
-  /** The org's URL and password, read from its Secret. */
-  credentials(org: OrgRef): Promise<Neo4jCredentials>
+  provision(org: Neo4jRef): Promise<StoreBinding>
+  bind(org: Neo4jRef): Promise<StoreBinding>
+  suspend(org: Neo4jRef): Promise<void>
+  deprovision(org: Neo4jRef, mode: 'soft' | 'shred'): Promise<void>
+  health(org: Neo4jRef): Promise<StoreHealth>
+  /** The instance's URL and password, read from its Secret. */
+  credentials(org: Neo4jRef): Promise<Neo4jCredentials>
   /** Scales a suspended pod back up and waits until it accepts connections. */
-  wake(org: OrgRef, timeoutMs?: number): Promise<void>
+  wake(org: Neo4jRef, timeoutMs?: number): Promise<void>
 }
 
 export class Neo4jProvisionError extends Error {
   override name = 'Neo4jProvisionError'
 }
 
-/** The name every object of an org's Neo4j shares: `neo4j-org-<id>`. */
-export function neo4jName(org: OrgRef): string {
+/** A store id: `st` and lowercase letters and digits (platform 0019), so a name made from it is a valid DNS label. */
+const STORE_ID = /^st[a-z0-9]{8,30}$/
+
+/**
+ * The name every object of a Neo4j instance shares: `neo4j-org-<id>` for the
+ * org's own, `neo4j-<store id>` for another of its instances.
+ */
+export function neo4jName(org: Neo4jRef): string {
+  if (org.storeId !== undefined) {
+    if (!STORE_ID.test(org.storeId)) throw new Neo4jProvisionError(`not a store id: ${org.storeId}`)
+    // Checked like an org id below: the org must be one, though the name does not carry it.
+    orgSchema(org.orgId)
+    return `neo4j-${org.storeId}`
+  }
   // orgSchema checks the id: lowercase letters and digits only, so the name is a valid DNS label.
   return `neo4j-${orgSchema(org.orgId).replace('_', '-')}`
 }
@@ -73,13 +98,18 @@ type StatefulSet = KubeObject & {
 type Secret = KubeObject & { data?: Record<string, string> }
 
 const decode = (value: string | undefined): string => Buffer.from(value ?? '', 'base64').toString('utf8')
+const describe = (org: Neo4jRef) => (org.storeId === undefined ? `org ${org.orgId}` : `org ${org.orgId}'s store ${org.storeId}`)
 
 export function neo4jPodProvisioner(options: Neo4jPodOptions): Neo4jPodProvisioner {
   const { kube, namespace } = options
   const memory = options.memory ?? DEFAULT_MEMORY
   const orgLabel = `${options.labelDomain ?? DEFAULT_LABEL_DOMAIN}/org`
+  // Another instance of the org's carries its store and its org under other keys: the org's own
+  // instance selects its pod by `<domain>/org`, and must never select this one's.
+  const storeLabel = `${options.labelDomain ?? DEFAULT_LABEL_DOMAIN}/store`
+  const storeOrgLabel = `${options.labelDomain ?? DEFAULT_LABEL_DOMAIN}/store-org`
 
-  const names = (org: OrgRef) => {
+  const names = (org: Neo4jRef) => {
     const name = neo4jName(org)
     return {
       name,
@@ -89,19 +119,21 @@ export function neo4jPodProvisioner(options: Neo4jPodOptions): Neo4jPodProvision
       host: `${name}.${namespace}.svc`,
     }
   }
-  const labels = (org: OrgRef) => ({
+  const owner = (org: Neo4jRef): Record<string, string> =>
+    org.storeId === undefined ? { [orgLabel]: org.orgId } : { [storeLabel]: org.storeId, [storeOrgLabel]: org.orgId }
+  const labels = (org: Neo4jRef) => ({
     'app.kubernetes.io/name': 'docket-cloud',
     'app.kubernetes.io/component': 'neo4j',
     'app.kubernetes.io/managed-by': 'docket-cloud-worker',
-    [orgLabel]: org.orgId,
+    ...owner(org),
   })
-  const selector = (org: OrgRef) => ({
-    'app.kubernetes.io/component': 'neo4j',
-    [orgLabel]: org.orgId,
-  })
-  const metadata = (org: OrgRef, name: string) => ({ name, namespace, labels: labels(org) })
+  const selector = (org: Neo4jRef) =>
+    org.storeId === undefined
+      ? { 'app.kubernetes.io/component': 'neo4j', [orgLabel]: org.orgId }
+      : { 'app.kubernetes.io/component': 'neo4j', [storeLabel]: org.storeId }
+  const metadata = (org: Neo4jRef, name: string) => ({ name, namespace, labels: labels(org) })
 
-  async function ensureSecret(org: OrgRef): Promise<void> {
+  async function ensureSecret(org: Neo4jRef): Promise<void> {
     const { secret } = names(org)
     if (await kube.get(kubePath('Secret', namespace, secret))) return
     // Made once and never rotated by a re-provision: the pod's data volume is initialised with it.
@@ -119,7 +151,7 @@ export function neo4jPodProvisioner(options: Neo4jPodOptions): Neo4jPodProvision
     })
   }
 
-  function objects(org: OrgRef, replicas: number): KubeObject[] {
+  function objects(org: Neo4jRef, replicas: number): KubeObject[] {
     const n = names(org)
     const certificate: KubeObject = {
       apiVersion: 'cert-manager.io/v1',
@@ -244,8 +276,8 @@ export function neo4jPodProvisioner(options: Neo4jPodOptions): Neo4jPodProvision
     return [certificate, pvc, service, policy, statefulSet]
   }
 
-  const statefulSet = (org: OrgRef) => kube.get<StatefulSet>(kubePath('StatefulSet', namespace, names(org).name))
-  const scale = (org: OrgRef, replicas: number) =>
+  const statefulSet = (org: Neo4jRef) => kube.get<StatefulSet>(kubePath('StatefulSet', namespace, names(org).name))
+  const scale = (org: Neo4jRef, replicas: number) =>
     kube.patch(kubePath('StatefulSet', namespace, names(org).name), { spec: { replicas } })
 
   const provisioner: Neo4jPodProvisioner = {
@@ -267,7 +299,7 @@ export function neo4jPodProvisioner(options: Neo4jPodOptions): Neo4jPodProvision
     async credentials(org) {
       const n = names(org)
       const secret = await kube.get<Secret>(kubePath('Secret', namespace, n.secret))
-      if (!secret?.data?.password) throw new Neo4jProvisionError(`org ${org.orgId} has no Neo4j credentials yet`)
+      if (!secret?.data?.password) throw new Neo4jProvisionError(`${describe(org)} has no Neo4j credentials yet`)
       return { url: `bolt+s://${n.host}:7687`, username: decode(secret.data.username) || 'neo4j', password: decode(secret.data.password) }
     },
 
@@ -275,13 +307,13 @@ export function neo4jPodProvisioner(options: Neo4jPodOptions): Neo4jPodProvision
 
     async wake(org, timeoutMs = 120_000) {
       const current = await statefulSet(org)
-      if (!current) throw new Neo4jProvisionError(`org ${org.orgId} has no Neo4j pod`)
+      if (!current) throw new Neo4jProvisionError(`${describe(org)} has no Neo4j pod`)
       if ((current.spec?.replicas ?? 0) < 1) await scale(org, 1)
       const deadline = Date.now() + timeoutMs
       for (;;) {
         const state = await statefulSet(org)
         if ((state?.status?.readyReplicas ?? 0) >= 1) return
-        if (Date.now() > deadline) throw new Neo4jProvisionError(`org ${org.orgId}'s Neo4j pod is not ready after ${timeoutMs / 1000}s`)
+        if (Date.now() > deadline) throw new Neo4jProvisionError(`${describe(org)}'s Neo4j pod is not ready after ${timeoutMs / 1000}s`)
         await new Promise((resolve) => setTimeout(resolve, 2_000))
       }
     },

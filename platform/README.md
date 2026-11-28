@@ -32,9 +32,9 @@ from these packages.
 | `packages/canonical-store` | `@docket/platform-canonical-store` | Spaces, dockets and their canonical documents in Postgres, writes with evidence, trust, proposals, saved chats, the activity log. |
 | `packages/ontology-service` | `@docket/platform-ontology-service` | Templates, drafts, versions, the change check, migrations, import and export. |
 | `packages/mcp-tools` | `@docket/platform-mcp-tools` | The MCP read and write tools, on docket's own tool surface. |
-| `packages/projections` | `@docket/platform-projections` | Each docket's projections on its account's stores. |
-| `packages/provisioner` | `@docket/platform-provisioner` | Per-account Postgres schemas and roles, Neo4j pods (Kubernetes), Qdrant collections, key rewrapping. |
-| `packages/ai` | `@docket/platform-ai` | The model provider client, per-account keys, metering and the monthly cap. |
+| `packages/projections` | `@docket/platform-projections` | Each docket's projections on its stores: its space's own Neo4j or its account's, and its Qdrant collection. |
+| `packages/provisioner` | `@docket/platform-provisioner` | Per-account Postgres schemas and roles, Neo4j pods (Kubernetes) per account and per space that has its own, Qdrant collections, key rewrapping. |
+| `packages/ai` | `@docket/platform-ai` | The model provider client, AI settings resolved account › space › docket, per-account keys and spaces' own keys, metering, the monthly cap and spaces' slices of it. |
 | `packages/enrichment`, `packages/consolidation` | `@docket/platform-enrichment`, `@docket/platform-consolidation` | Background enrichment and consolidation. |
 | `packages/github` | `@docket/platform-github` | The GitHub App: tokens, webhooks, trees, export PRs. |
 | `tests` | `@docket/platform-e2e` | The Playwright suite (`tests/e2e`), a fake GitHub and embedder, fixtures, and a k6 load test. |

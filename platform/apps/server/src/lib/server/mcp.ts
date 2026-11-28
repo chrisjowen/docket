@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createMcpServer, type CanonicalSource } from '@chrisjowen/docket'
+import { docketCapScope } from '@docket/platform-ai'
 import { audit, type AuditEventInput, type Outcome } from '@docket/platform-audit'
 import {
   actsFor,
@@ -173,7 +174,8 @@ export async function handleMcp(event: RequestEvent): Promise<Response> {
     ontologyHistory: new URL(`/o/${orgSlug}/w/${workspaceSlug}/ontology/history`, runtime.origin).toString(),
     inTenant,
     query: runtime.query,
-    assertWithinCap: () => runtime.caps.assertWithinCap(principal.orgId),
+    assertWithinCap: async () =>
+      runtime.caps.assertWithinCap(principal.orgId, await runtime.router.withPlatform((tx) => docketCapScope(tx, principal.orgId, principal.workspaceId))),
     actor: principal.actor,
     userId: principal.userId,
     writer: () =>

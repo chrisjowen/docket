@@ -19,7 +19,7 @@ export class UnknownWorkspace extends Error {
 
 export interface AskerDeps {
   router: TenantRouter
-  storeAccess(orgId: string): Promise<StoreAccess>
+  storeAccess(orgId: string, workspaceId: string): Promise<StoreAccess>
   /** The org's metered, capped models (`openRouterModels`), on its own key or the platform's shared one. */
   modelsFor(orgId: string, context: { workspaceId: string; actor: string }): Models
 }
@@ -36,6 +36,6 @@ export function workspaceAsker(deps: AskerDeps): (request: AskRequest) => Promis
     if (!workspace) throw new UnknownWorkspace(`no workspace ${workspaceId} in org ${orgId}`)
     const cypher = deps.modelsFor(orgId, { workspaceId, actor }).cypher
     if (!cypher) throw new Error('the org has no cypher model')
-    return askWorkspace({ orgId, workspaceId, access: await deps.storeAccess(orgId), question, cypher: chatOf(cypher) })
+    return askWorkspace({ orgId, workspaceId, access: await deps.storeAccess(orgId, workspaceId), question, cypher: chatOf(cypher) })
   }
 }

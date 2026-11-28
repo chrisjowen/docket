@@ -1,6 +1,9 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
+  import { resolve } from '$app/paths'
+
   import Csrf from '$lib/components/csrf.svelte'
+  import ModelSlots from '$lib/components/model-slots.svelte'
   import OrgSettingsTabs from '$lib/components/org-settings-tabs.svelte'
 
   let { data, form } = $props()
@@ -29,21 +32,38 @@
     Monthly cap (US dollars, at most ${data.maxCapUsd})
     <input name="cap" type="number" min="0" max={data.maxCapUsd} step="1" value={data.ai.capUsd} required />
   </label>
-  <label>
-    Model for Cypher and extraction
-    <select name="cypher">
-      {#each data.allowlist.cypher as model (model)}<option value={model} selected={model === data.models.cypher}>{model}</option>{/each}
-    </select>
-  </label>
-  <label>
-    Model for answers
-    <select name="synthesis">
-      {#each data.allowlist.synthesis as model (model)}<option value={model} selected={model === data.models.synthesis}>{model}</option>{/each}
-    </select>
-  </label>
+  <ModelSlots slots={data.models} required limitLabel="Spaces and dockets may choose from" />
   <p class="muted fine">Every request asks OpenRouter for providers that neither train on prompts nor retain them.</p>
   <div><button class="button primary" type="submit">Save</button></div>
 </form>
+
+<section class="card section stack" aria-labelledby="overrides-title" data-testid="ai-overrides">
+  <h2 id="overrides-title">Spaces and dockets</h2>
+  <p class="muted">
+    Each space may choose other models within the list above, pay for its calls with its own key, and take a slice of this cap; each docket may
+    choose its own models. Whoever may change settings on a space does that on its Settings tab.
+  </p>
+  {#if data.overrides.length}
+    <ul class="overrides">
+      {#each data.overrides as row (row.kind + row.slug)}
+        <li>
+          {#if row.kind === 'space'}
+            <a href={resolve('/o/[org]/s/[space]/settings', { org: data.org.slug, space: row.slug })}>{row.name}</a> <span class="badge">space</span>
+          {:else}
+            <a href={resolve('/o/[org]/w/[ws]/settings', { org: data.org.slug, ws: row.slug })}>{row.name}</a> <span class="badge">docket</span>
+          {/if}
+          <span class="muted fine">
+            {[row.models.length ? row.models.join(', ') : null, row.key, row.sliceUsd !== null ? `$${row.sliceUsd.toFixed(2)} a month` : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    <p class="muted fine">Every space and docket runs on these settings.</p>
+  {/if}
+</section>
 
 <style>
   .lede {
@@ -63,5 +83,20 @@
   }
   .fine {
     font-size: 0.8125rem;
+  }
+  .overrides {
+    display: grid;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .overrides li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.5rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 </style>

@@ -12,6 +12,9 @@ const MAX_RESULTS = 50
 /** What the model reads when the org's AI budget is spent (§11). */
 export const CAP_MESSAGE = 'AI budget for this month reached — search still works; ask an owner to raise the cap.'
 
+/** What to say for an `AiCapReached`: its own words when a space's slice is spent, else `CAP_MESSAGE`. */
+export const capMessage = (cause: Error): string => ('spaceId' in cause && cause.spaceId ? cause.message : CAP_MESSAGE)
+
 const DEFINITION = {
   name: 'docket_ask',
   title: 'Ask the docket',
@@ -68,7 +71,7 @@ export function askTool(context: CloudToolContext): CloudTool {
       try {
         await context.assertWithinCap()
       } catch (cause) {
-        if (cause instanceof Error && cause.name === 'AiCapReached') return failed(CAP_MESSAGE)
+        if (cause instanceof Error && cause.name === 'AiCapReached') return failed(capMessage(cause))
         throw cause
       }
       try {

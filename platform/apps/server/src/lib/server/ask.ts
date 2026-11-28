@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { UiEdge, UiEntity, UiGraph } from '@chrisjowen/docket/open/types'
-import { CAP_MESSAGE, QueryError, type AskResponse, type QueryClient } from '@docket/platform-mcp-tools'
+import { QueryError, capMessage, type AskResponse, type QueryClient } from '@docket/platform-mcp-tools'
 
 import { emptyGroups, entryHits, exhibitHits, interleave, memoryHits, noteHits, proseOf, SENT_TEXT, snippet, termsOf, type ResultGroups } from '$lib/ask/groups'
 import {
@@ -51,8 +51,8 @@ export interface AskDeps {
   /** The member asking: whose question each workspace's trace is (Settings → Queries). */
   userId: string
   query: QueryClient
-  /** Throws `AiCapReached` once the org's budget is spent. */
-  assertWithinCap(): Promise<void>
+  /** Throws `AiCapReached` once the budget a call for the docket is held to is spent: its space's slice, and the account's cap unless it pays with its own key. */
+  assertWithinCap(workspaceId: string): Promise<void>
   /** Each workspace's canonical graph, read in one transaction as the org: what search filters and draws. */
   graphs(workspaces: readonly OrgWorkspace[]): Promise<Map<string, CanonicalGraph>>
   /** Each workspace's newest activity-log changes (by slug), for the docket entries search finds. */
@@ -68,22 +68,22 @@ const referenced = (response: AskResponse): string[] => [
 
 /** Puts `question` to every workspace at once; a workspace that fails says why and the others still answer. */
 export async function askAcross(deps: Omit<AskDeps, 'graphs'>, workspaces: readonly OrgWorkspace[], question: string): Promise<WorkspaceAnswer[]> {
-  try {
-    await deps.assertWithinCap()
-  } catch (cause) {
-    if (cause instanceof Error && cause.name === 'AiCapReached') return workspaces.map((workspace) => failedAnswer(view(workspace), CAP_MESSAGE))
-    throw cause
-  }
   const responses = await Promise.all(
-    workspaces.map((workspace) =>
-      deps.query.ask({ orgId: deps.orgId, workspaceId: workspace.id, question, actor: deps.actor, userId: deps.userId }).then(
+    workspaces.map(async (workspace) => {
+      try {
+        await deps.assertWithinCap(workspace.id)
+      } catch (cause) {
+        if (cause instanceof Error && cause.name === 'AiCapReached') return { ok: false as const, message: capMessage(cause) }
+        throw cause
+      }
+      return deps.query.ask({ orgId: deps.orgId, workspaceId: workspace.id, question, actor: deps.actor, userId: deps.userId }).then(
         (response) => ({ ok: true as const, response }),
         (cause: unknown) => {
           if (cause instanceof QueryError) return { ok: false as const, message: `The docket could not answer: ${cause.message}` }
           throw cause
         },
-      ),
-    ),
+      )
+    }),
   )
   // Only the sources' titles and types are read, not each workspace's whole graph.
   const described = await deps.describe(

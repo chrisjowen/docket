@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { docketCapScope } from '@docket/platform-ai'
 import { describeResource, listDocuments, listIngests, listWorkspaces, workspaceGraph, type StoreContext } from '@docket/platform-canonical-store'
 import { readTools } from '@docket/platform-mcp-tools'
 
@@ -25,7 +26,8 @@ export function askDeps(access: OrgAccess, userId: string): AskDeps {
     actor: `user:${userId}`,
     userId,
     query: runtime.query,
-    assertWithinCap: () => runtime.caps.assertWithinCap(access.org.id),
+    assertWithinCap: async (workspaceId) =>
+      runtime.caps.assertWithinCap(access.org.id, await runtime.router.withPlatform((tx) => docketCapScope(tx, access.org.id, workspaceId))),
     graphs: (workspaces) =>
       inOrg(access, async (ctx: StoreContext) => {
         const graphs = new Map<string, CanonicalGraph>()
@@ -85,7 +87,7 @@ export function agentDeps(access: OrgAccess, userId: string): AgentDeps {
         ontologyHistory: new URL(`/o/${access.org.slug}/w/${workspace.slug}/ontology/history`, runtime.origin).toString(),
         inTenant: (fn) => inOrg(access, fn),
         query,
-        assertWithinCap: asking.assertWithinCap,
+        assertWithinCap: () => asking.assertWithinCap(workspace.id),
         actor: asking.actor,
         userId,
         writer: readOnly,
