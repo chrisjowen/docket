@@ -92,9 +92,11 @@ test('an admin manages access, removals and system accounts, and an org keeps an
   await danaPage.goto(`/o/${slug}/members`)
   await expect(danaPage.locator('tr[data-login="alice"] [data-testid="role"]')).toHaveText('Owner')
   await expect(danaPage.locator('tr[data-login="alice"]').getByRole('button', { name: 'Remove @alice' })).toHaveCount(0)
-  // Settings opens on the account's roles for anyone but an owner.
+  // An admin may change the account's models in Settings, but only an owner sets the monthly AI cap.
   await danaPage.goto(`/o/${slug}/settings`)
-  await expect(danaPage).toHaveURL(new RegExp(`/o/${slug}/settings/roles$`))
+  await expect(danaPage).toHaveURL(new RegExp(`/o/${slug}/settings$`))
+  await expect(danaPage.getByText('Only an owner of the account changes it.')).toBeVisible()
+  await expect(danaPage.locator('input[name="cap"]')).toHaveCount(0)
   await danaPage.goto(`/o/${slug}/settings/system-accounts`)
   await danaPage.getByPlaceholder('github-sync').fill('ci-bot')
   await danaPage.getByRole('button', { name: 'Create system account' }).click()
