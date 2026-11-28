@@ -49,7 +49,7 @@ describe('breadcrumbs', () => {
   })
 
   it('name pages outside a casebook', () => {
-    expect(crumbsFor({ routeId: '/orgs/new', pathname: '/orgs/new' })).toEqual([{ label: 'New account' }])
+    expect(crumbsFor({ routeId: '/start', pathname: '/start' })).toEqual([{ label: 'Create your account' }])
     expect(crumbsFor({ routeId: null, pathname: '/nowhere' })).toEqual([{ label: 'Docket Cloud' }])
   })
 })

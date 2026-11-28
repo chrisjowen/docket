@@ -8,9 +8,11 @@ import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { memoryMailer } from '$lib/server/mail'
 import type { Runtime } from '$lib/server/runtime'
 
 let runtime: Runtime
+const mailer = memoryMailer()
 vi.mock('$lib/server/runtime', () => ({ getRuntime: () => runtime }))
 const page = await import('./+page.server')
 
@@ -57,7 +59,7 @@ describe.skipIf(!TEST_PG_URL)('Users page', () => {
     org = await createTestOrg()
     slug = `o-${org.orgId}`
     users.owner = { id: org.userId, login: org.login }
-    runtime = { router: org.router, keyring: org.keyring, origin: 'https://docket.example' } as unknown as Runtime
+    runtime = { router: org.router, keyring: org.keyring, origin: 'https://docket.example', mailer } as unknown as Runtime
     alpha = (await org.withOrg((ctx) => insertWorkspace(ctx.tx, { name: 'Alpha', slug: 'alpha', createdBy: org.userId }))).id
     // Admin of alpha alone: manages access there, and nowhere else.
     await member('lead', 'admin', alpha)

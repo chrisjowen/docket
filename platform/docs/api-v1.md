@@ -44,7 +44,7 @@ UI imports it, and `GET /api/v1/openapi.json` publishes it as OpenAPI 3.1
 | --- | --- |
 | You | `GET /me`; `GET/POST /me/tokens`, `PATCH/DELETE /me/tokens/{id}`; `GET /me/connections`, `PATCH/DELETE /me/connections/{id}` |
 | Accounts | `GET/POST /accounts`; `GET/PATCH/DELETE /accounts/{acct}` (rename, transfer ownership with `{ owner }`, delete: owners only); `GET …/navigation` (the app's sidebar), `GET …/search` (the command menu's direct search) |
-| Users | `GET …/members`, `PATCH/DELETE …/members/{user}`; `GET/POST …/invites`, `DELETE …/invites/{id}` |
+| Users | `GET …/members`, `PATCH/DELETE …/members/{user}`; `GET/POST …/invites`, `POST …/invites/{id}/resend`, `DELETE …/invites/{id}` |
 | Access | `GET …/access?place=`, `GET …/access/who?place=`; `GET/POST …/grants`, `PUT/PATCH/DELETE …/grants/{id}` |
 | Roles | `GET/POST …/roles`, `PUT/DELETE …/roles/{id}` |
 | Spaces | `GET/POST …/spaces`, `GET/PATCH …/spaces/{space}` |
@@ -66,6 +66,14 @@ rather than call what is not there.
 `…` is `/api/v1/accounts/{acct}`. A place is named `account`,
 `space:<slug>` or `docket:<slug>`; a person by login, a system account by
 name, or `everyone`; a role by id or name.
+
+An invite is a link that works once, for 7 days (`/invite/dki_…`). Making
+one (`POST …/invites`) or sending it again (`POST …/invites/{id}/resend`,
+which makes a new link and ends the old one) returns its `link` that once,
+and emails it to the invite's address, or to a GitHub login's address when
+that person has signed in before (`emailed_to`). Whoever holds the link to
+an invite by email may sign in and accept it; an invite to a GitHub login
+only that login may. `admin_invite` over MCP never returns the link.
 
 Not here yet, from the management tasks of tenancy v2 §3.5:
 

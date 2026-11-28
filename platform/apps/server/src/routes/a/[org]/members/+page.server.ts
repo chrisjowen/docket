@@ -11,6 +11,7 @@ import {
   mayGrant,
   openInvitesOf,
   removeMember,
+  reissueInvite,
   revokeInvite,
   setOwner,
   type Invite,
@@ -18,6 +19,7 @@ import {
 import { error } from '@sveltejs/kit'
 
 import { changeAccess, giveChange, grantActions, grantView, placeKey, placeLabel, placeNames, placeOf, placesToGive, revokeChange, rolesFor } from '$lib/server/grants'
+import { inviteeOf, invitedView } from '$lib/server/invites'
 import { accountRoles } from '$lib/server/members'
 import { orgAccess } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
@@ -95,6 +97,7 @@ export const load: PageServerLoad = async (event) => {
       invitedByLogin: invite.invitedByLogin,
       createdAt: iso(invite.createdAt),
       expiresAt: iso(invite.expiresAt),
+      emailedTo: invite.emailedTo,
     })),
     accountPlace: placeKey(ACCOUNT),
   }
@@ -118,12 +121,27 @@ export const actions: Actions = {
         actorId: userId,
         actor: access.principal,
       })
-      const to = invite.githubLogin ? `@${invite.githubLogin}` : (invite.email ?? '')
       return {
         action: 'members.invite',
         target: [`invite:${invite.id}`],
-        args: { who: to, role: invite.roleId, place: placeKey(place), guest: invite.guest },
-        flash: `Invited ${to} as ${invite.roleName} on ${placeLabel(place, names, access.org.name)}. Ask them to sign in at this site.`,
+        args: { who: inviteeOf(invite), role: invite.roleId, place: placeKey(place), guest: invite.guest },
+        flash: `Invited ${inviteeOf(invite)}.`,
+        after: () => invitedView(event, access.org.name, invite, placeLabel(place, names, access.org.name)),
+      }
+    }),
+
+  /** Sends an open invite again: a new link for 7 more days, and the old one stops working. */
+  resendInvite: (event) =>
+    changeAccess(event, async (tx, { access, form, names }) => {
+      const invite = await reissueInvite(tx, { orgId: access.org.id, inviteId: String(form.get('invite') ?? ''), actor: access.principal })
+      return {
+        action: 'members.invite.resend',
+        target: [`invite:${invite.id}`],
+        flash: `Sent the invite for ${inviteeOf(invite)} again.`,
+        after: async () => {
+          const sent = await invitedView(event, access.org.name, invite, placeLabel(invite.place, names, access.org.name))
+          return { ...sent, flash: `Sent the invite for ${inviteeOf(invite)} again, with a new link for 7 more days; the old one no longer works. ${sent.invited.note}` }
+        },
       }
     }),
 
@@ -133,7 +151,7 @@ export const actions: Actions = {
       return {
         action: 'members.invite.revoke',
         target: [`invite:${invite.id}`],
-        flash: `Cancelled the invite for ${invite.githubLogin ? `@${invite.githubLogin}` : invite.email}.`,
+        flash: `Cancelled the invite for ${inviteeOf(invite)}. Its link no longer works.`,
       }
     }),
 

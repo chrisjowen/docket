@@ -156,7 +156,7 @@
           <p class="muted empty">No accounts yet.</p>
         {/each}
         {#if user.allowlisted}
-          <a href={resolve('/orgs/new')} class="new"><Plus size={14} aria-hidden="true" /> New account</a>
+          <a href={resolve('/start')} class="new"><Plus size={14} aria-hidden="true" /> New account</a>
         {/if}
       </div>
     </details>

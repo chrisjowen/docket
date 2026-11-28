@@ -6,6 +6,7 @@
 
   import GiveAccess from '$lib/components/access/give-access.svelte'
   import GrantList from '$lib/components/access/grant-list.svelte'
+  import InviteLink from '$lib/components/access/invite-link.svelte'
   import Avatar from '$lib/components/avatar.svelte'
   import Csrf from '$lib/components/csrf.svelte'
 
@@ -24,7 +25,7 @@
 </p>
 
 {#if form && 'problem' in form}<p class="alert" role="alert">{form.problem}</p>{/if}
-{#if form && 'flash' in form}<p class="flash" role="status">{form.flash}</p>{/if}
+{#if form && 'invited' in form && form.invited}<InviteLink invited={form.invited} />{:else if form && 'flash' in form}<p class="flash" role="status">{form.flash}</p>{/if}
 
 <section class="card you" aria-labelledby="you-title" data-testid="your-access">
   <h2 id="you-title"><ShieldCheck size={17} aria-hidden="true" /> Your access here: <span class="badge">{data.you.summary}</span></h2>

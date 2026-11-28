@@ -8,6 +8,7 @@ import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import { isHttpError, isRedirect, type RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { memoryMailer } from '$lib/server/mail'
 import type { Runtime } from '$lib/server/runtime'
 
 let runtime: Runtime
@@ -83,6 +84,7 @@ describe.skipIf(!TEST_PG_URL)('spaces', () => {
       keyring: org.keyring,
       origin: 'https://docket.example',
       caps: { status: async () => ({ spentUsd: 0, capUsd: 10, fraction: 0, warnedAt: null }) },
+      mailer: memoryMailer(),
     } as unknown as Runtime
     await org.withOrg(({ tx }) => insertWorkspace(tx, { name: 'Handbook', slug: 'handbook', createdBy: org.userId }))
     for (const name of ['admin', 'lead', 'writer', 'carol', 'dana']) await member(name)
@@ -172,7 +174,10 @@ describe.skipIf(!TEST_PG_URL)('spaces', () => {
     expect(await caps('dana', 'payments')).toEqual(['propose', 'read', 'write'])
 
     const invited = await outcome(() => spaceAccessPage.actions.invite!(event('lead', '/s/engineering/access', params, { who: 'newcomer', role: 'reader' }) as never))
-    expect(invited.data).toEqual({ flash: 'Invited @newcomer as Reader on Engineering. Ask them to sign in at this site.' })
+    expect(invited.data).toMatchObject({
+      flash: 'Invited @newcomer as Reader on Engineering. Pass the link on to them: it works once, for 7 days.',
+      invited: { to: '@newcomer', gives: 'Reader on Engineering', emailedTo: null, link: expect.stringMatching(/^https:\/\/docket\.example\/invite\/dki_[\w-]{32}$/) },
+    })
     const invites = await org.router.withPlatform((tx) => openInvitesOf(tx, org.orgId))
     const eng = (await org.withOrg(({ tx }) => listSpaces(tx))).find((space) => space.slug === 'engineering')!
     expect(invites.map((invite) => [invite.githubLogin, invite.place])).toEqual([['newcomer', spacePlace(eng.id)]])

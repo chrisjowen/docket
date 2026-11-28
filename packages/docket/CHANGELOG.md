@@ -196,6 +196,25 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   and every MCP address are unchanged.
 - The app says account where it said organisation or casebook, Home for an
   account's own page, and Chat for asking the record.
+- Signing up is seven steps: sign in (an open invite skips you ahead, into
+  its account); create your account at `/start`, as its Owner, with what it
+  gets spelled out (Postgres, Neo4j, Qdrant and the AI cap); General, with
+  what everyone gets there (Reader by default) and optionally more spaces;
+  the first docket, on the same New docket page; connecting an AI client,
+  one of three ways; inviting users, one row each; and landing in the
+  docket's Chat tab. `/orgs/new` redirects to `/start`, and the home page
+  offers it to someone in no account yet who may make one.
+- An invite is a link that works once, for 7 days (`/invite/dki_…`), shown
+  once to whoever invites and emailed to its address. Whoever holds the link
+  to an invite by email may sign in and accept it, whatever their GitHub
+  account; an invite to a GitHub login stays that login's. Users › Invite can
+  send an invite again with a new link; the old one stops working.
+  `POST /api/v1/accounts/{acct}/invites` returns the link, and
+  `…/invites/{id}/resend` is new; `admin_invite` over MCP never returns it.
+- `DOCKET_MAIL` chooses how invite emails are sent: `log` (the default)
+  writes each one's address and subject to the log, never its link; `none`
+  sends nothing. There is no mail transport yet, so the link is passed on by
+  whoever invites.
 
 ## 0.16.0
 

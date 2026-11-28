@@ -12,10 +12,12 @@ import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { memoryMailer } from '../mail'
 import { rateLimiter as addressLimiter } from '../rate-limit'
 import type { Runtime } from '../runtime'
 
 let runtime: Runtime
+const mailer = memoryMailer()
 vi.mock('../runtime', () => ({ getRuntime: () => runtime, initRuntime: () => undefined, RuntimeUnavailable: class extends Error {} }))
 const { handle } = await import('../../../hooks.server')
 const { handleApiV1 } = await import('./v1')
@@ -128,6 +130,7 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
       platformAdmins: new Set<string>(),
       maxOrgs: 100,
       provisioner: postgresProvisioner({ admin: org.db.admin, keys: {} as never, appRole: org.db.appRole }),
+      mailer,
     } as unknown as Runtime
   })
   beforeEach(() => {
@@ -351,8 +354,24 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
     expect(invite.status).toBe(201)
     conforms('invites.create', invite.body)
     expect((await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: 'another', place: 'account', role: 'reader' })).status).toBe(403)
+    // The invite is a link, returned once; an invite by email is also emailed (tenancy v2 §6).
+    expect(invite.body?.link).toMatch(/^https:\/\/docket\.example\/invite\/dki_[\w-]{32}$/)
+    expect(invite.body?.emailed_to).toBeNull()
+    const sent = mailer.sent.length
+    const byEmail = await api(asToken('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: 'Pat@Example.com', place: 'space:eng', role: 'reader' })
+    expect(byEmail.status).toBe(201)
+    expect(byEmail.body).toMatchObject({ to: 'pat@example.com', emailed_to: 'pat@example.com' })
+    expect(mailer.sent.slice(sent)).toEqual([expect.objectContaining({ to: 'pat@example.com', text: expect.stringContaining(String(byEmail.body?.link)) })])
+    const resent = await api(asToken('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites/${byEmail.body?.id}/resend`)
+    expect(resent.status).toBe(200)
+    conforms('invites.resend', resent.body)
+    expect(resent.body?.link).not.toBe(byEmail.body?.link)
+    expect(mailer.sent.at(-1)?.text).toContain(String(resent.body?.link))
+    expect((await api(asToken('writer'), 'POST', `/api/v1/accounts/${slug()}/invites/${byEmail.body?.id}/resend`)).status).toBe(403)
     const invites = await api(asToken('engAdmin'), 'GET', `/api/v1/accounts/${slug()}/invites`)
     expect((invites.body?.invites as { id: string }[]).map((each) => each.id)).toContain(invite.body?.id)
+    // A list never carries a link: it was shown once.
+    expect((invites.body?.invites as Record<string, unknown>[]).every((each) => !('link' in each))).toBe(true)
     expect((await api(asToken('engAdmin'), 'DELETE', `/api/v1/accounts/${slug()}/invites/${invite.body?.id}`)).status).toBe(204)
 
     const system = await api(asToken('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/system-accounts`, { name: `ci-${org.orgId.slice(0, 6)}`, grants: [{ place: 'space:eng', role: 'writer' }] })

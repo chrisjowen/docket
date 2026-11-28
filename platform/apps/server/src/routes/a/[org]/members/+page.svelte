@@ -5,6 +5,7 @@
   import { Check, Crown, Github, Mail, Minus, Server, UserMinus, UserPlus } from '@lucide/svelte'
 
   import GrantList from '$lib/components/access/grant-list.svelte'
+  import InviteLink from '$lib/components/access/invite-link.svelte'
   import Avatar from '$lib/components/avatar.svelte'
   import Csrf from '$lib/components/csrf.svelte'
 
@@ -30,7 +31,7 @@
 </div>
 
 {#if form && 'problem' in form}<p class="alert" role="alert">{form.problem}</p>{/if}
-{#if form && 'flash' in form}<p class="flash" role="status">{form.flash}</p>{/if}
+{#if form && 'invited' in form && form.invited}<InviteLink invited={form.invited} />{:else if form && 'flash' in form}<p class="flash" role="status">{form.flash}</p>{/if}
 
 {#if data.manage}
   <section class="card invite">
@@ -58,7 +59,10 @@
       <label class="check"><input type="checkbox" name="guest" /> Guest: sees only what they are given</label>
       <button class="button primary" type="submit">Send invite</button>
     </form>
-    <p class="muted fine">Invites expire after 7 days and work once. A GitHub invite also admits them to the beta.</p>
+    <p class="muted fine">
+      An invite is a link, sent by email when there is an address to send it to. It works once, for 7 days; whoever holds the link to an invite
+      by email may accept it, an invite to a GitHub login only that login may. It also admits them to the beta.
+    </p>
   </section>
 {/if}
 
@@ -169,7 +173,12 @@
           <span class="badge">{invite.role}</span>
           <span class="small">on {invite.place}{invite.guest ? ', as a guest' : ''}</span>
           <span class="muted small grow">invited by @{invite.invitedByLogin} · {day(invite.createdAt)}</span>
-          <span class="muted small">expires in {daysLeft(invite.expiresAt)} days</span>
+          <span class="muted small">{invite.emailedTo ? `emailed to ${invite.emailedTo} · ` : ''}expires in {daysLeft(invite.expiresAt)} days</span>
+          <form method="POST" action="?/resendInvite">
+            <Csrf token={data.csrf} />
+            <input type="hidden" name="invite" value={invite.id} />
+            <button class="button small" type="submit">Send again</button>
+          </form>
           <form method="POST" action="?/revokeInvite">
             <Csrf token={data.csrf} />
             <input type="hidden" name="invite" value={invite.id} />

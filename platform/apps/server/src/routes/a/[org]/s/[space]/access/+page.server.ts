@@ -3,6 +3,7 @@ import { ACCOUNT, TenancyError, createInvite, placeKey, spacePlace } from '@dock
 import { error, type RequestEvent } from '@sveltejs/kit'
 
 import { changeAccess, grantActions, placeNames } from '$lib/server/grants'
+import { invitedView } from '$lib/server/invites'
 import { placeAccess } from '$lib/server/place-access'
 import { spaceAccess } from '$lib/server/spaces'
 
@@ -64,7 +65,8 @@ export const actions: Actions = {
           action: 'members.invite',
           target: [`invite:${invite.id}`],
           args: { who: to, role: invite.roleId, place: placeKey(place), guest: invite.guest },
-          flash: `Invited ${to} as ${invite.roleName} on ${spaceName}. Ask them to sign in at this site.`,
+          flash: `Invited ${to} as ${invite.roleName} on ${spaceName}.`,
+          after: () => invitedView(event, access.org.name, invite, spaceName),
         }
       },
       access,

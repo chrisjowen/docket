@@ -45,7 +45,7 @@ test('Spaces + makes a space, its + opens New docket with the space chosen, and 
   await alice.getByLabel('GitHub login or email').fill(bob)
   await alice.locator('form[action="?/invite"] select[name="role"]').selectOption('writer')
   await alice.getByRole('button', { name: 'Send invite' }).click()
-  await expect(alice.getByText(`Invited @${bob} as Writer on Engineering.`)).toBeVisible()
+  await expect(alice.getByText(`@${bob} is invited as Writer on Engineering.`)).toBeVisible()
 
   // The space's own +: New docket, in Engineering, with no choice of space.
   await sidebar.getByTestId('new-docket-in-engineering').click()

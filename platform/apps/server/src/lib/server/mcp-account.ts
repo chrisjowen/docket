@@ -145,10 +145,15 @@ const ADMIN_TOOLS: AdminTool[] = [
   },
   {
     name: 'admin_invite',
-    description: 'Invites someone by GitHub login or email to a role on a place (account, space:<slug> or docket:<slug>).',
+    description:
+      'Invites someone by GitHub login or email to a role on a place (account, space:<slug> or docket:<slug>). The invite link is emailed where there is an address; it is never returned here.',
     schema: bodyOf('invites.create'),
     offered: (acct) => acct.canAnywhere('access'),
-    run: (_acct, args, call) => call('invites.create', { body: args }),
+    // An invite link lets someone in: like a token, it never passes through a model (tenancy v2 §3.4).
+    run: async (_acct, args, call) => {
+      const { link: _link, ...invite } = (await call('invites.create', { body: args })) as Record<string, unknown>
+      return { ...invite, link: null, note: 'The link is emailed where there is an address; whoever invited can send it again from Users.' }
+    },
   },
   {
     name: 'admin_create_space',

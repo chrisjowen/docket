@@ -96,7 +96,7 @@ export async function insertWorkspace(
     throw new WorkspaceError(
       'limit',
       input.maxWorkspaces === undefined
-        ? `An organisation holds at most ${LIMITS.workspacesPerOrg} workspaces in the beta.`
+        ? `An account holds at most ${LIMITS.workspacesPerOrg} dockets in the beta.`
         : `This organisation holds at most ${input.maxWorkspaces} databases.`,
     )
   }

@@ -167,5 +167,5 @@ async function inviteEditor(page: Page, org: string, login: string) {
   await page.getByLabel('GitHub login or email').fill(`@${login}`)
   await page.locator('form[action="?/invite"] select[name="role"]').selectOption('writer')
   await page.getByRole('button', { name: 'Send invite' }).click()
-  await expect(page.getByText(`Invited @${login} as Writer on`)).toBeVisible()
+  await expect(page.getByText(`@${login} is invited as Writer on`)).toBeVisible()
 }

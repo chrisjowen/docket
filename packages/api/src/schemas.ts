@@ -130,6 +130,16 @@ export const Invite = z.object({
   invited_by: z.string(),
   created_at: timestamp,
   expires_at: timestamp,
+  /** Where its email went; null when none was sent, or it was sent again since. */
+  emailed_to: z.string().nullable(),
+})
+
+/**
+ * An invite as made or sent again: with its link, which works once, for 7
+ * days, and is shown only now (and in its email). Never returned over MCP.
+ */
+export const IssuedInvite = Invite.extend({
+  link: z.string().describe('The invite link: /invite/dki_…; whoever opens it signs in and accepts'),
 })
 
 export const SystemAccount = z.object({

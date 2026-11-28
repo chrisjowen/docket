@@ -22,8 +22,10 @@ import {
 import { LIMITS, spacePlace } from '@docket/platform-tenancy'
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 
+import { afterFirstDocket } from '$lib/onboarding'
 import { placeNames } from '$lib/server/grants'
 import { accessChoices, giveInitialAccess, initialAccessFrom } from '$lib/server/new-docket'
+import { onboarding, rememberOnboardingDraft } from '$lib/server/onboarding'
 import { draftOntology } from '$lib/server/ontology-draft'
 import { placeAccess } from '$lib/server/place-access'
 import { readsDocket, recordAudit, requireUser, type OrgAccess } from '$lib/server/request'
@@ -61,6 +63,8 @@ export const load: PageServerLoad = async (event) => {
   // Who reaches every docket in the space already: shown to whoever may give more.
   const already = choices.gives ? (await placeAccess({ access, here: spacePlace(space.id), caps: access.capsAt(spacePlace(space.id)), names: await placeNames(access.org.id) })).reach : []
   return {
+    /** Step 4 of signing up (tenancy v2 §6): the same page, which then goes on to step 5. */
+    onboarding: onboarding(event),
     catalogue: [...builtInCatalogue(), ...templates.map(orgCatalogueEntry)],
     copyable: workspaces.filter((workspace) => readsDocket(access, workspace.id)).map((workspace) => ({ id: workspace.id, name: workspace.name })),
     drafts: drafts
@@ -125,7 +129,7 @@ export const actions: Actions = {
       if (!description) return fail(400, { ...described, problem: 'Describe what the docket should keep track of.' })
       if (description.length > MAX_DESCRIPTION) return fail(400, { ...described, problem: `Describe it in at most ${MAX_DESCRIPTION} characters.` })
       const problem = await inOrg(access, async (ctx) =>
-        (await countMemberWorkspaces(ctx.tx)) >= LIMITS.workspacesPerOrg ? `An organisation holds at most ${LIMITS.workspacesPerOrg} workspaces in the beta.` : newDocketProblem(ctx.tx, { name, slug }),
+        (await countMemberWorkspaces(ctx.tx)) >= LIMITS.workspacesPerOrg ? `An account holds at most ${LIMITS.workspacesPerOrg} dockets in the beta.` : newDocketProblem(ctx.tx, { name, slug }),
       )
       if (problem) return fail(400, { ...described, problem })
       const user = requireUser(event)
@@ -152,6 +156,7 @@ export const actions: Actions = {
         })
         return created
       })
+      if (onboarding(event)) rememberOnboardingDraft(event, access.org.slug, draft.id)
       redirect(303, `/a/${access.org.slug}/dockets/new/draft/${draft.id}`)
     }
 
@@ -189,6 +194,7 @@ export const actions: Actions = {
     }
     // Made, but its initial access could not all be given: its Access tab says so and can give it.
     if (created.problem) redirect(303, `/a/${access.org.slug}/d/${created.slug}/access?problem=${encodeURIComponent(created.problem)}`)
+    if (onboarding(event)) redirect(303, afterFirstDocket(access.org.slug, created.slug))
     redirect(303, `/a/${access.org.slug}/d/${created.slug}/ontology`)
   },
 }

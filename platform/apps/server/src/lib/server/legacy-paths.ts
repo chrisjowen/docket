@@ -4,7 +4,9 @@
  * The product's pages moved (tenancy v2 §2, phase 6): an account is
  * `/a/{acct}` and a docket in it `/a/{acct}/d/{docket}`, where they were
  * `/o/{org}` and `/o/{org}/w/{ws}`; New docket's drafts are under
- * `/a/{acct}/dockets/new`, where they were `/o/{org}/workspaces/new`. Every
+ * `/a/{acct}/dockets/new`, where they were `/o/{org}/workspaces/new`; and
+ * creating an account is a step of signing up, `/start`, where it
+ * was `/orgs/new`. Every
  * old page address keeps working: it answers a permanent redirect to its new
  * one, with its query. Only pages move. The CLI's `/api/o/{org}/...`, the org
  * admin API's `/api/admin/o/{org}/...` and every MCP address stay as they are.
@@ -14,6 +16,7 @@ const OLD_ACCOUNT = /^\/o\/([^/]+)(\/.*)?$/
 
 /** The new address of an old page path, or null when the path is not an old one. */
 export function legacyPath(pathname: string): string | null {
+  if (pathname === '/orgs/new') return '/start'
   const old = OLD_ACCOUNT.exec(pathname)
   if (!old) return null
   const rest = (old[2] ?? '').replace(/^\/w(?=\/|$)/, '/d').replace(/^\/workspaces(?=\/|$)/, '/dockets')

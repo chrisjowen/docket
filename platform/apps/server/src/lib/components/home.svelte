@@ -61,7 +61,7 @@
     <div class="row">
       <h2>Your accounts</h2>
       {#if data.user?.allowlisted}
-        <a class="button primary" href={resolve('/orgs/new')}><Plus size={16} aria-hidden="true" /> New account</a>
+        <a class="button primary" href={resolve('/start')}><Plus size={16} aria-hidden="true" /> New account</a>
       {/if}
     </div>
     {#if data.orgs.length}
@@ -77,7 +77,10 @@
         {/each}
       </ul>
     {:else if data.user?.allowlisted}
-      <p class="muted">You are not in an account yet. Create one for your team, then invite them.</p>
+      <div class="card start" data-testid="start-signup">
+        <p><strong>You are not in an account yet.</strong> Create one for your team: a first space, a first docket, an AI client and your people, in a few steps.</p>
+        <a class="button primary" href={resolve('/start')}>Create your account</a>
+      </div>
     {:else}
       <p class="muted">You are not in an account yet. Ask a team admin to invite you.</p>
     {/if}
@@ -85,6 +88,19 @@
 </div>
 
 <style>
+  .start {
+    display: flex;
+    gap: 0.75rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    padding: 1rem 1.1rem;
+  }
+  .start p {
+    margin: 0;
+    flex: 1;
+    min-width: min(100%, 18rem);
+  }
   .home {
     max-width: 52rem;
     margin: 0 auto;

@@ -50,6 +50,7 @@ import {
   placeKey,
   removeGrant,
   removeMember,
+  reissueInvite,
   revokeInvite,
   rolesOf,
   saveRole,
@@ -64,11 +65,13 @@ import {
   type Capability,
   type Grantee,
   type GrantView,
+  type IssuedInvite,
   type Place,
   type Tx,
 } from '@docket/platform-tenancy'
 
-import { placeNames, type PlaceNames } from '../grants'
+import { placeLabel, placeNames, type PlaceNames } from '../grants'
+import { sendInvite } from '../invites'
 import { accountRoles } from '../members'
 import { becauseLabel, placeAccess } from '../place-access'
 import { isPlatformAdmin } from '../request'
@@ -303,6 +306,17 @@ const ownCredentialAccount = (call: ApiCall, slug: unknown): Promise<AccountCall
 async function resources(acct: AccountCaller): Promise<Map<string, string>> {
   const all = await reading(acct, listWorkspaces)
   return new Map(all.map((workspace) => [mcpResourceUrl(runtime().origin, acct.org.slug, workspace.slug), workspace.id]))
+}
+
+/** A just-made (or renewed) invite, once it is saved and its email sent: with its link, shown this once. */
+async function issuedInviteView(call: ApiCall, acct: AccountCaller, invite: IssuedInvite, names: PlaceNames) {
+  const sent = await sendInvite(invite, {
+    accountName: acct.org.name,
+    placeName: placeLabel(invite.place, names, acct.org.name),
+    invitedBy: call.caller.user.login,
+    requestId: call.meta.requestId,
+  })
+  return { ...inviteView({ ...invite, emailedTo: sent.emailedTo, emailedAt: sent.emailedTo ? new Date() : null }, names, acct.org), link: sent.link }
 }
 
 export const HANDLERS: Record<string, Handler> = {
@@ -612,7 +626,18 @@ export const HANDLERS: Record<string, Handler> = {
       call.audit.args = { place: placeKey(place), role: role.id, guest: made.guest }
       return made
     })
-    return { status: 201, body: inviteView(invite, names, acct.org) }
+    return { status: 201, body: await issuedInviteView(call, acct, invite, names) }
+  },
+
+  'invites.resend': async (call) => {
+    const acct = await account(call)
+    const names = await placeNames(acct.org.id)
+    const invite = await inPlatform(call, acct, async (tx) => {
+      const renewed = await reissueInvite(tx, { orgId: acct.org.id, inviteId: call.params.id ?? '', actor: acct.principal })
+      call.audit.target = [`invite:${renewed.id}`]
+      return renewed
+    })
+    return { body: await issuedInviteView(call, acct, invite, names) }
   },
 
   'invites.revoke': async (call) => {

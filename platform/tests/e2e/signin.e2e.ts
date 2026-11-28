@@ -47,7 +47,7 @@ test.describe('sign-in', () => {
   test('a mutation without the CSRF token is refused', async ({ page }) => {
     await signIn(page, 'alice')
     await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible()
-    const refused = await page.request.post('/orgs/new', {
+    const refused = await page.request.post('/start?/create', {
       form: { name: 'No Token', slug: `no-token-${unique()}` },
       headers: { origin: new URL(page.url()).origin },
     })

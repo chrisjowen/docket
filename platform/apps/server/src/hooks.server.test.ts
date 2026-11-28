@@ -49,6 +49,7 @@ describe('old page addresses (/o/{org}, /o/{org}/w/{ws})', () => {
       ['/o/acme/w/payments/ask', '/a/acme/d/payments/ask'],
       ['/o/acme/w/payments/graph?focus=service.orders', '/a/acme/d/payments/graph?focus=service.orders'],
       ['/o/acme/workspaces/new/draft/d1', '/a/acme/dockets/new/draft/d1'],
+      ['/orgs/new', '/start'],
     ]
     for (const [from, to] of moved) {
       const response = await request('GET', from)

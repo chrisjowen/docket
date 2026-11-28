@@ -163,6 +163,7 @@ export const inviteView = (invite: StoreInvite, names: PlaceNames, org: Pick<Org
   invited_by: invite.invitedByLogin,
   created_at: invite.createdAt.toISOString(),
   expires_at: invite.expiresAt.toISOString(),
+  emailed_to: invite.emailedTo,
 })
 
 type DocketRef = { id: string; slug: string; name: string }

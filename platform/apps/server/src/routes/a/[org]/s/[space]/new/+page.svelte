@@ -6,6 +6,8 @@
   import { untrack } from 'svelte'
 
   import Csrf from '$lib/components/csrf.svelte'
+  import Steps from '$lib/components/onboarding/steps.svelte'
+  import { stepNumber } from '$lib/onboarding'
   import { TYPES_SHOWN, catalogueTags, filterCatalogue, typeLabel, type CatalogueKind } from '$lib/ontology/catalogue'
 
   let { data, form } = $props()
@@ -80,13 +82,15 @@
   <title>New docket in {data.space.name} · {data.org.name}</title>
 </svelte:head>
 
+{#if data.onboarding}<Steps current={stepNumber('docket')} />{/if}
+
 <p class="caption">
   <span class="label">New docket in</span>
   <a class="space-chip" href={resolve('/a/[org]/s/[space]', { org: data.org.slug, space: data.space.slug })} data-testid="new-docket-space"
     ><span class="space-mark" aria-hidden="true">{data.space.name.slice(0, 1).toUpperCase()}</span>{data.space.name}</a
   >
 </p>
-<h1>New docket</h1>
+<h1>{data.onboarding ? 'Your first docket' : 'New docket'}</h1>
 <p class="muted lede">
   A docket is an ontology, the documents that follow it, and later their graph. It goes in {data.space.name}: everyone with access
   to {data.space.name} reaches it as soon as it is made. Dockets share {data.org.name}'s stores and keys, and each has its own
@@ -346,7 +350,11 @@
       {:else}
         <button class="button primary" type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create docket'}</button>
       {/if}
-      <a class="button" href={resolve('/a/[org]/s/[space]', { org: data.org.slug, space: data.space.slug })}>Cancel</a>
+      {#if data.onboarding}
+        <a class="button" href={resolve('/a/[org]/start/connect', { org: data.org.slug })}>Skip for now</a>
+      {:else}
+        <a class="button" href={resolve('/a/[org]/s/[space]', { org: data.org.slug, space: data.space.slug })}>Cancel</a>
+      {/if}
     </div>
   </form>
 {/if}

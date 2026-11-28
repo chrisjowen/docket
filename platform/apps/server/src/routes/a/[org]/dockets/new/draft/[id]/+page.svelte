@@ -3,7 +3,9 @@
   import { resolve } from '$app/paths'
   import { ArrowLeft, Sparkles } from '@lucide/svelte'
 
+  import Steps from '$lib/components/onboarding/steps.svelte'
   import SchemaEditor from '$lib/components/schema/schema-editor.svelte'
+  import { stepNumber } from '$lib/onboarding'
 
   let { data, form } = $props()
   const here = $derived({ org: data.org.slug, id: data.pending.id })
@@ -13,6 +15,8 @@
 <svelte:head>
   <title>Review the draft · {data.pending.name}</title>
 </svelte:head>
+
+{#if data.onboarding}<Steps current={stepNumber('docket')} />{/if}
 
 <div class="head">
   <div>

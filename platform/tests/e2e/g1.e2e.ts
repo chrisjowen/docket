@@ -23,8 +23,9 @@ test('G1: create an org, invite a writer who can write but not publish', async (
   // New invites default to General; this one is for the whole account.
   await alice.locator('form[action="?/invite"] select[name="place"]').selectOption('account')
   await alice.getByRole('button', { name: 'Send invite' }).click()
-  await expect(alice.getByText(`Invited @${bob} as Writer on Acme ${suffix} (the whole account).`)).toBeVisible()
-  await expect(alice.getByText(`@${bob}`, { exact: true })).toBeVisible()
+  await expect(alice.getByText(`@${bob} is invited as Writer on Acme ${suffix} (the whole account).`)).toBeVisible()
+  // And it is listed among the pending invites.
+  await expect(alice.getByRole('listitem').filter({ hasText: `@${bob} Writer on Acme ${suffix}` })).toBeVisible()
 
   // Bob is not on the beta list; the pending invite admits him.
   const bobPage = await (await browser.newContext()).newPage()

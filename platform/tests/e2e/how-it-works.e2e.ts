@@ -28,7 +28,7 @@ test.beforeAll(async ({ browser }) => {
   await owner.getByLabel('GitHub login or email').fill(`@${viewer}`)
   await owner.locator('form[action="?/invite"] select[name="role"]').selectOption('reader')
   await owner.getByRole('button', { name: 'Send invite' }).click()
-  await expect(owner.getByText(`Invited @${viewer} as Reader on`)).toBeVisible()
+  await expect(owner.getByText(`@${viewer} is invited as Reader on`)).toBeVisible()
   await acmeWorkspace(owner, org)
   if (WORKER) {
     await owner.goto(`/a/${org}/d/acme/graph`)

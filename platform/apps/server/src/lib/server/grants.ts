@@ -155,7 +155,24 @@ export function granteeOf(form: FormData): Grantee {
   return { kind: 'user', id: who }
 }
 
-type Change = { action: string; target: string[]; args?: unknown; flash: string; inOrg?: (tx: Tx) => Promise<void> }
+type Change = {
+  action: string
+  target: string[]
+  args?: unknown
+  flash: string
+  inOrg?: (tx: Tx) => Promise<void>
+  /** Runs once the change is saved (an invite's email): its flash replaces the change's, and an invite's link joins the page's data. */
+  after?: () => Promise<{ flash?: string; invited?: Invited }>
+}
+
+/** A new invite, as the page that made it shows it: once, with its link to pass on. */
+export interface Invited {
+  to: string
+  gives: string
+  link: string
+  emailedTo: string | null
+  note: string
+}
 export type ChangeScope = { access: OrgAccess; userId: string; form: FormData; names: PlaceNames }
 
 /**
@@ -170,7 +187,7 @@ export async function changeAccess(
   event: RequestEvent,
   change: (tx: Tx, scope: ChangeScope) => Promise<Change>,
   precomputed?: OrgAccess,
-): Promise<ActionFailure<{ problem: string }> | { flash: string }> {
+): Promise<ActionFailure<{ problem: string }> | { flash: string; invited?: Invited }> {
   const user = requireUser(event)
   const access = precomputed ?? (await orgAccess(event))
   const form = await event.request.formData()
@@ -184,7 +201,8 @@ export async function changeAccess(
       await recordAudit(tx, event, { action: result.action, orgId: access.org.id, target: result.target, args: result.args })
       return result
     })
-    return { flash: done.flash }
+    const after = await done.after?.()
+    return { flash: after?.flash ?? done.flash, ...(after?.invited ? { invited: after.invited } : {}) }
   } catch (cause) {
     // A change the member may not make is refused outright, as any other route refuses it; a mistake they can fix is shown.
     if (cause instanceof TenancyError && cause.code === 'forbidden') error(403, cause.message)

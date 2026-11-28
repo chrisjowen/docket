@@ -36,11 +36,11 @@ try {
   if ((await page.goto(graph))?.status() === 200) {
     console.log(`seed-demo: already seeded: ${graph}`)
   } else {
-    await page.goto(`${base}/orgs/new`)
+    await page.goto(`${base}/start`)
     await page.getByLabel('Name').fill('Acme Corp')
     await page.getByLabel('Address').fill(org)
-    await page.getByRole('button', { name: 'Create organisation' }).click()
-    await page.waitForURL(new RegExp(`/a/${org}/members$`))
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await page.waitForURL(new RegExp(`/a/${org}/start/space$`))
     await page.goto(`${base}/a/${org}/dockets/new`)
     await page.getByLabel('Name').fill('Platform')
     await page.getByText('An entities.yaml file').click()

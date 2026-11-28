@@ -29,6 +29,10 @@ describe('legacyPath', () => {
     expect(legacyPath('/o/acme/workspaces/new/draft/d1/check')).toBe('/a/acme/dockets/new/draft/d1/check')
   })
 
+  it('moves creating an account to signing up', () => {
+    expect(legacyPath('/orgs/new')).toBe('/start')
+  })
+
   it('leaves every other address alone: the CLI and org admin APIs, MCP, the new pages', () => {
     for (const path of [
       '/',
@@ -39,6 +43,8 @@ describe('legacyPath', () => {
       '/mcp/acme',
       '/mcp/acme/payments',
       '/orgs',
+      '/orgs/new/x',
+      '/start',
       '/oauth/consent/x',
       '/o',
       '/other/o/acme',

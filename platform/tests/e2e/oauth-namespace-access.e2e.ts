@@ -50,7 +50,7 @@ test('a read-only member’s connection only reads over MCP OAuth, even when the
     await owner.getByLabel('GitHub login or email').fill(`@${dana}`)
     await owner.locator('form[action="?/invite"] select[name="role"]').selectOption('reader')
     await owner.getByRole('button', { name: 'Send invite' }).click()
-    await expect(owner.getByText(`Invited @${dana} as Reader on`)).toBeVisible()
+    await expect(owner.getByText(`@${dana} is invited as Reader on`)).toBeVisible()
 
     const danaPage = await (await browser.newContext()).newPage()
     await signIn(danaPage, dana, { name: 'Dana Diaz' })

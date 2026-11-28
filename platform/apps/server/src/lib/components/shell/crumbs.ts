@@ -31,7 +31,7 @@ const SPACE_PAGES: Record<string, string | null> = {
 /** Pages outside any casebook. */
 const OTHER_PAGES: Record<string, string> = {
   '/': 'Home',
-  '/orgs/new': 'New account',
+  '/start': 'Create your account',
   '/admin/waitlist': 'Waitlist',
   '/oauth/consent/[uid]': 'Authorise a client',
 }

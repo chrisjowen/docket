@@ -20,13 +20,14 @@ export async function signIn(page: Page, login: string, options: { name?: string
   await page.getByRole('button', { name: 'Authorize' }).click()
 }
 
-/** Creates an org from the home page and returns its slug. */
+/** Creates an account through signing up's second step, leaves the rest of signing up for later, and opens its Users page. Returns its slug. */
 export async function createOrg(page: Page, name: string): Promise<string> {
-  await page.goto('/orgs/new')
+  await page.goto('/start')
   await page.getByLabel('Name').fill(name)
   const slug = await page.getByLabel('Address').inputValue()
-  await page.getByRole('button', { name: 'Create organisation' }).click()
-  await expect(page).toHaveURL(new RegExp(`/a/${slug}/members$`))
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await expect(page).toHaveURL(new RegExp(`/a/${slug}/start/space$`))
+  await page.goto(`/a/${slug}/members`)
   return slug
 }
 

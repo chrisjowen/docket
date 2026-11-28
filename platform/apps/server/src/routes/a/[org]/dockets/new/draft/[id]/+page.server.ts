@@ -12,7 +12,9 @@ import {
 import { spacePlace } from '@docket/platform-tenancy'
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 
+import { afterFirstDocket } from '$lib/onboarding'
 import { giveInitialAccess } from '$lib/server/new-docket'
+import { forgetOnboardingDraft, onboardingDraft } from '$lib/server/onboarding'
 import { authoriseAnywhere, orgAccess, recordAudit, type OrgAccess } from '$lib/server/request'
 import { directory, registry } from '$lib/server/trust'
 import { actorNames, formText, inOrg, publisherOf } from '$lib/server/workspace'
@@ -51,6 +53,7 @@ export const load: PageServerLoad = async (event) => {
   })
   const name = await actorNames(access)
   return {
+    onboarding: onboardingDraft(event),
     pending: {
       id: read.draft.id,
       name: read.draft.name,
@@ -148,6 +151,11 @@ export const actions: Actions = {
     // Its initial access, chosen on New docket, as its creator; anything that could not be given shows on its Access tab.
     const problem = await giveInitialAccess(event, access, made.workspace, made.access)
     if (problem) redirect(303, `/a/${event.params.org}/d/${made.workspace.slug}/access?problem=${encodeURIComponent(problem)}`)
+    // Described during signing up (step 4): on to step 5.
+    if (onboardingDraft(event)) {
+      forgetOnboardingDraft(event)
+      redirect(303, afterFirstDocket(event.params.org, made.workspace.slug))
+    }
     redirect(303, `/a/${event.params.org}/d/${made.workspace.slug}/ontology`)
   },
 }
