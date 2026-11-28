@@ -11,10 +11,10 @@ import { authoriseAnywhere, orgAccess, recordAudit, requireUser } from '$lib/ser
 import { formText, inOrg } from '$lib/server/workspace'
 
 /**
- * The Ask page, in the casebook (`/o/{org}/ask`) or a docket's Chat tab
- * (`/o/{org}/w/{ws}/ask`): a member's questions to one or more of the org's
+ * The Ask page, in the casebook (`/a/{acct}/ask`) or a docket's Chat tab
+ * (`/a/{acct}/d/{docket}/ask`): a member's questions to one or more of the org's
  * workspaces, answered by the agent over each docket's MCP tools (streamed
- * from `/o/{org}/ask/stream`; `?/ask` without script) and saved as their
+ * from `/a/{acct}/ask/stream`; `?/ask` without script) and saved as their
  * chats, and the direct search over the same workspaces. The workspaces
  * offered are those the member reaches: their account role's, or the ones
  * they were granted. A Chat tab asks its docket alone and lists only the
@@ -29,7 +29,7 @@ const page = (org: string, docket: string | null, params: Record<string, string 
   const search = new URLSearchParams()
   for (const [name, value] of Object.entries(params)) for (const one of [value].flat()) search.append(name, one)
   const query = search.toString()
-  return `/o/${org}${docket ? `/w/${docket}` : ''}/ask${query ? `?${query}` : ''}`
+  return `/a/${org}${docket ? `/d/${docket}` : ''}/ask${query ? `?${query}` : ''}`
 }
 
 export async function loadAsk(event: RequestEvent) {
@@ -53,7 +53,7 @@ export async function loadAsk(event: RequestEvent) {
   const all = workspaces.map((workspace) => workspace.slug)
   const named = params.getAll('ws')
   const fromChat = chat ? workspaces.filter((workspace) => chat.workspaceIds.includes(workspace.id)).map((workspace) => workspace.slug) : []
-  const cookie = { path: `/o/${access.org.slug}`, httpOnly: false, sameSite: 'lax' as const, secure: event.url.protocol === 'https:', maxAge: 60 * 60 * 24 * 365 }
+  const cookie = { path: `/a/${access.org.slug}`, httpOnly: false, sameSite: 'lax' as const, secure: event.url.protocol === 'https:', maxAge: 60 * 60 * 24 * 365 }
   const selected = chosenWorkspaces(
     workspaces,
     askScope({ all, docket: docket?.slug, named, chat: fromChat, remembered: event.cookies.get(ASK_SCOPE_COOKIE) ?? null }),

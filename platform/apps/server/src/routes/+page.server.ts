@@ -44,7 +44,7 @@ async function answer(event: Parameters<Actions[string]>[0], accept: boolean) {
       })
       return answered
     })
-    if (accept) redirect(303, `/o/${invite.orgSlug}`)
+    if (accept) redirect(303, `/a/${invite.orgSlug}`)
     return { declined: invite.orgName }
   } catch (error) {
     if (error instanceof TenancyError) return fail(400, { problem: error.message })

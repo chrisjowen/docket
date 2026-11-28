@@ -38,7 +38,7 @@ test('Spaces + makes a space, its + opens New docket with the space chosen, and 
   await sidebar.getByTestId('new-space').click()
   await alice.getByLabel('Name').fill('Engineering')
   await alice.getByRole('button', { name: 'Create space' }).click()
-  await expect(alice).toHaveURL(`/o/${slug}/s/engineering/access`)
+  await expect(alice).toHaveURL(`/a/${slug}/s/engineering/access`)
   await expect(alice.getByTestId('your-access')).toContainText('Owner')
 
   // Whoever manages access on a space invites someone new straight into it.
@@ -49,63 +49,63 @@ test('Spaces + makes a space, its + opens New docket with the space chosen, and 
 
   // The space's own +: New docket, in Engineering, with no choice of space.
   await sidebar.getByTestId('new-docket-in-engineering').click()
-  await expect(alice).toHaveURL(`/o/${slug}/s/engineering/new`)
+  await expect(alice).toHaveURL(`/a/${slug}/s/engineering/new`)
   await expect(alice.getByTestId('new-docket-space')).toContainText('Engineering')
   await expect(alice.locator('select[name="space"]')).toHaveCount(0)
   await newDocket(alice, 'Payments')
-  await expect(alice).toHaveURL(`/o/${slug}/w/payments/ontology`)
+  await expect(alice).toHaveURL(`/a/${slug}/d/payments/ontology`)
   await expect(sidebar.getByRole('list', { name: 'Dockets in Engineering' }).getByRole('link', { name: /Payments/ })).toBeVisible()
 
   // The old address still opens New docket: in General.
-  await alice.goto(`/o/${slug}/workspaces/new`)
-  await expect(alice).toHaveURL(`/o/${slug}/s/general/new`)
+  await alice.goto(`/a/${slug}/dockets/new`)
+  await expect(alice).toHaveURL(`/a/${slug}/s/general/new`)
   await newDocket(alice, 'Handbook')
-  await expect(alice).toHaveURL(`/o/${slug}/w/handbook/ontology`)
+  await expect(alice).toHaveURL(`/a/${slug}/d/handbook/ontology`)
 
   // A third space, whose docket Bob is given on its own, as its initial access.
   await sidebar.getByTestId('new-space').click()
   await alice.getByLabel('Name').fill('Legal')
   await alice.getByRole('button', { name: 'Create space' }).click()
-  await alice.goto(`/o/${slug}/s/legal/new`)
+  await alice.goto(`/a/${slug}/s/legal/new`)
   await expect(alice.getByTestId('initial-access')).toContainText('Initial access')
   // Bob is not a member yet, so only everyone is offered.
   await newDocket(alice, 'Contracts', { access: { who: `Everyone at Spaces ${suffix}`, role: 'Reader' } })
-  await expect(alice).toHaveURL(`/o/${slug}/w/contracts/ontology`)
-  await alice.goto(`/o/${slug}/s/legal/new`)
+  await expect(alice).toHaveURL(`/a/${slug}/d/contracts/ontology`)
+  await alice.goto(`/a/${slug}/s/legal/new`)
   await newDocket(alice, 'Litigation')
-  await expect(alice).toHaveURL(`/o/${slug}/w/litigation/ontology`)
+  await expect(alice).toHaveURL(`/a/${slug}/d/litigation/ontology`)
 
   // Bob joins: Writer on Engineering covers Payments; General he reads, as everyone does; Legal he sees but only Contracts opens.
   const bobPage = await (await browser.newContext()).newPage()
   await signIn(bobPage, bob)
   await bobPage.getByRole('button', { name: `Accept and join Spaces ${suffix}` }).click()
-  await bobPage.goto(`/o/${slug}/w/payments/access`)
+  await bobPage.goto(`/a/${slug}/d/payments/access`)
   await expect(bobPage.getByTestId('your-access')).toContainText('Can write')
   await expect(bobPage.getByTestId('your-access')).toContainText('Writer on Engineering (space)')
-  await bobPage.goto(`/o/${slug}/w/handbook/access`)
+  await bobPage.goto(`/a/${slug}/d/handbook/access`)
   await expect(bobPage.getByTestId('your-access')).toContainText('Can read')
   await expect(bobPage.getByTestId('your-access')).toContainText('Reader on General (space), given to everyone')
-  await bobPage.goto(`/o/${slug}/w/contracts/access`)
+  await bobPage.goto(`/a/${slug}/d/contracts/access`)
   await expect(bobPage.getByTestId('your-access')).toContainText('Reader on this docket, given to everyone')
-  expect((await bobPage.request.get(`/o/${slug}/w/litigation/overview`)).status()).toBe(403)
-  await bobPage.goto(`/o/${slug}/s/legal`)
+  expect((await bobPage.request.get(`/a/${slug}/d/litigation/overview`)).status()).toBe(403)
+  await bobPage.goto(`/a/${slug}/s/legal`)
   await expect(bobPage.locator('[data-docket="litigation"]')).toContainText('You have no access to this docket.')
 
   // A Writer neither adds dockets nor makes spaces.
-  await bobPage.goto(`/o/${slug}/s/engineering`)
+  await bobPage.goto(`/a/${slug}/s/engineering`)
   await expect(bobPage.getByTestId('space-access')).toHaveText('Can write')
   await expect(bobPage.getByTestId('space-new-docket')).toHaveCount(0)
   await expect(bobPage.getByRole('navigation', { name: 'Sidebar' }).getByTestId('new-space')).toHaveCount(0)
-  expect((await bobPage.request.get(`/o/${slug}/s/engineering/new`)).status()).toBe(403)
-  expect((await bobPage.request.get(`/o/${slug}/spaces/new`)).status()).toBe(403)
-  expect((await bobPage.request.get(`/o/${slug}/s/nowhere`)).status()).toBe(404)
+  expect((await bobPage.request.get(`/a/${slug}/s/engineering/new`)).status()).toBe(403)
+  expect((await bobPage.request.get(`/a/${slug}/spaces/new`)).status()).toBe(403)
+  expect((await bobPage.request.get(`/a/${slug}/s/nowhere`)).status()).toBe(404)
 })
 
 test('the space pages and New docket fit a phone', async ({ page }) => {
   await signIn(page, 'alice')
   const slug = await createOrg(page, `Phone ${unique()}`)
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const path of [`/o/${slug}/s/general`, `/o/${slug}/s/general/access`, `/o/${slug}/s/general/new`, `/o/${slug}/spaces/new`]) {
+  for (const path of [`/a/${slug}/s/general`, `/a/${slug}/s/general/access`, `/a/${slug}/s/general/new`, `/a/${slug}/spaces/new`]) {
     await page.goto(path)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     expect(overflow, path).toBeLessThanOrEqual(0)

@@ -58,7 +58,7 @@ test.beforeAll(async ({ browser }) => {
   writer = await createToken(page, org, 'acme', { scopes: ['docket:read', 'docket:write', 'ontology:propose'], description: 'e2e writer' })
   reader = await createToken(page, org, 'acme', { scopes: ['docket:read'], description: 'e2e reader' })
   if (WORKER) {
-    await page.goto(`/o/${org}/w/acme/graph`)
+    await page.goto(`/a/${org}/d/acme/graph`)
     await expect(page.getByTestId('index-status')).toHaveText('Index up to date', { timeout: 60_000 })
   }
   await page.context().close()
@@ -172,7 +172,7 @@ test('docket_supersede keeps an out-of-date record on file but out of search ans
 
   const page = await (await browser.newContext()).newPage()
   await signIn(page, 'alice')
-  await page.goto(`/o/${org}/w/acme/graph?focus=${encodeURIComponent(sophia)}`)
+  await page.goto(`/a/${org}/d/acme/graph?focus=${encodeURIComponent(sophia)}`)
   const banner = page.getByTestId('inspector').getByTestId('superseded')
   await expect(banner).toContainText('Overruled')
   await expect(banner).toContainText(`renamed from Sophia ${marker}`)
@@ -218,7 +218,7 @@ test('a write is stamped with its writer, recorded once in the audit log, and sh
 
   const page = await (await browser.newContext()).newPage()
   await signIn(page, 'alice')
-  await page.goto(`/o/${org}/w/acme/activity?channel=mcp`)
+  await page.goto(`/a/${org}/d/acme/activity?channel=mcp`)
   const entry = page.getByTestId('activity-event').filter({ hasText: id })
   await expect(entry).toHaveCount(1)
   await expect(entry).toContainText('MCP')
@@ -287,7 +287,7 @@ test('write tools count against 30 writes a minute per token', async ({ browser,
 test('the graph capture forms write a resource with evidence, and show a refusal with its reasons', async ({ browser }) => {
   const page = await (await browser.newContext()).newPage()
   await signIn(page, 'alice')
-  await page.goto(`/o/${org}/w/acme/graph`)
+  await page.goto(`/a/${org}/d/acme/graph`)
   await page.getByTestId('capture-toggle').click()
   const panel = page.getByTestId('capture')
   await panel.getByRole('tab', { name: 'New resource' }).click()
@@ -313,7 +313,7 @@ test('the graph capture forms write a resource with evidence, and show a refusal
   await panel.getByRole('button', { name: 'Capture service' }).click()
   await expect(page.getByTestId('capture-diagnostics')).toContainText('type-conflict')
 
-  await page.goto(`/o/${org}/w/acme/activity?channel=ui`)
+  await page.goto(`/a/${org}/d/acme/activity?channel=ui`)
   const entry = page.getByTestId('activity-event').filter({ hasText: id })
   await expect(entry).toContainText('@alice')
   await expect(entry).toContainText('billing/main.go')

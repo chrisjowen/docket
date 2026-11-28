@@ -19,7 +19,7 @@ let org = ''
 let alice: Page
 let bob: Page
 const bobLogin = `bob${unique()}`
-const ws = () => `/o/${org}/w/acme`
+const ws = () => `/a/${org}/d/acme`
 const endpoint = () => `/mcp/${org}/acme`
 
 async function call(request: APIRequestContext, token: string, name: string, args: Record<string, unknown>): Promise<Result> {
@@ -56,7 +56,7 @@ test.beforeAll(async ({ browser }) => {
   await signIn(alice, 'alice')
   org = await createOrg(alice, `Ontology MCP ${unique()}`)
   await acmeWorkspace(alice, org)
-  await alice.goto(`/o/${org}/members`)
+  await alice.goto(`/a/${org}/members`)
   await alice.getByLabel('GitHub login or email').fill(`@${bobLogin}`)
   await alice.locator('form[action="?/invite"] select[name="role"]').selectOption('writer')
   await alice.getByRole('button', { name: 'Send invite' }).click()
@@ -133,7 +133,7 @@ test("a publisher's ontology:write token publishes and migrates over MCP, rolls 
   await expect(alice.locator('li[data-version="4"]')).toContainText('renameType feature_flag -> flag')
 
   // Every call and every change to who may publish are in the audit log.
-  await alice.goto(`/o/${org}/audit`)
+  await alice.goto(`/a/${org}/audit`)
   await expect(alice.getByRole('cell', { name: 'mcp.tools/call docket_publish_ontology_change' }).first()).toBeVisible()
   // The Access tab changes grants through the API, recorded as its operations.
   await expect(alice.getByRole('cell', { name: /^api\.grants\.(create|replace)$/ }).first()).toBeVisible()

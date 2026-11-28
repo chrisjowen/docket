@@ -43,7 +43,7 @@ test.beforeAll(async ({ browser }) => {
 
 test('facts: every record and relation as a note, filtered to the strong, needing corroboration and single-source ones, and the filter survives a reload', async ({ browser }) => {
   const page = await alice(browser)
-  await page.goto(`/o/${org}/w/acme/graph`)
+  await page.goto(`/a/${org}/d/acme/graph`)
   await page.getByTestId('view-facts').click()
   await expect(page).toHaveURL(/\?view=facts$/)
   // 21 records and 37 relations.
@@ -85,12 +85,12 @@ test('facts: every record and relation as a note, filtered to the strong, needin
   await expect(page.getByTestId('inspector').getByRole('heading', { name: 'Orders' })).toBeVisible()
   await expect(page.getByTestId('inspector').getByTestId('case-exhibits')).toContainText('orders/main.go')
   await page.getByRole('button', { name: 'Show in the network' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${org}/w/acme/graph\\?focus=service\\.orders$`))
+  await expect(page).toHaveURL(new RegExp(`/a/${org}/d/acme/graph\\?focus=service\\.orders$`))
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(page.getByTestId('inspector').getByRole('heading', { name: 'Orders' })).toBeVisible()
 
   // A document's "Show in graph" names the record in the fragment; the network opens its case file.
-  await page.goto(`/o/${org}/w/acme/graph#service.checkout`)
+  await page.goto(`/a/${org}/d/acme/graph#service.checkout`)
   await expect(page).toHaveURL(new RegExp(`/graph\\?focus=service\\.checkout$`))
   await expect(page.getByTestId('inspector').getByRole('heading', { name: 'Checkout' })).toBeVisible()
   await page.context().close()
@@ -98,7 +98,7 @@ test('facts: every record and relation as a note, filtered to the strong, needin
 
 test('facts: a note cites its exhibits inline, opens to quote them, and can be linked to', async ({ browser }) => {
   const page = await alice(browser)
-  await page.goto(`/o/${org}/w/acme/graph?view=facts&kind=exhibit`)
+  await page.goto(`/a/${org}/d/acme/graph?view=facts&kind=exhibit`)
   const orders = page.getByTestId('fact').filter({ has: page.getByRole('heading', { name: 'Orders', exact: true }) })
   // The record's own prose, then what its exhibits say, each cited by its number.
   await expect(orders).toContainText('Owns the order lifecycle')
@@ -126,7 +126,7 @@ test('facts: a note cites its exhibits inline, opens to quote them, and can be l
   await expect(page.getByTestId('trail-detail')).toBeVisible()
 
   // A link to the note, as search and the overview give, opens it and brings it into view.
-  await page.goto(`/o/${org}/w/acme/graph?view=facts&open=${no}`)
+  await page.goto(`/a/${org}/d/acme/graph?view=facts&open=${no}`)
   const linked = page.locator(`#note-${no}`)
   await expect(linked.getByRole('button', { name: /^Hide \d+ exhibits?$/ })).toHaveAttribute('aria-expanded', 'true')
   await expect(linked).toBeInViewport()
@@ -151,7 +151,7 @@ test("facts: a case file's \"more in Facts\" shows exactly the record's findings
   })
   expect(((await response.json()) as { result?: { isError?: boolean } }).result?.isError).toBeFalsy()
 
-  await page.goto(`/o/${org}/w/${ws}/graph?view=facts&focus=service.orders`)
+  await page.goto(`/a/${org}/d/${ws}/graph?view=facts&focus=service.orders`)
   const findings = page.getByTestId('inspector').getByTestId('case-findings')
   const count = Number(await findings.locator('h3 span').last().textContent())
   await findings.getByRole('button', { name: /^\d+ more in Facts$/ }).click()
@@ -170,7 +170,7 @@ test("facts: a case file's \"more in Facts\" shows exactly the record's findings
 
 test('timeline: supersessions, dated evidence and the activity log, by day', async ({ browser }) => {
   const page = await alice(browser)
-  await page.goto(`/o/${org}/w/acme/graph?view=timeline`)
+  await page.goto(`/a/${org}/d/acme/graph?view=timeline`)
   const timeline = page.getByTestId('timeline')
   await expect(timeline.getByTestId('view-timeline')).toHaveCount(0)
   await expect(page.getByTestId('view-timeline')).toHaveAttribute('aria-selected', 'true')
@@ -195,7 +195,7 @@ test('evidence: each document with its evidence, where it came from and the chan
   const path = graph.entities.find((entity) => entity.id === 'service.orders')?.path ?? ''
   expect(path).not.toBe('')
 
-  await page.goto(`/o/${org}/w/acme/graph?view=evidence`)
+  await page.goto(`/a/${org}/d/acme/graph?view=evidence`)
   const view = page.getByTestId('evidence')
   // Two of the example's documents carry evidence already; the writes above add three.
   await expect(view).toContainText('5 of 21 documents hold evidence, 18 pieces in all')
@@ -230,19 +230,19 @@ test('evidence: each document with its evidence, where it came from and the chan
 
 test('the timeline and evidence views read the activity log and document origins from their own endpoint, not the board', async ({ browser }) => {
   const page = await alice(browser)
-  const history = `/o/${org}/w/acme/graph/history`
+  const history = `/a/${org}/d/acme/graph/history`
 
   // The board and the facts view never ask for it; the evidence view, opened from a link, does.
   const asked: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === history) asked.push(request.url())
   })
-  await page.goto(`/o/${org}/w/acme/graph`)
+  await page.goto(`/a/${org}/d/acme/graph`)
   await expect(page.getByTestId('board')).toBeVisible()
   await page.getByTestId('view-facts').click()
   await expect(page.getByTestId('facts-count')).toBeVisible()
   expect(asked).toHaveLength(0)
-  await page.goto(`/o/${org}/w/acme/graph?view=evidence`)
+  await page.goto(`/a/${org}/d/acme/graph?view=evidence`)
   await expect(page.getByTestId('evidence')).toContainText('5 of 21 documents hold evidence')
   expect(asked).toHaveLength(1)
 
@@ -270,7 +270,7 @@ test('the timeline and evidence views read the activity log and document origins
 
 test('while the history loads, or when it fails, the views say so instead of showing empty counts, and a retry loads it', async ({ browser }) => {
   const page = await alice(browser)
-  const history = `**/o/${org}/w/acme/graph/history`
+  const history = `**/a/${org}/d/acme/graph/history`
   let release: () => void = () => {}
   const held = new Promise<void>((resolve) => (release = resolve))
   await page.route(history, async (route) => {
@@ -278,7 +278,7 @@ test('while the history loads, or when it fails, the views say so instead of sho
     await route.fulfill({ status: 500, body: 'down' })
   })
 
-  await page.goto(`/o/${org}/w/acme/graph?view=evidence`)
+  await page.goto(`/a/${org}/d/acme/graph?view=evidence`)
   const pending = page.getByTestId('history-pending')
   await expect(pending).toContainText('Loading the activity log')
   await expect(page.getByTestId('evidence')).toHaveCount(0)
@@ -296,7 +296,7 @@ test('while the history loads, or when it fails, the views say so instead of sho
 
 test('a capture that lands while the timeline is loading asks for the history again, so the timeline shows it', async ({ browser }) => {
   const page = await alice(browser)
-  await page.goto(`/o/${org}/w/acme/graph`)
+  await page.goto(`/a/${org}/d/acme/graph`)
   await page.getByTestId('capture-toggle').click()
   const panel = page.getByTestId('capture')
   await panel.getByRole('tab', { name: 'New resource' }).click()
@@ -320,7 +320,7 @@ test('a capture that lands while the timeline is loading asks for the history ag
   let answerHistory: () => void = () => {}
   const historyHeld = new Promise<void>((resolve) => (answerHistory = resolve))
   let asked = 0
-  await page.route(`**/o/${org}/w/acme/graph/history`, async (route) => {
+  await page.route(`**/a/${org}/d/acme/graph/history`, async (route) => {
     asked++
     await historyHeld
     await route.continue()

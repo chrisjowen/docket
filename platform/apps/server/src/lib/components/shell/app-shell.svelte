@@ -73,7 +73,7 @@
   const workspace = $derived(org ? (data.workspace ?? null) : null)
   const docketNo = $derived(workspace ? (data.dockets?.find((entry) => entry.slug === workspace.slug)?.docketNo ?? null) : null)
   const crumbs = $derived(crumbsFor({ routeId: page.route.id, pathname: page.url.pathname, org, workspace, space: org ? (data.space ?? null) : null }))
-  const orgPath = (path: '' | '/ask' | '/members' | '/tokens' | '/audit' | '/templates' | '/settings') => (org ? `/o/${org.slug}${path}` : '/')
+  const orgPath = (path: '' | '/ask' | '/members' | '/tokens' | '/audit' | '/templates' | '/settings') => (org ? `/a/${org.slug}${path}` : '/')
   const current = (href: string) => (page.url.pathname === href ? 'page' : undefined)
   /** Inside a docket, Ask opens on it. */
   const askScope = $derived(workspace ? `?ws=${encodeURIComponent(workspace.slug)}` : '')
@@ -117,7 +117,7 @@
     if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
     event.preventDefault()
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- Ask's resolved path, on the open docket
-    void goto(`${resolve('/o/[org]/ask', { org: org.slug })}${askScope}`)
+    void goto(`${resolve('/a/[org]/ask', { org: org.slug })}${askScope}`)
   }
 </script>
 
@@ -142,21 +142,21 @@
           {#if org}<small>{org.name} · {data.role ?? ''}</small>{/if}
         </span>
         <ChevronsUpDown size={14} aria-hidden="true" class="chev" />
-        <span class="visually-hidden">Switch casebook</span>
+        <span class="visually-hidden">Switch account</span>
       </summary>
-      <div class="menu" role="group" aria-label="Your casebooks">
-        <span class="label">Your casebooks</span>
+      <div class="menu" role="group" aria-label="Your accounts">
+        <span class="label">Your accounts</span>
         {#each orgs as entry (entry.slug)}
-          <a href={resolve('/o/[org]', { org: entry.slug })} aria-current={entry.slug === org?.slug ? 'page' : undefined}>
+          <a href={resolve('/a/[org]', { org: entry.slug })} aria-current={entry.slug === org?.slug ? 'page' : undefined}>
             <span class="org-mark" aria-hidden="true">{entry.name.slice(0, 2).toUpperCase()}</span>
             <span class="grow">{entry.name}</span>
             <span class="badge">{entry.role}</span>
           </a>
         {:else}
-          <p class="muted empty">No organisations yet.</p>
+          <p class="muted empty">No accounts yet.</p>
         {/each}
         {#if user.allowlisted}
-          <a href={resolve('/orgs/new')} class="new"><Plus size={14} aria-hidden="true" /> New organisation</a>
+          <a href={resolve('/orgs/new')} class="new"><Plus size={14} aria-hidden="true" /> New account</a>
         {/if}
       </div>
     </details>
@@ -171,43 +171,43 @@
 
     <nav class="nav" aria-label="Sidebar">
       {#if org}
-        <ul class="primary" aria-label="Casebook">
+        <ul class="primary" aria-label="Account">
           <li>
-            <a href={resolve('/o/[org]', { org: org.slug })} aria-current={current(orgPath(''))}>
-              <FolderOpen size={17} aria-hidden="true" /> Casebook
+            <a href={resolve('/a/[org]', { org: org.slug })} aria-current={current(orgPath(''))}>
+              <FolderOpen size={17} aria-hidden="true" /> Home
             </a>
           </li>
           <li>
             <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- Ask's resolved path, on the open docket -->
-            <a href="{resolve('/o/[org]/ask', { org: org.slug })}{askScope}" aria-current={current(orgPath('/ask'))}>
-              <MessageSquareText size={17} aria-hidden="true" /> Ask
+            <a href="{resolve('/a/[org]/ask', { org: org.slug })}{askScope}" aria-current={current(orgPath('/ask'))}>
+              <MessageSquareText size={17} aria-hidden="true" /> Chat
             </a>
           </li>
           <li>
-            <a href={resolve('/o/[org]/members', { org: org.slug })} aria-current={current(orgPath('/members'))}>
+            <a href={resolve('/a/[org]/members', { org: org.slug })} aria-current={current(orgPath('/members'))}>
               <Users size={17} aria-hidden="true" /> Users
             </a>
           </li>
           <li>
-            <a href={resolve('/o/[org]/tokens', { org: org.slug })} aria-current={current(orgPath('/tokens'))}>
+            <a href={resolve('/a/[org]/tokens', { org: org.slug })} aria-current={current(orgPath('/tokens'))}>
               <KeyRound size={17} aria-hidden="true" /> Tokens & connections
             </a>
           </li>
           <li>
-            <a href={resolve('/o/[org]/audit', { org: org.slug })} aria-current={current(orgPath('/audit'))}>
+            <a href={resolve('/a/[org]/audit', { org: org.slug })} aria-current={current(orgPath('/audit'))}>
               <ScrollText size={17} aria-hidden="true" /> Audit log
             </a>
           </li>
           {#if data.permissions?.settings}
             <li>
-              <a href={resolve('/o/[org]/templates', { org: org.slug })} aria-current={current(orgPath('/templates'))}>
+              <a href={resolve('/a/[org]/templates', { org: org.slug })} aria-current={current(orgPath('/templates'))}>
                 <LayoutTemplate size={17} aria-hidden="true" /> Templates
               </a>
             </li>
           {/if}
           {#if data.owner || data.accountAdmin || data.managesSystemAccounts}
             <li>
-              <a href={resolve('/o/[org]/settings', { org: org.slug })} aria-current={page.url.pathname.startsWith(orgPath('/settings')) ? 'page' : undefined}>
+              <a href={resolve('/a/[org]/settings', { org: org.slug })} aria-current={page.url.pathname.startsWith(orgPath('/settings')) ? 'page' : undefined}>
                 <Settings size={17} aria-hidden="true" /> Settings
               </a>
             </li>
@@ -220,11 +220,11 @@
           {#if data.createsSpaces}
             <a
               class="add"
-              href={resolve('/o/[org]/spaces/new', { org: org.slug })}
+              href={resolve('/a/[org]/spaces/new', { org: org.slug })}
               aria-label="New space"
               title="New space"
               data-testid="new-space"
-              aria-current={current(`/o/${org.slug}/spaces/new`)}><Plus size={15} aria-hidden="true" /></a
+              aria-current={current(`/a/${org.slug}/spaces/new`)}><Plus size={15} aria-hidden="true" /></a
             >
           {/if}
         </div>
@@ -235,8 +235,8 @@
               <div class="space-row" class:here={openSpace === space.slug}>
                 <a
                   class="space-name"
-                  href={resolve('/o/[org]/s/[space]', { org: org.slug, space: space.slug })}
-                  aria-current={page.url.pathname === `/o/${org.slug}/s/${space.slug}` ? 'page' : undefined}
+                  href={resolve('/a/[org]/s/[space]', { org: org.slug, space: space.slug })}
+                  aria-current={page.url.pathname === `/a/${org.slug}/s/${space.slug}` ? 'page' : undefined}
                 >
                   <span class="space-mark" aria-hidden="true">{space.name.slice(0, 1).toUpperCase()}</span>
                   <span class="docket-name">{space.name}</span>
@@ -244,11 +244,11 @@
                 {#if space.create}
                   <a
                     class="add"
-                    href={resolve('/o/[org]/s/[space]/new', { org: org.slug, space: space.slug })}
+                    href={resolve('/a/[org]/s/[space]/new', { org: org.slug, space: space.slug })}
                     aria-label="New docket in {space.name}"
                     title="New docket in {space.name}"
                     data-testid="new-docket-in-{space.slug}"
-                    aria-current={current(`/o/${org.slug}/s/${space.slug}/new`)}><Plus size={15} aria-hidden="true" /></a
+                    aria-current={current(`/a/${org.slug}/s/${space.slug}/new`)}><Plus size={15} aria-hidden="true" /></a
                   >
                 {/if}
               </div>
@@ -257,7 +257,7 @@
                   <li>
                     {#if entry.open}
                       <a
-                        href={resolve('/o/[org]/w/[ws]/overview', { org: org.slug, ws: entry.slug })}
+                        href={resolve('/a/[org]/d/[ws]/overview', { org: org.slug, ws: entry.slug })}
                         aria-current={workspace?.slug === entry.slug ? 'page' : undefined}
                       >
                         <span class="sdot" aria-hidden="true"></span>
@@ -279,13 +279,13 @@
           {/each}
         </ul>
       {:else}
-        <ul class="primary" aria-label="Casebooks">
+        <ul class="primary" aria-label="Accounts">
           <li>
             <a href={resolve('/')} aria-current={current('/')}><LayoutGrid size={17} aria-hidden="true" /> Home</a>
           </li>
           {#each orgs as entry (entry.slug)}
             <li>
-              <a href={resolve('/o/[org]', { org: entry.slug })}><FolderOpen size={17} aria-hidden="true" /> {entry.name}</a>
+              <a href={resolve('/a/[org]', { org: entry.slug })}><FolderOpen size={17} aria-hidden="true" /> {entry.name}</a>
             </li>
           {/each}
           {@render waitlist()}
@@ -295,7 +295,7 @@
 
     <div class="foot">
       {#if org && data.tokenNotices && data.tokenNotices.expiring + data.tokenNotices.expired > 0}
-        <a class="notice" data-testid="token-notice" href={resolve('/o/[org]/settings/system-accounts', { org: org.slug })}>
+        <a class="notice" data-testid="token-notice" href={resolve('/a/[org]/settings/system-accounts', { org: org.slug })}>
           <BellRing size={14} aria-hidden="true" />
           <span>
             {#if data.tokenNotices.expired}{data.tokenNotices.expired} system account {data.tokenNotices.expired === 1 ? 'token has' : 'tokens have'} expired{data.tokenNotices.expiring ? '; ' : '.'}{/if}
@@ -363,8 +363,8 @@
       <span class="grow"></span>
       {#if docketNo}<span class="docket-no hide-sm" data-testid="crumb-docket-no">{docketNo}</span>{/if}
       {#if org}
-        <a class="button primary small ask" href="{resolve('/o/[org]/ask', { org: org.slug })}{askScope}">
-          <MessageSquareText size={15} aria-hidden="true" /> Ask
+        <a class="button primary small ask" href="{resolve('/a/[org]/ask', { org: org.slug })}{askScope}">
+          <MessageSquareText size={15} aria-hidden="true" /> Chat
         </a>
       {/if}
     </header>
@@ -381,20 +381,20 @@
 
   <nav class="tabbar" aria-label="Quick links">
     {#if org}
-      <a href={resolve('/o/[org]', { org: org.slug })} aria-current={current(orgPath(''))}><FolderOpen size={19} aria-hidden="true" /> Casebook</a>
+      <a href={resolve('/a/[org]', { org: org.slug })} aria-current={current(orgPath(''))}><FolderOpen size={19} aria-hidden="true" /> Home</a>
       {#if workspace}
         <a
-          href={resolve('/o/[org]/w/[ws]/overview', { org: org.slug, ws: workspace.slug })}
-          aria-current={current(`/o/${org.slug}/w/${workspace.slug}/overview`)}><LayoutGrid size={19} aria-hidden="true" /> Docket</a
+          href={resolve('/a/[org]/d/[ws]/overview', { org: org.slug, ws: workspace.slug })}
+          aria-current={current(`/a/${org.slug}/d/${workspace.slug}/overview`)}><LayoutGrid size={19} aria-hidden="true" /> Docket</a
         >
         <a
-          href={resolve('/o/[org]/w/[ws]/graph', { org: org.slug, ws: workspace.slug })}
-          aria-current={current(`/o/${org.slug}/w/${workspace.slug}/graph`)}><Network size={19} aria-hidden="true" /> Record</a
+          href={resolve('/a/[org]/d/[ws]/graph', { org: org.slug, ws: workspace.slug })}
+          aria-current={current(`/a/${org.slug}/d/${workspace.slug}/graph`)}><Network size={19} aria-hidden="true" /> Record</a
         >
       {/if}
       <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- Ask's resolved path, on the open docket -->
-      <a href="{resolve('/o/[org]/ask', { org: org.slug })}{askScope}" aria-current={current(orgPath('/ask'))}
-        ><MessageSquareText size={19} aria-hidden="true" /> Ask</a
+      <a href="{resolve('/a/[org]/ask', { org: org.slug })}{askScope}" aria-current={current(orgPath('/ask'))}
+        ><MessageSquareText size={19} aria-hidden="true" /> Chat</a
       >
     {:else}
       <a href={resolve('/')} aria-current={current('/')}><LayoutGrid size={19} aria-hidden="true" /> Home</a>

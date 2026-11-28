@@ -26,7 +26,7 @@ export async function createOrg(page: Page, name: string): Promise<string> {
   await page.getByLabel('Name').fill(name)
   const slug = await page.getByLabel('Address').inputValue()
   await page.getByRole('button', { name: 'Create organisation' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${slug}/members$`))
+  await expect(page).toHaveURL(new RegExp(`/a/${slug}/members$`))
   return slug
 }
 
@@ -60,13 +60,13 @@ export async function acmeWorkspace(page: Page, org: string, name = 'Acme'): Pro
       const path = join(entry.parentPath, entry.name)
       return { name: relative(ACME, path).replace(/\//g, '_'), mimeType: 'text/markdown', buffer: readFileSync(path) }
     })
-  await page.goto(`/o/${org}/workspaces/new`)
+  await page.goto(`/a/${org}/dockets/new`)
   await page.getByLabel('Name').fill(name)
   await page.getByText('An entities.yaml file').click()
   await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({ name: 'entities.yaml', mimeType: 'text/yaml', buffer: ontology })
   await page.getByRole('button', { name: 'Create docket' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${org}/w/${ws}/ontology$`))
-  await page.goto(`/o/${org}/w/${ws}/documents`)
+  await expect(page).toHaveURL(new RegExp(`/a/${org}/d/${ws}/ontology$`))
+  await page.goto(`/a/${org}/d/${ws}/documents`)
   await page.locator('input[name="files"]').setInputFiles(documents)
   await page.getByRole('button', { name: 'Import', exact: true }).click()
   await expect(page.getByText('Wrote 21 documents.')).toBeVisible()
@@ -79,7 +79,7 @@ export async function acmeWorkspace(page: Page, org: string, name = 'Acme'): Pro
  * write nothing make it read-only.
  */
 export async function createToken(page: Page, org: string, ws: string, options: { scopes?: string[]; description?: string } = {}): Promise<string> {
-  await page.goto(`/o/${org}/w/${ws}/mcp`)
+  await page.goto(`/a/${org}/d/${ws}/mcp`)
   await page.getByLabel('Name', { exact: true }).fill(options.description ?? 'e2e')
   const writes = (options.scopes ?? ['docket:read']).some((scope) => scope !== 'docket:read' && scope !== 'ontology:read')
   const readOnly = page.getByRole('checkbox', { name: /Read-only/ })

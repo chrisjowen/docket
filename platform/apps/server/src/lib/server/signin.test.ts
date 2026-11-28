@@ -5,7 +5,7 @@ import { safeNext } from './signin'
 
 describe('safeNext', () => {
   it('keeps a same-site path', () => {
-    expect(safeNext('/o/acme/members?tab=invites#top')).toBe('/o/acme/members?tab=invites#top')
+    expect(safeNext('/a/acme/members?tab=invites#top')).toBe('/a/acme/members?tab=invites#top')
   })
 
   it('refuses anything a browser could read as another origin', () => {

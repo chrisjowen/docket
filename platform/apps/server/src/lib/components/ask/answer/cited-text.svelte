@@ -16,7 +16,7 @@
 {#each segments as segment, index (index)}{#if 'cite' in segment}{@const key = sourceKey(segment.cite)}<a
       class="fn"
       class:on={ctx.lit.key === key}
-      href="{resolve('/o/[org]/w/[ws]/graph', { org: ctx.org, ws: segment.cite.workspace })}?focus={encodeURIComponent(segment.cite.id)}"
+      href="{resolve('/a/[org]/d/[ws]/graph', { org: ctx.org, ws: segment.cite.workspace })}?focus={encodeURIComponent(segment.cite.id)}"
       aria-label="Footnote {ctx.footnote(segment.cite)}: {segment.cite.title}"
       data-testid="answer-cite"
       data-id={segment.cite.id}

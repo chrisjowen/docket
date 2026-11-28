@@ -27,7 +27,7 @@ test.beforeAll(async ({ browser }) => {
 /** Creates a workspace whose ontology is the fixture's entities.yaml, and loads the 12 fixture documents into it. */
 async function platformWorkspace(page: Page, name: string): Promise<string> {
   const ws = name.toLowerCase()
-  await page.goto(`/o/${slug}/workspaces/new`)
+  await page.goto(`/a/${slug}/dockets/new`)
   await page.getByLabel('Name').fill(name)
   await page.getByText('An entities.yaml file').click()
   await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({
@@ -36,15 +36,15 @@ async function platformWorkspace(page: Page, name: string): Promise<string> {
     buffer: Buffer.from(ontology),
   })
   await page.getByRole('button', { name: 'Create docket' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${slug}/w/${ws}/ontology$`))
+  await expect(page).toHaveURL(new RegExp(`/a/${slug}/d/${ws}/ontology$`))
   await expect(page.getByTestId('ontology-status')).toContainText('v1 is published')
 
-  await page.goto(`/o/${slug}/w/${ws}/documents`)
+  await page.goto(`/a/${slug}/d/${ws}/documents`)
   await page.locator('input[name="files"]').setInputFiles(documents)
   await page.getByRole('button', { name: 'Import', exact: true }).click()
   await expect(page.getByText('Wrote 12 documents.')).toBeVisible()
   await expect(page.getByTestId('findings')).toHaveText('0 with findings')
-  return `/o/${slug}/w/${ws}`
+  return `/a/${slug}/d/${ws}`
 }
 
 /**
@@ -118,7 +118,7 @@ test('G4: a breaking ontology change is shown with its diagnostics and blocked u
   await expect(pod.locator('td').nth(3)).toHaveText('2')
 
   // Every step is in the org's audit log.
-  await page.goto(`/o/${slug}/audit`)
+  await page.goto(`/a/${slug}/audit`)
   for (const action of ['workspace.create', 'documents.import', 'ontology.draft.create', 'ontology.publish']) {
     await expect(page.getByRole('cell', { name: action, exact: true }).first()).toBeVisible()
   }
@@ -161,11 +161,11 @@ test('a narrowing change needs "publish anyway", and a rollback publishes the ol
 
 test('the YAML exported after an import equals the imported file, apart from the header comment', async ({ page }) => {
   await signIn(page, 'alice')
-  await page.goto(`/o/${slug}/workspaces/new`)
+  await page.goto(`/a/${slug}/dockets/new`)
   await page.getByLabel('Name').fill('Blank start')
   await page.getByText('Blank', { exact: true }).click()
   await page.getByRole('button', { name: 'Create docket' }).click()
-  const ws = `/o/${slug}/w/blank-start`
+  const ws = `/a/${slug}/d/blank-start`
   await expect(page).toHaveURL(`${ws}/ontology`)
 
   // Import makes a draft; publishing it runs the same checks.
@@ -200,10 +200,10 @@ test('a writer proposes drafts but cannot publish them', async ({ browser }) => 
   const suffix = unique()
   const alice = await (await browser.newContext()).newPage()
   await signIn(alice, 'alice')
-  await alice.goto(`/o/${slug}/workspaces/new`)
+  await alice.goto(`/a/${slug}/dockets/new`)
   await alice.getByLabel('Name').fill('Roles')
   await alice.getByRole('button', { name: 'Create docket' }).click()
-  await alice.goto(`/o/${slug}/members`)
+  await alice.goto(`/a/${slug}/members`)
   const erin = `erin${suffix}`
   await alice.getByLabel('GitHub login or email').fill(`@${erin}`)
   await alice.getByRole('button', { name: 'Send invite' }).click()
@@ -211,7 +211,7 @@ test('a writer proposes drafts but cannot publish them', async ({ browser }) => 
   const page = await (await browser.newContext()).newPage()
   await signIn(page, erin)
   await page.getByRole('button', { name: /^Accept and join Ontology / }).click()
-  await page.goto(`/o/${slug}/w/roles/ontology`)
+  await page.goto(`/a/${slug}/d/roles/ontology`)
   await page.getByRole('button', { name: 'Start a draft' }).click()
   await page.getByLabel('New type name').fill('cost-centre')
   await page.getByRole('button', { name: 'Add type' }).click()
@@ -223,7 +223,7 @@ test('a writer proposes drafts but cannot publish them', async ({ browser }) => 
 
   // Around the UI: the server refuses the publish.
   const draft = new URL(page.url()).searchParams.get('draft') ?? ''
-  const refused = await page.request.post(`/o/${slug}/w/roles/ontology?/publish`, {
+  const refused = await page.request.post(`/a/${slug}/d/roles/ontology?/publish`, {
     form: { csrf: await page.locator('input[name="csrf"]').first().inputValue(), draft, expectedHead: '1' },
     headers: { origin: new URL(page.url()).origin, accept: 'text/html' },
     maxRedirects: 0,
@@ -231,7 +231,7 @@ test('a writer proposes drafts but cannot publish them', async ({ browser }) => 
   expect(refused.status()).toBe(403)
 
   // The owner sees the draft and publishes it.
-  await alice.goto(`/o/${slug}/w/roles/ontology`)
+  await alice.goto(`/a/${slug}/d/roles/ontology`)
   await alice.getByRole('link', { name: /Draft from the head/ }).click()
   await expect(alice.getByTestId('classification')).toHaveText('safe')
   await alice.getByRole('button', { name: 'Publish v2' }).click()

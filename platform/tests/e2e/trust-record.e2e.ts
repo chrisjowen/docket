@@ -51,7 +51,7 @@ test.describe.configure({ mode: 'serial' })
 let page: Page
 let org = ''
 let token = ''
-const base = () => `/o/${org}/w/platform`
+const base = () => `/a/${org}/d/platform`
 
 async function call(request: APIRequestContext, name: string, args: Record<string, unknown>) {
   const response = await mcp(request, `/mcp/${org}/platform`, token, 'tools/call', { name, arguments: args })
@@ -67,7 +67,7 @@ test.beforeAll(async ({ browser, request }) => {
   page = await (await browser.newContext()).newPage()
   await signIn(page, 'alice')
   org = await createOrg(page, `Record ${unique()}`)
-  await page.goto(`/o/${org}/workspaces/new`)
+  await page.goto(`/a/${org}/dockets/new`)
   await page.getByLabel('Name').fill('Platform')
   await page.getByText('An entities.yaml file').click()
   await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({ name: 'entities.yaml', mimeType: 'text/yaml', buffer: Buffer.from(ONTOLOGY) })

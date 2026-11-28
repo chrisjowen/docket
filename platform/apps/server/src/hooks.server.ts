@@ -7,6 +7,7 @@ import { rateLimitMessage, signInLimits } from '@docket/platform-limits'
 import { isUserAllowlisted, userById } from '@docket/platform-tenancy'
 import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit'
 
+import { legacyRedirect } from '$lib/server/legacy-paths'
 import { observeRequest } from '$lib/server/metrics'
 import { withFrameAncestors } from '$lib/server/preview'
 import { clientAddress, recordStandalone } from '$lib/server/request'
@@ -85,6 +86,9 @@ const route: Handle = async ({ event, resolve }) => {
     return new Response('The request body is too large.', { status: 413, headers: { 'content-type': 'text/plain; charset=utf-8' } })
   }
   if (PROBES.has(event.url.pathname)) return resolve(event)
+  // An old page address (`/o/{org}/...`, `/o/{org}/w/{ws}/...`) moved to `/a/{acct}/...` and `/a/{acct}/d/{docket}/...`.
+  const moved = legacyRedirect(event.url)
+  if (moved) return moved
 
   let runtime
   try {

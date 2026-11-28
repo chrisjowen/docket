@@ -12,9 +12,9 @@ import type { Runtime } from './runtime'
 
 let runtime: Runtime
 vi.mock('$lib/server/runtime', () => ({ getRuntime: () => runtime }))
-const { load: orgLayout } = await import('../../routes/o/[org]/+layout.server')
-const { load: casebook } = await import('../../routes/o/[org]/+page.server')
-const { load: docketLayout } = await import('../../routes/o/[org]/w/[ws]/+layout.server')
+const { load: orgLayout } = await import('../../routes/a/[org]/+layout.server')
+const { load: casebook } = await import('../../routes/a/[org]/+page.server')
+const { load: docketLayout } = await import('../../routes/a/[org]/d/[ws]/+layout.server')
 const { GET: proposalsApi } = await import('../../routes/api/o/[org]/w/[ws]/proposals/+server')
 const { inWorkspace } = await import('./workspace')
 const { orgAccess } = await import('./request')
@@ -45,7 +45,7 @@ describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
     )
 
   function event(name: string, ws?: string): RequestEvent {
-    const path = ws ? `/o/${slug}/w/${ws}` : `/o/${slug}`
+    const path = ws ? `/a/${slug}/d/${ws}` : `/a/${slug}`
     const url = new URL(`https://docket.example${path}`)
     return {
       params: { org: slug, ...(ws ? { ws } : {}) },

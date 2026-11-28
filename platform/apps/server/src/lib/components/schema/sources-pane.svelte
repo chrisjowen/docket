@@ -321,7 +321,7 @@
             {/each}
           </tbody>
         </table>
-        <p class="muted small foot">Set once per org, by whoever may change its settings, and attested to every workspace's policies. Changing someone's role scores again everything they are the source of. Service accounts act for the person shown above them; change that on <a href={resolve('/o/[org]/members', { org })}>Members &amp; roles</a>.</p>
+        <p class="muted small foot">Set once per account, by whoever may change its settings, and attested to every docket's policies. Changing someone's role scores again everything they are the source of. System accounts are shown under their own names; their access is on <a href={resolve('/a/[org]/members', { org })}>Users</a>.</p>
       {:else if connectionAttributes.length || registryAttributes.length}
         {#if connectionAttributes.length}
           <h3 class="sec">Connected repositories</h3>

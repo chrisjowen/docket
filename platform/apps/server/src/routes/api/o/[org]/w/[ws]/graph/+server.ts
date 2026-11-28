@@ -18,7 +18,7 @@ export const GET: RequestHandler = async (event) =>
       event,
       async ({ access, workspace, ctx }) => {
         authorise(access, 'read')
-        return workspaceGraph(ctx, workspace, { root: `/o/${access.org.slug}/w/${workspace.slug}` })
+        return workspaceGraph(ctx, workspace, { root: `/a/${access.org.slug}/d/${workspace.slug}` })
       },
       { api: true },
     ),

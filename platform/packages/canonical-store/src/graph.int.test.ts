@@ -58,11 +58,11 @@ describe.skipIf(!TEST_PG_URL)('workspaceGraph', () => {
   afterAll(() => org?.drop())
 
   it('shows the acme-platform example exactly as docket open does', async () => {
-    const cloud = await org.withOrg((ctx) => workspaceGraph(ctx, workspace, { root: '/o/acme/w/acme' }))
+    const cloud = await org.withOrg((ctx) => workspaceGraph(ctx, workspace, { root: '/a/acme/d/acme' }))
     const local = await readGraph(ACME)
     expect(local.entities.length).toBe(21)
     expect(comparable(cloud)).toEqual(comparable(local))
-    expect(cloud.project).toEqual({ name: 'Acme platform', root: '/o/acme/w/acme' })
+    expect(cloud.project).toEqual({ name: 'Acme platform', root: '/a/acme/d/acme' })
   })
 
   it('classifies every record and link into the ontology’s bands, with a line per source', async () => {

@@ -29,7 +29,7 @@ export class WorkspaceError extends Error {
   }
 }
 
-/** A workspace's address inside its org (`/o/{org}/w/{slug}`): the org slug's shape, with `new` kept for the create page. */
+/** A workspace's address inside its org (`/a/{acct}/d/{slug}`): the org slug's shape, with `new` kept for the create page. */
 export function workspaceSlugProblem(slug: string): string | null {
   if (!SLUG.test(slug)) return 'Use 2-40 lowercase letters, digits or hyphens, starting and ending with a letter or digit.'
   if (slug.includes('--')) return 'Use single hyphens only.'

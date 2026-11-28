@@ -170,8 +170,8 @@ export async function handleMcp(event: RequestEvent): Promise<Response> {
   const tools = cloudTools({
     orgId: principal.orgId,
     workspaceId: principal.workspaceId,
-    viewer: new URL(`/o/${orgSlug}/w/${workspaceSlug}/graph`, runtime.origin).toString(),
-    ontologyHistory: new URL(`/o/${orgSlug}/w/${workspaceSlug}/ontology/history`, runtime.origin).toString(),
+    viewer: new URL(`/a/${orgSlug}/d/${workspaceSlug}/graph`, runtime.origin).toString(),
+    ontologyHistory: new URL(`/a/${orgSlug}/d/${workspaceSlug}/ontology/history`, runtime.origin).toString(),
     inTenant,
     query: runtime.query,
     assertWithinCap: async () =>

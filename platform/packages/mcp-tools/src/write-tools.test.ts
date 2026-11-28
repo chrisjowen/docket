@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CloudToolContext } from './context.js'
 import { cloudTools, isWriteTool, registryFor, writeTools } from './index.js'
 
-const VIEWER = 'https://docket.test/o/acme/w/platform/graph'
-const HISTORY = 'https://docket.test/o/acme/w/platform/ontology/history'
+const VIEWER = 'https://docket.test/a/acme/d/platform/graph'
+const HISTORY = 'https://docket.test/a/acme/d/platform/ontology/history'
 
 function stubContext(overrides: Partial<CloudToolContext> = {}): CloudToolContext {
   return {

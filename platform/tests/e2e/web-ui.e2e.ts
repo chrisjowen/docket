@@ -30,7 +30,7 @@ test.beforeAll(async ({ browser }) => {
   org = await createOrg(alice, `Web UI ${unique()}`)
   await acmeWorkspace(alice, org)
   // Bob joins, so there is someone to give access to.
-  await alice.goto(`/o/${org}/members`)
+  await alice.goto(`/a/${org}/members`)
   await alice.getByLabel('GitHub login or email').fill(`@${bob}`)
   await alice.locator('form[action="?/invite"] select[name="role"]').selectOption('reader')
   await alice.getByRole('button', { name: 'Send invite' }).click()
@@ -62,19 +62,19 @@ async function giveAndTakeBack(page: Page) {
 
 test('the server serves the web UI for its pages, and the Access tab works through the API', async () => {
   // The page is the web UI's: its files under /_ui/, and nothing rendered on the server.
-  const page = await alice.request.get(`/o/${org}/w/acme/access`)
+  const page = await alice.request.get(`/a/${org}/d/acme/access`)
   expect(page.status()).toBe(200)
   expect(await page.text()).toContain('/_ui/immutable/')
-  expect(manifest.routes).toContain('/o/[org]/w/[ws]/access')
+  expect(manifest.routes).toContain('/a/[org]/d/[ws]/access')
   expect((await alice.request.get('/_ui/manifest.json')).status()).toBe(200)
-  expect((await alice.request.post(`/o/${org}/w/acme/access`, { data: {} })).status()).toBe(405)
+  expect((await alice.request.post(`/a/${org}/d/acme/access`, { data: {} })).status()).toBe(405)
 
   const calls: string[] = []
   alice.on('request', (request) => {
     const path = new URL(request.url()).pathname
     if (path.startsWith('/api/')) calls.push(`${request.method()} ${path.replace(/\/grants\/[^/]+$/, '/grants/*')}`)
   })
-  await alice.goto(`/o/${org}/w/acme/access`)
+  await alice.goto(`/a/${org}/d/acme/access`)
   await expect(alice.getByRole('heading', { name: 'Access', level: 1 })).toBeVisible()
   await expect(alice.getByTestId('your-access')).toContainText('Owner')
   // The shell and the docket's frame are the server's own, filled from the API.
@@ -99,13 +99,13 @@ test('the server serves the web UI for its pages, and the Access tab works throu
 
   // Its links to the pages the server still renders lead there.
   await alice.getByRole('navigation', { name: 'Docket' }).getByRole('link', { name: 'Overview' }).click()
-  await expect(alice).toHaveURL(`/o/${org}/w/acme/overview`)
+  await expect(alice).toHaveURL(`/a/${org}/d/acme/overview`)
 })
 
 test('the Access tab works on a phone', async ({ browser }) => {
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, storageState: await alice.context().storageState() })
   const page = await phone.newPage()
-  await page.goto(`/o/${org}/w/acme/access`)
+  await page.goto(`/a/${org}/d/acme/access`)
   await expect(page.getByTestId('your-access')).toContainText('Owner')
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   await giveAndTakeBack(page)
@@ -125,7 +125,7 @@ test('the same build runs on its own host, passing /api through to the server', 
   // signed in here too; every API call goes through this host.
   const context = await browser.newContext({ storageState: await alice.context().storageState() })
   const page = await context.newPage()
-  await page.goto(`${host}/o/${org}/w/acme/access`)
+  await page.goto(`${host}/a/${org}/d/acme/access`)
   await expect(page.getByTestId('your-access')).toContainText('Owner')
   await giveAndTakeBack(page)
   expect((await fetch(`${host}/api/v1/openapi.json`)).status).toBe(200)

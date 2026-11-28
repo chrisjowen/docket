@@ -186,6 +186,17 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   its shared Qdrant collection. A migration test checks every docket resolves
   to the same models, key and stores before and after.
 
+### Onboarding, invite links and new addresses (multi-tenant server)
+
+- An account's pages are at `/a/{account}` and a docket's at
+  `/a/{account}/d/{docket}`. Every old page address (`/o/{org}/…` and
+  `/o/{org}/w/{workspace}/…`) redirects permanently to its new one, query
+  and all, and a form posted to an old address is posted again to the new
+  one. The CLI's `/api/o/{org}/…`, the org admin API's `/api/admin/o/{org}/…`
+  and every MCP address are unchanged.
+- The app says account where it said organisation or casebook, Home for an
+  account's own page, and Chat for asking the record.
+
 ## 0.16.0
 
 ### Confidence comes from policies about sources

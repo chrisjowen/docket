@@ -30,14 +30,14 @@ vi.mock('@docket/platform-auth', async (actual) => ({
   },
 }))
 const { handleMcp } = await import('./mcp')
-const { load: orgLayout } = await import('../../routes/o/[org]/+layout.server')
-const { load: docketLayout } = await import('../../routes/o/[org]/w/[ws]/+layout.server')
-const { GET: commandSearch } = await import('../../routes/o/[org]/search/+server')
+const { load: orgLayout } = await import('../../routes/a/[org]/+layout.server')
+const { load: docketLayout } = await import('../../routes/a/[org]/d/[ws]/+layout.server')
+const { GET: commandSearch } = await import('../../routes/a/[org]/search/+server')
 const consentPage = await import('../../routes/oauth/consent/[uid]/+page.server')
 
 const ROUTES = join(import.meta.dirname, '..', '..', 'routes')
 /** Every route that works on one docket, for a signed-in member or a bearer token: the docket is the `[ws]` in its path. */
-const DOCKET_TREES = [join(ROUTES, 'o', '[org]', 'w', '[ws]'), join(ROUTES, 'api', 'o', '[org]', 'w', '[ws]')]
+const DOCKET_TREES = [join(ROUTES, 'a', '[org]', 'd', '[ws]'), join(ROUTES, 'api', 'o', '[org]', 'w', '[ws]')]
 const HANDLERS = ['load', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 const MARK = { alpha: 'ALPHA-MARK', beta: 'BETA-MARK', elsewhere: 'OTHER-ACCOUNT-MARK' } as const
 const EVERY_SCOPE: Scope[] = ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose']
@@ -222,7 +222,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
       options.body === 'json'
         ? { body: JSON.stringify(WELL_FORMED), headers: { 'content-type': 'application/json' } }
         : { body: options.body === 'form' ? wellFormedForm() : new FormData() }
-    const url = new URL(`https://docket.example/o/${orgSlug}${ws ? `/w/${ws}` : ''}${options.path ?? ''}`)
+    const url = new URL(`https://docket.example/a/${orgSlug}${ws ? `/d/${ws}` : ''}${options.path ?? ''}`)
     const event: Record<string, unknown> = {
       params: { org: orgSlug, ...(ws ? { ws } : {}), ...options.params },
       locals: {
@@ -364,11 +364,11 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
       expect(handlers.length).toBeGreaterThan(40)
       expect(handlers.map((handler) => `${handler.route} ${handler.name}`)).toEqual(
         expect.arrayContaining([
-          'o/[org]/w/[ws]/+layout.server.ts load',
-          'o/[org]/w/[ws]/documents/[...path]/+page.server.ts load',
-          'o/[org]/w/[ws]/proposals/[id]/+page.server.ts actions.accept',
-          'o/[org]/w/[ws]/settings/+page.server.ts load',
-          'o/[org]/w/[ws]/mcp/+page.server.ts load',
+          'a/[org]/d/[ws]/+layout.server.ts load',
+          'a/[org]/d/[ws]/documents/[...path]/+page.server.ts load',
+          'a/[org]/d/[ws]/proposals/[id]/+page.server.ts actions.accept',
+          'a/[org]/d/[ws]/settings/+page.server.ts load',
+          'a/[org]/d/[ws]/mcp/+page.server.ts load',
           'api/o/[org]/w/[ws]/proposals/[id]/+server.ts POST',
         ]),
       )

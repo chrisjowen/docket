@@ -25,17 +25,17 @@ async function fixtureWorkspace(page: Page, org: string): Promise<string> {
       .map((entry) => ({ name: entry.name, mimeType: 'text/markdown', buffer: readFileSync(join(entry.parentPath, entry.name)) })),
     ...Object.entries(EXTRA).map(([name, raw]) => ({ name, mimeType: 'text/markdown', buffer: Buffer.from(raw) })),
   ]
-  await page.goto(`/o/${org}/workspaces/new`)
+  await page.goto(`/a/${org}/dockets/new`)
   await page.getByLabel('Name').fill('Platform')
   await page.getByText('An entities.yaml file').click()
   await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({ name: 'entities.yaml', mimeType: 'text/yaml', buffer: readFileSync(join(FIXTURE, 'entities.yaml')) })
   await page.getByRole('button', { name: 'Create docket' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${org}/w/platform/ontology$`))
-  await page.goto(`/o/${org}/w/platform/documents`)
+  await expect(page).toHaveURL(new RegExp(`/a/${org}/d/platform/ontology$`))
+  await page.goto(`/a/${org}/d/platform/documents`)
   await page.locator('input[name="files"]').setInputFiles(documents)
   await page.getByRole('button', { name: 'Import', exact: true }).click()
   await expect(page.getByText('Wrote 14 documents.')).toBeVisible()
-  return `/o/${org}/w/platform`
+  return `/a/${org}/d/platform`
 }
 
 test('background enrichment is off until an admin turns it on, which adds what it writes with to the ontology', async ({ page }) => {

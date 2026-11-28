@@ -47,15 +47,15 @@
     <span class="docket-no" data-testid="docket-no">{docketNo}</span>
     <span class="label">Opened {opened}</span>
     <span class="label" aria-hidden="true">·</span>
-    <a class="label" href={resolve('/o/[org]/w/[ws]/ontology', ws)} data-testid="head">
+    <a class="label" href={resolve('/a/[org]/d/[ws]/ontology', ws)} data-testid="head">
       {data.workspace.head ? `Schema v${data.workspace.head.number}` : 'No schema yet'}
     </a>
     {#if data.workspace.drafts > 0}
       <span class="label" aria-hidden="true">·</span>
-      <a class="label" href={resolve('/o/[org]/w/[ws]/ontology', ws)}>{data.workspace.drafts} open {data.workspace.drafts === 1 ? 'draft' : 'drafts'}</a>
+      <a class="label" href={resolve('/a/[org]/d/[ws]/ontology', ws)}>{data.workspace.drafts} open {data.workspace.drafts === 1 ? 'draft' : 'drafts'}</a>
     {/if}
     <span class="label" aria-hidden="true">·</span>
-    <a class="label" href={resolve('/o/[org]/w/[ws]/documents', ws)} data-testid="documents">
+    <a class="label" href={resolve('/a/[org]/d/[ws]/documents', ws)} data-testid="documents">
       {data.workspace.documents} {data.workspace.documents === 1 ? 'document' : 'documents'}
     </a>
   </p>

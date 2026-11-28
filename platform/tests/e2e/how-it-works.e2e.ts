@@ -31,13 +31,13 @@ test.beforeAll(async ({ browser }) => {
   await expect(owner.getByText(`Invited @${viewer} as Reader on`)).toBeVisible()
   await acmeWorkspace(owner, org)
   if (WORKER) {
-    await owner.goto(`/o/${org}/w/acme/graph`)
+    await owner.goto(`/a/${org}/d/acme/graph`)
     await expect(owner.getByTestId('index-status')).toHaveText('Index up to date', { timeout: 60_000 })
   }
   member = await (await browser.newContext()).newPage()
   await signIn(member, viewer)
   await member.getByRole('button', { name: `Accept and join Sync ${suffix}` }).click()
-  await expect(member).toHaveURL(new RegExp(`/o/${org}$`))
+  await expect(member).toHaveURL(new RegExp(`/a/${org}$`))
 })
 
 test.afterAll(async () => {
@@ -46,17 +46,17 @@ test.afterAll(async () => {
 })
 
 test('Settings has General, Sync and Queries, under the workspace’s Settings tab', async () => {
-  await owner.goto(`/o/${org}/w/acme/settings`)
+  await owner.goto(`/a/${org}/d/acme/settings`)
   const tabs = owner.getByRole('navigation', { name: 'Settings' })
   await expect(tabs.getByRole('link')).toHaveText(['General', 'Sync', 'Queries'])
   await tabs.getByRole('link', { name: 'Sync' }).click()
-  await expect(owner).toHaveURL(new RegExp(`/o/${org}/w/acme/settings/sync$`))
+  await expect(owner).toHaveURL(new RegExp(`/a/${org}/d/acme/settings/sync$`))
   await expect(owner.getByRole('navigation', { name: 'Docket' }).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
 })
 
 test('Sync shows each store and the passes that projected the documents, by id', async () => {
   test.skip(!WORKER, 'needs the worker and its stores')
-  await owner.goto(`/o/${org}/w/acme/settings/sync`)
+  await owner.goto(`/a/${org}/d/acme/settings/sync`)
   await expect(owner.getByTestId('store-documents')).toContainText('documents')
   for (const store of ['neo4j', 'mem0']) {
     await expect(owner.getByTestId(`store-${store}`)).toHaveAttribute('data-state', 'current')
@@ -77,7 +77,7 @@ test('Queries replays a search step by step: the stores asked, the template quer
   expect(response.status()).toBe(200)
 
   // An owner sees every question asked of the workspace.
-  await owner.goto(`/o/${org}/w/acme/settings/queries`)
+  await owner.goto(`/a/${org}/d/acme/settings/queries`)
   await expect(owner.getByTestId('queries-whose')).toContainText('Every question anyone asked')
   const trace = owner.getByTestId('query-trace').filter({ hasText: question })
   await expect(trace).toHaveAttribute('data-tool', 'search')
@@ -101,27 +101,27 @@ test("a viewer sees only the questions they asked; the owner sees theirs and the
     expect(response.status()).toBe(200)
   }
 
-  await member.goto(`/o/${org}/w/acme/settings/queries`)
+  await member.goto(`/a/${org}/d/acme/settings/queries`)
   await expect(member.getByTestId('queries-whose')).toContainText('Only the questions you asked')
   await expect(member.getByTestId('query-trace').filter({ hasText: viewersQuestion })).toHaveCount(1)
   await expect(member.getByTestId('query-trace').filter({ hasText: ownersQuestion })).toHaveCount(0)
 
-  await owner.goto(`/o/${org}/w/acme/settings/queries`)
+  await owner.goto(`/a/${org}/d/acme/settings/queries`)
   await expect(owner.getByTestId('query-trace').filter({ hasText: viewersQuestion })).toHaveCount(1)
   await expect(owner.getByTestId('query-trace').filter({ hasText: ownersQuestion })).toHaveCount(1)
 })
 
 test('only an owner may ask for a re-check: the button, and the action around it', async () => {
-  await member.goto(`/o/${org}/w/acme/settings/sync`)
+  await member.goto(`/a/${org}/d/acme/settings/sync`)
   await expect(member.getByTestId('recheck')).toHaveCount(0)
   await expect(member.getByText('Only owners can ask for a re-check.')).toBeVisible()
-  const refused = await member.request.post(`/o/${org}/w/acme/settings/sync?/recheck`, {
+  const refused = await member.request.post(`/a/${org}/d/acme/settings/sync?/recheck`, {
     form: { csrf: await csrfOf(member) },
     headers: { origin: new URL(member.url()).origin },
   })
   expect(refused.status()).toBe(403)
 
-  await owner.goto(`/o/${org}/w/acme/settings/sync`)
+  await owner.goto(`/a/${org}/d/acme/settings/sync`)
   await owner.getByTestId('recheck').click()
   await expect(owner.getByRole('status').filter({ hasText: 'Re-check requested' })).toBeVisible()
   if (WORKER) {

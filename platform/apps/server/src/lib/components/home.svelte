@@ -59,16 +59,16 @@
 
   <section>
     <div class="row">
-      <h2>Your organisations</h2>
+      <h2>Your accounts</h2>
       {#if data.user?.allowlisted}
-        <a class="button primary" href={resolve('/orgs/new')}><Plus size={16} aria-hidden="true" /> New organisation</a>
+        <a class="button primary" href={resolve('/orgs/new')}><Plus size={16} aria-hidden="true" /> New account</a>
       {/if}
     </div>
     {#if data.orgs.length}
       <ul class="cards">
         {#each data.orgs as org (org.slug)}
           <li>
-            <a class="card org" href={resolve('/o/[org]', { org: org.slug })}>
+            <a class="card org" href={resolve('/a/[org]', { org: org.slug })}>
               <span class="org-mark">{org.name.slice(0, 2).toUpperCase()}</span>
               <strong class="grow">{org.name}</strong>
               <span class="badge" class:owner={org.role === 'owner'}>{org.role}</span>
@@ -77,9 +77,9 @@
         {/each}
       </ul>
     {:else if data.user?.allowlisted}
-      <p class="muted">You are not in an organisation yet. Create one for your team, then invite them.</p>
+      <p class="muted">You are not in an account yet. Create one for your team, then invite them.</p>
     {:else}
-      <p class="muted">You are not in an organisation yet. Ask a team admin to invite you.</p>
+      <p class="muted">You are not in an account yet. Ask a team admin to invite you.</p>
     {/if}
   </section>
 </div>

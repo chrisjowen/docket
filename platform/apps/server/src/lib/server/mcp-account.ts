@@ -291,8 +291,8 @@ export async function handleAccountMcp(event: RequestEvent): Promise<Response> {
     return cloudTools({
       orgId: principal.orgId,
       workspaceId: docket.id,
-      viewer: new URL(`/o/${orgSlug}/w/${docket.slug}/graph`, runtime.origin).toString(),
-      ontologyHistory: new URL(`/o/${orgSlug}/w/${docket.slug}/ontology/history`, runtime.origin).toString(),
+      viewer: new URL(`/a/${orgSlug}/d/${docket.slug}/graph`, runtime.origin).toString(),
+      ontologyHistory: new URL(`/a/${orgSlug}/d/${docket.slug}/ontology/history`, runtime.origin).toString(),
       inTenant,
       query: runtime.query,
       assertWithinCap: async () =>

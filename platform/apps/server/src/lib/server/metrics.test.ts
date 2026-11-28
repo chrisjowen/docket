@@ -15,7 +15,7 @@ describe('the metrics endpoint', () => {
 
   it('serves request timings, rate-limit refusals and readiness in the Prometheus text format', async () => {
     bindMetrics({ router: null, ready: () => true })
-    observeRequest('GET', '/o/[org]/w/[ws]', 200, 0.12)
+    observeRequest('GET', '/a/[org]/d/[ws]', 200, 0.12)
     observeRequest('GET', null, 404, 0.01)
     countRefusal({ allowed: false, limit: { scope: 'token', key: 'k', rule: perMinute(120) }, retryAfterSeconds: 1, cached: false })
 
@@ -23,7 +23,7 @@ describe('the metrics endpoint', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('text/plain')
     const text = await response.text()
-    expect(text).toContain('docket_http_request_duration_seconds_count{method="GET",route="/o/[org]/w/[ws]",status="200"} 1')
+    expect(text).toContain('docket_http_request_duration_seconds_count{method="GET",route="/a/[org]/d/[ws]",status="200"} 1')
     expect(text).toContain('route="unmatched",status="404"')
     expect(text).toContain('docket_rate_limited_total{scope="token",what="calls"} 1')
     expect(text).toContain('docket_ready 1')

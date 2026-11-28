@@ -8,48 +8,48 @@ const workspace = { slug: 'platform', name: 'Platform' }
 
 describe('breadcrumbs', () => {
   it('name the casebook on its own page, and lead back to it from an org page', () => {
-    expect(crumbsFor({ routeId: '/o/[org]', pathname: '/o/acme', org })).toEqual([{ label: 'Acme casebook' }])
-    expect(crumbsFor({ routeId: '/o/[org]/members', pathname: '/o/acme/members', org })).toEqual([
-      { label: 'Acme casebook', href: '/o/acme' },
+    expect(crumbsFor({ routeId: '/a/[org]', pathname: '/a/acme', org })).toEqual([{ label: 'Acme' }])
+    expect(crumbsFor({ routeId: '/a/[org]/members', pathname: '/a/acme/members', org })).toEqual([
+      { label: 'Acme', href: '/a/acme' },
       { label: 'Users' },
     ])
   })
 
   it("end on the docket on its overview, and on the section elsewhere", () => {
-    expect(crumbsFor({ routeId: '/o/[org]/w/[ws]/overview', pathname: '/o/acme/w/platform/overview', org, workspace })).toEqual([
-      { label: 'Acme', href: '/o/acme' },
+    expect(crumbsFor({ routeId: '/a/[org]/d/[ws]/overview', pathname: '/a/acme/d/platform/overview', org, workspace })).toEqual([
+      { label: 'Acme', href: '/a/acme' },
       { label: 'Platform' },
     ])
-    expect(crumbsFor({ routeId: '/o/[org]/w/[ws]/graph', pathname: '/o/acme/w/platform/graph', org, workspace })).toEqual([
-      { label: 'Acme', href: '/o/acme' },
-      { label: 'Platform', href: '/o/acme/w/platform/overview' },
+    expect(crumbsFor({ routeId: '/a/[org]/d/[ws]/graph', pathname: '/a/acme/d/platform/graph', org, workspace })).toEqual([
+      { label: 'Acme', href: '/a/acme' },
+      { label: 'Platform', href: '/a/acme/d/platform/overview' },
       { label: 'Record' },
     ])
   })
 
   it("link a nested page's section", () => {
-    expect(crumbsFor({ routeId: '/o/[org]/w/[ws]/ontology/history', pathname: '/o/acme/w/platform/ontology/history', org, workspace }).at(-1)).toEqual({
+    expect(crumbsFor({ routeId: '/a/[org]/d/[ws]/ontology/history', pathname: '/a/acme/d/platform/ontology/history', org, workspace }).at(-1)).toEqual({
       label: 'Schema',
-      href: '/o/acme/w/platform/ontology',
+      href: '/a/acme/d/platform/ontology',
     })
   })
 
   it("lead from a space's pages back to the space", () => {
     const space = { slug: 'engineering', name: 'Engineering' }
-    expect(crumbsFor({ routeId: '/o/[org]/s/[space]', pathname: '/o/acme/s/engineering', org, space })).toEqual([
-      { label: 'Acme', href: '/o/acme' },
+    expect(crumbsFor({ routeId: '/a/[org]/s/[space]', pathname: '/a/acme/s/engineering', org, space })).toEqual([
+      { label: 'Acme', href: '/a/acme' },
       { label: 'Engineering' },
     ])
-    expect(crumbsFor({ routeId: '/o/[org]/s/[space]/new', pathname: '/o/acme/s/engineering/new', org, space })).toEqual([
-      { label: 'Acme', href: '/o/acme' },
-      { label: 'Engineering', href: '/o/acme/s/engineering' },
+    expect(crumbsFor({ routeId: '/a/[org]/s/[space]/new', pathname: '/a/acme/s/engineering/new', org, space })).toEqual([
+      { label: 'Acme', href: '/a/acme' },
+      { label: 'Engineering', href: '/a/acme/s/engineering' },
       { label: 'New docket' },
     ])
-    expect(crumbsFor({ routeId: '/o/[org]/spaces/new', pathname: '/o/acme/spaces/new', org }).at(-1)).toEqual({ label: 'New space' })
+    expect(crumbsFor({ routeId: '/a/[org]/spaces/new', pathname: '/a/acme/spaces/new', org }).at(-1)).toEqual({ label: 'New space' })
   })
 
   it('name pages outside a casebook', () => {
-    expect(crumbsFor({ routeId: '/orgs/new', pathname: '/orgs/new' })).toEqual([{ label: 'New organisation' }])
+    expect(crumbsFor({ routeId: '/orgs/new', pathname: '/orgs/new' })).toEqual([{ label: 'New account' }])
     expect(crumbsFor({ routeId: null, pathname: '/nowhere' })).toEqual([{ label: 'Docket Cloud' }])
   })
 })

@@ -61,7 +61,7 @@
       class="src"
       class:uncited={no === null}
       class:on={lit === keyOf(source.id)}
-      href="{resolve('/o/[org]/w/[ws]/graph', { org, ws: part.workspace.slug })}?focus={encodeURIComponent(source.id)}"
+      href="{resolve('/a/[org]/d/[ws]/graph', { org, ws: part.workspace.slug })}?focus={encodeURIComponent(source.id)}"
       onmouseenter={() => (lit = keyOf(source.id))}
       onmouseleave={() => (lit = null)}
       onfocus={() => (lit = keyOf(source.id))}
@@ -100,7 +100,7 @@
                   class:w={fresh}
                   class:on={lit === keyOf(piece.cite)}
                   style="--i: {piece.i}"
-                  href="{resolve('/o/[org]/w/[ws]/graph', { org, ws: part.workspace.slug })}?focus={encodeURIComponent(piece.cite)}"
+                  href="{resolve('/a/[org]/d/[ws]/graph', { org, ws: part.workspace.slug })}?focus={encodeURIComponent(piece.cite)}"
                   aria-label="Footnote {order.indexOf(piece.cite) + 1}: {titleOf(piece.cite)}"
                   onmouseenter={() => (lit = keyOf(piece.cite))}
                   onmouseleave={() => (lit = null)}

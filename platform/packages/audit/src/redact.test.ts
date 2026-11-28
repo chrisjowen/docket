@@ -26,7 +26,7 @@ describe('redactSecrets (§19: no tokens in logs)', () => {
       'audit: chain check passed for 3 log(s)',
       'worker up: projecting into a Neo4j pod per org and Qdrant',
       'process exited with code 1',
-      'GET /o/acme/w/platform/graph?type=service 200',
+      'GET /a/acme/d/platform/graph?type=service 200',
     ]) {
       expect(redactSecrets(line)).toBe(line)
     }

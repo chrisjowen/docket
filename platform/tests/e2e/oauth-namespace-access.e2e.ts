@@ -46,7 +46,7 @@ test('a read-only member’s connection only reads over MCP OAuth, even when the
     const org = await createOrg(owner, `Acme ${suffix}`)
     const ws = await acmeWorkspace(owner, org, 'Platform')
 
-    await owner.goto(`/o/${org}/members`)
+    await owner.goto(`/a/${org}/members`)
     await owner.getByLabel('GitHub login or email').fill(`@${dana}`)
     await owner.locator('form[action="?/invite"] select[name="role"]').selectOption('reader')
     await owner.getByRole('button', { name: 'Send invite' }).click()

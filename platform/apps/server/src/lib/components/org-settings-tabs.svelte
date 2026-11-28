@@ -14,11 +14,11 @@
 
 <nav class="subtabs" aria-label="Settings">
   {#if data.owner}
-    <a href={resolve('/o/[org]/settings', { org })} aria-current={active === 'ai' ? 'page' : undefined}>AI</a>
+    <a href={resolve('/a/[org]/settings', { org })} aria-current={active === 'ai' ? 'page' : undefined}>AI</a>
   {/if}
-  <a href={resolve('/o/[org]/settings/roles', { org })} aria-current={active === 'roles' ? 'page' : undefined}>Roles</a>
+  <a href={resolve('/a/[org]/settings/roles', { org })} aria-current={active === 'roles' ? 'page' : undefined}>Roles</a>
   {#if data.owner || data.managesSystemAccounts}
-    <a href={resolve('/o/[org]/settings/system-accounts', { org })} aria-current={active === 'system-accounts' ? 'page' : undefined}>System accounts</a>
+    <a href={resolve('/a/[org]/settings/system-accounts', { org })} aria-current={active === 'system-accounts' ? 'page' : undefined}>System accounts</a>
   {/if}
 </nav>
 

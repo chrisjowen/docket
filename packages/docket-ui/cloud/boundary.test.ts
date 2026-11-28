@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 import { PLATFORM_LIB, SRC, boundary, refusal } from './boundary.js'
 
-const page = join(SRC, 'routes', 'o', '[org]', 'w', '[ws]', 'access', '+page.svelte')
+const page = join(SRC, 'routes', 'a', '[org]', 'd', '[ws]', 'access', '+page.svelte')
 const shared = join(PLATFORM_LIB, 'components', 'shell', 'app-shell.svelte')
 
 describe("the web UI's build boundary", () => {
@@ -24,7 +24,7 @@ describe("the web UI's build boundary", () => {
     expect(refusal('$lib/server/request', shared)).toMatch(/server's own code/)
     expect(refusal('../server/request', shared, join(PLATFORM_LIB, 'server', 'request.ts'))).toMatch(/server's own code/)
     expect(refusal('./+page.server', page)).toMatch(/server-only module/)
-    expect(refusal('../+layout.server.js', shared, join(PLATFORM_LIB, '..', 'routes', 'o', '[org]', '+layout.server.ts'))).toMatch(/server/)
+    expect(refusal('../+layout.server.js', shared, join(PLATFORM_LIB, '..', 'routes', 'a', '[org]', '+layout.server.ts'))).toMatch(/server/)
   })
 
   it("refuses server-only modules: Node's, SvelteKit's private environment, the server's packages and unknown packages", () => {

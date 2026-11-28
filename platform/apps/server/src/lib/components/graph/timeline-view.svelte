@@ -122,7 +122,7 @@
                   {#if entry.change}
                     Entered by {entry.change.actorLabel} via {CHANNEL_LABELS[entry.change.channel] ?? entry.change.channel}
                     {#if entry.change.outcome !== 'ok'}· <span class="stamp red">{entry.change.outcome}</span>{/if}
-                    · <a href="{resolve('/o/[org]/audit', { org })}?request={encodeURIComponent(entry.change.requestId)}">audit event</a>
+                    · <a href="{resolve('/a/[org]/audit', { org })}?request={encodeURIComponent(entry.change.requestId)}">audit event</a>
                   {:else if entry.evidence}
                     Entered{typeof entry.evidence.observedBy === 'string' ? ` by ${entry.evidence.observedBy}` : ''}{typeof entry.evidence.source === 'string' ? ` via ${entry.evidence.source}` : ''}
                   {:else}

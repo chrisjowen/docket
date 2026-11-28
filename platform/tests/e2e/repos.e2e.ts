@@ -42,13 +42,13 @@ test('a push to a connected repo is synced, and an export opens a PR against it'
 
   await signIn(page, owner)
   const slug = await createOrg(page, `Repos ${unique()}`)
-  await page.goto(`/o/${slug}/workspaces/new`)
+  await page.goto(`/a/${slug}/dockets/new`)
   await page.getByLabel('Name').fill('Platform')
   await page.getByText('An entities.yaml file').click()
   await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({ name: 'entities.yaml', mimeType: 'text/yaml', buffer: Buffer.from(ontology) })
   await page.getByRole('button', { name: 'Create docket' }).click()
   await expect(page.getByTestId('ontology-status')).toContainText('v1 is published')
-  const ws = `/o/${slug}/w/platform`
+  const ws = `/a/${slug}/d/platform`
 
   // Install on GitHub, come back through the setup URL, and prove the account through GitHub sign-in.
   await page.goto(`${ws}/repos`)
@@ -56,7 +56,7 @@ test('a push to a connected repo is synced, and an export opens a PR against it'
   await page.getByRole('link', { name: `Install on ${owner}` }).click()
   await page.getByLabel('Login').fill(owner)
   await page.getByRole('button', { name: 'Authorize' }).click()
-  await expect(page.getByRole('status')).toContainText(`GitHub account ${owner} is linked to this organisation`)
+  await expect(page.getByRole('status')).toContainText(`GitHub account ${owner} is linked to this account`)
 
   // Connect: the first import brings in the 12 documents.
   await page.getByRole('combobox', { name: 'Repo' }).selectOption({ label: `${repo} (private)` })

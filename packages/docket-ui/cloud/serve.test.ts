@@ -11,12 +11,12 @@ import { compatible, routePattern, webUi } from './serve.js'
 
 describe('the web UI as a server serves it', () => {
   it('reads route ids as address patterns', () => {
-    const access = routePattern('/o/[org]/w/[ws]/access')
-    expect(access.test('/o/acme/w/platform/access')).toBe(true)
-    expect(access.test('/o/acme/w/platform/access/')).toBe(true)
-    expect(access.test('/o/acme/w/platform/overview')).toBe(false)
-    expect(access.test('/o/acme/w/platform/access/more')).toBe(false)
-    expect(routePattern('/o/[org]/w/[ws]/documents/[...path]').test('/o/a/w/b/documents/x/y.md')).toBe(true)
+    const access = routePattern('/a/[org]/d/[ws]/access')
+    expect(access.test('/a/acme/d/platform/access')).toBe(true)
+    expect(access.test('/a/acme/d/platform/access/')).toBe(true)
+    expect(access.test('/a/acme/d/platform/overview')).toBe(false)
+    expect(access.test('/a/acme/d/platform/access/more')).toBe(false)
+    expect(routePattern('/a/[org]/d/[ws]/documents/[...path]').test('/a/a/d/b/documents/x/y.md')).toBe(true)
   })
 
   it('fits a UI to an API of the same major version and no older minor', () => {
@@ -40,7 +40,7 @@ describe('the web UI as a server serves it', () => {
       writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Docket</title>')
       writeFileSync(join(dir, 'favicon.svg'), '<svg/>')
       writeFileSync(join(dir, '_ui', 'immutable', 'app.js'), 'export {}')
-      writeFileSync(join(dir, '_ui', 'manifest.json'), JSON.stringify({ name: '@docket/cloud-ui', version: '0.1.0', api: '1.0', routes: ['/o/[org]/w/[ws]/access'] }))
+      writeFileSync(join(dir, '_ui', 'manifest.json'), JSON.stringify({ name: '@docket/cloud-ui', version: '0.1.0', api: '1.0', routes: ['/a/[org]/d/[ws]/access'] }))
       writeFileSync(join(outer, 'secret.txt'), 'not the UI')
       const web = webUi(dir, { frameAncestors: 'http://localhost:4310' })
       if (!web) throw new Error('no UI')
@@ -58,7 +58,7 @@ describe('the web UI as a server serves it', () => {
     })
 
     it("answers the UI's pages with its one page, framed only where allowed", async () => {
-      const response = await fetch(`${base}/o/acme/w/platform/access?tab=1`)
+      const response = await fetch(`${base}/a/acme/d/platform/access?tab=1`)
       expect(response.status).toBe(200)
       expect(response.headers.get('content-type')).toMatch(/text\/html/)
       expect(response.headers.get('content-security-policy')).toBe('frame-ancestors http://localhost:4310')
@@ -82,9 +82,9 @@ describe('the web UI as a server serves it', () => {
     })
 
     it('leaves every other address to the server, and takes only GET on its pages', async () => {
-      expect((await fetch(`${base}/o/acme/w/platform/overview`)).status).toBe(418)
+      expect((await fetch(`${base}/a/acme/d/platform/overview`)).status).toBe(418)
       expect((await fetch(`${base}/api/v1/session`)).status).toBe(418)
-      const post = await fetch(`${base}/o/acme/w/platform/access`, { method: 'POST', body: 'x' })
+      const post = await fetch(`${base}/a/acme/d/platform/access`, { method: 'POST', body: 'x' })
       expect(post.status).toBe(405)
       expect(post.headers.get('allow')).toBe('GET, HEAD')
     })

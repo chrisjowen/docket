@@ -115,7 +115,7 @@
           <p class="muted small origin" style="--i: 1">
             {#if open.document.originRef}<span class="mono">{open.document.originRef}</span> ·{/if}
             first written by {open.document.createdBy} on {when(open.document.createdAt)} ·
-            <a href={resolve('/o/[org]/w/[ws]/documents/[...path]', { ...ws, path: open.path })}>open the document</a>
+            <a href={resolve('/a/[org]/d/[ws]/documents/[...path]', { ...ws, path: open.path })}>open the document</a>
           </p>
         {/if}
         {#if open.entities.length}
