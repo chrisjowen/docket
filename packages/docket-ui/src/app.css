@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+/* cloud/ is the platform's web UI, a separate package with its own styles. */
+@source not '../cloud';
 @import 'tw-animate-css';
 @import './lib/styles/fonts.css';
 @import './lib/styles/casebook.css';
