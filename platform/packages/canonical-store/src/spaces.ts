@@ -79,3 +79,14 @@ export async function insertSpace(tx: Tx, input: { name: string; slug: string; d
     throw error
   }
 }
+
+/** Renames a space or changes its description. Who may is the caller's to check (Change settings on the space). */
+export async function updateSpace(tx: Tx, id: string, input: { name?: string; description?: string | null }): Promise<Space> {
+  const before = await spaceById(tx, id)
+  if (!before) throw new WorkspaceError('not-found', 'No such space.')
+  const name = input.name === undefined ? before.name : input.name.trim()
+  if (!name || name.length > 80) throw new WorkspaceError('invalid', 'Name the space in 1-80 characters.')
+  const description = input.description === undefined ? before.description : input.description?.trim().slice(0, 300) || null
+  const { rows } = await tx.query<SpaceRow>('UPDATE spaces SET name = $2, description = $3 WHERE id = $1 RETURNING *', [id, name, description])
+  return toSpace(rows[0] as SpaceRow)
+}

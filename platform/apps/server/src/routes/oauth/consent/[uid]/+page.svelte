@@ -1,13 +1,26 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
-  import { KeyRound, Laptop, ShieldAlert, ShieldCheck } from '@lucide/svelte'
+  import { Building2, KeyRound, Laptop, ShieldAlert, ShieldCheck } from '@lucide/svelte'
 
   import AuthFrame from '$lib/components/auth-frame.svelte'
   import Csrf from '$lib/components/csrf.svelte'
 
   let { data, form } = $props()
 
-  let reach = $state<'chosen' | 'all'>('chosen')
+  // A docket's address starts with that docket; the account's (one address for every docket) with every docket.
+  // svelte-ignore state_referenced_locally
+  let reach = $state<'chosen' | 'all'>(data.target?.account ? 'all' : 'chosen')
+  /** The dockets to choose from, under their space's name at the account's address. */
+  const groups = $derived.by(() => {
+    const out: { key: string; space: string; dockets: NonNullable<typeof data.target>['dockets'] }[] = []
+    for (const docket of data.target?.dockets ?? []) {
+      const last = out.at(-1)
+      if (data.target?.account && last?.key !== docket.spaceId) out.push({ key: docket.spaceId, space: docket.space, dockets: [docket] })
+      else if (last) last.dockets.push(docket)
+      else out.push({ key: '', space: '', dockets: [docket] })
+    }
+    return out
+  })
 
   // The server recorded the answer; the browser goes on to the authorization server, which sends it back to the client.
   $effect(() => {
@@ -85,13 +98,23 @@
     {#if form?.problem}<p class="alert" role="alert">{form.problem}</p>{/if}
 
     {#if data.target}
-      <p class="workspace">
-        <KeyRound size={16} aria-hidden="true" />
-        <span>
-          Docket <strong>{data.target.orgName} / {data.target.workspaceName}</strong>. Your access there:
-          <span class="badge">{data.target.role}</span>
-        </span>
-      </p>
+      {#if data.target.account}
+        <p class="workspace" data-testid="consent-account">
+          <Building2 size={16} aria-hidden="true" />
+          <span>
+            Account <strong>{data.target.orgName}</strong>: one address for its dockets, each call naming the docket it
+            uses. Your access on the whole account: <span class="badge">{data.target.role}</span>
+          </span>
+        </p>
+      {:else}
+        <p class="workspace">
+          <KeyRound size={16} aria-hidden="true" />
+          <span>
+            Docket <strong>{data.target.orgName} / {data.target.workspaceName}</strong>. Your access there:
+            <span class="badge">{data.target.role}</span>
+          </span>
+        </p>
+      {/if}
       <form method="POST" action="?/approve" class="stack">
         <Csrf token={data.csrf} />
         <label>
@@ -102,26 +125,29 @@
         <fieldset>
           <legend>It may use</legend>
           <label class="choice">
-            <input type="radio" name="reach" value="chosen" bind:group={reach} />
-            <span>These dockets</span>
+            <input type="radio" name="reach" value="chosen" bind:group={reach} data-testid="reach-chosen" />
+            <span>{data.target.account ? 'Only the dockets I choose' : 'These dockets'}</span>
           </label>
           {#if reach === 'chosen'}
-            <div class="dockets">
-              {#each data.target.dockets as docket (docket.id)}
-                <label class="choice">
-                  <input
-                    type="checkbox"
-                    name="docket"
-                    value={docket.id}
-                    checked={docket.id === data.target.workspaceId}
-                    disabled={docket.id === data.target.workspaceId}
-                  />
-                  <span>
-                    {docket.name}
-                    {#if docket.id === data.target.workspaceId}<span class="muted small">the docket it asked for</span>{/if}
-                    {#if docket.readOnly}<span class="muted small">you only read it</span>{/if}
-                  </span>
-                </label>
+            <div class="dockets" data-testid="consent-dockets">
+              {#each groups as group (group.key)}
+                {#if group.space}<p class="space">{group.space}</p>{/if}
+                {#each group.dockets as docket (docket.id)}
+                  <label class="choice">
+                    <input
+                      type="checkbox"
+                      name="docket"
+                      value={docket.id}
+                      checked={docket.id === data.target.workspaceId}
+                      disabled={docket.id === data.target.workspaceId}
+                    />
+                    <span>
+                      {docket.name}
+                      {#if docket.id === data.target.workspaceId}<span class="muted small">the docket it asked for</span>{/if}
+                      {#if docket.readOnly}<span class="muted small">you only read it</span>{/if}
+                    </span>
+                  </label>
+                {/each}
               {/each}
             </div>
           {/if}
@@ -134,7 +160,13 @@
           <input type="checkbox" name="readOnly" data-testid="connection-read-only" />
           <span>
             Read-only
-            <span class="muted small">Search, read and ask; never write{data.target.readOnlyHere ? '. You only read this docket anyway.' : '.'}</span>
+            <span class="muted small"
+              >Search, read and ask; never write{data.target.readOnlyHere
+                ? data.target.account
+                  ? '. You only read these dockets anyway.'
+                  : '. You only read this docket anyway.'
+                : '.'}</span
+            >
           </span>
         </label>
         <div class="actions">
@@ -144,8 +176,8 @@
       </form>
     {:else}
       <p class="alert" role="alert">
-        This client asks for a docket you do not have access to{data.resource ? ` (${data.resource})` : ''}. You can only
-        deny it.
+        This client asks for a docket, or an account, you do not have access to{data.resource ? ` (${data.resource})` : ''}.
+        You can only deny it.
       </p>
       <form method="POST" action="?/deny">
         <Csrf token={data.csrf} />
@@ -196,7 +228,11 @@
   .workspace {
     display: flex;
     gap: 0.5rem;
-    align-items: center;
+    align-items: flex-start;
+  }
+  .workspace :global(svg) {
+    flex: none;
+    margin-top: 0.2rem;
   }
   fieldset {
     display: grid;
@@ -230,8 +266,23 @@
     gap: 0.4rem;
     padding-left: 1.6rem;
   }
+  .space {
+    margin: 0.35rem 0 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .space:first-child {
+    margin-top: 0;
+  }
+  .choice > span {
+    overflow-wrap: anywhere;
+  }
   .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.6rem;
   }
 </style>

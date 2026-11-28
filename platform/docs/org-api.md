@@ -6,6 +6,8 @@ This document defines the REST API an org operator uses to create and manage per
 
 All endpoints in sections 2-4 are JSON, use `Authorization: Bearer <master-key>`, and are rate-limited, audited, and tenant-isolated. Errors follow the existing `error` + `error_description` shape (see `CliError`).
 
+People, system accounts and their tokens manage an account through the public API instead ([`api-v1.md`](api-v1.md)), with the capabilities their grants give them. This API keeps its master keys, paths and behaviour unchanged at `/api/admin/o/{org}/…`, beside it.
+
 ## 1. Master Admin Key
 
 An org has one or more master admin keys. A key is:

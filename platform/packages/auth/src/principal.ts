@@ -35,6 +35,20 @@ export interface Principal {
   expiresAt: Date
 }
 
+/**
+ * A caller at an account's MCP address (`/mcp/{org}`; tenancy v2 §4), or at
+ * `/api/v1`: who, and what their credential narrows them to, before a docket
+ * is chosen. Each call to a docket's tools is then a `Principal` for it.
+ */
+export type AccountPrincipal = Omit<Principal, 'workspaceId'> & {
+  /**
+   * The one MCP URL an OAuth access token from a grant made before named
+   * connections is bound to (its audience); null for an API token or a
+   * named connection, which are bound by their dockets.
+   */
+  audience: string | null
+}
+
 /** The MCP resource a request is for: its canonical URL, and the org and workspace it names. */
 export interface McpResource {
   /** `https://docket.example.com/mcp/{org}/{workspace}`: the OAuth audience (RFC 8707). */
@@ -48,8 +62,19 @@ export function mcpResourceUrl(origin: string, orgSlug: string, workspaceSlug: s
   return new URL(`/mcp/${encodeURIComponent(orgSlug)}/${encodeURIComponent(workspaceSlug)}`, origin).toString()
 }
 
-/** The org and workspace slugs of a canonical MCP URL on this origin, or null when it is not one. */
-export function parseMcpResourceUrl(origin: string, value: string): { orgSlug: string; workspaceSlug: string } | null {
+/** The canonical MCP URL of an account (tenancy v2 §4): one address for all its dockets, with a `docket` argument. */
+export function accountMcpUrl(origin: string, orgSlug: string): string {
+  return new URL(`/mcp/${encodeURIComponent(orgSlug)}`, origin).toString()
+}
+
+/**
+ * The org and workspace slugs of a canonical MCP URL on this origin, or null
+ * when it is not one: a docket's (`/mcp/{org}/{workspace}`), or, with
+ * `account: true`, an account's too (`/mcp/{org}`, workspace null).
+ */
+export function parseMcpResourceUrl(origin: string, value: string): { orgSlug: string; workspaceSlug: string } | null
+export function parseMcpResourceUrl(origin: string, value: string, options: { account: true }): { orgSlug: string; workspaceSlug: string | null } | null
+export function parseMcpResourceUrl(origin: string, value: string, options: { account?: boolean } = {}): { orgSlug: string; workspaceSlug: string | null } | null {
   let url: URL
   try {
     url = new URL(value)
@@ -57,7 +82,7 @@ export function parseMcpResourceUrl(origin: string, value: string): { orgSlug: s
     return null
   }
   if (url.origin !== new URL(origin).origin || url.search || url.hash) return null
-  const match = /^\/mcp\/([a-z0-9-]{1,40})\/([a-z0-9-]{1,40})$/.exec(url.pathname)
-  if (!match) return null
-  return { orgSlug: match[1] as string, workspaceSlug: match[2] as string }
+  const match = /^\/mcp\/([a-z0-9-]{1,40})(?:\/([a-z0-9-]{1,40}))?$/.exec(url.pathname)
+  if (!match || (!match[2] && !options.account)) return null
+  return { orgSlug: match[1] as string, workspaceSlug: match[2] ?? null }
 }

@@ -39,25 +39,25 @@ import { getRuntime } from './runtime'
  */
 
 export const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26']
-const MAX_BODY_BYTES = 1024 * 1024
+export const MAX_BODY_BYTES = 1024 * 1024
 
-type Message = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown }
-type JsonRpcResponse = { jsonrpc: '2.0'; id: unknown; result?: Record<string, unknown>; error?: { code: number; message: string } }
+export type Message = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown }
+export type JsonRpcResponse = { jsonrpc: '2.0'; id: unknown; result?: Record<string, unknown>; error?: { code: number; message: string } }
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
+export const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /** A request's JSON-RPC id, as a refusal echoes it: a string or a number, else null. */
-const jsonRpcId = (id: unknown): McpMessage['id'] => (typeof id === 'string' || typeof id === 'number' ? id : null)
+export const jsonRpcId = (id: unknown): McpMessage['id'] => (typeof id === 'string' || typeof id === 'number' ? id : null)
 
-function respond(status: number, body: unknown, headers: Record<string, string> = {}): Response {
+export function respond(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(body === null ? null : JSON.stringify(body), {
     status,
     headers: { ...CORS_HEADERS, ...(body === null ? {} : { 'content-type': 'application/json' }), ...headers },
   })
 }
 
-function refusal(resourceUrl: string, refused: Refusal | { status: 400 | 401; error: 'invalid_request' | 'invalid_token'; description?: string } | null): Response {
+export function refusal(resourceUrl: string, refused: Refusal | { status: 400 | 401; error: 'invalid_request' | 'invalid_token'; description?: string } | null): Response {
   if (!refused) return respond(401, { error: 'invalid_token', error_description: 'Send Authorization: Bearer <token>.' }, { 'www-authenticate': bearerChallenge(resourceUrl) })
   const scope = 'scope' in refused ? refused.scope : undefined
   return respond(
@@ -68,7 +68,7 @@ function refusal(resourceUrl: string, refused: Refusal | { status: 400 | 401; er
 }
 
 /** The workspace's canonical documents, each read in a tenant transaction of its own. */
-function tenantSource(inTenant: <T>(fn: (ctx: StoreContext) => Promise<T>) => Promise<T>, workspaceId: string): CanonicalSource {
+export function tenantSource(inTenant: <T>(fn: (ctx: StoreContext) => Promise<T>) => Promise<T>, workspaceId: string): CanonicalSource {
   return {
     resolved: cloudResolvedConfig(workspaceId),
     async ontology() {
@@ -86,7 +86,7 @@ function tenantSource(inTenant: <T>(fn: (ctx: StoreContext) => Promise<T>) => Pr
 }
 
 /** How a JSON-RPC answer reads in the audit log. */
-function outcomeOf(response: JsonRpcResponse | null): Outcome {
+export function outcomeOf(response: JsonRpcResponse | null): Outcome {
   if (!response) return 'ok'
   if (response.error) return response.error.code === -32602 || response.error.code === -32600 ? 'invalid' : 'error'
   return response.result?.isError === true ? 'error' : 'ok'

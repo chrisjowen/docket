@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { accessOf, capsAt, docketPlace, type Tx } from '@docket/platform-tenancy'
+import { accessOf, capsAt, docketPlace, type Access, type Tx } from '@docket/platform-tenancy'
 
 import type { Principal } from './principal.js'
 import { capabilityScopes, impliedScopes, type Scope } from './scopes.js'
@@ -18,8 +18,18 @@ type Platform = <T>(fn: (tx: Tx) => Promise<T>) => Promise<T>
  */
 export async function effectiveScopes(principal: Principal, deps: { platform: Platform }): Promise<Scope[]> {
   const access = await deps.platform((tx) => accessOf(tx, principal.orgId, principal.userId))
-  const allowed = new Set(capabilityScopes(capsAt(access, docketPlace(principal.workspaceId))))
-  return impliedScopes(principal.scopes).filter((scope) => allowed.has(scope))
+  return scopesOn(access, principal, principal.workspaceId)
+}
+
+/**
+ * `effectiveScopes` on one docket, from the owner's access read once: what
+ * the account's MCP address asks for each docket a call may reach. Which
+ * dockets the credential names is the caller's to check, as resolving a
+ * bearer does for a docket's own address.
+ */
+export function scopesOn(access: Access | null, credential: Pick<Principal, 'scopes'>, workspaceId: string): Scope[] {
+  const allowed = new Set(capabilityScopes(capsAt(access, docketPlace(workspaceId))))
+  return impliedScopes(credential.scopes).filter((scope) => allowed.has(scope))
 }
 
 /** Why a call is refused, as the MCP endpoint answers it (RFC 6750 §3.1). */

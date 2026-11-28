@@ -299,14 +299,17 @@ async function boot(key: Uint8Array, requests: pg.Pool, attempt = 1): Promise<vo
       cookieKeys,
       isHuman: async (userId) => (await platform((tx) => userById(tx, userId)))?.kind === 'human',
       resourceFor: async (url) => {
-        const named = parseMcpResourceUrl(origin, url)
+        // A docket's MCP URL, or an account's (tenancy v2 §4): one address for every docket, with a docket argument.
+        const named = parseMcpResourceUrl(origin, url, { account: true })
         if (!named) return null
         const org = await platform(async (tx) => {
           const { rows } = await tx.query<{ id: string }>("SELECT id FROM platform.orgs WHERE slug = $1 AND status = 'active'", [named.orgSlug])
           return rows[0] ?? null
         })
         if (!org) return null
-        const workspace = await router.withTenant(org.id, (tx) => workspaceBySlug(tx, named.workspaceSlug))
+        if (named.workspaceSlug === null) return { orgId: org.id, workspaceId: null }
+        const workspaceSlug = named.workspaceSlug
+        const workspace = await router.withTenant(org.id, (tx) => workspaceBySlug(tx, workspaceSlug))
         return workspace ? { orgId: org.id, workspaceId: workspace.id } : null
       },
       devicePoll: async (codeHash) => (await limiter.check(devicePollLimits(codeHash))).allowed,

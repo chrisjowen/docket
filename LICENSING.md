@@ -6,7 +6,7 @@ carries an `SPDX-License-Identifier` header.
 
 | Path | Licence | What it is |
 | --- | --- | --- |
-| `packages/*` (the `docket` CLI, `docket-server`, `docket-ui`, `contracts`, `adapter-kit` and the adapters, the Claude Code plugin) | [Apache-2.0](LICENSE) | The CLI, the reusable server core, the local UI and the adapter SDK. Unchanged by the platform import. |
+| `packages/*` (the `docket` CLI, `docket-server`, `docket-ui`, `contracts`, the public API contract `api`, `adapter-kit` and the adapters, the Claude Code plugin) | [Apache-2.0](LICENSE) | The CLI, the reusable server core, the local UI and the adapter SDK. Unchanged by the platform import. |
 | `wheelhouse/` | [Apache-2.0](LICENSE) | The Wheelhouse plugin build. |
 | `platform/**` (`@docket/server-platform`, `@docket/server-worker`, the `@docket/platform-*` modules and the platform's tests and docs) | [AGPL-3.0-only](platform/LICENSE) | The multi-tenant Docket server: accounts and dockets, sign-in and OAuth, the web app and its API, MCP, the worker, projections, enrichment and the canonical store. |
 

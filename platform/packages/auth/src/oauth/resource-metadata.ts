@@ -17,20 +17,21 @@ export function protectedResourceMetadataUrl(resourceUrl: string): string {
   return new URL(`${PRM_PREFIX}${url.pathname}`, url.origin).toString()
 }
 
-/** The MCP URL a PRM request is for, or null when the path names no `/mcp/{org}/{workspace}`. */
+/** The MCP URL a PRM request is for, or null when the path names no `/mcp/{org}/{workspace}` or account `/mcp/{org}`. */
 export function resourceOfMetadataPath(origin: string, pathname: string): string | null {
   if (!pathname.startsWith(`${PRM_PREFIX}/`)) return null
   const path = pathname.slice(PRM_PREFIX.length)
-  return /^\/mcp\/[a-z0-9-]{1,40}\/[a-z0-9-]{1,40}$/.test(path) ? new URL(path, origin).toString() : null
+  return /^\/mcp\/[a-z0-9-]{1,40}(?:\/[a-z0-9-]{1,40})?$/.test(path) ? new URL(path, origin).toString() : null
 }
 
 export function protectedResourceMetadata(origin: string, resourceUrl: string) {
+  const account = /^\/mcp\/[^/]+$/.test(new URL(resourceUrl).pathname)
   return {
     resource: resourceUrl,
     authorization_servers: [new URL(origin).origin],
     scopes_supported: [...SCOPES],
     bearer_methods_supported: ['header'],
-    resource_name: 'Docket Cloud workspace',
+    resource_name: account ? 'Docket Cloud account' : 'Docket Cloud workspace',
     resource_documentation: new URL('/', origin).toString(),
   }
 }

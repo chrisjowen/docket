@@ -36,9 +36,9 @@ export {
   parseScopeString,
 } from './scopes.js'
 export type { Scope } from './scopes.js'
-export { mcpResourceUrl, parseMcpResourceUrl } from './principal.js'
-export type { McpResource, Principal } from './principal.js'
-export { checkScope, effectiveScopes } from './effective-permission.js'
+export { accountMcpUrl, mcpResourceUrl, parseMcpResourceUrl } from './principal.js'
+export type { AccountPrincipal, McpResource, Principal } from './principal.js'
+export { checkScope, effectiveScopes, scopesOn } from './effective-permission.js'
 export { actsFor, principalLabel } from './label.js'
 export type { Refusal } from './effective-permission.js'
 export {
