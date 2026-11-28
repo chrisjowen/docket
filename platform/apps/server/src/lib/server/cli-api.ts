@@ -83,8 +83,8 @@ function outcomeOf(status: number): Outcome {
 
 export async function handleCli(event: RequestEvent, route: CliRoute, run: (call: CliCall) => Promise<Response>): Promise<Response> {
   const runtime = getRuntime()
-  const orgSlug = event.params.org ?? ''
-  const workspaceSlug = event.params.ws ?? ''
+  const orgSlug = event.params.acct ?? ''
+  const workspaceSlug = event.params.docket ?? ''
   const resourceUrl = mcpResourceUrl(runtime.origin, orgSlug, workspaceSlug)
   const action = `cli.${route.action}`
   const ip = clientAddress(event)

@@ -25,17 +25,17 @@ async function fixtureWorkspace(page: Page, org: string): Promise<string> {
       .map((entry) => ({ name: entry.name, mimeType: 'text/markdown', buffer: readFileSync(join(entry.parentPath, entry.name)) })),
     ...Object.entries(EXTRA).map(([name, raw]) => ({ name, mimeType: 'text/markdown', buffer: Buffer.from(raw) })),
   ]
-  await page.goto(`/o/${org}/workspaces/new`)
+  await page.goto(`/a/${org}/dockets/new`)
   await page.getByLabel('Name').fill('Platform')
   await page.getByText('An entities.yaml file').click()
   await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({ name: 'entities.yaml', mimeType: 'text/yaml', buffer: readFileSync(join(FIXTURE, 'entities.yaml')) })
   await page.getByRole('button', { name: 'Create docket' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${org}/w/platform/ontology$`))
-  await page.goto(`/o/${org}/w/platform/documents`)
+  await expect(page).toHaveURL(new RegExp(`/a/${org}/d/platform/ontology$`))
+  await page.goto(`/a/${org}/d/platform/documents`)
   await page.locator('input[name="files"]').setInputFiles(documents)
   await page.getByRole('button', { name: 'Import', exact: true }).click()
   await expect(page.getByText('Wrote 14 documents.')).toBeVisible()
-  return `/o/${org}/w/platform`
+  return `/a/${org}/d/platform`
 }
 
 test('background enrichment is off until an admin turns it on, which adds what it writes with to the ontology', async ({ page }) => {
@@ -90,7 +90,7 @@ test('a run writes inferred links with their reasoning and evidence, and its inf
   await expect(run).toContainText('only what the rules decide alone was written')
 
   // The inference is an ordinary link of the graph, with inferred evidence citing where it was read.
-  const graph = await (await page.request.get(`/api/${ws.slice(1)}/graph`)).json()
+  const graph = await (await page.request.get(`/api/o/${org}/w/platform/graph`)).json()
   const api = graph.entities.find((entity: { id: string }) => entity.id === 'api.orders')
   const owner = api.links.find((link: { rel: string }) => link.rel === 'owned_by')
   expect(owner.target).toBe('team.commerce')
@@ -113,6 +113,6 @@ test('a run writes inferred links with their reasoning and evidence, and its inf
   await expect(section.getByTestId('enrichment-run')).toHaveCount(2, { timeout: 60_000 })
   await expect(section.getByTestId('enrichment-run').first()).toHaveAttribute('data-status', 'ok', { timeout: 60_000 })
   await expect(section.getByTestId('enrichment-run').first().getByTestId('enrichment-summary')).toContainText('Wrote 0 of')
-  const after = await (await page.request.get(`/api/${ws.slice(1)}/graph`)).json()
+  const after = await (await page.request.get(`/api/o/${org}/w/platform/graph`)).json()
   expect(after.entities.find((entity: { id: string }) => entity.id === 'api.orders').links.some((link: { rel: string }) => link.rel === 'owned_by')).toBe(false)
 })

@@ -15,8 +15,8 @@ test.describe('sign-in', () => {
     // No session was made: / sends the visitor to sign in.
     await page.goto('/')
     await expect(page).toHaveURL(/\/signin$/)
-    await page.goto('/o/anything')
-    await expect(page).toHaveURL(/\/signin\?next=%2Fo%2Fanything$/)
+    await page.goto('/a/anything')
+    await expect(page).toHaveURL(/\/signin\?next=%2Fa%2Fanything$/)
 
     await page.goto('/signin/invite-only')
     await page.getByLabel('Email').fill(`${login}@example.test`)
@@ -40,14 +40,14 @@ test.describe('sign-in', () => {
   })
 
   test('a signed-out visitor is sent to sign in and back', async ({ page }) => {
-    await page.goto('/o/anything/members')
-    await expect(page).toHaveURL(/\/signin\?next=%2Fo%2Fanything%2Fmembers$/)
+    await page.goto('/a/anything/members')
+    await expect(page).toHaveURL(/\/signin\?next=%2Fa%2Fanything%2Fmembers$/)
   })
 
   test('a mutation without the CSRF token is refused', async ({ page }) => {
     await signIn(page, 'alice')
     await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible()
-    const refused = await page.request.post('/orgs/new', {
+    const refused = await page.request.post('/start?/create', {
       form: { name: 'No Token', slug: `no-token-${unique()}` },
       headers: { origin: new URL(page.url()).origin },
     })

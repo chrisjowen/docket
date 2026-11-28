@@ -12,3 +12,8 @@ export function safeNext(next: string | null | undefined): string {
   if (!next || !next.startsWith('/') || next.startsWith('//') || /[\u0000-\u001f\u007f\\]/.test(next)) return '/'
   return next
 }
+
+/** The invite link a sign-in returns to (`next` is `/invite/dki_…`): holding one lets its holder in (tenancy v2 §6). */
+export function inviteLinkOf(next: string | null | undefined): string | null {
+  return /^\/invite\/(dki_[A-Za-z0-9_-]{32})(?:[/?#]|$)/.exec(safeNext(next))?.[1] ?? null
+}

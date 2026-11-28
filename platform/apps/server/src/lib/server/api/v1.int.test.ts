@@ -12,10 +12,12 @@ import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { logMailer, memoryMailer } from '../mail'
 import { rateLimiter as addressLimiter } from '../rate-limit'
 import type { Runtime } from '../runtime'
 
 let runtime: Runtime
+const mailer = memoryMailer()
 vi.mock('../runtime', () => ({ getRuntime: () => runtime, initRuntime: () => undefined, RuntimeUnavailable: class extends Error {} }))
 const { handle } = await import('../../../hooks.server')
 const { handleApiV1 } = await import('./v1')
@@ -128,6 +130,7 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
       platformAdmins: new Set<string>(),
       maxOrgs: 100,
       provisioner: postgresProvisioner({ admin: org.db.admin, keys: {} as never, appRole: org.db.appRole }),
+      mailer,
     } as unknown as Runtime
   })
   beforeEach(() => {
@@ -351,8 +354,24 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
     expect(invite.status).toBe(201)
     conforms('invites.create', invite.body)
     expect((await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: 'another', place: 'account', role: 'reader' })).status).toBe(403)
+    // The invite is a link, returned once; an invite by email is also emailed (tenancy v2 §6).
+    expect(invite.body?.link).toMatch(/^https:\/\/docket\.example\/invite\/dki_[\w-]{32}$/)
+    expect(invite.body?.emailed_to).toBeNull()
+    const sent = mailer.sent.length
+    const byEmail = await api(asToken('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: 'Pat@Example.com', place: 'space:eng', role: 'reader' })
+    expect(byEmail.status).toBe(201)
+    expect(byEmail.body).toMatchObject({ to: 'pat@example.com', emailed_to: 'pat@example.com' })
+    expect(mailer.sent.slice(sent)).toEqual([expect.objectContaining({ to: 'pat@example.com', text: expect.stringContaining(String(byEmail.body?.link)) })])
+    const resent = await api(asToken('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites/${byEmail.body?.id}/resend`)
+    expect(resent.status).toBe(200)
+    conforms('invites.resend', resent.body)
+    expect(resent.body?.link).not.toBe(byEmail.body?.link)
+    expect(mailer.sent.at(-1)?.text).toContain(String(resent.body?.link))
+    expect((await api(asToken('writer'), 'POST', `/api/v1/accounts/${slug()}/invites/${byEmail.body?.id}/resend`)).status).toBe(403)
     const invites = await api(asToken('engAdmin'), 'GET', `/api/v1/accounts/${slug()}/invites`)
     expect((invites.body?.invites as { id: string }[]).map((each) => each.id)).toContain(invite.body?.id)
+    // A list never carries a link: it was shown once.
+    expect((invites.body?.invites as Record<string, unknown>[]).every((each) => !('link' in each))).toBe(true)
     expect((await api(asToken('engAdmin'), 'DELETE', `/api/v1/accounts/${slug()}/invites/${invite.body?.id}`)).status).toBe(204)
 
     const system = await api(asToken('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/system-accounts`, { name: `ci-${org.orgId.slice(0, 6)}`, grants: [{ place: 'space:eng', role: 'writer' }] })
@@ -381,6 +400,46 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
     expect((await api(asToken('writer'), 'GET', `/api/v1/accounts/${slug()}/audit`)).status).toBe(403)
     const usage = await api(owner, 'GET', `/api/v1/accounts/${slug()}/usage`)
     conforms('usage.get', usage.body)
+  })
+
+  it("emails a GitHub-login invite to that person's address on file without ever showing it, and counts only a delivered email as sent", async () => {
+    const secret = `known-${org.orgId.slice(0, 6)}@private.example`
+    const known = `known${org.orgId.slice(0, 6)}`
+    await org.router.withPlatform((tx) => upsertGitHubUser(tx, { id: randomInt(1, 2 ** 31), login: known, name: null, avatarUrl: null, emails: [secret] }))
+
+    const sent = mailer.sent.length
+    const byLogin = await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: known, place: 'space:eng', role: 'reader' })
+    expect(byLogin.status).toBe(201)
+    conforms('invites.create', byLogin.body)
+    expect(mailer.sent.slice(sent)).toEqual([expect.objectContaining({ to: secret })])
+    expect(byLogin.body).toMatchObject({ to: known, emailed: true, emailed_to: null })
+    expect(JSON.stringify(byLogin.body)).not.toContain(secret)
+    const resent = await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites/${byLogin.body?.id}/resend`)
+    expect(resent.body).toMatchObject({ emailed: true, emailed_to: null })
+    expect(JSON.stringify(resent.body)).not.toContain(secret)
+
+    const byEmail = await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: 'shown@example.com', place: 'space:eng', role: 'reader' })
+    expect(byEmail.body).toMatchObject({ emailed: true, emailed_to: 'shown@example.com' })
+
+    const listed = await api(asSession('engAdmin'), 'GET', `/api/v1/accounts/${slug()}/invites`)
+    conforms('invites.list', listed.body)
+    expect(JSON.stringify(listed.body)).not.toContain(secret)
+    const each = listed.body?.invites as { id: string; emailed: boolean; emailed_to: string | null }[]
+    expect(each.find((invite) => invite.id === byLogin.body?.id)).toMatchObject({ emailed: true, emailed_to: null })
+    expect(each.find((invite) => invite.id === byEmail.body?.id)).toMatchObject({ emailed: true, emailed_to: 'shown@example.com' })
+
+    // With DOCKET_MAIL=log nothing leaves the server, so nothing reads as emailed.
+    const logged: string[] = []
+    runtime.mailer = logMailer((line) => logged.push(line))
+    try {
+      const notSent = await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: 'unsent@example.com', place: 'space:eng', role: 'reader' })
+      expect(logged).toHaveLength(1)
+      expect(notSent.body).toMatchObject({ emailed: false, emailed_to: null })
+      const again = await api(asSession('engAdmin'), 'GET', `/api/v1/accounts/${slug()}/invites`)
+      expect((again.body?.invites as { id: string }[]).find((invite) => invite.id === notSent.body?.id)).toMatchObject({ emailed: false, emailed_to: null })
+    } finally {
+      runtime.mailer = mailer
+    }
   })
 
   it('lists users and system accounts, keeps the user list from guests, and leaves ownership to owners', async () => {
@@ -429,8 +488,51 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
     const deleted = await api(admin, 'DELETE', `/api/v1/accounts/${acct}`)
     expect(deleted.status).toBe(204)
     expect((await api(admin, 'GET', `/api/v1/accounts/${acct}`)).status).toBe(404)
-    expect((await api(adminToken, 'GET', `/api/v1/accounts/${acct}`)).status).toBe(404)
+    // Its tokens stopped working: they are no longer credentials at all.
+    expect((await api(adminToken, 'GET', `/api/v1/accounts/${acct}`)).status).toBe(401)
     const { rows } = await org.db.admin.query<{ status: string }>('SELECT status FROM platform.orgs WHERE id = $1', [third.orgId])
     expect(rows[0]?.status).toBe('deleted')
+  })
+
+  it("lets the platform operator alone list accounts, set an account's limits and suspend it, by their own session", async () => {
+    runtime.platformAdmins = new Set([other.login])
+    const operator = asSession('otherOwner')
+    // Anyone else, and any token, is refused: even the operator's own.
+    expect((await api(asSession('owner'), 'GET', '/api/v1/operator/accounts')).status).toBe(403)
+    expect((await api(asToken('otherOwner'), 'GET', '/api/v1/operator/accounts')).status).toBe(403)
+
+    const listed = await api(operator, 'GET', '/api/v1/operator/accounts')
+    expect(listed.status).toBe(200)
+    conforms('operator.accounts.list', listed.body)
+    const mine = (listed.body?.accounts as { slug: string }[]).find((each) => each.slug === slug())
+    expect(mine).toMatchObject({ owners: [org.login], status: 'active', limits: { max_members: null, max_dockets: null } })
+    // Nothing of an account's content: not even its dockets' names.
+    expect(JSON.stringify(listed.body)).not.toMatch(/Payments|Platform|Engineering/)
+
+    // Its own docket limit holds it below what it has: what it has stays, nothing new is made.
+    const limited = await api(operator, 'PATCH', `/api/v1/operator/accounts/${slug()}`, { max_dockets: 1 })
+    expect(limited.status).toBe(200)
+    conforms('operator.accounts.update', limited.body)
+    const refused = await api(asToken('owner'), 'POST', `/api/v1/accounts/${slug()}/dockets`, { space: 'general', name: 'One more', template: 'blank' })
+    expect(refused.status).toBe(403)
+    expect(refused.body).toMatchObject({ error: 'forbidden', error_description: 'This account holds at most 1 dockets.' })
+    expect((await api(operator, 'PATCH', `/api/v1/operator/accounts/${slug()}`, { max_dockets: null })).body).toMatchObject({ limits: { max_dockets: null } })
+    expect((await api(operator, 'PATCH', `/api/v1/operator/accounts/${slug()}`, {})).status).toBe(400)
+    expect((await api(operator, 'PATCH', '/api/v1/operator/accounts/no-such-account', { max_members: 3 })).status).toBe(404)
+
+    // Suspended, the account is not served to anyone, its own owner's token included; resumed, it is again.
+    const suspended = await api(operator, 'PATCH', `/api/v1/operator/accounts/${otherSlug()}`, { suspended: true, reason: 'Test' })
+    expect(suspended.body).toMatchObject({ status: 'suspended', suspended: { by: other.login, reason: 'Test' } })
+    expect((await api(asToken('otherOwner'), 'GET', `/api/v1/accounts/${otherSlug()}`)).status).toBe(401)
+    expect((await api(operator, 'GET', `/api/v1/accounts/${otherSlug()}`)).status).toBe(404)
+    expect((await api(operator, 'PATCH', `/api/v1/operator/accounts/${otherSlug()}`, { suspended: false })).body).toMatchObject({ status: 'active', suspended: null })
+    expect((await api(asToken('otherOwner'), 'GET', `/api/v1/accounts/${otherSlug()}`)).status).toBe(200)
+
+    // Each change is in the platform's own log, with who made it.
+    const { rows } = await org.db.admin.query<{ action: string; actor: string }>(
+      "SELECT action, actor FROM platform.audit_event WHERE action = 'api.operator.accounts.update' AND outcome = 'ok' ORDER BY seq",
+    )
+    expect(rows.length).toBeGreaterThanOrEqual(4)
+    expect(new Set(rows.map((row) => row.actor))).toEqual(new Set([`user:${other.userId}`]))
   })
 })

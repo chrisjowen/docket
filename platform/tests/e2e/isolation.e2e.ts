@@ -35,21 +35,21 @@ test.describe('isolation (Postgres)', () => {
     }
 
     // Carol's workspace, its ontology, its export and its check: all 404 to Alice.
-    await carol.goto(`/o/${orgB}/workspaces/new`)
+    await carol.goto(`/a/${orgB}/dockets/new`)
     await carol.getByLabel('Name').fill('Secret')
     await carol.getByRole('button', { name: 'Create docket' }).click()
-    await expect(carol).toHaveURL(new RegExp(`/o/${orgB}/w/secret/ontology$`))
-    const workspace = `/o/${orgB}/w/secret`
+    await expect(carol).toHaveURL(new RegExp(`/a/${orgB}/d/secret/ontology$`))
+    const workspace = `/a/${orgB}/d/secret`
     for (const path of [
-      `/o/${orgB}`,
-      `/o/${orgB}/members`,
-      `/o/${orgB}/audit`,
+      `/a/${orgB}`,
+      `/a/${orgB}/members`,
+      `/a/${orgB}/audit`,
       workspace,
       `${workspace}/ontology`,
       `${workspace}/ontology/history`,
       `${workspace}/ontology/export`,
       `${workspace}/documents`,
-      `/o/${orgA}/w/secret/ontology`,
+      `/a/${orgA}/d/secret/ontology`,
     ]) {
       const page = await alice.request.get(path)
       expect(page.status(), path).toBe(404)

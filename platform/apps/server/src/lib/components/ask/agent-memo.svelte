@@ -70,7 +70,7 @@
       class="src"
       class:uncited={no === null}
       class:on={lit === sourceKey(source)}
-      href="{resolve('/o/[org]/w/[ws]/graph', { org, ws: source.workspace })}?focus={encodeURIComponent(source.id)}"
+      href="{resolve('/a/[acct]/d/[docket]/graph', { acct: org, docket: source.workspace })}?focus={encodeURIComponent(source.id)}"
       onmouseenter={() => (lit = sourceKey(source))}
       onmouseleave={() => (lit = null)}
       onfocus={() => (lit = sourceKey(source))}

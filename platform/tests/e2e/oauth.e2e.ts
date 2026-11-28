@@ -137,14 +137,14 @@ test('code + PKCE + resource gives a token for this workspace only', async ({ br
   expect(elsewhere.headers()['www-authenticate']).toContain('error="invalid_token"')
 
   // The connection shows on the workspace's MCP page by its name, and the call in its audit as who and through what.
-  await page.goto(`/o/${org}/w/platform/mcp`)
+  await page.goto(`/a/${org}/d/platform/mcp`)
   await expect(page.getByTestId('grant-row')).toContainText('e2e laptop')
   await expect(page.getByTestId('grant-row')).toContainText('Read-only')
   await expect(page.getByTestId('audit-row').filter({ hasText: 'oauth.grant' }).first()).toContainText(clientId)
   await expect(page.getByTestId('audit-row').filter({ hasText: 'mcp.tools/list' }).first()).toContainText("@alice via 'e2e laptop'")
 
   // Your tokens & connections lists it, and renames it.
-  await page.goto(`/o/${org}/tokens`)
+  await page.goto(`/a/${org}/tokens`)
   await page.getByTestId('connection-row').getByRole('button', { name: 'Rename e2e laptop' }).click()
   // Renaming, the name is in the field: the row no longer reads it as text.
   const renaming = page.getByTestId('connection-row').filter({ has: page.getByLabel('New name') })

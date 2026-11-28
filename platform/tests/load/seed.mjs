@@ -52,21 +52,21 @@ try {
     await page.getByLabel('Name').fill(`Load ${run} ${n}`)
     await page.getByLabel('Address').fill(org)
     await page.getByRole('button', { name: 'Create organisation' }).click()
-    await page.waitForURL(new RegExp(`/o/${org}/members$`))
+    await page.waitForURL(new RegExp(`/a/${org}/members$`))
 
-    await page.goto(`${base}/o/${org}/workspaces/new`)
+    await page.goto(`${base}/a/${org}/dockets/new`)
     await page.getByLabel('Name').fill('Acme')
     await page.getByText('An entities.yaml file').click()
     await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({ name: 'entities.yaml', mimeType: 'text/yaml', buffer: ontology })
     await page.getByRole('button', { name: 'Create docket' }).click()
     await page.waitForURL(/\/ontology$/)
-    await page.goto(`${base}/o/${org}/w/acme/documents`)
+    await page.goto(`${base}/a/${org}/d/acme/documents`)
     await page.locator('input[name="files"]').setInputFiles(documents)
     await page.getByRole('button', { name: 'Import', exact: true }).click()
     await page.getByText(`Wrote ${documents.length} documents.`).waitFor()
 
     for (let t = 1; t <= perOrg; t += 1) {
-      await page.goto(`${base}/o/${org}/w/acme/mcp`)
+      await page.goto(`${base}/a/${org}/d/acme/mcp`)
       await page.getByLabel('Description').fill(`load test ${t}`)
       for (const box of await page.locator('input[name="scope"]:not([disabled])').all()) {
         if ((await box.getAttribute('value')) === 'docket:read') await box.check()
@@ -77,7 +77,7 @@ try {
     }
 
     // Searches answer from the projections: wait until the worker has indexed the workspace.
-    await page.goto(`${base}/o/${org}/w/acme/graph`)
+    await page.goto(`${base}/a/${org}/d/acme/graph`)
     await page.getByText('Index up to date').waitFor({ timeout: 120_000 })
     console.log(`seed: ${org}/acme with ${perOrg} tokens`)
   }

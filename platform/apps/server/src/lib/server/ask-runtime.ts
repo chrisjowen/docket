@@ -32,7 +32,7 @@ export function askDeps(access: OrgAccess, userId: string): AskDeps {
       inOrg(access, async (ctx: StoreContext) => {
         const graphs = new Map<string, CanonicalGraph>()
         for (const workspace of workspaces) {
-          graphs.set(workspace.slug, await workspaceGraph(ctx, workspace, { root: `/o/${access.org.slug}/w/${workspace.slug}` }))
+          graphs.set(workspace.slug, await workspaceGraph(ctx, workspace, { root: `/a/${access.org.slug}/d/${workspace.slug}` }))
         }
         return graphs
       }),
@@ -83,8 +83,8 @@ export function agentDeps(access: OrgAccess, userId: string): AgentDeps {
       readTools({
         orgId: access.org.id,
         workspaceId: workspace.id,
-        viewer: new URL(`/o/${access.org.slug}/w/${workspace.slug}/graph`, runtime.origin).toString(),
-        ontologyHistory: new URL(`/o/${access.org.slug}/w/${workspace.slug}/ontology/history`, runtime.origin).toString(),
+        viewer: new URL(`/a/${access.org.slug}/d/${workspace.slug}/graph`, runtime.origin).toString(),
+        ontologyHistory: new URL(`/a/${access.org.slug}/d/${workspace.slug}/ontology/history`, runtime.origin).toString(),
         inTenant: (fn) => inOrg(access, fn),
         query,
         assertWithinCap: () => asking.assertWithinCap(workspace.id),

@@ -104,7 +104,7 @@ describe.skipIf(!TEST_PG_URL)('MCP access by grants on the account and the docke
     const url = new URL(`https://docket.example/mcp/${orgSlug()}/main`)
     const event = {
       url,
-      params: { org: orgSlug(), ws: 'main' },
+      params: { acct: orgSlug(), docket: 'main' },
       request: new Request(url, {
         method: 'POST',
         headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' },

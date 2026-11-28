@@ -15,7 +15,7 @@ export type Drafted = { ok: true; yaml: string; template: StartingPoint; summary
 
 export const DRAFT_PROBLEMS = {
   offline: 'AI drafting is not available on this server: its AI service is not running. Start from a template instead.',
-  notConfigured: 'AI is not set up for this organisation yet, so it cannot draft an ontology. Start from a template instead, or ask an owner to set up AI.',
+  notConfigured: 'AI is not set up for this account yet, so it cannot draft an ontology. Start from a template instead, or ask an owner to set up AI.',
   capReached: "This month's AI budget is spent, so AI cannot draft an ontology. Start from a template instead, or ask an owner to raise the cap.",
   failed: 'AI could not draft the ontology just now. Try again in a moment, or start from a template.',
   unreadable: 'AI did not answer with an ontology. Try again, or describe the domain in other words.',

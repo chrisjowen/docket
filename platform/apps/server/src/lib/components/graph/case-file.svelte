@@ -71,7 +71,7 @@
   const band = $derived(entity ? (recordBand(entity) as Band | undefined) : undefined)
   const trust = $derived((entity as (UiEntity & Trusted) | undefined)?.trust)
   const sources = $derived(entity ? sourcesOf(entity) : [])
-  const ws = $derived({ org: page.params.org ?? '', ws: page.params.ws ?? '' })
+  const ws = $derived({ acct: page.params.acct ?? '', docket: page.params.docket ?? '' })
 
   /** "Why 0.93": asked for when the record opens, and again when its evidence changes. */
   let why = $state<{ id: string; explained: Explained | null; failed: boolean } | null>(null)
@@ -81,7 +81,7 @@
     const record = entity?.id
     if (!key || !record) return
     const controller = new AbortController()
-    fetch(`${resolve('/o/[org]/w/[ws]/graph/explain', ws)}?id=${encodeURIComponent(record)}`, { signal: controller.signal })
+    fetch(`${resolve('/a/[acct]/d/[docket]/graph/explain', ws)}?id=${encodeURIComponent(record)}`, { signal: controller.signal })
       .then(async (response) => (response.ok ? ((await response.json()) as { explained: Explained }).explained : Promise.reject(new Error(String(response.status)))))
       .then((explained) => (why = { id: record, explained, failed: false }))
       .catch(() => {
@@ -174,7 +174,7 @@
         <GitPullRequestArrow size={16} aria-hidden="true" />
         <span>
           {@render record(trust.pending.by)} proposes to replace it: its evidence scores <b class="mono">{trust.pending.score.toFixed(2)}</b> of the <b class="mono">{trust.pending.threshold.toFixed(2)}</b> it needs{trust.pending.stale ? ', and the record has changed since' : ''}. Until it is proven, this record stands.
-          <a href={resolve('/o/[org]/w/[ws]/proposals/[id]', { ...ws, id: trust.pending.proposal })}>Review the proposal</a>
+          <a href={resolve('/a/[acct]/d/[docket]/proposals/[id]', { ...ws, id: trust.pending.proposal })}>Review the proposal</a>
         </span>
       </div>
     {/if}
@@ -183,7 +183,7 @@
         <GitPullRequestArrow size={16} aria-hidden="true" />
         <span>
           Proposes to replace {@render record(proposes.replaces)}: <b class="mono">{proposes.score.toFixed(2)}</b> of <b class="mono">{proposes.threshold.toFixed(2)}</b> so far.
-          <a href={resolve('/o/[org]/w/[ws]/proposals/[id]', { ...ws, id: proposes.proposal })}>Review the proposal</a>
+          <a href={resolve('/a/[acct]/d/[docket]/proposals/[id]', { ...ws, id: proposes.proposal })}>Review the proposal</a>
         </span>
       </div>
     {/each}
@@ -224,7 +224,7 @@
       <section style="--i: 3" aria-labelledby="case-why" data-testid="evidence">
         <h3 class="label" id="case-why"><span>Why {weight !== null ? weight.toFixed(2) : ''}</span><span>{sources.length} source{sources.length === 1 ? '' : 's'}</span></h3>
         {#if explained}
-          <Why {explained} scored={false} policiesUrl={canEditSchema ? `${resolve('/o/[org]/w/[ws]/ontology', ws)}?tab=policies` : null} />
+          <Why {explained} scored={false} policiesUrl={canEditSchema ? `${resolve('/a/[acct]/d/[docket]/ontology', ws)}?tab=policies` : null} />
         {:else if why?.failed && why.id === entity.id}
           <p class="muted small">Could not explain the confidence just now.</p>
         {:else}

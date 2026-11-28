@@ -25,11 +25,11 @@
     <ul class="points">
       <li>
         <Lock size={16} aria-hidden="true" />
-        <div><strong>Encrypted everywhere</strong><span>TLS on every hop; volumes and backups encrypted; a data key per organisation.</span></div>
+        <div><strong>Encrypted everywhere</strong><span>TLS on every hop; volumes and backups encrypted; a data key per account.</span></div>
       </li>
       <li>
         <DatabaseZap size={16} aria-hidden="true" />
-        <div><strong>Your own databases</strong><span>A Postgres schema, a Neo4j database and Qdrant collections per organisation.</span></div>
+        <div><strong>Your own databases</strong><span>A Postgres schema, a Neo4j database and Qdrant collections per account.</span></div>
       </li>
       <li>
         <ScrollText size={16} aria-hidden="true" />
@@ -91,10 +91,10 @@
     <div>
       <strong>Invite-only for now</strong>
       {#if others}
-        <p>Sign-in works for people this server's operator allows, and for anyone with a pending invite from an organisation.</p>
+        <p>Sign-in works for people this server's operator allows, and for anyone with a pending invite to an account.</p>
       {:else}
         <p>
-          Sign-in works for GitHub accounts on the beta list, or with a pending invite from an organisation. Not
+          Sign-in works for GitHub accounts on the beta list, or with a pending invite to an account. Not
           invited? Sign in anyway and you can ask for access.
         </p>
       {/if}

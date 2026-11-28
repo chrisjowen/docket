@@ -391,7 +391,7 @@ export async function setOwner(tx: Tx, input: { orgId: string; userId: string; o
   if (!row) throw new TenancyError('not-found', 'No such member.')
   if (row.kind !== 'human') throw new TenancyError('forbidden', 'A system account cannot own the account.')
   if (row.owner && !input.owner && (await ownerCount(tx, input.orgId)) <= 1) {
-    throw new TenancyError('last-owner', 'An organisation needs an owner. Make someone else owner first.')
+    throw new TenancyError('last-owner', 'An account needs an owner. Make someone else owner first.')
   }
   await tx.query('UPDATE platform.memberships SET owner = $3, guest = guest AND NOT $3 WHERE org_id = $1 AND user_id = $2', [
     input.orgId,

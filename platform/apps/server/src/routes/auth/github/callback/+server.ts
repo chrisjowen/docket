@@ -15,7 +15,7 @@ import { redirect } from '@sveltejs/kit'
 import { completeLink, pendingLinkOf } from '$lib/server/github-link'
 import { auditInput, clientAddress, recordStandalone } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
-import { OAUTH_COOKIE, PENDING_COOKIE, safeNext } from '$lib/server/signin'
+import { OAUTH_COOKIE, PENDING_COOKIE, inviteLinkOf, safeNext } from '$lib/server/signin'
 
 import type { RequestHandler } from './$types'
 
@@ -23,7 +23,7 @@ import type { RequestHandler } from './$types'
  * GitHub's redirect back (§8.1), for sign-in and for linking an installation
  * of the GitHub App to an org. The state must match the cookie set when
  * sign-in started. An identity on the beta list, with a verified email on the
- * sign-in allowlist, or holding an open invite, gets a session as the user
+ * sign-in allowlist, or holding an open invite (or its link, to sign in and accept it), gets a session as the user
  * every sign-in provider resolves to; anyone else joins the beta waitlist and sees the
  * invite-only page. An invited waitlist entry with one of the identity's
  * verified emails puts its login on the beta list first.
@@ -66,7 +66,7 @@ export const GET: RequestHandler = async (event) => {
     if (await claimWaitlistInvite(tx, identity)) {
       await audit(tx, auditInput(event, { action: 'waitlist.claim', outcome: 'ok', orgId: null, target: [`github:${identity.login}`] }))
     }
-    if (!(await mayEnter(tx, { provider: 'github', github: identity }))) {
+    if (!(await mayEnter(tx, { provider: 'github', github: identity }, { inviteLink: inviteLinkOf(typeof started.next === 'string' ? started.next : null) }))) {
       const pending = newSecret()
       await tx.query(
         `INSERT INTO platform.access_requests (id_hash, github_id, github_login, email) VALUES ($1, $2, $3, $4)`,

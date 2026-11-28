@@ -9,7 +9,7 @@
 
 <nav class="subtabs" aria-label="Settings">
   {#each SETTINGS_TABS as tab (tab.key)}
-    <a href={resolve(tab.route, { org, ws })} aria-current={active === tab.key ? 'page' : undefined}>{tab.label}</a>
+    <a href={resolve(tab.route, { acct: org, docket: ws })} aria-current={active === tab.key ? 'page' : undefined}>{tab.label}</a>
   {/each}
 </nav>
 

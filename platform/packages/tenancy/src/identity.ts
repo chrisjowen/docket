@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import type { Tx } from './db.js'
-import { TenancyError, mayEnterBeta, normaliseEmail, normaliseLogin, openInvitesFor, upsertGitHubUser, type GitHubIdentity, type User } from './model.js'
+import { TenancyError, inviteByLink, inviteLinkAdmits, mayEnterBeta, normaliseEmail, normaliseLogin, openInvitesFor, upsertGitHubUser, type GitHubIdentity, type User } from './model.js'
 
 /**
  * One way into the same users table for every sign-in provider (§8.1). A
@@ -213,9 +213,16 @@ async function onSigninAllowlist(tx: Tx, emails: readonly string[], login: strin
  * identity already attached to a member of an active account, one of its
  * verified emails on the sign-in allowlist (exactly, or by domain), or an open
  * invite to one of them. A GitHub identity may also through the beta
- * allowlist and a GitHub-login invite, as before (`mayEnterBeta`).
+ * allowlist and a GitHub-login invite, as before (`mayEnterBeta`). An open
+ * invite's link (`inviteLink`, the secret it carries) lets its holder in too.
  */
-export async function mayEnter(tx: Tx, identity: ExternalIdentity): Promise<boolean> {
+export async function mayEnter(tx: Tx, identity: ExternalIdentity, options: { inviteLink?: string | null } = {}): Promise<boolean> {
+  // Holding an open invite's link (tenancy v2 §6): an invite by email lets in whoever holds it, one to a GitHub login only that login.
+  if (options.inviteLink) {
+    const invite = await inviteByLink(tx, options.inviteLink)
+    const login = identity.provider === 'github' ? identity.github.login : null
+    if (invite && (invite.githubLogin === null ? invite.state === 'open' : login !== null && inviteLinkAdmits(invite, login))) return true
+  }
   if (identity.provider === 'github') {
     if (await mayEnterBeta(tx, identity.github)) return true
     return onSigninAllowlist(tx, identity.github.emails, null)

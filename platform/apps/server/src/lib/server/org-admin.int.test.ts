@@ -49,7 +49,7 @@ describe.skipIf(!TEST_PG_URL)('org admin HTTP endpoints', () => {
     if (options.bearer !== null) headers.authorization = `Bearer ${options.bearer ?? master.key}`
     if (body !== undefined) headers['content-type'] = 'application/json'
     const event = {
-      params: { org: slug, path }, url,
+      params: { acct: slug, path }, url,
       request: new Request(url, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }),
       locals: { requestId: randomUUID(), startedAt: performance.now() }, getClientAddress: () => '192.0.2.1',
     } as unknown as RequestEvent

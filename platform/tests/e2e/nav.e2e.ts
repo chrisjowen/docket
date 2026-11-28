@@ -11,19 +11,19 @@ import { createOrg, signIn, unique } from './helpers'
 test('a docket opens on its overview, with its sections as tabs, and the old address redirects there', async ({ page }) => {
   await signIn(page, 'alice')
   const slug = await createOrg(page, `Nav ${unique()}`)
-  await page.goto(`/o/${slug}/workspaces/new`)
+  await page.goto(`/a/${slug}/dockets/new`)
   await page.getByLabel('Name').fill('Platform')
   await page.getByText('Blank', { exact: true }).click()
   await page.getByRole('button', { name: 'Create docket' }).click()
-  const ws = `/o/${slug}/w/platform`
+  const ws = `/a/${slug}/d/platform`
   await expect(page).toHaveURL(`${ws}/ontology`)
 
   // The casebook lists the docket with its docket number; the sidebar's docket link opens its overview.
-  await page.goto(`/o/${slug}`)
-  await expect(page.getByRole('heading', { level: 1, name: 'The casebook' })).toBeVisible()
+  await page.goto(`/a/${slug}`)
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible()
   await expect(page.getByRole('table').getByRole('row', { name: /Platform/ })).toContainText(/PLA-\d{2}-0001/)
   const sidebar = page.getByRole('navigation', { name: 'Sidebar' })
-  await expect(sidebar.getByRole('link', { name: 'Casebook' })).toHaveAttribute('aria-current', 'page')
+  await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
   await sidebar.getByRole('list', { name: 'Dockets' }).getByRole('link', { name: /Platform/ }).click()
   await expect(page).toHaveURL(`${ws}/overview`)
   await expect(sidebar.getByRole('link', { name: /Platform/ })).toHaveAttribute('aria-current', 'page')
@@ -55,7 +55,7 @@ test('a docket opens on its overview, with its sections as tabs, and the old add
     await expect(tabs.locator('[aria-current="page"]')).toHaveText(label)
     await expect(crumbs.locator('[aria-current="page"]')).toHaveText(label)
   }
-  await expect(page.getByTestId('address')).toHaveText(`/o/${slug}/w/platform`)
+  await expect(page.getByTestId('address')).toHaveText(`/a/${slug}/d/platform`)
   await page.goto(`${ws}/ontology/history`)
   await expect(tabs.locator('[aria-current="page"]')).toHaveText('Schema')
   await expect(crumbs.getByRole('link', { name: 'Schema' })).toHaveAttribute('href', `${ws}/ontology`)
@@ -70,14 +70,14 @@ test('a docket opens on its overview, with its sections as tabs, and the old add
   expect(focused.headers().location).toBe(`${ws}/graph?focus=team.core`)
 
   // A docket the casebook does not have is 404, not a redirect.
-  const missing = await page.request.get(`/o/${slug}/w/nosuch`, { maxRedirects: 0 })
+  const missing = await page.request.get(`/a/${slug}/d/nosuch`, { maxRedirects: 0 })
   expect(missing.status()).toBe(404)
 })
 
 test('the theme toggle switches to dark and the server remembers it', async ({ page }) => {
   await signIn(page, 'alice')
   const slug = await createOrg(page, `Theme ${unique()}`)
-  await page.goto(`/o/${slug}`)
+  await page.goto(`/a/${slug}`)
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
   await page.getByRole('button', { name: 'Switch to dark theme' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')

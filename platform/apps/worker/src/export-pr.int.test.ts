@@ -92,7 +92,7 @@ describe.skipIf(!TEST_PG_URL)('export PRs', () => {
     expect(pull?.body).toContain('| Resource | Type | Links | Evidence | Written by | File |')
     expect(pull?.body).toContain(`| \`service.ledger\` | service | 1 | 2 | @${f.org.login} | \`.docket/resources/service/ledger.md\` |`)
     expect(pull?.body).toContain(`| \`team.finance\` | team | 0 | 0 | @${f.org.login} | \`.docket/resources/team/finance.md\` |`)
-    expect(pull?.body).toContain('https://docket.example/o/')
+    expect(pull?.body).toContain('https://docket.example/a/')
 
     // The branch holds the files, byte for byte; the base branch has not moved.
     const onBranch = f.git.filesAt(f.repo.fullName, 'docket-cloud/export-20261104-0930')

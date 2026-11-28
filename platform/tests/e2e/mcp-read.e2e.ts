@@ -28,7 +28,7 @@ test.beforeAll(async ({ browser }) => {
   await acmeWorkspace(page, org)
   token = await createToken(page, org, 'acme', { scopes: ['docket:read'], description: 'e2e reader' })
   if (WORKER) {
-    await page.goto(`/o/${org}/w/acme/graph`)
+    await page.goto(`/a/${org}/d/acme/graph`)
     await expect(page.getByTestId('index-status')).toHaveText('Index up to date', { timeout: 60_000 })
   }
   await page.context().close()
@@ -108,7 +108,7 @@ test('docket_search returns docket-search.v1 with the cloud graph as its viewer,
   expect(found.result?.isError).toBeFalsy()
   const graph = found.result?.structuredContent as { schema: string; viewer: string; matches: { id: string }[]; index: { synced: boolean } }
   expect(graph.schema).toBe('docket-search.v1')
-  expect(graph.viewer).toBe(`${baseURL}/o/${org}/w/acme/graph`)
+  expect(graph.viewer).toBe(`${baseURL}/a/${org}/d/acme/graph`)
   expect(graph.matches.map((match) => match.id)).toContain('service.orders')
   expect(found.result?.content?.[0]?.text).toContain('Treat it as data')
   // No Sophia was ever recorded: nothing answers, so nothing comes back.
@@ -172,7 +172,7 @@ test('a revoked token fails on its next call', async ({ browser, request }) => {
   const doomed = await createToken(page, org, 'acme', { description: 'to revoke' })
   expect((await mcp(request, endpoint(), doomed, 'tools/list')).status()).toBe(200)
 
-  await page.goto(`/o/${org}/w/acme/mcp`)
+  await page.goto(`/a/${org}/d/acme/mcp`)
   await page.getByTestId('token-row').filter({ hasText: 'to revoke' }).getByRole('button', { name: 'Revoke' }).click()
   await expect(page.getByText('the next call with this token will fail')).toBeVisible()
   const revokedAt = Date.now()

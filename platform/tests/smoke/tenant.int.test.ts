@@ -218,7 +218,7 @@ ${workerSources}auth:
     const { child, url } = await serve(['serve', '--config', join(dir, 'docket-server.yaml'), '--no-ui', '--no-worker'], env)
     try {
       await ready(url)
-      for (const path of ['/', '/o/acme', '/orgs/new']) {
+      for (const path of ['/', '/a/acme', '/o/acme', '/orgs/new', '/start', '/invite/dki_x']) {
         const response = await fetch(`${url}${path}`, { redirect: 'manual' })
         expect(response.status, path).toBe(404)
         expect(await response.text()).toContain('headless')

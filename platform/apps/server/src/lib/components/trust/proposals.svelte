@@ -27,7 +27,7 @@
   }
   let { data, form }: Props = $props()
 
-  const ws = $derived({ org: data.org.slug, ws: data.workspace.slug })
+  const ws = $derived({ acct: data.org.slug, docket: data.workspace.slug })
   const detail = $derived(data.detail)
   const FILTERS = [
     { status: 'pending', label: 'Pending' },
@@ -94,7 +94,7 @@
 
 <nav class="filters seg" aria-label="Proposals by status">
   {#each FILTERS as filter (filter.status)}
-    <a href="{resolve('/o/[org]/w/[ws]/proposals', ws)}?status={filter.status}" aria-current={data.status === filter.status ? 'page' : undefined}
+    <a href="{resolve('/a/[acct]/d/[docket]/proposals', ws)}?status={filter.status}" aria-current={data.status === filter.status ? 'page' : undefined}
       >{filter.label} <span class="count">{data.counts[filter.status]}</span></a
     >
   {/each}
@@ -105,7 +105,7 @@
     {#each data.queue as item (item.id)}
       <li>
         <a
-          href="{resolve('/o/[org]/w/[ws]/proposals/[id]', { ...ws, id: item.id })}?status={data.status}"
+          href="{resolve('/a/[acct]/d/[docket]/proposals/[id]', { ...ws, id: item.id })}?status={data.status}"
           aria-current={detail?.id === item.id ? 'page' : undefined}
           data-proposal={item.id}
         >
@@ -134,7 +134,7 @@
         <div class="side old" class:struck={detail.status === 'accepted'}>
           <p class="row">
             {#if detail.old}<span class="code" title={detail.old.type}>{typeCode(detail.old.type)}</span>{/if}
-            <a class="mono small" href="{resolve('/o/[org]/w/[ws]/graph', ws)}?focus={encodeURIComponent(detail.resource)}">{detail.resource}</a>
+            <a class="mono small" href="{resolve('/a/[acct]/d/[docket]/graph', ws)}?focus={encodeURIComponent(detail.resource)}">{detail.resource}</a>
             {#if detail.status === 'accepted'}<span class="stamp red">Out of date</span>{:else}<span class="stamp ok">Current fact</span>{/if}
           </p>
           <p class="t">{detail.old?.title ?? detail.resource}</p>
@@ -144,7 +144,7 @@
         <div class="side new">
           <p class="row">
             {#if detail.new}<span class="code" title={detail.new.type}>{typeCode(detail.new.type)}</span>{/if}
-            <a class="mono small" href="{resolve('/o/[org]/w/[ws]/graph', ws)}?focus={encodeURIComponent(detail.by)}">{detail.by}</a>
+            <a class="mono small" href="{resolve('/a/[acct]/d/[docket]/graph', ws)}?focus={encodeURIComponent(detail.by)}">{detail.by}</a>
             <span class="stamp {STAMP[detail.status]}">{detail.status === 'pending' ? 'Not yet fact' : detail.status === 'accepted' ? 'Current fact' : 'Rejected'}</span>
           </p>
           <p class="t">{detail.new?.title ?? detail.by}</p>

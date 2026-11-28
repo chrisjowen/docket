@@ -46,7 +46,7 @@
     }
     csrf: string | null
     canManage: boolean
-    ws: { org: string; ws: string }
+    ws: { acct: string; docket: string }
     problem?: string | undefined
     flash?: string | undefined
   }
@@ -187,7 +187,7 @@
               <p class="muted small">Retired by {run.retiredBy} · {when(run.retiredAt)}</p>
             {:else if run.live > 0}
               <div class="actions">
-                <a class="small" href="{resolve('/o/[org]/w/[ws]/activity', ws)}?channel=enrichment">See it in the activity log</a>
+                <a class="small" href="{resolve('/a/[acct]/d/[docket]/activity', ws)}?channel=enrichment">See it in the activity log</a>
                 {#if canManage && run.status !== 'running'}
                   <form method="POST" action="?/retireRun" use:enhance>
                     <Csrf token={csrf} />

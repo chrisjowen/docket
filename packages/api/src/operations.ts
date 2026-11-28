@@ -13,10 +13,12 @@ import {
   Grant,
   GranteeRef,
   Invite,
+  IssuedInvite,
   IssuedToken,
   Me,
   Member,
   Navigation,
+  OperatorAccount,
   PlaceRef,
   QuickSearch,
   Role,
@@ -46,7 +48,7 @@ import {
  * Every `/api/v1` answer carries it (`X-Docket-Api-Version`), as does the OpenAPI document; a client built for
  * another major, or a newer minor, says so rather than call what is not there.
  */
-export const API_VERSION = '1.1'
+export const API_VERSION = '1.2'
 
 /** Whether a client built for API `wanted` can use a server answering `served`: the same major, and no newer minor. */
 export function compatible(wanted: string, served: string): boolean {
@@ -66,7 +68,7 @@ export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 /** What a call needs, as data and as words. */
 export interface Needs {
   /** A capability, held on `on`; or being signed in, a member, an owner, or on the beta list. */
-  capability: Capability | 'signed-in' | 'member' | 'owner' | 'allowlisted'
+  capability: Capability | 'signed-in' | 'member' | 'owner' | 'allowlisted' | 'operator'
   /** Where it must be held: the account, the place the call names, a space, a docket, or a place a system account reaches. */
   on?: 'account' | 'place' | 'space' | 'docket' | 'system-account' | 'anywhere'
   text: string
@@ -215,6 +217,41 @@ export const OPERATIONS = [
     status: 204,
   }),
 
+  // --- The platform operator ---------------------------------------------------
+  op({
+    id: 'operator.accounts.list',
+    method: 'GET',
+    path: '/api/v1/operator/accounts',
+    tag: 'Operator',
+    summary: "Every account on the platform: owners, people, system accounts, open invites, limits and whether it is suspended. Nothing of an account's content.",
+    auth: SESSION,
+    needs: { capability: 'operator', text: 'A platform operator (DOCKET_PLATFORM_ADMINS), in their own browser session' },
+    response: z.object({
+      accounts: z.array(OperatorAccount),
+      defaults: z.object({ max_members: z.number().int(), max_dockets: z.number().int() }),
+      platform: z.object({ live: z.number().int(), max: z.number().int() }),
+    }),
+    status: 200,
+  }),
+  op({
+    id: 'operator.accounts.update',
+    method: 'PATCH',
+    path: '/api/v1/operator/accounts/{acct}',
+    tag: 'Operator',
+    summary: 'Suspends or resumes an account, and sets its own limits on seats and dockets (null: the beta’s). A suspended account is not served; nothing in it is lost.',
+    auth: SESSION,
+    params: acct,
+    body: z.object({
+      suspended: z.boolean().optional(),
+      reason: z.string().trim().max(300).optional().describe('Why it is suspended: shown to operators'),
+      max_members: z.number().int().min(1).max(10_000).nullable().optional(),
+      max_dockets: z.number().int().min(1).max(1_000).nullable().optional(),
+    }),
+    needs: { capability: 'operator', text: 'A platform operator (DOCKET_PLATFORM_ADMINS), in their own browser session' },
+    response: OperatorAccount,
+    status: 200,
+  }),
+
   // --- Accounts ----------------------------------------------------------------
   op({
     id: 'accounts.list',
@@ -354,13 +391,25 @@ export const OPERATIONS = [
     method: 'POST',
     path: '/api/v1/accounts/{acct}/invites',
     tag: 'Users',
-    summary: 'Invites someone by GitHub login or email to a role on a place.',
+    summary:
+      'Invites someone by GitHub login or email to a role on a place. The invite is a link that works once, for 7 days, returned here once and emailed when there is an address to send it to; over MCP the link is left out.',
     params: acct,
     body: z.object({ to: z.string().trim().min(1).max(254), place: PlaceRef, role: z.string().min(1).max(80), guest: z.boolean().optional() }),
     needs: { capability: 'access', on: 'place', text: 'Manage access on that place, holding what the role gives' },
-    response: Invite,
+    response: IssuedInvite,
     status: 201,
     mcpTool: 'admin_invite',
+  }),
+  op({
+    id: 'invites.resend',
+    method: 'POST',
+    path: '/api/v1/accounts/{acct}/invites/{id}/resend',
+    tag: 'Users',
+    summary: 'Sends an open invite again: a new link, for 7 more days, emailed again; the old link stops working.',
+    params: withAcct({ id: z.string().min(1).max(80) }),
+    needs: { capability: 'access', on: 'place', text: 'Manage access where it gives access' },
+    response: IssuedInvite,
+    status: 200,
   }),
   op({
     id: 'invites.revoke',

@@ -2,12 +2,12 @@
 import { audit } from '@docket/platform-audit'
 import { SESSION_COOKIE, createSession, passwordSignIn, sessionCookieOptions } from '@docket/platform-auth'
 import { passwordLimits, rateLimitMessage } from '@docket/platform-limits'
-import { mayEnterBeta, normaliseOtherLogin, upsertGitHubUser } from '@docket/platform-tenancy'
+import { mayEnter, normaliseOtherLogin, upsertGitHubUser } from '@docket/platform-tenancy'
 import { fail, redirect } from '@sveltejs/kit'
 
 import { auditInput, clientAddress } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
-import { safeNext } from '$lib/server/signin'
+import { inviteLinkOf, safeNext } from '$lib/server/signin'
 
 import type { Actions, PageServerLoad } from './$types'
 
@@ -69,8 +69,9 @@ export const actions: Actions = {
     if (!demo) return fail(404, { demoProblem: 'There is no demo sign-in here.' })
     const form = await event.request.formData()
     const identity = { id: demo.githubId, login: demo.login, name: null, avatarUrl: null, emails: [] }
+    const inviteLink = inviteLinkOf(String(form.get('next') ?? '/'))
     const session = await router.withPlatform(async (tx) => {
-      if (!(await mayEnterBeta(tx, identity))) return null
+      if (!(await mayEnter(tx, { provider: 'github', github: identity }, { inviteLink }))) return null
       const user = await upsertGitHubUser(tx, identity)
       const created = await createSession(tx, { userId: user.id, ip: clientAddress(event), userAgent: event.request.headers.get('user-agent') })
       await audit(tx, {

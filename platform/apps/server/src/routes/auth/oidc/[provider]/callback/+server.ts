@@ -6,7 +6,7 @@ import { redirect } from '@sveltejs/kit'
 
 import { auditInput, clientAddress, recordStandalone } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
-import { OIDC_COOKIE, safeNext } from '$lib/server/signin'
+import { OIDC_COOKIE, inviteLinkOf, safeNext } from '$lib/server/signin'
 
 import type { RequestHandler } from './$types'
 
@@ -61,7 +61,7 @@ export const GET: RequestHandler = async (event) => {
 
   const session = await router.withPlatform(async (tx) => {
     const target = `oidc:${provider.name}:${identity.subject}`
-    if (!(await mayEnter(tx, identity))) {
+    if (!(await mayEnter(tx, identity, { inviteLink: inviteLinkOf(typeof started.next === 'string' ? started.next : null) }))) {
       await audit(tx, auditInput(event, { action: 'auth.signin', outcome: 'denied', orgId: null, target: [target] }))
       return null
     }

@@ -48,7 +48,7 @@ export async function spaceById(tx: Tx, id: string): Promise<Space | null> {
   return rows[0] ? toSpace(rows[0]) : null
 }
 
-/** A space's address inside its org (`/o/{org}/s/{slug}`): a docket address's shape, with `new` kept for the create page. */
+/** A space's address inside its org (`/a/{acct}/s/{slug}`): a docket address's shape, with `new` kept for the create page. */
 export function spaceSlugProblem(slug: string): string | null {
   return workspaceSlugProblem(slug)
 }

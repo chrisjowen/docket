@@ -130,6 +130,38 @@ export const Invite = z.object({
   invited_by: z.string(),
   created_at: timestamp,
   expires_at: timestamp,
+  /** Whether its email was delivered; false when none was, or it was sent again since. */
+  emailed: z.boolean(),
+  /** The address it was emailed to, when it was made for one; null for a GitHub login, whose address on file is never shown. */
+  emailed_to: z.string().nullable(),
+})
+
+/**
+ * An invite as made or sent again: with its link, which works once, for 7
+ * days, and is shown only now (and in its email). Never returned over MCP.
+ */
+export const IssuedInvite = Invite.extend({
+  link: z.string().describe('The invite link: /invite/dki_…; whoever opens it signs in and accepts'),
+})
+
+/**
+ * An account as the platform operator sees it (operator console): who owns
+ * it, how many people, system accounts and open invites it has, its limits
+ * and whether it is suspended. Never anything of its content.
+ */
+export const OperatorAccount = z.object({
+  id: z.string(),
+  slug: z.string(),
+  name: z.string(),
+  status: z.enum(['provisioning', 'active', 'suspended']),
+  created_at: timestamp,
+  owners: z.array(z.string()),
+  people: z.number().int(),
+  system_accounts: z.number().int(),
+  open_invites: z.number().int(),
+  /** Its own limits; null: the beta's, which `defaults` gives. */
+  limits: z.object({ max_members: z.number().int().nullable(), max_dockets: z.number().int().nullable() }),
+  suspended: z.object({ at: timestamp, by: z.string().nullable(), reason: z.string().nullable() }).nullable(),
 })
 
 export const SystemAccount = z.object({

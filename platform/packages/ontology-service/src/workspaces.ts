@@ -25,7 +25,7 @@ export type OntologyStart =
  */
 export async function createWorkspace(
   ctx: StoreContext,
-  input: { name: string; slug: string; start: OntologyStart; publisher: Publisher; spaceId?: string; requestId?: string; maxWorkspaces?: number },
+  input: { name: string; slug: string; start: OntologyStart; publisher: Publisher; spaceId?: string; requestId?: string; maxWorkspaces?: number; docketLimit?: number },
 ): Promise<{ workspace: Workspace; version: Published }> {
   let yaml: string
   let source: string
@@ -62,6 +62,7 @@ export async function createWorkspace(
     createdBy: input.publisher.actor,
     ...(input.spaceId !== undefined ? { spaceId: input.spaceId } : {}),
     ...(input.maxWorkspaces !== undefined ? { maxWorkspaces: input.maxWorkspaces } : {}),
+    ...(input.docketLimit !== undefined ? { docketLimit: input.docketLimit } : {}),
   })
   const draft = await createDraft(ctx.tx, workspace.id, { yaml, source, author: input.publisher.actor })
   const version = await publish(ctx, workspace.id, draft.id, {

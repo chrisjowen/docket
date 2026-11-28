@@ -78,7 +78,9 @@ async function lookupApiToken(tx: Tx, raw: string, now: Date): Promise<Bound | n
   }>(
     `SELECT id, prefix, org_id, dockets, owner_id, read_only, legacy_scopes, description, expires_at, last_used_at
        FROM platform.api_tokens
-      WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > $2`,
+      WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > $2
+        -- A token of a suspended or deleted account reaches nothing (the operator console).
+        AND org_id IN (SELECT id FROM platform.orgs WHERE status = 'active')`,
     [tokenHash(raw), now],
   )
   const row = rows[0]
@@ -145,6 +147,9 @@ async function lookupAccessToken(tx: Tx, raw: string, now: Date): Promise<Bound 
   if (extra.workspace_id !== undefined && typeof extra.workspace_id !== 'string') return null
   const expiresAt = new Date(exp * 1000)
   if (expiresAt <= now) return null
+  // A connection to a suspended or deleted account reaches nothing (the operator console).
+  const live = await tx.query("SELECT 1 FROM platform.orgs WHERE id = $1 AND status = 'active'", [extra.org_id])
+  if (!live.rowCount) return null
   const common = { userId: accountId, orgId: extra.org_id, via: 'oauth' as const, clientId, tokenId: grantId, expiresAt }
   if (row.connection === null) {
     // Every grant for an account's address is a named connection: one without is for a single docket.
