@@ -3,18 +3,22 @@ import { z } from 'zod'
 import {
   Account,
   AccessExplained,
+  AccessWho,
   API_ERROR_CODES,
   AuditEvent,
   Capability,
   Connection,
   Docket,
+  DocketSummary,
   Grant,
   GranteeRef,
   Invite,
   IssuedToken,
   Me,
   Member,
+  Navigation,
   PlaceRef,
+  QuickSearch,
   Role,
   SLUG,
   Space,
@@ -36,6 +40,20 @@ import {
  * those). A browser session sends its CSRF token (`GET /api/v1/me`) as
  * `X-CSRF-Token` on every call that is not a GET.
  */
+
+/**
+ * The API's version, `major.minor`: a new minor adds operations or fields, a new major changes or removes them.
+ * Every `/api/v1` answer carries it (`X-Docket-Api-Version`), as does the OpenAPI document; a client built for
+ * another major, or a newer minor, says so rather than call what is not there.
+ */
+export const API_VERSION = '1.1'
+
+/** Whether a client built for API `wanted` can use a server answering `served`: the same major, and no newer minor. */
+export function compatible(wanted: string, served: string): boolean {
+  const [wantMajor, wantMinor] = wanted.split('.').map(Number)
+  const [haveMajor, haveMinor] = served.split('.').map(Number)
+  return wantMajor === haveMajor && (wantMinor ?? 0) <= (haveMinor ?? 0)
+}
 
 /** How a call may authenticate: a browser session cookie, an API token, or an OAuth access token from a named connection. */
 export type Credential = 'session' | 'token' | 'oauth'
@@ -258,6 +276,33 @@ export const OPERATIONS = [
     status: 204,
   }),
 
+  op({
+    id: 'accounts.navigation',
+    method: 'GET',
+    path: '/api/v1/accounts/{acct}/navigation',
+    tag: 'Accounts',
+    summary: "What the app's sidebar shows you in an account: your role, its spaces and the dockets you see, token notices and the month's AI spend.",
+    params: acct,
+    needs: { capability: 'member', on: 'account', text: 'A member of the account; a guest sees only what they hold something in' },
+    response: Navigation,
+    status: 200,
+  }),
+  op({
+    id: 'accounts.search',
+    method: 'GET',
+    path: '/api/v1/accounts/{acct}/search',
+    tag: 'Accounts',
+    summary: "The command menu's direct search (no AI) over the dockets `ws` names, or every docket you read: the first few of each kind of result.",
+    params: acct,
+    query: z.object({
+      q: z.string().max(200).optional(),
+      ws: z.string().max(4100).optional().describe('Docket slugs, comma-separated; omitted: every docket you read'),
+    }),
+    needs: { capability: 'read', on: 'anywhere', text: 'Read and ask on a docket; it searches only the dockets you read' },
+    response: QuickSearch,
+    status: 200,
+  }),
+
   // --- Users -------------------------------------------------------------------
   op({
     id: 'members.list',
@@ -340,6 +385,18 @@ export const OPERATIONS = [
     query: z.object({ place: PlaceRef }),
     needs: { capability: 'member', on: 'place', text: 'A member who sees the place' },
     response: AccessExplained,
+    status: 200,
+  }),
+  op({
+    id: 'access.who',
+    method: 'GET',
+    path: '/api/v1/accounts/{acct}/access/who',
+    tag: 'Access',
+    summary: 'Who reaches a place and why, the grants on the bigger places that cover it, and whom you may give access there.',
+    params: acct,
+    query: z.object({ place: PlaceRef }),
+    needs: { capability: 'access', on: 'place', text: 'Manage access, or Manage system accounts, on the place' },
+    response: AccessWho,
     status: 200,
   }),
   op({
@@ -546,6 +603,17 @@ export const OPERATIONS = [
     params: withAcct({ docket: SLUG }),
     needs: { capability: 'read', on: 'docket', text: 'Read and ask on the docket' },
     response: Docket,
+    status: 200,
+  }),
+  op({
+    id: 'dockets.summary',
+    method: 'GET',
+    path: '/api/v1/accounts/{acct}/dockets/{docket}/summary',
+    tag: 'Dockets',
+    summary: "A docket's header: its documents, open ontology drafts and published schema version.",
+    params: withAcct({ docket: SLUG }),
+    needs: { capability: 'read', on: 'docket', text: 'Read and ask on the docket' },
+    response: DocketSummary,
     status: 200,
   }),
   op({

@@ -224,7 +224,94 @@ export const Me = z.object({
     .nullable(),
   /** May create accounts (on the beta list). */
   allowlisted: z.boolean(),
+  /** Runs the platform (`DOCKET_PLATFORM_ADMINS`): sees its admin pages. */
+  platform_admin: z.boolean(),
   accounts: z.array(z.object({ id: z.string(), slug: z.string(), name: z.string(), owner: z.boolean(), guest: z.boolean() })),
+})
+
+/**
+ * What the app's sidebar shows a member of an account (`accounts.navigation`):
+ * their role, what they may do on the whole account and where they manage
+ * access, its spaces and the dockets they see - numbered across the account,
+ * so a docket keeps its number whoever is looking - token notices for its
+ * owners, and the month's AI spend.
+ */
+export const Navigation = z.object({
+  account: z.object({ slug: z.string(), name: z.string() }),
+  /** How their access reads across the account: Owner, or their role there. */
+  role: z.string(),
+  /** What they may do on the whole account. */
+  caps: z.array(Capability),
+  owner: z.boolean(),
+  /** Admin on the whole account: may change its roles. */
+  account_admin: z.boolean(),
+  /** Manages access, or system accounts, somewhere in the account. */
+  manages_access: z.boolean(),
+  manages_system_accounts: z.boolean(),
+  /** May make a space. */
+  creates_spaces: z.boolean(),
+  /** The spaces they see, General first; `create`: they may add a docket there. */
+  spaces: z.array(z.object({ id: z.string(), slug: z.string(), name: z.string(), general: z.boolean(), create: z.boolean() })),
+  /** The dockets they see; `open` is false for one they see but may not read. */
+  dockets: z.array(z.object({ slug: z.string(), name: z.string(), space_id: z.string(), number: z.string(), open: z.boolean() })),
+  /** System account tokens about to expire or just expired: for the account's owners. */
+  token_notices: z.object({ expiring: z.number().int(), expired: z.number().int() }),
+  ai: z.object({ spent_usd: z.number(), cap_usd: z.number(), fraction: z.number(), warned: z.boolean() }),
+})
+
+/** A docket's header (`dockets.summary`): how many documents it holds, its open ontology drafts, and its schema. */
+export const DocketSummary = z.object({
+  docket: z.string(),
+  documents: z.number().int(),
+  drafts: z.number().int(),
+  /** The published ontology version, or null before the first. */
+  schema: z
+    .object({ version: z.number().int(), published_at: timestamp.nullable(), published_by: z.string(), message: z.string().nullable() })
+    .nullable(),
+})
+
+/**
+ * The command menu's direct search (`accounts.search`): the first few of each
+ * kind of result, as the app's Ask draws them, and the type colours they use.
+ */
+export const QuickSearch = z.object({
+  records: z.array(z.record(z.string(), z.unknown())),
+  groups: z.object({
+    notes: z.array(z.record(z.string(), z.unknown())),
+    memory: z.array(z.record(z.string(), z.unknown())),
+    exhibits: z.array(z.record(z.string(), z.unknown())),
+    entries: z.array(z.record(z.string(), z.unknown())),
+  }),
+  slots: z.record(z.string(), z.unknown()),
+})
+
+/**
+ * Who reaches a place (`access.who`), for whoever manages access or system
+ * accounts there: everyone who may do something there and why, the grants on
+ * the bigger places that cover it (changed there, not here), and whom the
+ * caller may give access there.
+ */
+export const AccessWho = z.object({
+  place: Place,
+  reach: z.array(
+    z.object({
+      id: z.string(),
+      login: z.string(),
+      name: z.string().nullable(),
+      kind: z.enum(['human', 'service']),
+      guest: z.boolean(),
+      /** "Owner", "Can write", "Admin"... */
+      summary: z.string(),
+      /** Capabilities beyond what `summary` says. */
+      extra: z.array(Capability),
+      caps: z.array(Capability),
+      because: z.array(z.string()),
+    }),
+  ),
+  /** The grants on the space a docket is in, and on the whole account: they cover this place too. */
+  covering: z.array(Grant),
+  /** Whom the caller may give access here: `everyone`, or a member's id. */
+  candidates: z.array(z.object({ ref: z.string(), label: z.string() })),
 })
 
 export const SLUG = slug

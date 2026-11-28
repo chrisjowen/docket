@@ -553,9 +553,12 @@ rebuilds from Postgres.
 
 ### Not yet
 
-- **The UI as its own deployment.** `--no-ui` turns the product's pages off,
-  but they are still served by the same app; a separately deployed UI follows
-  once the public API covers every page.
+- **The UI as its own deployment, for every page.** The web UI's pages can be
+  hosted on their own, in front of the server
+  ([`packages/docket-ui/cloud`](../packages/docket-ui/cloud/README.md)), but
+  only a docket's Access tab has moved there so far; the server still renders
+  the rest, so the host passes them through. `--no-ui` turns every product
+  page off, the web UI's included.
 - **Linking identities.** A person who signs in with a second provider is a
   second user until an account settings page can link the two.
 - **Password changes** happen in the config. There is no page for changing

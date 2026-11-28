@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { OPERATIONS, type Operation } from './operations.js'
+import { API_VERSION, OPERATIONS, type Operation } from './operations.js'
 import { ApiError, ERROR_STATUS } from './schemas.js'
 
 const json = (schema: z.ZodType) => z.toJSONSchema(schema, { io: 'output', unrepresentable: 'any' }) as Record<string, unknown>
@@ -67,7 +67,7 @@ export function openApiDocument(origin = 'https://docket.example') {
     openapi: '3.1.0',
     info: {
       title: 'Docket API',
-      version: '1',
+      version: API_VERSION,
       description:
         'A call needs the same capability as the button in the app, held by whoever the credential acts as, on the place it names. ' +
         'A token or OAuth connection acts as its owner, narrowed to read-only and/or to some dockets. A browser session sends its CSRF token ' +

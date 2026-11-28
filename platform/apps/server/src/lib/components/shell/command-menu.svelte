@@ -160,7 +160,8 @@
     const controller = new AbortController()
     const timer = setTimeout(() => {
       const scope = workspace ? `&ws=${encodeURIComponent(workspace.slug)}` : ''
-      fetch(`${resolve('/o/[org]/search', { org: org.slug })}?q=${encodeURIComponent(q)}${scope}`, { signal: controller.signal })
+      // `accounts.search` (@docket/api): the same on a server-rendered page and in the web UI.
+      fetch(`/api/v1/accounts/${encodeURIComponent(org.slug)}/search?q=${encodeURIComponent(q)}${scope}`, { signal: controller.signal })
         .then(async (response) => {
           if (!response.ok) throw new Error(`The search answered ${response.status}.`)
           found = await response.json()

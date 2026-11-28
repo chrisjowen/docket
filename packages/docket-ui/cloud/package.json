@@ -1,0 +1,33 @@
+{
+  "name": "@docket/cloud-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The multi-tenant server's web UI: a static single-page app that uses only the public API (/api/v1). Bundled with the server, or hosted on its own in front of a reverse-proxied API.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "pnpm --dir ../../../platform/apps/server exec svelte-kit sync && svelte-kit sync && vite build && node scripts/manifest.mjs",
+    "pack:standalone": "node scripts/pack.mjs",
+    "standalone": "node standalone.mjs",
+    "typecheck": "svelte-kit sync && node scripts/typecheck.mjs",
+    "test": "svelte-kit sync && vitest run"
+  },
+  "devDependencies": {
+    "@docket/api": "workspace:*",
+    "@docket/platform-tenancy": "workspace:*",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "@fontsource/instrument-serif": "5.3.0",
+    "@lucide/svelte": "^0.554.0",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@types/node": "^22.19.0",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}

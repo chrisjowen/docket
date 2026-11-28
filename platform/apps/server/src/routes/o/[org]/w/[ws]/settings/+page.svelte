@@ -8,6 +8,7 @@
   import EnrichmentSettings from '$lib/components/enrichment-settings.svelte'
   import ModelSlots from '$lib/components/model-slots.svelte'
   import SettingsTabs from '$lib/components/settings-tabs.svelte'
+  import { href } from '$lib/href'
 
   let { data, form } = $props()
   let confirm = $state('')
@@ -48,7 +49,7 @@
     Anyone who can propose an ontology change files it as a draft. Whoever holds <strong>Publish ontology changes</strong> on this
     docket publishes it - in the Schema tab, or straight from an MCP client, with no review. It is a capability like any
     other: give it to one person on the
-    <a href={resolve('/o/[org]/w/[ws]/access', { org: data.org.slug, ws: data.workspace.slug })}>Access</a> tab. Every change
+    <a href={href('/o/[org]/w/[ws]/access', { org: data.org.slug, ws: data.workspace.slug })}>Access</a> tab. Every change
     is in the audit log and the
     <a href={resolve('/o/[org]/w/[ws]/ontology/history', { org: data.org.slug, ws: data.workspace.slug })}>ontology history</a>, where any version can be rolled back.
   </p>

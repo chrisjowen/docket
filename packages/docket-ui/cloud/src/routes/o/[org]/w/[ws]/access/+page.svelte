@@ -1,16 +1,54 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <script lang="ts">
-  import { resolve } from '$app/paths'
+  import { invalidate } from '$app/navigation'
   import { page } from '$app/state'
   import { CAPABILITY_INFO, type Capability } from '@docket/platform-tenancy/roles'
   import { ShieldCheck } from '@lucide/svelte'
 
-  import GiveAccess from '$lib/components/access/give-access.svelte'
-  import GrantList from '$lib/components/access/grant-list.svelte'
-  import Avatar from '$lib/components/avatar.svelte'
+  import { ApiError, call } from '$lib/api'
+  import { adjustment, givenMessage, removedMessage } from '$lib/views'
+  import GiveAccess from '$platform/components/access/give-access.svelte'
+  import GrantList from '$platform/components/access/grant-list.svelte'
+  import type { AccessSubmit } from '$platform/components/access/submit'
+  import Avatar from '$platform/components/avatar.svelte'
+  import { href } from '$platform/href'
 
-  let { data, form } = $props()
+  let { data } = $props()
   const capLabel = (cap: string) => CAPABILITY_INFO[cap as Capability]?.label ?? cap
+
+  // What the last change came to, in the words the server's page used for its form's.
+  let flash = $state<string | null>(null)
+  let problem = $state<string | null>(null)
+
+  /**
+   * Gives, changes or takes away a grant on this docket (`grants.create`, `grants.replace`, `grants.delete`),
+   * from the forms the server's page posts to its own actions, then reads the tab again.
+   */
+  const submit: AccessSubmit = async (action, form) => {
+    flash = null
+    problem = null
+    const acct = data.org.slug
+    const roleId = String(form.get('role') ?? '')
+    const role = data.roles.find((each) => each.id === roleId) ?? { caps: [] }
+    const { add, remove } = adjustment(role, form.has('adjusted') ? form.getAll('cap').map(String) : null)
+    const id = String(form.get('grant') ?? '')
+    try {
+      if (action === 'revoke') {
+        const row = data.onDocket.find((each) => each.id === id)
+        await call(fetch, 'grants.delete', { params: { acct, id } })
+        flash = row ? removedMessage(row) : 'Access removed.'
+      } else {
+        const grant =
+          action === 'give'
+            ? await call(fetch, 'grants.create', { params: { acct }, body: { who: String(form.get('who') ?? ''), place: data.here.key, role: roleId, add, remove } })
+            : await call(fetch, 'grants.replace', { params: { acct, id }, body: { role: roleId, add, remove } })
+        flash = givenMessage(grant)
+      }
+      await invalidate('api:docket-access')
+    } catch (cause) {
+      problem = cause instanceof ApiError ? cause.message : 'The change could not be made. Try again.'
+    }
+  }
 </script>
 
 <svelte:head>
@@ -23,10 +61,10 @@
   up, and a role on a bigger place covers this docket too{#if data.fromSpace}: a role on {data.fromSpace.name} covers every docket in it{/if}.
 </p>
 
-{#if form && 'problem' in form}<p class="alert" role="alert">{form.problem}</p>{:else if page.url.searchParams.get('problem')}
+{#if problem}<p class="alert" role="alert">{problem}</p>{:else if page.url.searchParams.get('problem')}
   <p class="alert" role="alert">The docket was made, but not all of its initial access could be given: {page.url.searchParams.get('problem')}</p>
 {/if}
-{#if form && 'flash' in form}<p class="flash" role="status">{form.flash}</p>{/if}
+{#if flash}<p class="flash" role="status">{flash}</p>{/if}
 
 <section class="card you" aria-labelledby="you-title" data-testid="your-access">
   <h2 id="you-title"><ShieldCheck size={17} aria-hidden="true" /> Your access here: <span class="badge">{data.you.summary}</span></h2>
@@ -67,18 +105,18 @@
   <section aria-labelledby="docket-grants-title">
     <h2 id="docket-grants-title" class="section">Given on this docket</h2>
     <div class="card">
-      <GrantList grants={data.onDocket} roles={data.roles} csrf={data.csrf} showPlace={false} label="Grants on this docket" />
+      <GrantList grants={data.onDocket} roles={data.roles} csrf={data.csrf} showPlace={false} label="Grants on this docket" {submit} />
     </div>
   </section>
 
-  <GiveAccess people={data.people} places={[data.place]} roles={data.roles} csrf={data.csrf} title="Give access to {data.workspace.name}" />
+  <GiveAccess people={data.people} places={[data.here]} roles={data.roles} csrf={data.csrf} title="Give access to {data.workspace.name}" {submit} />
 
   {#if data.fromSpace}
     <section aria-labelledby="space-grants-title">
       <h2 id="space-grants-title" class="section">From {data.fromSpace.name}</h2>
       <p class="muted small">
         These cover every docket in the {data.fromSpace.name} space, this one included. Change them on
-        <a href={resolve('/o/[org]/s/[space]/access', { org: data.org.slug, space: data.fromSpace.slug })}>{data.fromSpace.name}'s access page</a>.
+        <a href={href('/o/[org]/s/[space]/access', { org: data.org.slug, space: data.fromSpace.slug })}>{data.fromSpace.name}'s access page</a>.
       </p>
       <div class="card">
         <GrantList grants={data.fromSpace.grants} roles={data.roles} csrf={data.csrf} showPlace={false} label="Grants on {data.fromSpace.name}" />
@@ -90,7 +128,7 @@
     <h2 id="account-grants-title" class="section">From the whole account</h2>
     <p class="muted small">
       These cover every docket in {data.org.name}, this one included. Change them on
-      <a href={resolve('/o/[org]/members', { org: data.org.slug })}>Users</a>.
+      <a href={href('/o/[org]/members', { org: data.org.slug })}>Users</a>.
     </p>
     <div class="card">
       <GrantList grants={data.onAccount} roles={data.roles} csrf={data.csrf} showPlace={false} label="Grants on the whole account" />

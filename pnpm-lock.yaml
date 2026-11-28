@@ -450,6 +450,54 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.4)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
 
+  packages/docket-ui/cloud:
+    devDependencies:
+      '@docket/api':
+        specifier: workspace:*
+        version: link:../../api
+      '@docket/platform-tenancy':
+        specifier: workspace:*
+        version: link:../../../platform/packages/tenancy
+      '@fontsource-variable/geist':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/geist-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/instrument-serif':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@lucide/svelte':
+        specifier: ^0.554.0
+        version: 0.554.0(svelte@5.57.1)
+      '@sveltejs/adapter-static':
+        specifier: ^3.0.10
+        version: 3.0.10(@sveltejs/kit@2.70.3(@opentelemetry/api@1.10.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.57.1)(vite@7.3.6(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)))(svelte@5.57.1)(typescript@5.9.3)(vite@7.3.6(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)))
+      '@sveltejs/kit':
+        specifier: ^2.70.3
+        version: 2.70.3(@opentelemetry/api@1.10.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.57.1)(vite@7.3.6(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)))(svelte@5.57.1)(typescript@5.9.3)(vite@7.3.6(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^6.2.4
+        version: 6.2.4(svelte@5.57.1)(vite@7.3.6(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
+      '@types/node':
+        specifier: ^22.19.0
+        version: 22.20.4
+      svelte:
+        specifier: ^5.57.1
+        version: 5.57.1
+      svelte-check:
+        specifier: ^4.7.6
+        version: 4.7.6(picomatch@4.0.7)(svelte@5.57.1)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^7.0.0
+        version: 7.3.6(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.4)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
+
   packages/server:
     dependencies:
       yaml:
@@ -565,6 +613,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@docket/cloud-ui':
+        specifier: workspace:*
+        version: link:../../../packages/docket-ui/cloud
       '@fontsource-variable/geist':
         specifier: 5.3.0
         version: 5.3.0

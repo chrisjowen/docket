@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { OPERATIONS, matchOperation, openApiDocument, operation, pathOf, type Operation } from './index.js'
+import { API_VERSION, OPERATIONS, compatible, matchOperation, openApiDocument, operation, pathOf, type Operation } from './index.js'
 
 const all = OPERATIONS as readonly Operation[]
 
@@ -53,6 +53,23 @@ describe('the /api/v1 operations', () => {
     expect(operation('grants.create').body?.safeParse({ who: 'sam', place: 'docket:Pay', role: 'writer' }).success).toBe(false)
     expect(operation('grants.create').body?.safeParse({ who: 'sam', place: 'account', role: 'writer', add: ['fly'] }).success).toBe(false)
     expect(operation('audit.list').query?.safeParse({ limit: '20' })).toMatchObject({ success: true, data: { limit: 20 } })
+  })
+
+  it("match the web UI's own reads beside the operations they sit under", () => {
+    expect(matchOperation('GET', '/api/v1/accounts/acme/navigation')).toMatchObject({ operation: { id: 'accounts.navigation' } })
+    expect(matchOperation('GET', '/api/v1/accounts/acme/access/who')).toMatchObject({ operation: { id: 'access.who' } })
+    expect(matchOperation('GET', '/api/v1/accounts/acme/access')).toMatchObject({ operation: { id: 'access.explain' } })
+    expect(matchOperation('GET', '/api/v1/accounts/acme/dockets/payments/summary')).toMatchObject({ operation: { id: 'dockets.summary' }, params: { docket: 'payments' } })
+    expect(operation('accounts.search').query?.safeParse({ q: 'orders', ws: 'payments,platform' }).success).toBe(true)
+  })
+
+  it('fit a client to a server of the same major version and no older minor', () => {
+    expect(API_VERSION).toMatch(/^\d+\.\d+$/)
+    expect(compatible('1.0', '1.1')).toBe(true)
+    expect(compatible('1.1', '1.1')).toBe(true)
+    expect(compatible('1.2', '1.1')).toBe(false)
+    expect(compatible('1.0', '2.0')).toBe(false)
+    expect(openApiDocument().info.version).toBe(API_VERSION)
   })
 
   it('generate an OpenAPI document with each operation’s credentials, capability and errors', () => {

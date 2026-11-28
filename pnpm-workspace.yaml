@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - packages/docket-ui/cloud
   - platform
   - platform/apps/*
   - platform/packages/*

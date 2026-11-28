@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ERROR_STATUS, matchOperation, type ApiErrorCode, type Operation } from '@docket/api'
+import { API_VERSION, ERROR_STATUS, matchOperation, type ApiErrorCode, type Operation } from '@docket/api'
 import { ApiTokenError, ConnectionError, TokenRevocationError } from '@docket/platform-auth'
 import { WorkspaceError } from '@docket/platform-canonical-store'
 import { perMinute, rateLimitMessage } from '@docket/platform-limits'
@@ -57,7 +57,14 @@ export const outcomeOf = (status: number) =>
 function respond(status: number, body: unknown, requestId: string, headers: Record<string, string> = {}): Response {
   return new Response(body === null ? null : JSON.stringify(body), {
     status,
-    headers: { ...(body === null ? {} : { 'content-type': 'application/json' }), 'cache-control': 'no-store', 'x-request-id': requestId, ...headers },
+    headers: {
+      ...(body === null ? {} : { 'content-type': 'application/json' }),
+      'cache-control': 'no-store',
+      'x-request-id': requestId,
+      // What a client checks it fits (`compatible`): a web UI hosted apart from its server, a CLI.
+      'x-docket-api-version': API_VERSION,
+      ...headers,
+    },
   })
 }
 

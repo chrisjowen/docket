@@ -125,6 +125,7 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
       origin: 'https://docket.example',
       tokens: tokenResolver({ platform: (fn) => org.router.withPlatform(fn), ttlMs: 0 }),
       frameAncestors: "'none'",
+      platformAdmins: new Set<string>(),
       maxOrgs: 100,
       provisioner: postgresProvisioner({ admin: org.db.admin, keys: {} as never, appRole: org.db.appRole }),
     } as unknown as Runtime

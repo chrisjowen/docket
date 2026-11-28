@@ -149,7 +149,7 @@ const child = spawn(process.execPath, [join(root, 'apps/server/server.js')], {
     DOCKET_BETA_ALLOWLIST: process.env.E2E_ALLOWLIST ?? 'alice,carol',
     DOCKET_PLATFORM_ADMINS: process.env.E2E_PLATFORM_ADMINS ?? 'alice',
     // The suite makes more orgs than the beta's 8; each test keeps to orgs of its own.
-    DOCKET_BETA_ORG_LIMIT: process.env.E2E_ORG_LIMIT ?? '40',
+    DOCKET_BETA_ORG_LIMIT: process.env.E2E_ORG_LIMIT ?? '100',
     DOCKET_SIGNIN_PER_MINUTE: process.env.E2E_SIGNIN_PER_MINUTE ?? '1000',
     DOCKET_OAUTH_PER_MINUTE: process.env.E2E_OAUTH_PER_MINUTE ?? '1000',
     DOCKET_OAUTH_TOKEN_PER_MINUTE: process.env.E2E_OAUTH_PER_MINUTE ?? '1000',

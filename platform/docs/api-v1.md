@@ -43,14 +43,25 @@ UI imports it, and `GET /api/v1/openapi.json` publishes it as OpenAPI 3.1
 | Area | Operations |
 | --- | --- |
 | You | `GET /me`; `GET/POST /me/tokens`, `PATCH/DELETE /me/tokens/{id}`; `GET /me/connections`, `PATCH/DELETE /me/connections/{id}` |
-| Accounts | `GET/POST /accounts`; `GET/PATCH/DELETE /accounts/{acct}` (rename, transfer ownership with `{ owner }`, delete: owners only) |
+| Accounts | `GET/POST /accounts`; `GET/PATCH/DELETE /accounts/{acct}` (rename, transfer ownership with `{ owner }`, delete: owners only); `GET …/navigation` (the app's sidebar), `GET …/search` (the command menu's direct search) |
 | Users | `GET …/members`, `PATCH/DELETE …/members/{user}`; `GET/POST …/invites`, `DELETE …/invites/{id}` |
-| Access | `GET …/access?place=`; `GET/POST …/grants`, `PUT/PATCH/DELETE …/grants/{id}` |
+| Access | `GET …/access?place=`, `GET …/access/who?place=`; `GET/POST …/grants`, `PUT/PATCH/DELETE …/grants/{id}` |
 | Roles | `GET/POST …/roles`, `PUT/DELETE …/roles/{id}` |
 | Spaces | `GET/POST …/spaces`, `GET/PATCH …/spaces/{space}` |
-| Dockets | `GET/POST …/dockets`, `GET/PATCH/DELETE …/dockets/{docket}` |
+| Dockets | `GET/POST …/dockets`, `GET/PATCH/DELETE …/dockets/{docket}`, `GET …/dockets/{docket}/summary` |
 | System accounts | `GET/POST …/system-accounts`, `GET/DELETE …/system-accounts/{id}`, `GET/POST …/system-accounts/{id}/tokens`, `DELETE …/tokens/{token}` |
 | Oversight | `GET …/audit`, `GET …/usage` |
+
+The web UI ([`packages/docket-ui/cloud`](../../packages/docket-ui/cloud))
+draws its pages from these operations alone; `navigation`, `search`,
+`summary` and `access/who` are what the app's frame and a place's Access tab
+show.
+
+**Versions.** `API_VERSION` in `@docket/api` is `major.minor`: a new minor
+adds operations or fields, a new major changes or removes them. Every answer
+carries it as `X-Docket-Api-Version`, and the OpenAPI document as its
+`info.version`; a client built for another major, or a newer minor, refuses
+rather than call what is not there.
 
 `…` is `/api/v1/accounts/{acct}`. A place is named `account`,
 `space:<slug>` or `docket:<slug>`; a person by login, a system account by
