@@ -27,7 +27,7 @@ test.beforeAll(async ({ browser }) => {
   await acmeWorkspace(page, org, 'Mirror')
   if (WORKER) {
     for (const ws of ['acme', 'mirror']) {
-      await page.goto(`/o/${org}/w/${ws}/graph`)
+      await page.goto(`/a/${org}/d/${ws}/graph`)
       await expect(page.getByTestId('index-status')).toHaveText('Index up to date', { timeout: 60_000 })
     }
   }
@@ -42,9 +42,9 @@ async function openScope(page: Page) {
 
 async function openAsk(page: Page) {
   await signIn(page, 'alice')
-  await page.goto(`/o/${org}`)
-  await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Ask' }).click()
-  await expect(page).toHaveURL(`/o/${org}/ask`)
+  await page.goto(`/a/${org}`)
+  await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Chat' }).click()
+  await expect(page).toHaveURL(`/a/${org}/ask`)
 }
 
 test('search finds every kind of result in every chosen workspace, filters the records, and draws them on the map', async ({ page }) => {
@@ -161,7 +161,7 @@ test('a question goes to each chosen workspace, cites sources by workspace, and 
   await page.getByRole('button', { name: 'Ask', exact: true }).click()
 
   // The chat is saved, and its URL set, once docket has answered from every workspace.
-  await expect(page).toHaveURL(new RegExp(`/o/${org}/ask\\?chat=[0-9a-f-]{36}$`), { timeout: 30_000 })
+  await expect(page).toHaveURL(new RegExp(`/a/${org}/ask\\?chat=[0-9a-f-]{36}$`), { timeout: 30_000 })
   await expect(page.getByTestId('question')).toHaveText(/Who owns the orders service\?/)
   const parts = page.getByTestId('workspace-answer')
   await expect(parts).toHaveCount(2)
@@ -223,16 +223,16 @@ test('a question goes to each chosen workspace, cites sources by workspace, and 
   if (WORKER) {
     // A source opens in its workspace's Record, on that record.
     const link = page.getByTestId('answer').first().locator('[data-workspace="acme"] [data-testid="source"][data-id="service.orders"]').getByRole('link')
-    await expect(link).toHaveAttribute('href', `/o/${org}/w/acme/graph?focus=service.orders`)
+    await expect(link).toHaveAttribute('href', `/a/${org}/d/acme/graph?focus=service.orders`)
     await link.click()
-    await expect(page).toHaveURL(new RegExp(`/o/${org}/w/acme/graph\\?focus=service\\.orders$`))
+    await expect(page).toHaveURL(new RegExp(`/a/${org}/d/acme/graph\\?focus=service\\.orders$`))
     await expect(page.getByTestId('inspector').getByRole('heading', { name: 'Orders', level: 2 })).toBeVisible()
     await page.goto(url)
   }
 
   await page.getByRole('button', { name: 'Delete chat' }).click()
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
-  await expect(page).toHaveURL(`/o/${org}/ask`)
+  await expect(page).toHaveURL(`/a/${org}/ask`)
   await expect(chats.getByRole('link', { name: /Who owns the orders service\?/ })).toHaveCount(0)
   expect((await page.goto(url))?.status()).toBe(404)
 })
@@ -251,48 +251,48 @@ test('a question needs words and a workspace', async ({ page }) => {
 test('a docket’s Chat tab asks that docket alone, and every way into Ask keeps the docket and remembers the scope', async ({ page }) => {
   test.setTimeout(60_000)
   await signIn(page, 'alice')
-  await page.goto(`/o/${org}/w/acme/overview`)
+  await page.goto(`/a/${org}/d/acme/overview`)
   await page.getByRole('navigation', { name: 'Docket' }).getByRole('link', { name: 'Chat', exact: true }).click()
-  await expect(page).toHaveURL(`/o/${org}/w/acme/ask`)
+  await expect(page).toHaveURL(`/a/${org}/d/acme/ask`)
   await expect(page.getByTestId('scope')).toContainText('asking Acme only')
   await expect(page.getByTestId('workspace-picker')).toHaveCount(0)
   await page.getByLabel('Question').fill('Which teams are on call?')
   await page.getByRole('button', { name: 'Ask', exact: true }).click()
 
   // The answer is saved to a chat on the tab, asked of Acme alone.
-  await expect(page).toHaveURL(new RegExp(`/o/${org}/w/acme/ask\\?chat=[0-9a-f-]{36}$`), { timeout: 30_000 })
+  await expect(page).toHaveURL(new RegExp(`/a/${org}/d/acme/ask\\?chat=[0-9a-f-]{36}$`), { timeout: 30_000 })
   await expect(page.getByTestId('question')).toContainText('asked of Acme')
   await expect(page.getByTestId('question')).not.toContainText('Mirror')
   const chats = page.getByRole('complementary', { name: 'Saved chats' })
   await expect(chats.getByRole('link', { name: /Which teams are on call\?/ })).toHaveAttribute('aria-current', 'page')
   // Mirror's tab lists only the chats asking Mirror alone.
-  await page.goto(`/o/${org}/w/mirror/ask`)
+  await page.goto(`/a/${org}/d/mirror/ask`)
   await expect(chats.getByRole('link', { name: /Which teams are on call\?/ })).toHaveCount(0)
 
   // From inside a docket, the sidebar's Ask opens on it, and New chat keeps it.
-  await page.goto(`/o/${org}/w/acme/overview`)
-  await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Ask' }).click()
-  await expect(page).toHaveURL(`/o/${org}/ask?ws=acme`)
+  await page.goto(`/a/${org}/d/acme/overview`)
+  await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Chat' }).click()
+  await expect(page).toHaveURL(`/a/${org}/ask?ws=acme`)
   await expect(page.getByTestId('scope').locator('summary')).toHaveText(/Acme/)
-  await expect(page.getByTestId('new-chat').first()).toHaveAttribute('href', `/o/${org}/ask?ws=acme`)
+  await expect(page.getByTestId('new-chat').first()).toHaveAttribute('href', `/a/${org}/ask?ws=acme`)
   // The scope is remembered: Ask's bare address keeps Acme instead of resetting to every docket.
-  await page.goto(`/o/${org}/ask`)
+  await page.goto(`/a/${org}/ask`)
   await expect(page.getByTestId('scope').locator('summary')).toHaveText(/Acme/)
   await page.getByTestId('scope').locator('summary').click()
   await page.getByRole('button', { name: 'All dockets' }).click()
-  await page.goto(`/o/${org}/ask`)
+  await page.goto(`/a/${org}/ask`)
   await expect(page.getByTestId('scope').locator('summary')).toHaveText(/All 2 dockets/)
 
   // A phone keeps the chip on one line under the composer, without the page scrolling sideways.
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto(`/o/${org}/w/acme/ask`)
+  await page.goto(`/a/${org}/d/acme/ask`)
   await expect(page.locator('form.chat-composer')).toBeInViewport()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
 test('the command menu finds records and the rest, jumps to pages, and hands the words to Ask', async ({ page }) => {
   await signIn(page, 'alice')
-  await page.goto(`/o/${org}/w/acme/overview`)
+  await page.goto(`/a/${org}/d/acme/overview`)
   // The sidebar's search field opens it, as ⌘K (Ctrl+K) does from anywhere; clicked again until the page has hydrated.
   const menu = page.getByRole('dialog', { name: 'Search or jump to' })
   await expect(async () => {
@@ -311,7 +311,7 @@ test('the command menu finds records and the rest, jumps to pages, and hands the
   await expect(menu.locator('[role="option"][data-group="Exhibits"]').first()).toBeVisible()
   await expect(options.filter({ hasText: 'Search everything for “orders”' })).toBeVisible()
   await options.filter({ hasText: 'Search everything for “orders”' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${org}/ask\\?mode=search&q=orders&ws=acme$`))
+  await expect(page).toHaveURL(new RegExp(`/a/${org}/ask\\?mode=search&q=orders&ws=acme$`))
   await expect(page.getByTestId('group-exhibits')).toBeVisible()
 
   // A page by its name, with the keyboard: outside a docket, the casebook's pages.
@@ -319,15 +319,15 @@ test('the command menu finds records and the rest, jumps to pages, and hands the
   await menu.getByRole('combobox').fill('users')
   await expect(options.first()).toHaveText(/Users/)
   await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(`/o/${org}/members`)
+  await expect(page).toHaveURL(`/a/${org}/members`)
 
   // The words, asked: Ask opens on the docket and sends them, as a new chat. Reached in the page, so ⌘K finds it hydrated.
   await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: /^Acme/ }).click()
-  await expect(page).toHaveURL(`/o/${org}/w/acme/overview`)
+  await expect(page).toHaveURL(`/a/${org}/d/acme/overview`)
   await page.keyboard.press('ControlOrMeta+k')
   await menu.getByRole('combobox').fill('Who owns checkout?')
   await options.filter({ hasText: 'Ask: “Who owns checkout?”' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${org}/ask\\?chat=[0-9a-f-]{36}$`), { timeout: 30_000 })
+  await expect(page).toHaveURL(new RegExp(`/a/${org}/ask\\?chat=[0-9a-f-]{36}$`), { timeout: 30_000 })
   await expect(page.getByTestId('question')).toHaveText(/Who owns checkout\?/)
   await expect(page.getByTestId('workspace-answer')).toHaveCount(1)
 })

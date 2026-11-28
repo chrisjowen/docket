@@ -200,7 +200,7 @@ export function exportPr(deps: ExportPrDeps): ExportPr {
       if (!files.length) throw new ExportError('empty', 'Nothing to export: every cloud document is in the repo already, and its ontology matches.')
 
       const workspaceName = read.workspace?.name ?? connection.workspaceId
-      const link = deps.origin && read.workspace ? new URL(`/o/${org.slug}/w/${read.workspace.slug}/repos`, deps.origin).toString() : undefined
+      const link = deps.origin && read.workspace ? new URL(`/a/${org.slug}/d/${read.workspace.slug}/repos`, deps.origin).toString() : undefined
       const pr = await openExportPr(client, {
         repo: route.repoFullName,
         base: route.branch,

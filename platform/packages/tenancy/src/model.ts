@@ -72,6 +72,10 @@ export interface Invite {
   invitedByLogin: string
   createdAt: Date
   expiresAt: Date
+  /** The address it was made for, once its email was delivered; null for a GitHub-login invite, whose address is never shown. */
+  emailedTo: string | null
+  /** When its email was delivered; null when none was (or since it was sent again). */
+  emailedAt: Date | null
 }
 
 type UserRow = {
@@ -281,7 +285,7 @@ export async function insertOrg(
   await reapStaleOrgs(tx)
   const maxOrgs = input.maxOrgs ?? LIMITS.orgs
   if ((await countLiveOrgs(tx)) >= maxOrgs) {
-    throw new TenancyError('limit', `The beta is full: it holds ${maxOrgs} organisations.`)
+    throw new TenancyError('limit', `The beta is full: it holds ${maxOrgs} accounts.`)
   }
   const taken = await tx.query('SELECT 1 FROM platform.orgs WHERE slug = $1', [input.slug])
   if (taken.rowCount) throw new TenancyError('conflict', 'That name is taken.')
@@ -371,17 +375,22 @@ export async function listMembers(tx: Tx, orgId: string): Promise<Member[]> {
   }))
 }
 
-/** Locks the org row and checks a new seat fits under the members limit. The org admin API's service accounts take no seat. */
+/**
+ * Locks the org row and checks a new seat fits under the members limit: the
+ * account's own, which the operator sets, or the beta's. The org admin API's
+ * service accounts take no seat.
+ */
 async function reserveSeat(tx: Tx, orgId: string): Promise<void> {
-  await tx.query('SELECT 1 FROM platform.orgs WHERE id = $1 FOR UPDATE', [orgId])
+  const locked = await tx.query<{ max_members: number | null }>('SELECT max_members FROM platform.orgs WHERE id = $1 FOR UPDATE', [orgId])
+  const limit = locked.rows[0]?.max_members ?? LIMITS.membersPerOrg
   const { rows } = await tx.query<{ count: string }>(
     `SELECT (SELECT count(*) FROM platform.memberships m JOIN platform.orgs o ON o.id = m.org_id
               WHERE m.org_id = $1 AND m.user_id IS DISTINCT FROM o.org_admin_id AND NOT ${DATABASE_ACCOUNT('m')})
           + (SELECT count(*) FROM platform.invites WHERE org_id = $1 AND ${OPEN_INVITE}) AS count`,
     [orgId],
   )
-  if (Number(rows[0]?.count ?? 0) >= LIMITS.membersPerOrg) {
-    throw new TenancyError('limit', `An organisation holds at most ${LIMITS.membersPerOrg} members and invites.`)
+  if (Number(rows[0]?.count ?? 0) >= limit) {
+    throw new TenancyError('limit', `This account holds at most ${limit} members and invites.`)
   }
 }
 
@@ -431,7 +440,7 @@ export async function removeMember(tx: Tx, input: { orgId: string; userId: strin
   }
   if (held.owner) {
     const { rows: owners } = await tx.query<{ count: string }>('SELECT count(*) FROM platform.memberships WHERE org_id = $1 AND owner', [input.orgId])
-    if (Number(owners[0]?.count ?? 0) <= 1) throw new TenancyError('last-owner', 'An organisation needs an owner. Make someone else owner first.')
+    if (Number(owners[0]?.count ?? 0) <= 1) throw new TenancyError('last-owner', 'An account needs an owner. Make someone else owner first.')
   }
   await tx.query('DELETE FROM platform.memberships WHERE org_id = $1 AND user_id = $2', [input.orgId, input.userId])
   if (row.kind === 'service') {
@@ -810,6 +819,8 @@ type InviteRow = {
   invited_by_login: string
   created_at: Date
   expires_at: Date
+  emailed_to: string | null
+  emailed_at: Date | null
 }
 
 function toInvite(row: InviteRow): Invite {
@@ -827,11 +838,13 @@ function toInvite(row: InviteRow): Invite {
     invitedByLogin: row.invited_by_login,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
+    emailedTo: row.emailed_to,
+    emailedAt: row.emailed_at,
   }
 }
 
 const INVITE_COLUMNS = `i.id, i.org_id, i.github_login, i.email, i.role_id, r.name AS role_name, i.place_kind, i.place_id,
-  i.owner, i.guest, i.invited_by, u.login AS invited_by_login, i.created_at, i.expires_at`
+  i.owner, i.guest, i.invited_by, u.login AS invited_by_login, i.created_at, i.expires_at, i.emailed_to, i.emailed_at`
 const INVITE_FROM = 'platform.invites i JOIN platform.users u ON u.id = i.invited_by JOIN platform.roles r ON r.id = i.role_id'
 
 async function rolesCaps(tx: Tx, orgId: string, roleId: string): Promise<readonly Capability[] | null> {
@@ -843,6 +856,26 @@ async function rolesCaps(tx: Tx, orgId: string, roleId: string): Promise<readonl
   return builtin?.caps ?? roles[0]?.caps.filter(isCapability) ?? null
 }
 
+/** An invite as issued: with its link's secret, which only its SHA-256 is kept of. Shown once, and sent in the email. */
+export interface IssuedInvite extends Invite {
+  linkSecret: string
+}
+
+/** The prefix of an invite link's secret: `/invite/dki_…`. */
+export const INVITE_LINK_PREFIX = 'dki_'
+
+function newInviteLink(): { secret: string; hash: string } {
+  const secret = `${INVITE_LINK_PREFIX}${randomBytes(24).toString('base64url')}`
+  return { secret, hash: inviteLinkHash(secret) }
+}
+
+const inviteLinkHash = (secret: string) => createHash('sha256').update(secret, 'utf8').digest('hex')
+
+/** Whether a string has an invite link secret's shape: checked before any lookup. */
+export function isInviteLinkSecret(value: string): boolean {
+  return new RegExp(`^${INVITE_LINK_PREFIX}[A-Za-z0-9_-]{32}$`).test(value)
+}
+
 /**
  * Invites someone by GitHub login or email (§8.1), to a role on a place: what
  * they get when they accept. Anyone who manages access on a place may invite
@@ -852,7 +885,7 @@ async function rolesCaps(tx: Tx, orgId: string, roleId: string): Promise<readonl
 export async function createInvite(
   tx: Tx,
   input: { orgId: string; who: string; roleId: string; place: Place; guest?: boolean; actorId: string; actor: Access; now?: Date },
-): Promise<Invite> {
+): Promise<IssuedInvite> {
   const caps = await rolesCaps(tx, input.orgId, input.roleId)
   if (!caps) throw new TenancyError('invalid', 'Choose a role.')
   if (!mayGrant(input.actor, input.place, caps, 'human')) {
@@ -880,10 +913,11 @@ export async function createInvite(
   await reserveSeat(tx, input.orgId)
   const now = input.now ?? new Date()
   const id = randomUUID()
+  const link = newInviteLink()
   try {
     await tx.query(
-      `INSERT INTO platform.invites (id, org_id, github_login, email, role_id, place_kind, place_id, guest, invited_by, created_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO platform.invites (id, org_id, github_login, email, role_id, place_kind, place_id, guest, invited_by, created_at, expires_at, link_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         id,
         input.orgId,
@@ -896,6 +930,7 @@ export async function createInvite(
         input.actorId,
         now,
         new Date(now.getTime() + INVITE_TTL_MS),
+        link.hash,
       ],
     )
   } catch (error) {
@@ -906,7 +941,7 @@ export async function createInvite(
   }
   const invite = await inviteById(tx, id)
   if (!invite) throw new Error('invite vanished')
-  return invite
+  return { ...invite, linkSecret: link.secret }
 }
 
 async function inviteById(tx: Tx, id: string): Promise<Invite | null> {
@@ -949,24 +984,45 @@ export async function openInvitesFor(
   return rows.map((row) => ({ ...toInvite(row), orgSlug: row.org_slug, orgName: row.org_name }))
 }
 
+/** Refuses whoever may not give what an invite gives, where it gives it: they may neither cancel nor send it. */
+async function mayAnswerFor(tx: Tx, orgId: string, invite: Invite, actor: Access, verb: 'cancel' | 'send'): Promise<void> {
+  if (invite.owner) {
+    if (!actor.owner) throw new TenancyError('forbidden', `Only an owner can ${verb} an invite to own the account.`)
+    return
+  }
+  const caps = (await rolesCaps(tx, orgId, invite.roleId)) ?? []
+  if (!mayGrant(actor, invite.place, caps, 'human')) {
+    throw new TenancyError('forbidden', `You can only ${verb} an invite where you manage access.`)
+  }
+}
+
 /** Cancels an open invite: whoever may give what it gives, where it gives it, may take it back. */
 export async function revokeInvite(tx: Tx, input: { orgId: string; inviteId: string; actor: Access }): Promise<Invite> {
   const invite = await inviteById(tx, input.inviteId)
   if (!invite || invite.orgId !== input.orgId) throw new TenancyError('not-found', 'No such invite.')
-  if (invite.owner) {
-    if (!input.actor.owner) throw new TenancyError('forbidden', 'Only an owner can cancel an invite to own the account.')
-  } else {
-    const caps = (await rolesCaps(tx, input.orgId, invite.roleId)) ?? []
-    if (!mayGrant(input.actor, invite.place, caps, 'human')) {
-      throw new TenancyError('forbidden', 'You can only cancel an invite where you manage access.')
-    }
-  }
+  await mayAnswerFor(tx, input.orgId, invite, input.actor, 'cancel')
   const { rowCount } = await tx.query(
     `UPDATE platform.invites SET revoked_at = now() WHERE id = $1 AND ${OPEN_INVITE}`,
     [input.inviteId],
   )
   if (!rowCount) throw new TenancyError('not-found', 'That invite is no longer open.')
   return invite
+}
+
+/** Joins a user to the account an invite is for, with what it gives. */
+async function joinByInvite(tx: Tx, invite: Invite, userId: string): Promise<void> {
+  const joined = await tx.query(
+    `INSERT INTO platform.memberships (org_id, user_id, owner, guest, invited_by) VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (org_id, user_id) DO NOTHING`,
+    [invite.orgId, userId, invite.owner, invite.guest && !invite.owner, invite.invitedBy],
+  )
+  if (joined.rowCount && !invite.owner) {
+    await tx.query(
+      `INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id, granted_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [`g_${randomUUID()}`, invite.orgId, userId, invite.place.kind, placeIdOf(invite.place), invite.roleId, invite.invitedBy],
+    )
+  }
 }
 
 /**
@@ -985,19 +1041,121 @@ export async function answerInvite(
     input.accept ? [input.inviteId, input.user.id] : [input.inviteId],
   )
   if (!rowCount) throw new TenancyError('not-found', 'That invite is no longer open.')
-  if (input.accept) {
-    const joined = await tx.query(
-      `INSERT INTO platform.memberships (org_id, user_id, owner, guest, invited_by) VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (org_id, user_id) DO NOTHING`,
-      [mine.orgId, input.user.id, mine.owner, mine.guest && !mine.owner, mine.invitedBy],
-    )
-    if (joined.rowCount && !mine.owner) {
-      await tx.query(
-        `INSERT INTO platform.grants (id, org_id, principal_id, place_kind, place_id, role_id, granted_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [`g_${randomUUID()}`, mine.orgId, input.user.id, mine.place.kind, placeIdOf(mine.place), mine.roleId, mine.invitedBy],
-      )
-    }
-  }
+  if (input.accept) await joinByInvite(tx, mine, input.user.id)
   return mine
+}
+
+// --- Invite links (tenancy v2 §6) ---------------------------------------------
+
+/** What an invite link opens: the invite, and whether it can still be answered. */
+export interface InviteByLink extends InviteForUser {
+  state: 'open' | 'accepted' | 'declined' | 'cancelled' | 'expired'
+}
+
+/**
+ * The invite a link's secret opens, whatever its state, or null for a link
+ * that never was one (or was replaced by a newer one). An invite to an
+ * account that is no longer active opens nothing.
+ */
+export async function inviteByLink(tx: Tx, secret: string, now = new Date()): Promise<InviteByLink | null> {
+  if (!isInviteLinkSecret(secret)) return null
+  const { rows } = await tx.query<InviteRow & { org_slug: string; org_name: string; accepted_at: Date | null; declined_at: Date | null; revoked_at: Date | null }>(
+    `SELECT ${INVITE_COLUMNS}, o.slug AS org_slug, o.name AS org_name, i.accepted_at, i.declined_at, i.revoked_at
+       FROM ${INVITE_FROM}
+       JOIN platform.orgs o ON o.id = i.org_id AND o.status = 'active'
+      WHERE i.link_hash = $1`,
+    [inviteLinkHash(secret)],
+  )
+  const row = rows[0]
+  if (!row) return null
+  const state = row.accepted_at
+    ? 'accepted'
+    : row.declined_at
+      ? 'declined'
+      : row.revoked_at
+        ? 'cancelled'
+        : row.expires_at <= now
+          ? 'expired'
+          : 'open'
+  return { ...toInvite(row), orgSlug: row.org_slug, orgName: row.org_name, state }
+}
+
+/**
+ * Whether an invite link lets this GitHub login in: an open invite, by email
+ * (the link is how its address was proved) or to this very login. An invite
+ * to another login is theirs alone.
+ */
+export function inviteLinkAdmits(invite: Pick<InviteByLink, 'state' | 'githubLogin'>, login: string): boolean {
+  return invite.state === 'open' && (invite.githubLogin === null || invite.githubLogin === login.toLowerCase())
+}
+
+/**
+ * Accepts or declines an invite by its link (tenancy v2 §6): it works once.
+ * Whoever holds the link to an invite by email may answer it; an invite to a
+ * GitHub login only that login may.
+ */
+export async function answerInviteByLink(
+  tx: Tx,
+  input: { secret: string; user: { id: string; login: string }; accept: boolean },
+): Promise<InviteForUser> {
+  const invite = await inviteByLink(tx, input.secret)
+  if (!invite || invite.state !== 'open') throw new TenancyError('not-found', 'That invite is no longer open.')
+  if (!inviteLinkAdmits(invite, input.user.login)) {
+    throw new TenancyError('forbidden', `This invite is for @${invite.githubLogin}. Sign in as them to accept it.`)
+  }
+  const { rowCount } = await tx.query(
+    `UPDATE platform.invites SET ${input.accept ? 'accepted_at = now(), accepted_by = $2' : 'declined_at = now()'}
+      WHERE id = $1 AND ${OPEN_INVITE}`,
+    input.accept ? [invite.id, input.user.id] : [invite.id],
+  )
+  if (!rowCount) throw new TenancyError('not-found', 'That invite is no longer open.')
+  if (input.accept) await joinByInvite(tx, invite, input.user.id)
+  return invite
+}
+
+/**
+ * Sends an open invite again: a new link, for 7 more days, and the old link
+ * stops working. Whoever may cancel it may send it again.
+ */
+export async function reissueInvite(
+  tx: Tx,
+  input: { orgId: string; inviteId: string; actor: Access; now?: Date },
+): Promise<IssuedInvite> {
+  const invite = await inviteById(tx, input.inviteId)
+  if (!invite || invite.orgId !== input.orgId) throw new TenancyError('not-found', 'No such invite.')
+  await mayAnswerFor(tx, input.orgId, invite, input.actor, 'send')
+  const now = input.now ?? new Date()
+  const link = newInviteLink()
+  const { rowCount } = await tx.query(
+    `UPDATE platform.invites SET link_hash = $2, expires_at = $3, emailed_to = NULL, emailed_at = NULL WHERE id = $1 AND ${OPEN_INVITE}`,
+    [input.inviteId, link.hash, new Date(now.getTime() + INVITE_TTL_MS)],
+  )
+  if (!rowCount) throw new TenancyError('not-found', 'That invite is no longer open.')
+  const fresh = await inviteById(tx, input.inviteId)
+  if (!fresh) throw new Error('invite vanished')
+  return { ...fresh, linkSecret: link.secret }
+}
+
+/**
+ * Records that an invite's email was delivered. Only the address the invite
+ * was made for is kept: the address on file of a GitHub-login invitee is
+ * never stored here, nor shown to whoever invited them.
+ */
+export async function markInviteEmailed(tx: Tx, input: { inviteId: string }): Promise<void> {
+  await tx.query('UPDATE platform.invites SET emailed_to = lower(email), emailed_at = now() WHERE id = $1', [input.inviteId])
+}
+
+/**
+ * Where an invite's email goes: the address it was made for, or the primary
+ * email of the person a GitHub-login invite is for, when they have signed in
+ * here before. Null when there is nowhere to send it.
+ */
+export async function inviteEmailAddress(tx: Tx, invite: Pick<Invite, 'email' | 'githubLogin'>): Promise<string | null> {
+  if (invite.email) return invite.email
+  if (!invite.githubLogin) return null
+  const { rows } = await tx.query<{ email: string | null }>(
+    "SELECT email FROM platform.users WHERE kind = 'human' AND login_lower = $1 AND email IS NOT NULL LIMIT 1",
+    [invite.githubLogin],
+  )
+  return rows[0]?.email ?? null
 }

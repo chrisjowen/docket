@@ -44,7 +44,7 @@ UI imports it, and `GET /api/v1/openapi.json` publishes it as OpenAPI 3.1
 | --- | --- |
 | You | `GET /me`; `GET/POST /me/tokens`, `PATCH/DELETE /me/tokens/{id}`; `GET /me/connections`, `PATCH/DELETE /me/connections/{id}` |
 | Accounts | `GET/POST /accounts`; `GET/PATCH/DELETE /accounts/{acct}` (rename, transfer ownership with `{ owner }`, delete: owners only); `GET …/navigation` (the app's sidebar), `GET …/search` (the command menu's direct search) |
-| Users | `GET …/members`, `PATCH/DELETE …/members/{user}`; `GET/POST …/invites`, `DELETE …/invites/{id}` |
+| Users | `GET …/members`, `PATCH/DELETE …/members/{user}`; `GET/POST …/invites`, `POST …/invites/{id}/resend`, `DELETE …/invites/{id}` |
 | Access | `GET …/access?place=`, `GET …/access/who?place=`; `GET/POST …/grants`, `PUT/PATCH/DELETE …/grants/{id}` |
 | Roles | `GET/POST …/roles`, `PUT/DELETE …/roles/{id}` |
 | Spaces | `GET/POST …/spaces`, `GET/PATCH …/spaces/{space}` (rename; its own Neo4j or the account's with `graph`; its own provider key or the account's with `ai_key`) |
@@ -52,6 +52,7 @@ UI imports it, and `GET /api/v1/openapi.json` publishes it as OpenAPI 3.1
 | Settings | `GET/PATCH …/settings` (the account's models, its limits on what spaces and dockets choose, and its monthly cap); `GET/PATCH …/spaces/{space}/settings` (a space's models, limits and slice of the cap); `GET/PATCH …/dockets/{docket}/settings` (a docket's models and background agents) |
 | System accounts | `GET/POST …/system-accounts`, `GET/DELETE …/system-accounts/{id}`, `GET/POST …/system-accounts/{id}/tokens`, `DELETE …/tokens/{token}` |
 | Oversight | `GET …/audit`, `GET …/usage` |
+| Operator | `GET /operator/accounts`, `PATCH /operator/accounts/{acct}` |
 
 The web UI ([`packages/docket-ui/cloud`](../../packages/docket-ui/cloud))
 draws its pages from these operations alone; `navigation`, `search`,
@@ -67,6 +68,29 @@ rather than call what is not there.
 `…` is `/api/v1/accounts/{acct}`. A place is named `account`,
 `space:<slug>` or `docket:<slug>`; a person by login, a system account by
 name, or `everyone`; a role by id or name.
+
+An invite is a link that works once, for 7 days (`/invite/dki_…`). Making
+one (`POST …/invites`) or sending it again (`POST …/invites/{id}/resend`,
+which makes a new link and ends the old one) returns its `link` that once,
+and emails it to the invite's address, or to a GitHub login's address when
+that person has signed in before. `emailed` says whether the email was
+delivered (never when `DOCKET_MAIL` is `log` or `none`); `emailed_to` is the
+address the invite was made for, and is null for an invite to a GitHub login:
+that person's address on file is never shown to whoever invites them. Whoever holds the link to
+an invite by email may sign in and accept it; an invite to a GitHub login
+only that login may. `admin_invite` over MCP never returns the link.
+
+The operator operations are the operator console's (`/admin/accounts`), for
+the platform's operators (`DOCKET_PLATFORM_ADMINS`) in their own browser
+session; any token, and anyone else, is refused (403). They list every
+account with its owners, its counts of people, system accounts and open
+invites, its limits and whether it is suspended, never anything of its
+content; and they suspend or resume an account (`{ suspended, reason }`) and
+set its own limits on seats and dockets (`{ max_members, max_dockets }`, null
+for the beta's). A suspended account is not served: its pages, API and MCP
+addresses answer as if it did not exist, its tokens and connections stop
+working (401), and nothing in it is lost. Each change is recorded in the
+platform's audit log as `api.operator.accounts.update`.
 
 **Settings.** A place's settings resolve account, then space, then docket
 (tenancy v2 §5), and every change goes through that resolver: a place

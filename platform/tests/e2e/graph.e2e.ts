@@ -28,13 +28,13 @@ test('the graph browser shows an imported workspace, and its index catches up', 
   test.setTimeout(90_000)
   await signIn(page, 'alice')
   const slug = await createOrg(page, `Graph ${unique()}`)
-  await page.goto(`/o/${slug}/workspaces/new`)
+  await page.goto(`/a/${slug}/dockets/new`)
   await page.getByLabel('Name').fill('Acme')
   await page.getByText('An entities.yaml file').click()
   await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({ name: 'entities.yaml', mimeType: 'text/yaml', buffer: Buffer.from(ontology) })
   await page.getByRole('button', { name: 'Create docket' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${slug}/w/acme/ontology$`))
-  await page.goto(`/o/${slug}/w/acme/documents`)
+  await expect(page).toHaveURL(new RegExp(`/a/${slug}/d/acme/ontology$`))
+  await page.goto(`/a/${slug}/d/acme/documents`)
   await page.locator('input[name="files"]').setInputFiles(documents)
   await page.getByRole('button', { name: 'Import', exact: true }).click()
   await expect(page.getByText('Wrote 21 documents.')).toBeVisible()
@@ -48,7 +48,7 @@ test('the graph browser shows an imported workspace, and its index catches up', 
   expect(graph.entities.map((entity) => entity.id)).toContain('service.orders')
 
   await page.getByRole('navigation', { name: 'Docket' }).getByRole('link', { name: 'Record' }).click()
-  await expect(page).toHaveURL(new RegExp(`/o/${slug}/w/acme/graph$`))
+  await expect(page).toHaveURL(new RegExp(`/a/${slug}/d/acme/graph$`))
   await expect(page.getByText('21 records and 37 relations')).toBeVisible()
   await expect(page.getByTestId('board').locator('g[role="button"]')).toHaveCount(21)
 
@@ -68,7 +68,7 @@ test('the graph browser shows an imported workspace, and its index catches up', 
   await expect(page).not.toHaveURL(/focus=/)
 
   // On the facts view a record's case file opens in the same drawer, with the findings about it; one opens its note.
-  await page.goto(`/o/${slug}/w/acme/graph?view=facts&focus=service.orders`)
+  await page.goto(`/a/${slug}/d/acme/graph?view=facts&focus=service.orders`)
   await expect(inspector.getByRole('heading', { name: 'Orders' })).toBeVisible()
   const findings = inspector.getByTestId('case-findings')
   await expect(findings.getByRole('button').first()).toContainText('Orders')

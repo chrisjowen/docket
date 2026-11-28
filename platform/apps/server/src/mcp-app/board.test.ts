@@ -26,7 +26,7 @@ const graph = (overrides: Partial<SearchGraph> = {}): SearchGraph => ({
   ],
   sources: [{ name: 'local', hits: 1 }],
   index: { synced: true, behind: 0 },
-  viewer: 'https://docket.example/o/acme/w/shop/graph',
+  viewer: 'https://docket.example/a/acme/d/shop/graph',
   warnings: [],
   ...overrides,
 })

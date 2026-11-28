@@ -6,7 +6,7 @@
  * The scope reads as a chip: all dockets, one, or several.
  */
 
-/** The cookie holding the casebook's last Ask scope, set on its `/o/{org}` path. */
+/** The cookie holding the casebook's last Ask scope, set on its `/a/{acct}` path. */
 export const ASK_SCOPE_COOKIE = 'ask_scope'
 
 /** What the cookie holds when every docket was chosen, so dockets opened later join in. */

@@ -186,6 +186,45 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   its shared Qdrant collection. A migration test checks every docket resolves
   to the same models, key and stores before and after.
 
+### Onboarding, invite links and new addresses (multi-tenant server)
+
+- An account's pages are at `/a/{account}` and a docket's at
+  `/a/{account}/d/{docket}`. Every old page address (`/o/{org}/…` and
+  `/o/{org}/w/{workspace}/…`) redirects permanently to its new one, query
+  and all, and a form posted to an old address is posted again to the new
+  one. The CLI's `/api/o/{org}/…`, the org admin API's `/api/admin/o/{org}/…`
+  and every MCP address are unchanged.
+- The app says account where it said organisation or casebook, Home for an
+  account's own page, and Chat for asking the record.
+- The operator console (`/admin`), for the platform's operators
+  (`DOCKET_PLATFORM_ADMINS`): every account with its owners and its counts of
+  people, system accounts and open invites, never anything of its content.
+  An operator suspends or resumes an account, saying why, and sets its own
+  limits on seats and dockets in place of the beta's; `GET
+  /api/v1/operator/accounts` and `PATCH /api/v1/operator/accounts/{acct}` do
+  the same from the operator's browser session. A suspended account is not
+  served and its tokens and connections stop working; nothing in it is lost.
+  The beta waitlist is the console's second tab.
+- Signing up is seven steps: sign in (an open invite skips you ahead, into
+  its account); create your account at `/start`, as its Owner, with what it
+  gets spelled out (Postgres, Neo4j, Qdrant and the AI cap); General, with
+  what everyone gets there (Reader by default) and optionally more spaces;
+  the first docket, on the same New docket page; connecting an AI client,
+  one of three ways; inviting users, one row each; and landing in the
+  docket's Chat tab. `/orgs/new` redirects to `/start`, and the home page
+  offers it to someone in no account yet who may make one.
+- An invite is a link that works once, for 7 days (`/invite/dki_…`), shown
+  once to whoever invites and emailed to its address. Whoever holds the link
+  to an invite by email may sign in and accept it, whatever their GitHub
+  account; an invite to a GitHub login stays that login's. Users › Invite can
+  send an invite again with a new link; the old one stops working.
+  `POST /api/v1/accounts/{acct}/invites` returns the link, and
+  `…/invites/{id}/resend` is new; `admin_invite` over MCP never returns it.
+- `DOCKET_MAIL` chooses how invite emails are sent: `log` (the default)
+  writes each one's address and subject to the log, never its link; `none`
+  sends nothing. There is no mail transport yet, so the link is passed on by
+  whoever invites.
+
 ### Storage and AI settings on API v1 and MCP (multi-tenant server)
 
 - `GET`/`PATCH /api/v1/accounts/{account}/settings`, `…/spaces/{space}/settings`
@@ -207,7 +246,7 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
 - In the app, the account's AI settings page is now open to anyone with
   Change settings on the account, not only owners; the monthly cap field
   stays owner-only.
-- The API's version is now 1.2.
+- The API's version is now 1.3.
 
 ## 0.16.0
 

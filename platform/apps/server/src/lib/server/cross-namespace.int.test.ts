@@ -30,14 +30,14 @@ vi.mock('@docket/platform-auth', async (actual) => ({
   },
 }))
 const { handleMcp } = await import('./mcp')
-const { load: orgLayout } = await import('../../routes/o/[org]/+layout.server')
-const { load: docketLayout } = await import('../../routes/o/[org]/w/[ws]/+layout.server')
-const { GET: commandSearch } = await import('../../routes/o/[org]/search/+server')
+const { load: orgLayout } = await import('../../routes/a/[acct]/+layout.server')
+const { load: docketLayout } = await import('../../routes/a/[acct]/d/[docket]/+layout.server')
+const { GET: commandSearch } = await import('../../routes/a/[acct]/search/+server')
 const consentPage = await import('../../routes/oauth/consent/[uid]/+page.server')
 
 const ROUTES = join(import.meta.dirname, '..', '..', 'routes')
-/** Every route that works on one docket, for a signed-in member or a bearer token: the docket is the `[ws]` in its path. */
-const DOCKET_TREES = [join(ROUTES, 'o', '[org]', 'w', '[ws]'), join(ROUTES, 'api', 'o', '[org]', 'w', '[ws]')]
+/** Every route that works on one docket, for a signed-in member or a bearer token: the docket is the `[docket]` in its path. */
+const DOCKET_TREES = [join(ROUTES, 'a', '[acct]', 'd', '[docket]'), join(ROUTES, 'api', 'o', '[acct]', 'w', '[docket]')]
 const HANDLERS = ['load', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 const MARK = { alpha: 'ALPHA-MARK', beta: 'BETA-MARK', elsewhere: 'OTHER-ACCOUNT-MARK' } as const
 const EVERY_SCOPE: Scope[] = ['docket:read', 'docket:write', 'ontology:read', 'ontology:propose']
@@ -222,9 +222,9 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
       options.body === 'json'
         ? { body: JSON.stringify(WELL_FORMED), headers: { 'content-type': 'application/json' } }
         : { body: options.body === 'form' ? wellFormedForm() : new FormData() }
-    const url = new URL(`https://docket.example/o/${orgSlug}${ws ? `/w/${ws}` : ''}${options.path ?? ''}`)
+    const url = new URL(`https://docket.example/a/${orgSlug}${ws ? `/d/${ws}` : ''}${options.path ?? ''}`)
     const event: Record<string, unknown> = {
-      params: { org: orgSlug, ...(ws ? { ws } : {}), ...options.params },
+      params: { acct: orgSlug, ...(ws ? { docket: ws } : {}), ...options.params },
       locals: {
         user: { ...users[name]!, name: null, avatarUrl: null, emails: [], allowlisted: false },
         startedAt: performance.now(),
@@ -255,7 +255,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
     const method = options.method ?? 'GET'
     return {
       url,
-      params: { org: orgSlug, ws, ...options.params },
+      params: { acct: orgSlug, docket: ws, ...options.params },
       request: new Request(url, {
         method,
         headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' },
@@ -344,7 +344,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
   afterAll(() => org?.drop())
 
   describe('the web app, signed in', () => {
-    // Some 900 calls: 20 s on its own, longer beside the other suites sharing the stores.
+    // Some 900 calls: 20 s on its own, but 75-90 s in CI beside the other suites sharing the stores.
     it('refuses beta, and the other account, on every docket route: each page, action and API', async () => {
       const handlers: { route: string; name: string; call: (event: RequestEvent) => unknown; method: string; body?: 'form' | 'json' }[] = []
       for (const file of (await Promise.all(DOCKET_TREES.map(routeFiles))).flat()) {
@@ -364,12 +364,12 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
       expect(handlers.length).toBeGreaterThan(40)
       expect(handlers.map((handler) => `${handler.route} ${handler.name}`)).toEqual(
         expect.arrayContaining([
-          'o/[org]/w/[ws]/+layout.server.ts load',
-          'o/[org]/w/[ws]/documents/[...path]/+page.server.ts load',
-          'o/[org]/w/[ws]/proposals/[id]/+page.server.ts actions.accept',
-          'o/[org]/w/[ws]/settings/+page.server.ts load',
-          'o/[org]/w/[ws]/mcp/+page.server.ts load',
-          'api/o/[org]/w/[ws]/proposals/[id]/+server.ts POST',
+          'a/[acct]/d/[docket]/+layout.server.ts load',
+          'a/[acct]/d/[docket]/documents/[...path]/+page.server.ts load',
+          'a/[acct]/d/[docket]/proposals/[id]/+page.server.ts actions.accept',
+          'a/[acct]/d/[docket]/settings/+page.server.ts load',
+          'a/[acct]/d/[docket]/mcp/+page.server.ts load',
+          'api/o/[acct]/w/[docket]/proposals/[id]/+server.ts POST',
         ]),
       )
 
@@ -397,7 +397,7 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
       }
       expect(answers).toEqual(expected)
       expect(await betaState()).toEqual(before)
-    }, 90_000)
+    }, 180_000)
 
     it('never names beta to a guest, nor the other account to anyone, in the sidebar', async () => {
       const sidebar = async (name: string, orgSlug = slug) =>
@@ -539,12 +539,12 @@ describe.skipIf(!TEST_PG_URL)('cross-namespace isolation', () => {
 
   describe("the CLI's API, by bearer token", () => {
     const cliRoutes = async () => ({
-      me: (await import('../../routes/api/o/[org]/w/[ws]/me/+server')).GET,
-      documents: (await import('../../routes/api/o/[org]/w/[ws]/documents/+server')).GET,
-      push: (await import('../../routes/api/o/[org]/w/[ws]/documents/push/+server')).POST,
-      tokens: (await import('../../routes/api/o/[org]/w/[ws]/tokens/+server')).GET,
-      mint: (await import('../../routes/api/o/[org]/w/[ws]/tokens/+server')).POST,
-      revoke: (await import('../../routes/api/o/[org]/w/[ws]/tokens/[id]/+server')).DELETE,
+      me: (await import('../../routes/api/o/[acct]/w/[docket]/me/+server')).GET,
+      documents: (await import('../../routes/api/o/[acct]/w/[docket]/documents/+server')).GET,
+      push: (await import('../../routes/api/o/[acct]/w/[docket]/documents/push/+server')).POST,
+      tokens: (await import('../../routes/api/o/[acct]/w/[docket]/tokens/+server')).GET,
+      mint: (await import('../../routes/api/o/[acct]/w/[docket]/tokens/+server')).POST,
+      revoke: (await import('../../routes/api/o/[acct]/w/[docket]/tokens/[id]/+server')).DELETE,
     })
 
     it('answers an alpha token, API or OAuth, as if beta and the other account had no such workspace', async () => {

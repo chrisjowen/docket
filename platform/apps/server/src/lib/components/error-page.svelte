@@ -19,14 +19,14 @@
   {/if}
   <p class="lede">
     {#if page.status === 404}
-      There is nothing here, or it belongs to an organisation you are not in.
+      There is nothing here, or it belongs to an account you are not in.
     {:else if page.status === 403}
-      Ask someone who manages access in this organisation if you need it.
+      Ask someone who manages access in this account if you need it.
     {:else}
       Try again in a moment.
     {/if}
   </p>
-  <a class="button primary" href={resolve('/')}>Back to your organisations</a>
+  <a class="button primary" href={resolve('/')}>Back to your accounts</a>
 </div>
 
 <style>

@@ -32,16 +32,16 @@ try {
   await page.waitForURL((url) => !url.pathname.startsWith('/signin'))
 
   const org = 'acme-corp'
-  const graph = `${base}/o/${org}/w/platform/graph`
+  const graph = `${base}/a/${org}/d/platform/graph`
   if ((await page.goto(graph))?.status() === 200) {
     console.log(`seed-demo: already seeded: ${graph}`)
   } else {
-    await page.goto(`${base}/orgs/new`)
+    await page.goto(`${base}/start`)
     await page.getByLabel('Name').fill('Acme Corp')
     await page.getByLabel('Address').fill(org)
-    await page.getByRole('button', { name: 'Create organisation' }).click()
-    await page.waitForURL(new RegExp(`/o/${org}/members$`))
-    await page.goto(`${base}/o/${org}/workspaces/new`)
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await page.waitForURL(new RegExp(`/a/${org}/start/space$`))
+    await page.goto(`${base}/a/${org}/dockets/new`)
     await page.getByLabel('Name').fill('Platform')
     await page.getByText('An entities.yaml file').click()
     await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({
@@ -51,7 +51,7 @@ try {
     })
     await page.getByRole('button', { name: 'Create docket' }).click()
     await page.waitForURL(/\/ontology$/)
-    await page.goto(`${base}/o/${org}/w/platform/documents`)
+    await page.goto(`${base}/a/${org}/d/platform/documents`)
     await page.locator('input[name="files"]').setInputFiles(documents)
     await page.getByRole('button', { name: 'Import', exact: true }).click()
     await page.getByText(`Wrote ${documents.length} documents.`).waitFor()

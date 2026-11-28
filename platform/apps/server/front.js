@@ -24,11 +24,12 @@ const serving = existsSync(join(UI_DIR, 'serve.js')) ? await import(pathToFileUR
 
 /**
  * The product's pages, which a headless server (`--no-ui`) does not serve: the home page and
- * everything under an account, account creation and the platform admin's pages. The API,
- * MCP, OAuth (with its consent screen), sign-in, the GitHub callbacks and health stay.
+ * everything under an account (at its address, or an old one that redirects), signing up and
+ * invite links, and the platform operator's pages. The API, MCP, OAuth (with its consent
+ * screen), sign-in, the GitHub callbacks and health stay.
  */
 export function isProductPage(pathname) {
-  return pathname === '/' || /^\/(o|orgs|admin|_ui)(\/|$)/.test(pathname) || pathname === '/github/setup'
+  return pathname === '/' || /^\/(a|o|orgs|admin|start|invite|_ui)(\/|$)/.test(pathname) || pathname === '/github/setup'
 }
 
 /** The built web UI (`UI_DIR`), or null when there is none: then its pages are not found, and the server says so. */

@@ -136,7 +136,7 @@ export async function orgAccess(event: RequestEvent, options: { api?: boolean } 
     requireUser(event)
     throw new Error('unreachable')
   }
-  const slug = event.params.org ?? ''
+  const slug = event.params.acct ?? ''
   const found = await getRuntime().router.withPlatform(async (tx) => {
     const membership = await membershipBySlug(tx, slug, user.id)
     const principal = membership && (await accessOf(tx, membership.org.id, user.id))

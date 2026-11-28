@@ -9,29 +9,31 @@ export interface Crumb {
 
 /** What org-level pages read as in the breadcrumbs, by route. */
 const ORG_PAGES: Record<string, string> = {
-  '/o/[org]/ask': 'Ask',
-  '/o/[org]/members': 'Users',
-  '/o/[org]/tokens': 'Your tokens & connections',
-  '/o/[org]/audit': 'Audit log',
-  '/o/[org]/settings': 'Settings',
-  '/o/[org]/settings/system-accounts': 'System accounts',
-  '/o/[org]/settings/system-accounts/[id]': 'System account',
-  '/o/[org]/workspaces/new': 'New docket',
-  '/o/[org]/spaces/new': 'New space',
+  '/a/[acct]/ask': 'Chat',
+  '/a/[acct]/members': 'Users',
+  '/a/[acct]/tokens': 'Your tokens & connections',
+  '/a/[acct]/audit': 'Audit log',
+  '/a/[acct]/settings': 'Settings',
+  '/a/[acct]/settings/system-accounts': 'System accounts',
+  '/a/[acct]/settings/system-accounts/[id]': 'System account',
+  '/a/[acct]/dockets/new': 'New docket',
+  '/a/[acct]/spaces/new': 'New space',
 }
 
 /** A space's pages, by route: its own page carries no label of its own. */
 const SPACE_PAGES: Record<string, string | null> = {
-  '/o/[org]/s/[space]': null,
-  '/o/[org]/s/[space]/access': 'Users & system accounts',
-  '/o/[org]/s/[space]/new': 'New docket',
+  '/a/[acct]/s/[space]': null,
+  '/a/[acct]/s/[space]/access': 'Users & system accounts',
+  '/a/[acct]/s/[space]/new': 'New docket',
+  '/a/[acct]/s/[space]/settings': 'Settings',
 }
 
 /** Pages outside any casebook. */
 const OTHER_PAGES: Record<string, string> = {
   '/': 'Home',
-  '/orgs/new': 'New organisation',
-  '/admin/waitlist': 'Waitlist',
+  '/start': 'Create your account',
+  '/admin/accounts': 'Operator console',
+  '/admin/waitlist': 'Operator console · Waitlist',
   '/oauth/consent/[uid]': 'Authorise a client',
 }
 
@@ -51,7 +53,7 @@ export function crumbsFor(input: {
     const label = routeId ? OTHER_PAGES[routeId] : undefined
     return [{ label: label ?? 'Docket Cloud' }]
   }
-  const casebook = `/o/${org.slug}`
+  const casebook = `/a/${org.slug}`
   if (space && routeId && routeId in SPACE_PAGES) {
     const label = SPACE_PAGES[routeId]
     const trail: Crumb[] = [{ label: org.name, href: casebook }]
@@ -59,9 +61,9 @@ export function crumbsFor(input: {
   }
   if (!workspace) {
     const label = routeId ? ORG_PAGES[routeId] : undefined
-    return label ? [{ label: `${org.name} casebook`, href: casebook }, { label }] : [{ label: `${org.name} casebook` }]
+    return label ? [{ label: org.name, href: casebook }, { label }] : [{ label: org.name }]
   }
-  const base = `/o/${org.slug}/w/${workspace.slug}`
+  const base = `/a/${org.slug}/d/${workspace.slug}`
   const tab = activeTab(pathname, org.slug, workspace.slug)
   const trail: Crumb[] = [
     { label: org.name, href: casebook },

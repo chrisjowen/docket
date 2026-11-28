@@ -213,7 +213,7 @@ test("a bearer call ignores the browser's session: no CSRF token is asked for", 
   expect(session).not.toBe('')
   const page = await (await browser.newContext()).newPage()
   await signIn(page, 'alice')
-  await page.goto(`/o/${org}`)
+  await page.goto(`/a/${org}`)
   // The page's request context sends alice's session cookie, but no CSRF token and no Origin.
   const response = await page.request.post(`/api/o/${org}/w/platform/documents/push`, {
     headers: { authorization: `Bearer ${session}`, 'content-type': 'application/json' },

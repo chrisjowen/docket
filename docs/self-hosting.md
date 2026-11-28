@@ -494,8 +494,16 @@ guess.
   are limited per address and per login. There is no self-service sign-up.
 
 Who may sign in: members of an account, anyone with an open invite (by
-GitHub login, or by an email a provider has verified), and whoever
-`auth.access.allow` names. Everyone on `allow` may also create accounts.
+GitHub login, or by an email a provider has verified), anyone holding an
+open invite's link (an invite by email; one to a GitHub login only for that
+login), and whoever `auth.access.allow` names. Everyone on `allow` may also
+create accounts, at `/start`, which then walks them through a first space,
+docket, AI client and invites.
+
+Invites go by link and by email. The server has no mail transport of its own
+yet: `DOCKET_MAIL=log` (the default) writes each invite email's address and
+subject to the log, never its link, and `DOCKET_MAIL=none` sends nothing.
+Either way, whoever invites sees the link once and passes it on.
 
 ```yaml
 # Single sign-on only, for a company's own install.

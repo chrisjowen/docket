@@ -13,7 +13,7 @@ components, so a visitor cannot tell which drew a page.
 
 | Page | Here since | API operations |
 | --- | --- | --- |
-| A docket's Access tab (`/o/{account}/w/{docket}/access`) | B5 | `me.get`, `accounts.navigation`, `accounts.search` (⌘K), `dockets.get`, `dockets.summary`, `access.explain`, `access.who`, `grants.list`, `roles.list`, `grants.create`, `grants.replace`, `grants.delete` |
+| A docket's Access tab (`/a/{account}/d/{docket}/access`) | B5 | `me.get`, `accounts.navigation`, `accounts.search` (⌘K), `dockets.get`, `dockets.summary`, `access.explain`, `access.who`, `grants.list`, `roles.list`, `grants.create`, `grants.replace`, `grants.delete` |
 
 It calls the operations `@docket/api` defines ([`packages/api`](../../api),
 served at `GET /api/v1/openapi.json`), by their ids and with their types; the
@@ -73,7 +73,7 @@ reverse proxy does the same; with nginx, for example:
 
 ```nginx
 location /_ui/ { root /srv/docket-cloud-ui/site; }
-location ~ ^/o/[^/]+/w/[^/]+/access/?$ { root /srv/docket-cloud-ui/site; try_files /index.html =404; }
+location ~ ^/a/[^/]+/d/[^/]+/access/?$ { root /srv/docket-cloud-ui/site; try_files /index.html =404; }
 location / { proxy_pass http://docket:4390; proxy_set_header X-Forwarded-For $remote_addr; }
 ```
 

@@ -47,7 +47,7 @@ export function newTenantId(): string {
 }
 
 /**
- * The org's name in URLs (`/o/{slug}`): lowercase letters, digits and inner
+ * The org's name in URLs (`/a/{slug}`): lowercase letters, digits and inner
  * hyphens, 2-40 characters. The slug is separate from the id, so a rename never
  * touches the org's schema.
  */

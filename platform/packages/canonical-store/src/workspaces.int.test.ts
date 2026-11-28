@@ -170,7 +170,7 @@ describe.skipIf(!TEST_PG_URL)('insertWorkspace limits with the org admin API', (
     expect(await org.withOrg(({ tx }) => countMemberWorkspaces(tx))).toBe(0)
     for (let i = 0; i < LIMITS.workspacesPerOrg; i += 1) await byMember(`ui-${i}`)
     expect(await org.withOrg(({ tx }) => countMemberWorkspaces(tx))).toBe(LIMITS.workspacesPerOrg)
-    await expect(byMember('ui-over')).rejects.toMatchObject({ code: 'limit', message: expect.stringContaining('in the beta') })
+    await expect(byMember('ui-over')).rejects.toMatchObject({ code: 'limit', message: `This account holds at most ${LIMITS.workspacesPerOrg} dockets.` })
     // The org's limit counts the members' workspaces as well as its own.
     await expect(viaApi('api-over')).rejects.toMatchObject({ code: 'limit', message: expect.stringContaining(`${limit} databases`) })
   })

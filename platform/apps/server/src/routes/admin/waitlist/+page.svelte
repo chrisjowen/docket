@@ -4,6 +4,7 @@
   import { Ticket } from '@lucide/svelte'
 
   import Csrf from '$lib/components/csrf.svelte'
+  import OperatorTabs from '$lib/components/operator-tabs.svelte'
 
   let { data, form } = $props()
 
@@ -22,12 +23,13 @@
 
 <div class="admin">
   <h1>Beta waitlist</h1>
+  <OperatorTabs active="waitlist" />
   <p class="muted">
-    Teams asking to join, newest first: {data.waiting} waiting. The beta holds {data.orgs.live} of {data.orgs.max} organisations.
+    Teams asking to join, newest first: {data.waiting} waiting. The beta holds {data.orgs.live} of {data.orgs.max} accounts.
   </p>
   <p class="muted small">
     <strong>Invite</strong> puts the entry's verified GitHub login on the beta list, so its next GitHub sign-in gets in and may
-    create an organisation. An entry from the form has no verified GitHub account: ask its person to use <strong>Join with
+    create an account. An entry from the form has no verified GitHub account: ask its person to use <strong>Join with
     GitHub</strong> with that email as a verified address, and the entry can be invited then. Docket Cloud sends no email yet:
     tell people yourself.
   </p>

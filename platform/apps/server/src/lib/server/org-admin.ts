@@ -287,7 +287,7 @@ function outcome(status: number): Outcome {
 export async function handleOrgAdmin(event: RequestEvent): Promise<Response> {
   const runtime = getRuntime()
   const route = routeOf(event)
-  const recordRefused = refusedCredentials(event, runtime, `${runtime.origin}/api/admin/o/${event.params.org ?? ''}`)
+  const recordRefused = refusedCredentials(event, runtime, `${runtime.origin}/api/admin/o/${event.params.acct ?? ''}`)
   const state: { principal: MasterKeyPrincipal | null } = { principal: null }
   let workspaceId: string | undefined
   let target: string[] = []
@@ -307,7 +307,7 @@ export async function handleOrgAdmin(event: RequestEvent): Promise<Response> {
       response = await runtime.router.withPlatform(async (tx) => {
         const bearer = bearerOf(event.request)
         const found = bearer ? await lookupMasterKey(tx, bearer) : null
-        if (!found || found.orgSlug !== event.params.org) throw new CliError(401, 'invalid_token', 'This master key is not valid for this organisation.')
+        if (!found || found.orgSlug !== event.params.acct) throw new CliError(401, 'invalid_token', 'This master key is not valid for this organisation.')
         state.principal = found
         const limits: Limit[] = [{ scope: 'master key', key: `org-admin:${found.id}`, rule: perMinute(60) }]
         if (route.action === 'key.issue') limits.push({ scope: 'master key', what: 'new keys', key: `org-admin-key-create:${found.id}`, rule: perMinute(10) })

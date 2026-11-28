@@ -32,9 +32,21 @@ describe('the /api/v1 operations', () => {
     }
   })
 
-  it('keep minting a personal token and making an account to a browser session', () => {
+  it('keep minting a personal token, making an account and the operator console to a browser session', () => {
     expect(operation('me.tokens.create').auth).toEqual(['session'])
     expect(operation('accounts.create').auth).toEqual(['session'])
+    expect(operation('operator.accounts.list').auth).toEqual(['session'])
+    expect(operation('operator.accounts.update')).toMatchObject({ auth: ['session'], needs: { capability: 'operator' } })
+    expect(operation('operator.accounts.update').mcpTool).toBeUndefined()
+  })
+
+  it('return an invite link only where one is made, never in a list', () => {
+    const link = { link: 'https://docket.example/invite/dki_x' }
+    expect(operation('invites.create').response?.safeParse({}).success).toBe(false)
+    expect(Object.keys((operation('invites.create').response as unknown as { shape: object }).shape)).toContain('link')
+    expect(Object.keys((operation('invites.resend').response as unknown as { shape: object }).shape)).toContain('link')
+    const listed = (operation('invites.list').response as unknown as { shape: { invites: { element: { shape: object } } } }).shape.invites.element.shape
+    expect(Object.keys(listed)).not.toContain(Object.keys(link)[0])
   })
 
   it('match a request to its operation, its path parameters, or the methods the path takes', () => {

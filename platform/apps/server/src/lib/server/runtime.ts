@@ -50,6 +50,7 @@ import {
 import pg from 'pg'
 
 import { loginList } from './admin'
+import { mailerFrom, type Mailer } from './mail'
 import type { ReadinessProbes } from './health'
 import { startJobs } from './jobs'
 import { bindMetrics, countRefusal, startMetricsServer } from './metrics'
@@ -107,6 +108,8 @@ export interface Runtime {
   platformAdmins: ReadonlySet<string>
   /** Whether a cognee service runs beside the worker (`DOCKET_COGNEE_ENABLED`): only then can a workspace turn cognee on. */
   cognee: boolean
+  /** How invite emails are sent (`DOCKET_MAIL`): logged by default, never their links. */
+  mailer: Mailer
 }
 
 /**
@@ -360,7 +363,9 @@ async function boot(key: Uint8Array, requests: pg.Pool, attempt = 1): Promise<vo
       signInRule: env.DOCKET_SIGNIN_PER_MINUTE ? perMinute(Number(env.DOCKET_SIGNIN_PER_MINUTE)) : RATE_LIMITS.signInPerAddress,
       platformAdmins: new Set(loginList('DOCKET_PLATFORM_ADMINS', env.DOCKET_PLATFORM_ADMINS)),
       cognee: env.DOCKET_COGNEE_ENABLED === 'true',
+      mailer: mailerFrom(env.DOCKET_MAIL),
     }
+    if (!runtime.mailer.delivers) console.info(`mail: ${runtime.mailer.kind} (DOCKET_MAIL): invite emails are not sent; whoever invites passes the link on`)
     if (runtime.demo) console.warn(`local preview: demo sign-in as ${runtime.demo.login} is on (DOCKET_DEMO_LOGIN)`)
     startupError = undefined
     bindMetrics({ router, ready: () => kek !== undefined && runtime !== undefined })

@@ -12,6 +12,7 @@ import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { memoryMailer } from './mail'
 import { rateLimiter as addressLimiter } from './rate-limit'
 import type { Runtime } from './runtime'
 
@@ -107,7 +108,7 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
     const url = new URL(`https://docket.example/mcp/${slug()}${query}`)
     const event = {
       url,
-      params: { org: slug() },
+      params: { acct: slug() },
       request: new Request(url, {
         method: 'POST',
         headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' },
@@ -167,6 +168,7 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
         ask: async () => Promise.reject(new Error('not used')),
       },
       caps: { assertWithinCap: async () => undefined },
+      mailer: memoryMailer(),
     } as unknown as Runtime
   })
   beforeEach(() => {
@@ -269,6 +271,13 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
     expect(offered.some((name) => name.startsWith('admin_'))).toBe(false)
   })
 
+  it('invites over MCP without ever handing the invite link to the model', async () => {
+    const invited = await call(tokens.owner as string, 'admin_invite', { to: 'mcp-invitee@example.com', place: 'space:general', role: 'reader' }, '?admin=1')
+    expect(invited.body?.result.isError, JSON.stringify(invited.body)).toBeUndefined()
+    expect(invited.body?.result.structuredContent).toMatchObject({ to: 'mcp-invitee@example.com', link: null, emailed_to: 'mcp-invitee@example.com' })
+    expect(JSON.stringify(invited.body)).not.toMatch(/dki_/)
+  })
+
   it('lets a system account that manages without content set things up over MCP, as the API checks it, and read nothing', async () => {
     const list = await tools(tokens.provisioner as string, '?admin=1')
     expect(list.map((tool) => tool.name)).not.toContain('docket_search')
@@ -363,7 +372,7 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
       const url = new URL(`https://docket.example/mcp/${slug()}/${ws}`)
       const event = {
         url,
-        params: { org: slug(), ws },
+        params: { acct: slug(), docket: ws },
         request: new Request(url, { method: 'POST', headers: { authorization: `Bearer ${connected}`, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) }),
         locals: { requestId: randomUUID(), startedAt: performance.now() },
         getClientAddress: () => '192.0.2.30',

@@ -29,7 +29,7 @@ export class WorkspaceError extends Error {
   }
 }
 
-/** A workspace's address inside its org (`/o/{org}/w/{slug}`): the org slug's shape, with `new` kept for the create page. */
+/** A workspace's address inside its org (`/a/{acct}/d/{slug}`): the org slug's shape, with `new` kept for the create page. */
 export function workspaceSlugProblem(slug: string): string | null {
   if (!SLUG.test(slug)) return 'Use 2-40 lowercase letters, digits or hyphens, starting and ending with a letter or digit.'
   if (slug.includes('--')) return 'Use single hyphens only.'
@@ -76,11 +76,12 @@ export async function countMemberWorkspaces(tx: Tx): Promise<number> {
 /**
  * Records a workspace, in `spaceId` or else General. Its first ontology version is published by the ontology service, in the same transaction.
  * `maxWorkspaces` replaces the beta's limit for the org admin API, which holds the org to its own (docs/org-api.md),
- * counting every workspace; otherwise members' workspaces are held to the beta's (`countMemberWorkspaces`).
+ * counting every workspace; otherwise members' workspaces are held to `docketLimit`, the account's own limit that the
+ * platform operator sets, or else the beta's (`countMemberWorkspaces`).
  */
 export async function insertWorkspace(
   tx: Tx,
-  input: { name: string; slug: string; createdBy: string; id?: string; spaceId?: string; maxWorkspaces?: number },
+  input: { name: string; slug: string; createdBy: string; id?: string; spaceId?: string; maxWorkspaces?: number; docketLimit?: number },
 ): Promise<Workspace> {
   const name = input.name.trim()
   if (!name || name.length > 80) throw new WorkspaceError('invalid', 'Name the workspace in 1-80 characters.')
@@ -92,12 +93,11 @@ export async function insertWorkspace(
     input.maxWorkspaces === undefined
       ? await countMemberWorkspaces(tx)
       : Number((await tx.query<{ count: string }>('SELECT count(*) FROM workspaces')).rows[0]?.count ?? 0)
-  if (count >= (input.maxWorkspaces ?? LIMITS.workspacesPerOrg)) {
+  const limit = input.maxWorkspaces ?? input.docketLimit ?? LIMITS.workspacesPerOrg
+  if (count >= limit) {
     throw new WorkspaceError(
       'limit',
-      input.maxWorkspaces === undefined
-        ? `An organisation holds at most ${LIMITS.workspacesPerOrg} workspaces in the beta.`
-        : `This organisation holds at most ${input.maxWorkspaces} databases.`,
+      input.maxWorkspaces === undefined ? `This account holds at most ${limit} dockets.` : `This organisation holds at most ${input.maxWorkspaces} databases.`,
     )
   }
   const taken = await tx.query('SELECT 1 FROM workspaces WHERE slug = $1', [input.slug])

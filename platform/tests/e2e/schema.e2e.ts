@@ -73,10 +73,10 @@ test.describe.configure({ mode: 'serial' })
 
 let page: Page
 let org = ''
-const editor = () => `/o/${org}/w/vendors/ontology`
+const editor = () => `/a/${org}/d/vendors/ontology`
 
 async function workspace(name: string, yaml: string) {
-  await page.goto(`/o/${org}/workspaces/new`)
+  await page.goto(`/a/${org}/dockets/new`)
   await page.getByLabel('Name').fill(name)
   await page.getByText('An entities.yaml file').click()
   await page.getByLabel('Upload .docket/entities.yaml').setInputFiles({ name: 'entities.yaml', mimeType: 'text/yaml', buffer: Buffer.from(yaml) })
@@ -174,7 +174,7 @@ test('policies: an edit shows what it re-scores, and the preview prices evidence
 
 test('a schema in the old evidence form converts to sources and policies, every score unchanged', async () => {
   await workspace('Legacy', LEGACY)
-  await page.goto(`/o/${org}/w/legacy/ontology`)
+  await page.goto(`/a/${org}/d/legacy/ontology`)
   await page.getByRole('button', { name: 'Start a draft' }).click()
   await page.getByRole('tab', { name: /^Policies/ }).click()
   await page.getByRole('button', { name: 'Convert to sources & policies' }).click()

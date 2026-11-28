@@ -10,8 +10,8 @@ import type { AuditOutcome, CloudToolContext } from './context.js'
 import { getTool } from './get.js'
 import { writeTools } from './index.js'
 
-const VIEWER = 'https://docket.test/o/acme/w/platform/graph'
-const HISTORY = 'https://docket.test/o/acme/w/platform/ontology/history'
+const VIEWER = 'https://docket.test/a/acme/d/platform/graph'
+const HISTORY = 'https://docket.test/a/acme/d/platform/ontology/history'
 /** Whether the caller holds Publish ontology changes on the docket, as the endpoint answers it. */
 let holdsPublish = false
 

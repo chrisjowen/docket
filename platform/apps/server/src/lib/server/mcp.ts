@@ -95,8 +95,8 @@ export function outcomeOf(response: JsonRpcResponse | null): Outcome {
 
 export async function handleMcp(event: RequestEvent): Promise<Response> {
   const runtime = getRuntime()
-  const orgSlug = event.params.org ?? ''
-  const workspaceSlug = event.params.ws ?? ''
+  const orgSlug = event.params.acct ?? ''
+  const workspaceSlug = event.params.docket ?? ''
   const resourceUrl = mcpResourceUrl(runtime.origin, orgSlug, workspaceSlug)
   const base = {
     ip: clientAddress(event),
@@ -170,8 +170,8 @@ export async function handleMcp(event: RequestEvent): Promise<Response> {
   const tools = cloudTools({
     orgId: principal.orgId,
     workspaceId: principal.workspaceId,
-    viewer: new URL(`/o/${orgSlug}/w/${workspaceSlug}/graph`, runtime.origin).toString(),
-    ontologyHistory: new URL(`/o/${orgSlug}/w/${workspaceSlug}/ontology/history`, runtime.origin).toString(),
+    viewer: new URL(`/a/${orgSlug}/d/${workspaceSlug}/graph`, runtime.origin).toString(),
+    ontologyHistory: new URL(`/a/${orgSlug}/d/${workspaceSlug}/ontology/history`, runtime.origin).toString(),
     inTenant,
     query: runtime.query,
     assertWithinCap: async () =>

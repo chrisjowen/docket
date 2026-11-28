@@ -145,10 +145,15 @@ const ADMIN_TOOLS: AdminTool[] = [
   },
   {
     name: 'admin_invite',
-    description: 'Invites someone by GitHub login or email to a role on a place (account, space:<slug> or docket:<slug>).',
+    description:
+      'Invites someone by GitHub login or email to a role on a place (account, space:<slug> or docket:<slug>). The invite link is emailed where there is an address; it is never returned here.',
     schema: bodyOf('invites.create'),
     offered: (acct) => acct.canAnywhere('access'),
-    run: (_acct, args, call) => call('invites.create', { body: args }),
+    // An invite link lets someone in: like a token, it never passes through a model (tenancy v2 §3.4).
+    run: async (_acct, args, call) => {
+      const { link: _link, ...invite } = (await call('invites.create', { body: args })) as Record<string, unknown>
+      return { ...invite, link: null, note: 'The link is emailed where there is an address; whoever invited can send it again from Users.' }
+    },
   },
   {
     name: 'admin_create_space',
@@ -221,7 +226,7 @@ const truthy = (value: string | null) => value === '1' || value === 'true'
 
 export async function handleAccountMcp(event: RequestEvent): Promise<Response> {
   const runtime = getRuntime()
-  const orgSlug = event.params.org ?? ''
+  const orgSlug = event.params.acct ?? ''
   const resourceUrl = accountMcpUrl(runtime.origin, orgSlug)
   const base = { ip: clientAddress(event), userAgent: event.request.headers.get('user-agent'), requestId: event.locals.requestId }
   const latency = () => performance.now() - event.locals.startedAt
@@ -316,8 +321,8 @@ export async function handleAccountMcp(event: RequestEvent): Promise<Response> {
     return cloudTools({
       orgId: principal.orgId,
       workspaceId: docket.id,
-      viewer: new URL(`/o/${orgSlug}/w/${docket.slug}/graph`, runtime.origin).toString(),
-      ontologyHistory: new URL(`/o/${orgSlug}/w/${docket.slug}/ontology/history`, runtime.origin).toString(),
+      viewer: new URL(`/a/${orgSlug}/d/${docket.slug}/graph`, runtime.origin).toString(),
+      ontologyHistory: new URL(`/a/${orgSlug}/d/${docket.slug}/ontology/history`, runtime.origin).toString(),
       inTenant,
       query: runtime.query,
       assertWithinCap: async () =>

@@ -147,7 +147,7 @@ export async function saveOrgTemplate(
   // Serialised per org, so the limit holds under concurrent saves.
   await tx.query("SELECT pg_advisory_xact_lock(hashtext('docket-cloud:template-save:' || current_schema()))")
   const { rows: counted } = await tx.query<{ count: string }>('SELECT count(*) FROM ontology_templates')
-  if (Number(counted[0]?.count ?? 0) >= MAX_ORG_TEMPLATES) throw new TemplateError('invalid', `An organisation keeps at most ${MAX_ORG_TEMPLATES} templates.`)
+  if (Number(counted[0]?.count ?? 0) >= MAX_ORG_TEMPLATES) throw new TemplateError('invalid', `An account keeps at most ${MAX_ORG_TEMPLATES} templates.`)
   const { rows } = await unique(() =>
     tx.query<TemplateRow>(
       `INSERT INTO ontology_templates (name, description, tags, yaml, yaml_hash, from_workspace_id, created_by, updated_by)

@@ -52,7 +52,7 @@ function readInstallCookie(cookies: Cookies): { state?: unknown; org?: unknown; 
   }
 }
 
-const reposPage = (org: string, ws: string) => `/o/${encodeURIComponent(org)}/w/${encodeURIComponent(ws)}/repos`
+const reposPage = (org: string, ws: string) => `/a/${encodeURIComponent(org)}/d/${encodeURIComponent(ws)}/repos`
 
 /** The member at `slug`, and whether they may link a GitHub installation to it: Change settings on the whole account. */
 async function linker(tx: Tx, slug: string, userId: string) {

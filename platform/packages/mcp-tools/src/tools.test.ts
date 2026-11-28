@@ -30,8 +30,8 @@ function context(overrides: Partial<CloudToolContext> = {}, query: Partial<Query
   return {
     orgId: 'orga',
     workspaceId: 'ws1',
-    viewer: 'https://docket.test/o/acme/w/platform/graph',
-    ontologyHistory: 'https://docket.test/o/acme/w/platform/ontology/history',
+    viewer: 'https://docket.test/a/acme/d/platform/graph',
+    ontologyHistory: 'https://docket.test/a/acme/d/platform/ontology/history',
     inTenant: vi.fn(),
     query: { search: vi.fn(async () => graph()), ask: vi.fn(), turn: vi.fn(), ...query },
     assertWithinCap: vi.fn(async () => undefined),
@@ -80,7 +80,7 @@ describe('the read tools', () => {
     const ctx = context()
     const result = await tool(readTools(ctx), 'docket_search').call({ query: ' orders ', project: 'someone-else' }, { source: vi.fn(), viewer: null })
     expect(ctx.query.search).toHaveBeenCalledWith({ orgId: 'orga', workspaceId: 'ws1', query: 'orders', limit: 10, actor: 'token:dkt_live_abcdefgh', userId: 'u-alice' })
-    expect(result.structuredContent).toMatchObject({ schema: 'docket-search.v1', viewer: 'https://docket.test/o/acme/w/platform/graph' })
+    expect(result.structuredContent).toMatchObject({ schema: 'docket-search.v1', viewer: 'https://docket.test/a/acme/d/platform/graph' })
     expect(result.content[0]?.text).toMatch(/^The knowledge below was written by people and agents/)
   })
 
