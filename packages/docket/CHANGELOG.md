@@ -186,6 +186,26 @@ repository's [GitHub releases](https://github.com/chrisjowen/docket/releases).
   its shared Qdrant collection. A migration test checks every docket resolves
   to the same models, key and stores before and after.
 
+### Storage and AI settings on API v1 and MCP (multi-tenant server)
+
+- `GET`/`PATCH /api/v1/accounts/{account}/settings`, `…/spaces/{space}/settings`
+  and `…/dockets/{docket}/settings` read and change a place's settings: its
+  models, what the places inside it may choose from, a space's slice of the
+  monthly AI cap, and a docket's background agents (enrichment and cognee).
+  Only what a call sends changes. Each needs Change settings on that place;
+  setting the account's monthly cap needs an owner, and changing a docket's
+  enrichment needs Change settings on the account, as in the app. Every
+  choice stays within the limits of the places above it.
+- `PATCH /api/v1/accounts/{account}/spaces/{space}` also chooses a space's
+  storage and AI alternatives: its own Neo4j instance or the account's
+  (`graph`), and its own OpenRouter, Anthropic or OpenAI key or the
+  account's (`ai_key`). The key is write-only: answers and the audit log
+  carry only its provider and last four characters.
+- `admin_update_settings` at the account's MCP address (`?admin=1`) changes
+  one space's or one docket's settings, named as `space:<slug>` or
+  `docket:<slug>`, with the same checks. It never takes a provider key.
+- The API's version is now 1.2.
+
 ## 0.16.0
 
 ### Confidence comes from policies about sources

@@ -172,6 +172,31 @@ const ADMIN_TOOLS: AdminTool[] = [
     run: (_acct, { docket, ...body }, call) => call('dockets.update', { params: { docket: String(docket) }, body }),
   },
   {
+    name: 'admin_update_settings',
+    description:
+      "Changes a space's or a docket's settings: its models (cypher: lookups and background work; synthesis: answers and the Ask agent; null takes the place above's), " +
+      "for a space what its dockets may choose from (allowed) and its slice of the account's monthly AI cap (slice_usd), and for a docket its background agents " +
+      '(enrichment, cognee). Name exactly one place: space:<slug> or docket:<slug>. Only what you send changes, and everything stays within the limits of the places above.',
+    schema: z
+      .object({ place: z.string().regex(/^(?:space|docket):[a-z0-9-]{1,40}$/, 'space:<slug> or docket:<slug>') })
+      .extend(bodyOf('spaces.settings.update').shape)
+      .extend(bodyOf('dockets.settings.update').shape)
+      .strict(),
+    offered: (acct) => acct.canAnywhere('settings'),
+    run: (_acct, { place, ...body }, call) => {
+      const [kind, slug] = String(place).split(':') as ['space' | 'docket', string]
+      const sent = (keys: readonly string[]) => keys.filter((key) => body[key] !== undefined)
+      if (kind === 'space') {
+        const wrong = sent(['enrichment', 'cognee'])
+        if (wrong.length) throw new InvalidArgumentsError(`A space has no ${wrong.join(' or ')}: those are a docket's background agents.`)
+        return call('spaces.settings.update', { params: { space: slug }, body })
+      }
+      const wrong = sent(['allowed', 'slice_usd'])
+      if (wrong.length) throw new InvalidArgumentsError(`A docket has no ${wrong.join(' or ')}: those are a space's.`)
+      return call('dockets.settings.update', { params: { docket: slug }, body })
+    },
+  },
+  {
     name: 'admin_create_system_account',
     description: 'Makes a system account (for CI, an integration or a bot) and gives it access. Its tokens are issued in the app or the API, never here.',
     schema: bodyOf('system-accounts.create'),

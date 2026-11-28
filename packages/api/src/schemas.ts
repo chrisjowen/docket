@@ -314,6 +314,75 @@ export const AccessWho = z.object({
   candidates: z.array(z.object({ ref: z.string(), label: z.string() })),
 })
 
+/**
+ * What models do (tenancy v2 §5): `cypher` writes graph queries and runs the
+ * background work (enrichment, consolidation, summaries); `synthesis` writes
+ * answers and drives the Ask agent.
+ */
+export const MODEL_USES = ['cypher', 'synthesis'] as const
+export type ModelUse = (typeof MODEL_USES)[number]
+
+/** The model providers a space may pay with its own key for. */
+export const AI_PROVIDERS = ['openrouter', 'anthropic', 'openai'] as const
+export const AiProvider = z.enum(AI_PROVIDERS)
+
+/** Whose choice a resolved setting is: a place's own, or the platform's default. */
+export const SettingsSource = z.enum(['platform', 'account', 'space', 'docket'])
+
+/** One use's model at a place: its own choice, what runs, and what it may choose from. */
+export const ModelSetting = z.object({
+  /** How the app names the use: "Answers and the Ask agent". */
+  label: z.string(),
+  /** This place's own choice; null: it runs what the place above it runs. */
+  own: z.string().nullable(),
+  /** The model that runs here, and whose choice it is; null only when nothing it may choose is served by its space's own key. */
+  model: z.string().nullable(),
+  from: SettingsSource,
+  /** What would run here if this place chose nothing. */
+  inherited: z.object({ model: z.string().nullable(), from: SettingsSource }),
+  /** The models this place may choose from: the platform's list, narrowed by every place above it and by its space's own key. */
+  choices: z.array(z.string()),
+  /** This place's own limit on what the places inside it may choose (none for a docket); empty: no limit. */
+  allowed: z.array(z.string()),
+})
+
+/**
+ * A place's storage and AI settings (tenancy v2 §5), as whoever may change
+ * them sees them: its models per use, whose key pays for its AI (never the
+ * key: only its provider and last four characters), the monthly caps that
+ * hold there, a space's storage, and a docket's background agents.
+ */
+export const PlaceSettings = z.object({
+  place: Place,
+  models: z.object({ cypher: ModelSetting, synthesis: ModelSetting }),
+  key: z.union([
+    z.object({ from: z.literal('account') }),
+    z.object({ from: z.literal('space'), space: z.string(), provider: AiProvider, hint: z.string() }),
+  ]),
+  budget: z.object({
+    /** The account's monthly AI cap, in US dollars. */
+    monthly_cap_usd: z.number(),
+    /** The space's own slice of that cap; null: none of its own. */
+    space_slice_usd: z.number().nullable(),
+  }),
+  /** A space's own Neo4j instance (`own`), or the account's (`account`); null for the account or a docket. */
+  storage: z
+    .object({
+      graph: z.enum(['account', 'own']),
+      /** The space's own instance, while it is asked for, made, or given up. */
+      status: z.string().nullable(),
+      last_error: z.string().nullable(),
+    })
+    .nullable(),
+  /** A docket's background agents; null for the account or a space. */
+  agents: z
+    .object({
+      enrichment: z.object({ enabled: z.boolean(), schedule: z.enum(['nightly', 'weekly']), monthly_limit_usd: z.number() }),
+      cognee: z.object({ enabled: z.boolean(), floor: z.number(), monthly_limit_usd: z.number(), available: z.boolean() }),
+    })
+    .nullable(),
+})
+
 export const SLUG = slug
 
 /** The error every `/api/v1` refusal answers with. */

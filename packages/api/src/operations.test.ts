@@ -63,6 +63,26 @@ describe('the /api/v1 operations', () => {
     expect(operation('accounts.search').query?.safeParse({ q: 'orders', ws: 'payments,platform' }).success).toBe(true)
   })
 
+  it("read and change each place's settings, a space's and a docket's also as admin_update_settings, and take a provider key only off MCP", () => {
+    expect(matchOperation('PATCH', '/api/v1/accounts/acme/settings')).toMatchObject({ operation: { id: 'accounts.settings.update' } })
+    expect(matchOperation('GET', '/api/v1/accounts/acme/spaces/eng/settings')).toMatchObject({ operation: { id: 'spaces.settings.get' }, params: { space: 'eng' } })
+    expect(matchOperation('PATCH', '/api/v1/accounts/acme/dockets/payments/settings')).toMatchObject({ operation: { id: 'dockets.settings.update' }, params: { docket: 'payments' } })
+    expect(all.filter((each) => each.mcpTool === 'admin_update_settings').map((each) => each.id).sort()).toEqual(['dockets.settings.update', 'spaces.settings.update'])
+    for (const id of ['accounts.settings.update', 'spaces.settings.update', 'dockets.settings.update', 'spaces.update'] as const) {
+      expect(operation(id).needs.capability, id).toBe('settings')
+    }
+    // A key travels only on the space's own PATCH, which no MCP tool makes.
+    const keyed = all.filter((each) => each.body && 'ai_key' in each.body.shape)
+    expect(keyed.map((each) => each.id)).toEqual(['spaces.update'])
+    expect(keyed.every((each) => !each.mcpTool)).toBe(true)
+    // A setting sent to a place that has none is refused, never quietly dropped.
+    expect(operation('dockets.settings.update').body?.safeParse({ slice_usd: 1 }).success).toBe(false)
+    expect(operation('spaces.settings.update').body?.safeParse({ enrichment: { enabled: true } }).success).toBe(false)
+    expect(operation('spaces.settings.update').body?.safeParse({ models: { synthesis: null }, allowed: { cypher: ['a/b'] }, slice_usd: 4 }).success).toBe(true)
+    expect(operation('dockets.settings.update').body?.safeParse({ cognee: { floor: 2 } }).success).toBe(false)
+    expect(operation('spaces.update').body?.safeParse({ ai_key: { provider: 'mistral', key: 'x' } }).success).toBe(false)
+  })
+
   it('fit a client to a server of the same major version and no older minor', () => {
     expect(API_VERSION).toMatch(/^\d+\.\d+$/)
     expect(compatible('1.0', '1.1')).toBe(true)

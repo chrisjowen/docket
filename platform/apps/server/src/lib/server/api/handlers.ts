@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { capOf, placeAiSettings, saveAiSettings, setCap, type PlaceAiSettings, type Provider } from '@docket/platform-ai'
 import { audit, listAudit, type Outcome } from '@docket/platform-audit'
 import {
   issueApiToken,
@@ -13,18 +14,21 @@ import {
   revokeWorkspaceCredentials,
 } from '@docket/platform-auth'
 import {
+  cogneeSettings,
   deleteWorkspace,
   insertSpace,
   listSpaces,
   listWorkspaces,
   newSpaceProblem,
   removeMemberAttributes,
+  saveCogneeSettings,
   trustChanged,
   updateSpace,
   updateWorkspace,
   WorkspaceError,
   type StoreContext,
 } from '@docket/platform-canonical-store'
+import { enrichmentSettings, ensureEnrichmentOntology, saveSettings as saveEnrichmentSettings } from '@docket/platform-enrichment'
 import { dropRoutes } from '@docket/platform-github'
 import { rateLimitMessage, tokenCreateLimits } from '@docket/platform-limits'
 import { createWorkspace, isTemplateId, orgTemplateId, type OntologyStart } from '@docket/platform-ontology-service'
@@ -71,12 +75,14 @@ import {
 import { placeNames, type PlaceNames } from '../grants'
 import { accountRoles } from '../members'
 import { becauseLabel, placeAccess } from '../place-access'
+import { askOwnGraph, giveUpOwnGraph, setSpaceKey, spaceKeys } from '../place-settings'
 import { isPlatformAdmin } from '../request'
 import { getRuntime } from '../runtime'
 import { accountShell, commandSearch, docketFacts } from '../shell'
 import { mayChangeAccount, mayManageSystemAccounts } from '../system-accounts'
 import { actorNames, inOrg } from '../workspace'
 import { accountCaller, ApiFailure, readsOnly, type AccountCaller, type Caller } from './caller'
+import { mergedModels, requireChange, settingsView } from './settings'
 import {
   accountView,
   connectionView,
@@ -170,6 +176,30 @@ async function inPlatform<T>(call: ApiCall, acct: AccountCaller, fn: (tx: Tx) =>
   const value = await router.withPlatform(async (tx) => {
     const done = await fn(tx)
     await router.enterTenant(tx, acct.org.id)
+    await audit(tx, auditFields(call, 'ok'))
+    return done
+  })
+  call.audit.written = true
+  return value
+}
+
+/**
+ * A change to the platform's records and then to the account's own schema,
+ * in one transaction with its audit event: the platform part runs first,
+ * since the account's role cannot reach the platform's tables.
+ */
+async function inPlatformThenTenant<P, T>(
+  call: ApiCall,
+  acct: AccountCaller,
+  first: (tx: Tx) => Promise<P>,
+  then: (ctx: StoreContext, before: P) => Promise<T>,
+): Promise<T> {
+  const { router, keyring } = runtime()
+  const keys = await keyring.forOrg(acct.org.id)
+  const value = await router.withPlatform(async (tx) => {
+    const before = await first(tx)
+    await router.enterTenant(tx, acct.org.id)
+    const done = await then({ tx, keys }, before)
     await audit(tx, auditFields(call, 'ok'))
     return done
   })
@@ -530,6 +560,37 @@ export const HANDLERS: Record<string, Handler> = {
     return { body: null }
   },
 
+  'accounts.settings.get': async (call) => {
+    const acct = await account(call)
+    if (!acct.capsAt(ACCOUNT).has('settings')) refuse(`You cannot change ${acct.org.name}'s settings.`)
+    return { body: await settingsView(acct.org, { kind: 'account' }, await placeNames(acct.org.id)) }
+  },
+
+  // The account's models, what its spaces and dockets may choose from, and (owners only, as billing) its monthly cap.
+  'accounts.settings.update': async (call) => {
+    const acct = await account(call)
+    if (!acct.capsAt(ACCOUNT).has('settings')) refuse(`You cannot change ${acct.org.name}'s settings.`)
+    requireChange(call.body)
+    const cap = call.body.monthly_cap_usd as number | undefined
+    if (cap !== undefined && !acct.owner) refuse('Only an owner of the account sets its monthly AI cap.')
+    await inPlatform(call, acct, async (tx) => {
+      const args: Record<string, unknown> = {}
+      if (cap !== undefined) {
+        args.cap = { before: await capOf(tx, acct.org.id), after: cap }
+        await setCap(tx, acct.org.id, cap, call.caller.user.id)
+      }
+      if (call.body.models !== undefined || call.body.allowed !== undefined) {
+        const own = await placeAiSettings(tx, acct.org.id, { kind: 'account' })
+        const saved = await saveAiSettings(tx, { orgId: acct.org.id, place: { kind: 'account' }, ...mergedModels(own, call.body), by: call.caller.user.id })
+        args.before = saved.before
+        args.after = saved.after
+      }
+      call.audit.target = [`org:${acct.org.id}`]
+      call.audit.args = args
+    })
+    return { body: await settingsView(acct.org, { kind: 'account' }, await placeNames(acct.org.id)) }
+  },
+
   // --- Users -------------------------------------------------------------------
   'members.list': async (call) => {
     const acct = await account(call)
@@ -769,20 +830,75 @@ export const HANDLERS: Record<string, Handler> = {
     return { body: spaceView(space, caps) }
   },
 
+  // A space's name and description, and its storage and AI alternatives: its own Neo4j, its own provider key.
   'spaces.update': async (call) => {
     const acct = await account(call)
     const { space, caps } = await spaceOf(acct, call.params.space ?? '')
     if (!caps.has('settings')) refuse(`You cannot change ${space.name}'s settings.`)
-    const updated = await inTenant(call, acct, async (ctx) => {
-      const done = await updateSpace(ctx.tx, space.id, {
-        ...(call.body.name !== undefined ? { name: String(call.body.name) } : {}),
-        ...(call.body.description !== undefined ? { description: call.body.description as string | null } : {}),
+    const key = call.body.ai_key as { provider: Provider; key: string } | null | undefined
+    const graph = call.body.graph as 'account' | 'own' | undefined
+    const updated = await inPlatformThenTenant(
+      call,
+      acct,
+      async (tx) => {
+        // Only the provider and the key's last four characters are ever recorded: never the key.
+        let keyChange: { provider: Provider | null; hint: string | null; removed?: true } | undefined
+        if (key === null) {
+          const removed = await spaceKeys().remove(tx, { orgId: acct.org.id, spaceId: space.id })
+          keyChange = { provider: removed?.provider ?? null, hint: removed?.hint ?? null, removed: true }
+        } else if (key) {
+          const info = await setSpaceKey(tx, { orgId: acct.org.id, orgName: acct.org.name, spaceId: space.id, provider: key.provider, key: key.key, by: call.caller.user.id })
+          keyChange = { provider: info.provider, hint: info.hint }
+        }
+        let graphChange: string | undefined
+        if (graph === 'own') {
+          graphChange = await askOwnGraph(tx, acct.org.id, space.id, call.caller.user.id)
+          if (graphChange === 'full') throw new ApiFailure('conflict', 'There is no room for another Neo4j pod on this box. Ask whoever runs Docket for more room.')
+        } else if (graph === 'account') {
+          graphChange = (await giveUpOwnGraph(tx, acct.org.id, space.id)) ? 'retiring' : 'account'
+        }
+        return { keyChange, graphChange }
+      },
+      async (ctx, { keyChange, graphChange }) => {
+        const done = await updateSpace(ctx.tx, space.id, {
+          ...(call.body.name !== undefined ? { name: String(call.body.name) } : {}),
+          ...(call.body.description !== undefined ? { description: call.body.description as string | null } : {}),
+        })
+        call.audit.target = [`space:${space.id}`]
+        call.audit.args = { name: done.name, ...(keyChange ? { key: keyChange } : {}), ...(graphChange ? { graph: graphChange } : {}) }
+        return done
+      },
+    )
+    return { body: spaceView(updated, caps) }
+  },
+
+  'spaces.settings.get': async (call) => {
+    const acct = await account(call)
+    const { space, caps } = await spaceOf(acct, call.params.space ?? '')
+    if (!caps.has('settings')) refuse(`You cannot change ${space.name}'s settings.`)
+    return { body: await settingsView(acct.org, { kind: 'space', id: space.id }, await placeNames(acct.org.id)) }
+  },
+
+  // A space's models, what its dockets may choose from, and its slice of the account's cap: within the account's limits.
+  'spaces.settings.update': async (call) => {
+    const acct = await account(call)
+    const { space, caps } = await spaceOf(acct, call.params.space ?? '')
+    if (!caps.has('settings')) refuse(`You cannot change ${space.name}'s settings.`)
+    requireChange(call.body)
+    await inPlatform(call, acct, async (tx) => {
+      const own = await placeAiSettings(tx, acct.org.id, { kind: 'space', id: space.id })
+      const slice = call.body.slice_usd === undefined ? own.monthlyUsd : (call.body.slice_usd as number | null)
+      const saved = await saveAiSettings(tx, {
+        orgId: acct.org.id,
+        place: { kind: 'space', id: space.id },
+        ...mergedModels(own, call.body),
+        monthlyUsd: slice,
+        by: call.caller.user.id,
       })
       call.audit.target = [`space:${space.id}`]
-      call.audit.args = { name: done.name }
-      return done
+      call.audit.args = { space: space.id, before: saved.before, after: saved.after }
     })
-    return { body: spaceView(updated, caps) }
+    return { body: await settingsView(acct.org, { kind: 'space', id: space.id }, await placeNames(acct.org.id)) }
   },
 
   // --- Dockets -----------------------------------------------------------------
@@ -871,6 +987,67 @@ export const HANDLERS: Record<string, Handler> = {
       })
     })
     return { status: 204, body: null }
+  },
+
+  'dockets.settings.get': async (call) => {
+    const acct = await account(call)
+    const { workspace, names, caps } = await docketOf(acct, call.params.docket ?? '')
+    if (!caps.has('settings')) refuse(`You cannot change ${workspace.name}'s settings.`)
+    return { body: await settingsView(acct.org, { kind: 'docket', id: workspace.id }, names) }
+  },
+
+  // A docket's models, within its space's and the account's limits, and its background agents, within the account's cap.
+  'dockets.settings.update': async (call) => {
+    const acct = await account(call)
+    const { workspace, names, caps } = await docketOf(acct, call.params.docket ?? '')
+    call.audit.workspaceId = workspace.id
+    if (!caps.has('settings')) refuse(`You cannot change ${workspace.name}'s settings.`)
+    requireChange(call.body)
+    const enrichment = call.body.enrichment as { enabled?: boolean; schedule?: 'nightly' | 'weekly'; monthly_limit_usd?: number } | undefined
+    const cognee = call.body.cognee as { enabled?: boolean; floor?: number; monthly_limit_usd?: number } | undefined
+    // As in the app: enrichment spends the account's AI and may publish onto the ontology.
+    if (enrichment && !acct.capsAt(ACCOUNT).has('settings')) refuse(`Changing ${workspace.name}'s enrichment needs Change settings on the account.`)
+    if (cognee?.enabled === true && !runtime().cognee) throw new ApiFailure('invalid_request', 'cognee does not run on this server, so it cannot be turned on.')
+    const by = `user:${call.caller.user.id}`
+    await inPlatformThenTenant(
+      call,
+      acct,
+      async (tx) => {
+        let models: { before: PlaceAiSettings['models']; after: PlaceAiSettings['models'] } | undefined
+        if (call.body.models !== undefined) {
+          const own = await placeAiSettings(tx, acct.org.id, { kind: 'docket', id: workspace.id })
+          const saved = await saveAiSettings(tx, { orgId: acct.org.id, place: { kind: 'docket', id: workspace.id }, models: mergedModels(own, call.body).models, by: call.caller.user.id })
+          models = { before: saved.before.models, after: saved.after.models }
+        }
+        return { models, capUsd: enrichment || cognee ? await capOf(tx, acct.org.id) : 0 }
+      },
+      async (ctx, { models, capUsd }) => {
+        const args: Record<string, unknown> = { ...(models ? { models } : {}) }
+        if (enrichment) {
+          const current = await enrichmentSettings(ctx.tx, workspace.id)
+          const next = {
+            enabled: enrichment.enabled ?? current.enabled,
+            schedule: enrichment.schedule ?? current.schedule,
+            monthlyLimitUsd: enrichment.monthly_limit_usd ?? current.monthlyLimitUsd,
+          }
+          // Turning it on first publishes what it writes with onto the ontology, if the head lacks it.
+          const published = next.enabled
+            ? await ensureEnrichmentOntology(ctx, workspace.id, { actor: call.caller.actor, login: call.caller.user.login, requestId: call.meta.requestId })
+            : null
+          await saveEnrichmentSettings(ctx.tx, workspace.id, { ...next, capUsd, by })
+          args.enrichment = { ...next, ontology: published?.number ?? null }
+        }
+        if (cognee) {
+          const current = await cogneeSettings(ctx.tx, workspace.id)
+          const next = { enabled: cognee.enabled ?? current.enabled, floor: cognee.floor ?? current.floor, monthlyLimitUsd: cognee.monthly_limit_usd ?? current.monthlyLimitUsd }
+          await saveCogneeSettings(ctx.tx, workspace.id, { ...next, capUsd, by })
+          args.cognee = next
+        }
+        call.audit.target = [`workspace:${workspace.id}`]
+        call.audit.args = args
+      },
+    )
+    return { body: await settingsView(acct.org, { kind: 'docket', id: workspace.id }, names) }
   },
 
   // --- System accounts ---------------------------------------------------------
