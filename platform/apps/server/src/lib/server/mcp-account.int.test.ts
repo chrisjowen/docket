@@ -250,7 +250,16 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
   it('offers the admin tools only when asked for, and only to a caller who can manage, never one that mints tokens', async () => {
     expect((await tools(tokens.owner as string)).some((tool) => tool.name.startsWith('admin_'))).toBe(false)
     const admin = (await tools(tokens.owner as string, '?admin=1')).map((tool) => tool.name).filter((name) => name.startsWith('admin_'))
-    expect(admin.sort()).toEqual(['admin_create_docket', 'admin_create_space', 'admin_create_system_account', 'admin_invite', 'admin_set_access', 'admin_update_docket', 'admin_usage'])
+    expect(admin.sort()).toEqual([
+      'admin_create_docket',
+      'admin_create_space',
+      'admin_create_system_account',
+      'admin_invite',
+      'admin_set_access',
+      'admin_update_docket',
+      'admin_update_settings',
+      'admin_usage',
+    ])
     expect(admin.some((name) => /token/.test(name))).toBe(false)
     expect((await tools(tokens.writer as string, '?admin=1')).some((tool) => tool.name.startsWith('admin_'))).toBe(false)
     expect((await tools(tokens.owner as string, '?admin=1&read_only=1')).some((tool) => tool.name.startsWith('admin_'))).toBe(false)
@@ -291,6 +300,42 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
     const { rows } = await org.withOrg(({ tx }) => tx.query<{ action: string; actor: string }>("SELECT action, actor FROM audit_event WHERE action LIKE 'mcp.tools/call admin_%' ORDER BY seq"))
     expect(rows.map((row) => row.action)).toEqual(expect.arrayContaining(['mcp.tools/call admin_create_docket', 'mcp.tools/call admin_set_access']))
     expect(rows.find((row) => row.action === 'mcp.tools/call admin_create_docket')?.actor).toBe(`token:${(tokens.provisioner as string).slice(0, 16)}`)
+  })
+
+  it("changes a space's or a docket's settings over MCP, naming exactly one place, within the limits above it", async () => {
+    const owner = tokens.owner as string
+    const listed = (await tools(owner, '?admin=1')).find((tool) => tool.name === 'admin_update_settings')
+    expect(listed?.inputSchema.required).toEqual(['place'])
+    // Nobody without Change settings somewhere is offered it.
+    expect((await tools(tokens.writer as string, '?admin=1')).map((tool) => tool.name)).not.toContain('admin_update_settings')
+
+    const space = await call(owner, 'admin_update_settings', { place: 'space:eng', models: { synthesis: 'openai/gpt-4.1' }, allowed: { synthesis: ['openai/gpt-4.1'] } }, '?admin=1')
+    expect(space.body?.result.isError, JSON.stringify(space.body)).toBeUndefined()
+    expect(space.body?.result.structuredContent).toMatchObject({ place: { ref: 'space:eng' }, models: { synthesis: { own: 'openai/gpt-4.1', from: 'space' } } })
+    // A docket in Engineering chooses only what Engineering allows.
+    const outside = await call(owner, 'admin_update_settings', { place: 'docket:payments', models: { synthesis: 'anthropic/claude-sonnet-5.5' } }, '?admin=1')
+    expect(outside.body?.result).toMatchObject({ isError: true })
+    const docket = await call(owner, 'admin_update_settings', { place: 'docket:payments', models: { synthesis: 'openai/gpt-4.1', cypher: null } }, '?admin=1')
+    expect(docket.body?.result.structuredContent).toMatchObject({ place: { ref: 'docket:payments' }, models: { synthesis: { own: 'openai/gpt-4.1', from: 'docket' } } })
+
+    // Exactly one space or docket: never the account (that is the app's or the API's), and only the place's own settings.
+    for (const args of [
+      { place: 'account', models: { synthesis: null } },
+      { models: { synthesis: null } },
+      { place: 'space:eng', enrichment: { enabled: false } },
+      { place: 'docket:payments', slice_usd: 1 },
+      { place: 'space:eng', ai_key: { provider: 'openai', key: 'sk-not-over-mcp' } },
+    ]) {
+      const refused = await call(owner, 'admin_update_settings', args, '?admin=1')
+      expect(JSON.stringify(refused.body), JSON.stringify(args)).toMatch(/"isError":true|"error":\{/)
+      expect(JSON.stringify(refused.body)).not.toContain('sk-not-over-mcp')
+    }
+
+    const cleared = await call(owner, 'admin_update_settings', { place: 'space:eng', models: { synthesis: null }, allowed: { synthesis: null } }, '?admin=1')
+    expect(cleared.body?.result.structuredContent).toMatchObject({ models: { synthesis: { own: null, allowed: [] } } })
+    await call(owner, 'admin_update_settings', { place: 'docket:payments', models: { synthesis: null } }, '?admin=1')
+    const { rows } = await org.withOrg(({ tx }) => tx.query<{ outcome: string }>("SELECT outcome FROM audit_event WHERE action = 'mcp.tools/call admin_update_settings' ORDER BY seq"))
+    expect(rows.map((row) => row.outcome)).toEqual(expect.arrayContaining(['ok', 'invalid']))
   })
 
   it("asks a docket whose space pays with its own key once the account's cap is spent, and refuses the account's dockets", async () => {

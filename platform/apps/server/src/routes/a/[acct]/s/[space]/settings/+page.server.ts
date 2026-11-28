@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { randomBytes } from 'node:crypto'
-
 import {
   PROVIDERS,
   PROVIDER_INFO,
@@ -16,7 +14,7 @@ import { listWorkspaces } from '@docket/platform-canonical-store'
 import type { Tx } from '@docket/platform-tenancy'
 import { error, fail, type RequestEvent } from '@sveltejs/kit'
 
-import { keyView, modelSlots, modelsFrom, podsOnBox, spaceKeys } from '$lib/server/place-settings'
+import { askOwnGraph, giveUpOwnGraph, keyView, modelSlots, modelsFrom, podsOnBox, setSpaceKey, spaceKeys } from '$lib/server/place-settings'
 import { recordAudit } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 import { spaceAccess } from '$lib/server/spaces'
@@ -154,13 +152,7 @@ export const actions: Actions = {
     if (!isProvider(provider)) return fail(400, { problem: 'Choose OpenRouter, Anthropic or OpenAI.' })
     try {
       const saved = await change(event, access.org.id, async (tx, userId) => {
-        const info = await spaceKeys().set(tx, { orgId: access.org.id, spaceId: space.id, provider, key, by: userId })
-        const resolved = await resolveAiSettings(tx, access.org.id, { spaceId: space.id })
-        if (Object.values(resolved.models).some((each) => each.model === null)) {
-          throw new ProviderKeyError(
-            `None of the models ${access.org.name} allows for some use here is served by ${PROVIDER_INFO[provider].label}: ask an owner to allow one, or use another provider's key.`,
-          )
-        }
+        const info = await setSpaceKey(tx, { orgId: access.org.id, orgName: access.org.name, spaceId: space.id, provider, key, by: userId })
         // Only the provider and the last four characters: never the key.
         return { audit: { action: 'space.key.set', args: { space: space.id, provider, hint: info.hint } }, result: info }
       })
@@ -185,25 +177,9 @@ export const actions: Actions = {
   ownGraph: async (event) => {
     const { access, space } = await settingsAccess(event)
     const outcome = await change(event, access.org.id, async (tx, userId) => {
-      // One request at a time across the box, so two spaces never take the last pod.
-      await tx.query("SELECT pg_advisory_xact_lock(hashtext('docket:neo4j-pods'))")
-      const existing = await tx.query<{ id: string; status: string }>(
-        "SELECT id, status FROM platform.stores WHERE org_id = $1 AND kind = 'neo4j' AND space_id = $2",
-        [access.org.id, space.id],
-      )
-      const current = existing.rows[0]
-      if (current && current.status !== 'retiring') return { audit: { action: 'space.store.add', args: { space: space.id, outcome: 'exists' } }, result: 'exists' as const }
-      if ((await podsOnBox(tx)).left < 1) return { audit: { action: 'space.store.add', args: { space: space.id, outcome: 'full' } }, result: 'full' as const }
-      if (current) {
-        // Changed its mind before the old one was removed: keep it.
-        await tx.query("UPDATE platform.stores SET status = 'requested', requested_by = $2, updated_at = now() WHERE id = $1", [current.id, userId])
-      } else {
-        await tx.query(
-          "INSERT INTO platform.stores (id, org_id, kind, space_id, status, requested_by) VALUES ($1, $2, 'neo4j', $3, 'requested', $4)",
-          [`st${randomBytes(8).toString('hex')}`, access.org.id, space.id, userId],
-        )
-      }
-      return { audit: { action: 'space.store.add', args: { space: space.id, kind: 'neo4j' } }, result: 'requested' as const }
+      const asked = await askOwnGraph(tx, access.org.id, space.id, userId)
+      const args = asked === 'requested' ? { space: space.id, kind: 'neo4j' } : { space: space.id, outcome: asked }
+      return { audit: { action: 'space.store.add', args }, result: asked }
     })
     if (outcome === 'full') return fail(409, { problem: 'There is no room for another Neo4j pod on this box. Ask whoever runs Docket for more room.' })
     if (outcome === 'exists') return { flash: `${space.name} already has its own Neo4j.` }
@@ -215,13 +191,10 @@ export const actions: Actions = {
   /** Gives up the space's own Neo4j: its dockets move back to the account's, then the pod is removed. */
   sharedGraph: async (event) => {
     const { access, space } = await settingsAccess(event)
-    const moved = await change(event, access.org.id, async (tx) => {
-      const { rowCount } = await tx.query(
-        "UPDATE platform.stores SET status = 'retiring', updated_at = now() WHERE org_id = $1 AND kind = 'neo4j' AND space_id = $2 AND status <> 'retiring'",
-        [access.org.id, space.id],
-      )
-      return { audit: { action: 'space.store.remove', args: { space: space.id, kind: 'neo4j' } }, result: (rowCount ?? 0) > 0 }
-    })
+    const moved = await change(event, access.org.id, async (tx) => ({
+      audit: { action: 'space.store.remove', args: { space: space.id, kind: 'neo4j' } },
+      result: await giveUpOwnGraph(tx, access.org.id, space.id),
+    }))
     return {
       flash: moved
         ? `${space.name}'s dockets go back to ${access.org.name}'s Neo4j and are rebuilt there; then its own pod is removed.`

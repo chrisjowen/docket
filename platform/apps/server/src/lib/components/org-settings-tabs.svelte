@@ -4,16 +4,16 @@
   import { page } from '$app/state'
 
   /**
-   * The account's Settings: AI for its owners, Roles for its admins (everyone
+   * The account's Settings: AI for whoever may change settings on the whole account, Roles for its admins (everyone
    * else who reaches Settings reads them), System accounts for whoever manages
    * system accounts somewhere.
    */
   let { org, active }: { org: string; active: 'ai' | 'roles' | 'system-accounts' } = $props()
-  const data = $derived(page.data as { owner?: boolean; managesSystemAccounts?: boolean })
+  const data = $derived(page.data as { owner?: boolean; managesSystemAccounts?: boolean; permissions?: { settings?: boolean } })
 </script>
 
 <nav class="subtabs" aria-label="Settings">
-  {#if data.owner}
+  {#if data.permissions?.settings}
     <a href={resolve('/a/[acct]/settings', { acct: org })} aria-current={active === 'ai' ? 'page' : undefined}>AI</a>
   {/if}
   <a href={resolve('/a/[acct]/settings/roles', { acct: org })} aria-current={active === 'roles' ? 'page' : undefined}>Roles</a>

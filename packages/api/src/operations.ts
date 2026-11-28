@@ -17,9 +17,11 @@ import {
   IssuedToken,
   Me,
   Member,
+  AiProvider,
   Navigation,
   OperatorAccount,
   PlaceRef,
+  PlaceSettings,
   QuickSearch,
   Role,
   SLUG,
@@ -48,7 +50,7 @@ import {
  * Every `/api/v1` answer carries it (`X-Docket-Api-Version`), as does the OpenAPI document; a client built for
  * another major, or a newer minor, says so rather than call what is not there.
  */
-export const API_VERSION = '1.2'
+export const API_VERSION = '1.3'
 
 /** Whether a client built for API `wanted` can use a server answering `served`: the same major, and no newer minor. */
 export function compatible(wanted: string, served: string): boolean {
@@ -113,6 +115,37 @@ const tokenInput = {
   read_only: z.boolean().optional(),
   dockets: z.array(SLUG).min(1).max(100).nullable().optional().describe('The dockets it reaches, by slug; null or omitted: every docket its owner reaches'),
 }
+
+const modelName = z.string().trim().min(1).max(200)
+/** Each use's model, chosen from the place's `choices`; null: the place above's. */
+const modelsInput = z
+  .object({ cypher: modelName.nullable().optional(), synthesis: modelName.nullable().optional() })
+  .describe("Each use's model (cypher: lookups and background work; synthesis: answers and the Ask agent), from the place's choices; null runs the place above's")
+/** What the places inside may choose from, per use: only models the place itself may choose. */
+const allowedInput = z
+  .object({ cypher: z.array(modelName).max(50).nullable().optional(), synthesis: z.array(modelName).max(50).nullable().optional() })
+  .describe('The models the places inside may choose from, per use, out of what this place may choose; null or empty: no limit of its own')
+const usd = z.number().min(0).max(1_000_000)
+const spaceSettingsBody = z
+  .object({
+  models: modelsInput.optional(),
+  allowed: allowedInput.optional(),
+  slice_usd: usd.nullable().optional().describe("The space's slice of the account's monthly AI cap, in US dollars, at most the cap; null: none of its own"),
+})
+  .strict()
+const docketSettingsBody = z
+  .object({
+  models: modelsInput.optional(),
+  enrichment: z
+    .object({ enabled: z.boolean().optional(), schedule: z.enum(['nightly', 'weekly']).optional(), monthly_limit_usd: usd.optional() })
+    .optional()
+    .describe("Background enrichment: on or off, nightly or weekly, and its monthly AI limit (at most the account's cap). Turning it on may publish what it needs onto the ontology"),
+  cognee: z
+    .object({ enabled: z.boolean().optional(), floor: z.number().min(0).max(1).optional(), monthly_limit_usd: usd.optional() })
+    .optional()
+    .describe("The cognee projection: on or off (where it runs), its search floor, and cognify's monthly AI limit (at most the account's cap)"),
+})
+  .strict()
 
 type Definition = Omit<Operation, 'readOnly' | 'errors' | 'auth'> & { auth?: readonly Credential[]; errors?: readonly ApiErrorCode[] }
 
@@ -311,6 +344,34 @@ export const OPERATIONS = [
     needs: { capability: 'owner', on: 'account', text: 'Owner' },
     response: null,
     status: 204,
+  }),
+  op({
+    id: 'accounts.settings.get',
+    method: 'GET',
+    path: '/api/v1/accounts/{acct}/settings',
+    tag: 'Settings',
+    summary: "The account's AI settings: its models, what its spaces and dockets may choose from, and its monthly AI cap.",
+    params: acct,
+    needs: { capability: 'settings', on: 'account', text: 'Change settings on the account' },
+    response: PlaceSettings,
+    status: 200,
+  }),
+  op({
+    id: 'accounts.settings.update',
+    method: 'PATCH',
+    path: '/api/v1/accounts/{acct}/settings',
+    tag: 'Settings',
+    summary:
+      "Changes the account's models (from the platform's list), what its spaces and dockets may choose from, or its monthly AI cap. Only what is sent changes; lower places' choices hold only while the account's limits allow them.",
+    params: acct,
+    body: z.object({
+      models: modelsInput.optional(),
+      allowed: allowedInput.optional(),
+      monthly_cap_usd: usd.optional().describe("The account's monthly AI cap, in US dollars, within the platform's maximum: an owner only"),
+    }).strict(),
+    needs: { capability: 'settings', on: 'account', text: 'Change settings on the account; an owner, for the monthly cap' },
+    response: PlaceSettings,
+    status: 200,
   }),
 
   op({
@@ -601,12 +662,50 @@ export const OPERATIONS = [
     method: 'PATCH',
     path: '/api/v1/accounts/{acct}/spaces/{space}',
     tag: 'Spaces',
-    summary: 'Renames a space or changes its description.',
+    summary:
+      "Renames a space, changes its description, or chooses its storage and AI alternatives: its own Neo4j instance or the account's, and its own model provider key or the account's. A key is write-only: only its provider and last four characters are ever shown.",
     params: withAcct({ space: SLUG }),
-    body: z.object({ name: name.optional(), description: z.string().max(300).nullable().optional() }),
+    body: z.object({
+      name: name.optional(),
+      description: z.string().max(300).nullable().optional(),
+      graph: z
+        .enum(['account', 'own'])
+        .optional()
+        .describe("own: ask for the space's own Neo4j instance (one more pod on the box); its dockets move there and are rebuilt from their records once it is up. account: move them back"),
+      ai_key: z
+        .object({ provider: AiProvider, key: z.string().min(1).max(512).describe('The key itself: sealed, never shown or recorded again') })
+        .nullable()
+        .optional()
+        .describe("The space's own model provider key, which its dockets' AI calls then go on; null: the account's key again"),
+    }),
     needs: { capability: 'settings', on: 'space', text: 'Change settings on the space' },
     response: Space,
     status: 200,
+  }),
+  op({
+    id: 'spaces.settings.get',
+    method: 'GET',
+    path: '/api/v1/accounts/{acct}/spaces/{space}/settings',
+    tag: 'Settings',
+    summary: "A space's storage and AI settings: its models, what its dockets may choose from, its slice of the monthly cap, whose key it pays with, and where its graph lives.",
+    params: withAcct({ space: SLUG }),
+    needs: { capability: 'settings', on: 'space', text: 'Change settings on the space' },
+    response: PlaceSettings,
+    status: 200,
+  }),
+  op({
+    id: 'spaces.settings.update',
+    method: 'PATCH',
+    path: '/api/v1/accounts/{acct}/spaces/{space}/settings',
+    tag: 'Settings',
+    summary:
+      "Changes a space's models, what its dockets may choose from, or its slice of the account's monthly cap, within every limit the account sets. Only what is sent changes.",
+    params: withAcct({ space: SLUG }),
+    body: spaceSettingsBody,
+    needs: { capability: 'settings', on: 'space', text: 'Change settings on the space' },
+    response: PlaceSettings,
+    status: 200,
+    mcpTool: 'admin_update_settings',
   }),
 
   // --- Dockets -----------------------------------------------------------------
@@ -688,6 +787,31 @@ export const OPERATIONS = [
     needs: { capability: 'delete', on: 'docket', text: 'Delete on the docket' },
     response: null,
     status: 204,
+  }),
+  op({
+    id: 'dockets.settings.get',
+    method: 'GET',
+    path: '/api/v1/accounts/{acct}/dockets/{docket}/settings',
+    tag: 'Settings',
+    summary: "A docket's settings: its models, whose key it pays with, and its background agents (enrichment and cognee).",
+    params: withAcct({ docket: SLUG }),
+    needs: { capability: 'settings', on: 'docket', text: 'Change settings on the docket' },
+    response: PlaceSettings,
+    status: 200,
+  }),
+  op({
+    id: 'dockets.settings.update',
+    method: 'PATCH',
+    path: '/api/v1/accounts/{acct}/dockets/{docket}/settings',
+    tag: 'Settings',
+    summary:
+      "Changes a docket's models, within what its space and the account allow, or its background agents, within the account's monthly cap. Only what is sent changes.",
+    params: withAcct({ docket: SLUG }),
+    body: docketSettingsBody,
+    needs: { capability: 'settings', on: 'docket', text: 'Change settings on the docket; Change settings on the account, for enrichment (as in the app)' },
+    response: PlaceSettings,
+    status: 200,
+    mcpTool: 'admin_update_settings',
   }),
 
   // --- System accounts ---------------------------------------------------------

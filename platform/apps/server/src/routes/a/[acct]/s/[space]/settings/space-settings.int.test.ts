@@ -131,6 +131,33 @@ describe.skipIf(!TEST_PG_URL)("a space's settings", () => {
     expect(page.budget).toMatchObject({ sliceUsd: 4, accountCapUsd: 10 })
   })
 
+  it("lets an account admin who is not an owner change the account's models but not its monthly cap", async () => {
+    await member('steward')
+    await grant('steward', 'account', null, 'admin')
+    const capBefore = (await runtime.caps.status(org.orgId)).capUsd
+    const page = await outcome(() => accountSettings.load(event('steward', '/settings') as never))
+    expect(page.status).toBe(200)
+    expect((await outcome(() => accountSettings.load(event('writer', '/settings') as never))).status).toBe(303)
+
+    const capChange = await outcome(() =>
+      accountSettings.actions.ai!(event('steward', '/settings', {}, { cap: '50', cypher: 'anthropic/claude-haiku-5.5', synthesis: 'openai/gpt-4.1' }) as never),
+    )
+    expect(capChange.data).toMatchObject({ status: 403, data: { problem: 'Only an owner of the account sets its monthly AI cap.' } })
+
+    const saved = await outcome(() =>
+      accountSettings.actions.ai!(event('steward', '/settings', {}, {
+          cypher: 'anthropic/claude-haiku-5.5',
+          synthesis: 'anthropic/claude-sonnet-5.5',
+          allowed_synthesis: ['openai/gpt-4.1', 'anthropic/claude-sonnet-5.5'],
+        }) as never,
+      ),
+    )
+    expect(saved.data).toEqual({ flash: expect.stringMatching(/^Saved .*'s models\.$/) })
+    expect((await runtime.caps.status(org.orgId)).capUsd).toBe(capBefore)
+    const after = (await accountSettings.load(event('owner', '/settings') as never)) as unknown as { models: { use: string; model: string }[] }
+    expect(after.models.find((slot) => slot.use === 'synthesis')).toMatchObject({ model: 'anthropic/claude-sonnet-5.5' })
+  })
+
   it("keeps the space's own key sealed: the page and the audit log carry only its provider and last four characters", async () => {
     const set = await outcome(() => settingsPage.actions.setKey!(at('lead', { provider: 'anthropic', key: 'sk-ant-api03-very-secret-WXYZ' }) as never))
     expect(set.data).toEqual({ flash: 'Engineering now pays for AI with its own Anthropic key (…WXYZ).' })

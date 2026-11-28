@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { API_VERSION, ERROR_STATUS, matchOperation, type ApiErrorCode, type Operation } from '@docket/api'
+import { CapError, ProviderKeyError, SettingsError } from '@docket/platform-ai'
 import { ApiTokenError, ConnectionError, TokenRevocationError } from '@docket/platform-auth'
-import { WorkspaceError } from '@docket/platform-canonical-store'
+import { CogneeSettingsError, WorkspaceError } from '@docket/platform-canonical-store'
+import { EnrichmentSettingsError, NoOntology } from '@docket/platform-enrichment'
 import { perMinute, rateLimitMessage } from '@docket/platform-limits'
-import { OntologyInvalid, VersionNotFound } from '@docket/platform-ontology-service'
+import { OntologyBreakingChange, OntologyInvalid, OntologyNarrowingChange, StaleDraft, VersionNotFound } from '@docket/platform-ontology-service'
 import { TenancyError } from '@docket/platform-tenancy'
 import type { RequestEvent } from '@sveltejs/kit'
 import type { z } from 'zod'
@@ -48,6 +50,21 @@ export function errorOf(cause: unknown): ApiFailure {
   if (cause instanceof ConnectionError) return new ApiFailure(/choose/i.test(cause.message) ? 'invalid_request' : 'not_found', cause.message)
   if (cause instanceof OntologyInvalid) return new ApiFailure('invalid_request', 'That is not a docket ontology.')
   if (cause instanceof VersionNotFound) return new ApiFailure('invalid_request', cause.message)
+  // Settings outside what the places above allow, or out of range: the resolver's own words, never a key.
+  if (
+    cause instanceof SettingsError ||
+    cause instanceof CapError ||
+    cause instanceof ProviderKeyError ||
+    cause instanceof EnrichmentSettingsError ||
+    cause instanceof CogneeSettingsError ||
+    cause instanceof NoOntology
+  ) {
+    return new ApiFailure('invalid_request', cause.message)
+  }
+  if (cause instanceof StaleDraft) return new ApiFailure('conflict', 'The ontology changed while this was saved: try again.')
+  if (cause instanceof OntologyBreakingChange || cause instanceof OntologyNarrowingChange) {
+    return new ApiFailure('conflict', 'Adding what enrichment needs to the ontology would change how existing documents validate: publish it from the Ontology tab instead.')
+  }
   return new ApiFailure('server_error', 'The server failed to answer.')
 }
 

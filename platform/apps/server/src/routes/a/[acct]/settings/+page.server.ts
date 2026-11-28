@@ -15,20 +15,21 @@ import { listSpaces, listWorkspaces } from '@docket/platform-canonical-store'
 import { fail, redirect } from '@sveltejs/kit'
 
 import { modelSlots, modelsFrom } from '$lib/server/place-settings'
-import { authoriseOwner, orgAccess, recordAudit } from '$lib/server/request'
+import { authorise, orgAccess, recordAudit } from '$lib/server/request'
 import { getRuntime } from '$lib/server/runtime'
 
 import type { Actions, PageServerLoad } from './$types'
 
 /**
- * The org's settings: its monthly AI cap and model choices (§11), owners
- * only (§4), and which models its spaces and dockets may choose from
- * (tenancy v2 §5). Anyone else who reaches Settings goes straight to the
- * settings they do have: the account's roles.
+ * The org's settings: its model choices (§11) and which models its spaces and
+ * dockets may choose from (tenancy v2 §5), for whoever may change settings on
+ * the whole account, and its monthly AI cap, which only an owner sets (§4, as
+ * billing). Anyone else who reaches Settings goes straight to the settings
+ * they do have: the account's roles.
  */
 export const load: PageServerLoad = async (event) => {
   const access = await orgAccess(event)
-  if (!access.owner) redirect(303, `/a/${access.org.slug}/settings/roles`)
+  if (!access.can('settings')) redirect(303, `/a/${access.org.slug}/settings/roles`)
   const { router, caps } = getRuntime()
   const orgId = access.org.id
   const [status, view, spaces, dockets] = await Promise.all([
@@ -80,32 +81,33 @@ export const load: PageServerLoad = async (event) => {
 }
 
 export const actions: Actions = {
-  /** Sets the cap and models. The worker moves the org's OpenRouter key limit to match within minutes. */
+  /** Sets the models and, for an owner, the cap. The worker moves the org's OpenRouter key limit to match within minutes. */
   ai: async (event) => {
     const access = await orgAccess(event)
-    authoriseOwner(access)
+    authorise(access, 'settings')
     const form = await event.request.formData()
-    const cap = Number(String(form.get('cap') ?? '').trim())
+    if (form.has('cap') && !access.owner) return fail(403, { problem: 'Only an owner of the account sets its monthly AI cap.' })
+    const cap = access.owner ? Number(String(form.get('cap') ?? '').trim()) : null
     const { models, allowed } = modelsFrom(form)
     if (!models.cypher || !models.synthesis) return fail(400, { problem: 'Choose models from the list.' })
     const user = event.locals.user
     if (!user) return fail(401, { problem: 'Sign in first.' })
     try {
       await getRuntime().router.withPlatform(async (tx) => {
-        const before = await capOf(tx, access.org.id)
-        await setCap(tx, access.org.id, cap, user.id)
+        const before = cap === null ? null : await capOf(tx, access.org.id)
+        if (cap !== null) await setCap(tx, access.org.id, cap, user.id)
         const saved = await saveAiSettings(tx, { orgId: access.org.id, place: { kind: 'account' }, models, allowed, by: user.id })
         await getRuntime().router.enterTenant(tx, access.org.id)
         await recordAudit(tx, event, {
           action: 'ai.settings',
           orgId: access.org.id,
-          args: { before, cap, cypher: models.cypher, synthesis: models.synthesis, allowed: saved.after.allowed },
+          args: { ...(cap === null ? {} : { before, cap }), cypher: models.cypher, synthesis: models.synthesis, allowed: saved.after.allowed },
         })
       })
     } catch (caught) {
       if (caught instanceof CapError || caught instanceof SettingsError) return fail(400, { problem: caught.message })
       throw caught
     }
-    return { flash: `Saved: $${cap.toFixed(2)} a month.` }
+    return { flash: cap === null ? `Saved ${access.org.name}'s models.` : `Saved: $${cap.toFixed(2)} a month.` }
   },
 }

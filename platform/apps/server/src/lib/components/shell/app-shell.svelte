@@ -207,7 +207,7 @@
               </a>
             </li>
           {/if}
-          {#if data.owner || data.accountAdmin || data.managesSystemAccounts}
+          {#if data.owner || data.accountAdmin || data.managesSystemAccounts || data.permissions?.settings}
             <li>
               <a href={resolve('/a/[acct]/settings', { acct: org.slug })} aria-current={page.url.pathname.startsWith(orgPath('/settings')) ? 'page' : undefined}>
                 <Settings size={17} aria-hidden="true" /> Settings

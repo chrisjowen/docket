@@ -15,7 +15,7 @@
 
 <h1>Settings</h1>
 <OrgSettingsTabs org={data.org.slug} active="ai" />
-<p class="muted lede">Owners only. Changes are recorded in the audit log.</p>
+<p class="muted lede">Changes are recorded in the audit log.</p>
 
 {#if form?.problem}<p class="alert" role="alert">{form.problem}</p>{/if}
 {#if form?.flash}<p class="flash" role="status">{form.flash}</p>{/if}
@@ -28,10 +28,14 @@
     is this cap. Search never uses it, so search keeps working when the budget is spent. Owners are warned at 80%.
     This month ({data.ai.month}): <strong>${data.ai.spentUsd.toFixed(2)}</strong> spent.
   </p>
-  <label>
-    Monthly cap (US dollars, at most ${data.maxCapUsd})
-    <input name="cap" type="number" min="0" max={data.maxCapUsd} step="1" value={data.ai.capUsd} required />
-  </label>
+  {#if data.owner}
+    <label>
+      Monthly cap (US dollars, at most ${data.maxCapUsd})
+      <input name="cap" type="number" min="0" max={data.maxCapUsd} step="1" value={data.ai.capUsd} required />
+    </label>
+  {:else}
+    <p class="muted">Monthly cap: <strong>${data.ai.capUsd.toFixed(2)}</strong>. Only an owner of the account changes it.</p>
+  {/if}
   <ModelSlots slots={data.models} required limitLabel="Spaces and dockets may choose from" />
   <p class="muted fine">Every request asks OpenRouter for providers that neither train on prompts nor retain them.</p>
   <div><button class="button primary" type="submit">Save</button></div>

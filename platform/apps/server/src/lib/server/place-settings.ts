@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { randomBytes } from 'node:crypto'
+
 import { env } from '$env/dynamic/private'
 import {
   MODEL_USES,
   MODEL_USE_INFO,
   PROVIDER_INFO,
+  ProviderKeyError,
+  resolveAiSettings,
   spaceAiKeys,
   type ModelUse,
+  type Provider,
   type PlaceAiSettings,
   type ProviderKeyInfo,
   type ResolvedAiSettings,
@@ -44,6 +49,73 @@ let keys: SpaceAiKeys | undefined
 export function spaceKeys(): SpaceAiKeys {
   const { router, keyring } = getRuntime()
   return (keys ??= spaceAiKeys({ platform: (fn) => router.withPlatform(fn), keysFor: (orgId) => keyring.forOrg(orgId) }))
+}
+
+/**
+ * Gives a space its own provider key, inside the caller's transaction: its
+ * dockets' calls go on it from the next one. Refused when, for some use,
+ * nothing the account allows is served by that provider. Returns only what
+ * may be shown and audited: the provider and the key's last four characters.
+ */
+export async function setSpaceKey(
+  tx: Tx,
+  input: { orgId: string; orgName: string; spaceId: string; provider: Provider; key: string; by: string },
+): Promise<ProviderKeyInfo> {
+  const info = await spaceKeys().set(tx, { orgId: input.orgId, spaceId: input.spaceId, provider: input.provider, key: input.key, by: input.by })
+  const resolved = await resolveAiSettings(tx, input.orgId, { spaceId: input.spaceId })
+  if (Object.values(resolved.models).some((each) => each.model === null)) {
+    throw new ProviderKeyError(
+      `None of the models ${input.orgName} allows for some use here is served by ${PROVIDER_INFO[input.provider].label}: ask an owner to allow one, or use another provider's key.`,
+    )
+  }
+  return info
+}
+
+/**
+ * Asks for a space's own Neo4j instance, one more pod on the box, which the
+ * worker makes; the space's dockets move there once it is up. `exists` when
+ * it has one already, `full` when the box has no room for another.
+ */
+export async function askOwnGraph(tx: Tx, orgId: string, spaceId: string, by: string): Promise<'requested' | 'exists' | 'full'> {
+  // One request at a time across the box, so two spaces never take the last pod.
+  await tx.query("SELECT pg_advisory_xact_lock(hashtext('docket:neo4j-pods'))")
+  const existing = await tx.query<{ id: string; status: string }>("SELECT id, status FROM platform.stores WHERE org_id = $1 AND kind = 'neo4j' AND space_id = $2", [
+    orgId,
+    spaceId,
+  ])
+  const current = existing.rows[0]
+  if (current && current.status !== 'retiring') return 'exists'
+  if ((await podsOnBox(tx)).left < 1) return 'full'
+  if (current) {
+    // Changed its mind before the old one was removed: keep it.
+    await tx.query("UPDATE platform.stores SET status = 'requested', requested_by = $2, updated_at = now() WHERE id = $1", [current.id, by])
+  } else {
+    await tx.query("INSERT INTO platform.stores (id, org_id, kind, space_id, status, requested_by) VALUES ($1, $2, 'neo4j', $3, 'requested', $4)", [
+      `st${randomBytes(8).toString('hex')}`,
+      orgId,
+      spaceId,
+      by,
+    ])
+  }
+  return 'requested'
+}
+
+/** Gives up a space's own Neo4j: its dockets move back to the account's, then the pod is removed. Whether it had one. */
+export async function giveUpOwnGraph(tx: Tx, orgId: string, spaceId: string): Promise<boolean> {
+  const { rowCount } = await tx.query(
+    "UPDATE platform.stores SET status = 'retiring', updated_at = now() WHERE org_id = $1 AND kind = 'neo4j' AND space_id = $2 AND status <> 'retiring'",
+    [orgId, spaceId],
+  )
+  return (rowCount ?? 0) > 0
+}
+
+/** A space's own Neo4j instance, while it is asked for, running or being given up; null when it uses the account's. */
+export async function spaceGraph(tx: Tx, orgId: string, spaceId: string): Promise<{ status: string; lastError: string | null } | null> {
+  const { rows } = await tx.query<{ status: string; last_error: string | null }>(
+    "SELECT status, last_error FROM platform.stores WHERE org_id = $1 AND kind = 'neo4j' AND space_id = $2",
+    [orgId, spaceId],
+  )
+  return rows[0] ? { status: rows[0].status, lastError: rows[0].last_error } : null
 }
 
 /** One use's settings as a page shows them: the model it runs on and whose choice that is, what it may be, and what "the same as above" means. */

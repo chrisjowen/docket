@@ -47,8 +47,9 @@ UI imports it, and `GET /api/v1/openapi.json` publishes it as OpenAPI 3.1
 | Users | `GET …/members`, `PATCH/DELETE …/members/{user}`; `GET/POST …/invites`, `POST …/invites/{id}/resend`, `DELETE …/invites/{id}` |
 | Access | `GET …/access?place=`, `GET …/access/who?place=`; `GET/POST …/grants`, `PUT/PATCH/DELETE …/grants/{id}` |
 | Roles | `GET/POST …/roles`, `PUT/DELETE …/roles/{id}` |
-| Spaces | `GET/POST …/spaces`, `GET/PATCH …/spaces/{space}` |
+| Spaces | `GET/POST …/spaces`, `GET/PATCH …/spaces/{space}` (rename; its own Neo4j or the account's with `graph`; its own provider key or the account's with `ai_key`) |
 | Dockets | `GET/POST …/dockets`, `GET/PATCH/DELETE …/dockets/{docket}`, `GET …/dockets/{docket}/summary` |
+| Settings | `GET/PATCH …/settings` (the account's models, its limits on what spaces and dockets choose, and its monthly cap); `GET/PATCH …/spaces/{space}/settings` (a space's models, limits and slice of the cap); `GET/PATCH …/dockets/{docket}/settings` (a docket's models and background agents) |
 | System accounts | `GET/POST …/system-accounts`, `GET/DELETE …/system-accounts/{id}`, `GET/POST …/system-accounts/{id}/tokens`, `DELETE …/tokens/{token}` |
 | Oversight | `GET …/audit`, `GET …/usage` |
 | Operator | `GET /operator/accounts`, `PATCH /operator/accounts/{acct}` |
@@ -91,14 +92,30 @@ addresses answer as if it did not exist, its tokens and connections stop
 working (401), and nothing in it is lost. Each change is recorded in the
 platform's audit log as `api.operator.accounts.update`.
 
+**Settings.** A place's settings resolve account, then space, then docket
+(tenancy v2 §5), and every change goes through that resolver: a place
+chooses only models every place above it allows (and, in a space that pays
+with its own key, that its provider serves), limits the places inside it only
+to models it may choose itself, and a space's slice is at most the account's
+cap. A `PATCH` changes only what it sends; `null` clears a place's own choice,
+so it runs what the place above it runs. Each needs Change settings on its
+place. Setting the account's monthly cap needs an owner, as it is what the
+account pays; changing a docket's enrichment needs Change settings on the
+account, as in the app, since it spends the account's AI and may publish what
+it needs onto the ontology. The account always pays Docket's provider and
+keeps its records and graph on Docket's stores, so its settings are its
+models, limits and cap; a space's own key and Neo4j are on
+`PATCH …/spaces/{space}`.
+
+A space's provider key is write-only: no answer, log line or audit event
+carries it, only its provider and last four characters. It is never taken
+over MCP.
+
 Not here yet, from the management tasks of tenancy v2 §3.5:
 
 - Billing (`PATCH /accounts/{acct}`): the product has no billing to manage.
-- Account storage, AI provider and models (`PATCH …/settings`); models and
-  background agents for a space or docket (`PATCH …/{place}/settings`, MCP
-  `admin_update_settings`); and a space's storage or AI alternatives on
-  `PATCH …/spaces/{space}`. These follow the settings resolver of tenancy v2
-  phase 5, which lands separately.
+- Background agent defaults for an account or a space: enrichment and cognee
+  are set per docket.
 
 An account the caller is not in, a docket or space they cannot see, and a
 grant they neither hold nor manage all answer 404; one they see but may not
@@ -125,11 +142,13 @@ beside each docket's own (`/mcp/{acct}/{docket}`), which is unchanged.
   never falls back to a default.
 - `?read_only=1` drops the write tools.
 - `?admin=1` opts in to the management tools - `admin_set_access`, `admin_invite`, `admin_create_space`,
-  `admin_create_docket`, `admin_update_docket`,
+  `admin_create_docket`, `admin_update_docket`, `admin_update_settings`,
   `admin_create_system_account`, `admin_usage` - each offered only when the
   caller holds its capability somewhere, and each making the same call, with
   the same checks and audit, as `/api/v1`. None mints a token, and none is
   offered to a read-only credential or one made before scopes went.
+  `admin_update_settings` names exactly one place, `space:<slug>` or
+  `docket:<slug>`, and makes that place's `PATCH …/settings` call.
 
 OAuth clients sign in for it with the account's MCP URL as the resource
 indicator (RFC 8707). The consent screen then asks which of the account's
