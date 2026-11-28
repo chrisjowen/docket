@@ -12,10 +12,10 @@ import type { Runtime } from './runtime'
 
 let runtime: Runtime
 vi.mock('$lib/server/runtime', () => ({ getRuntime: () => runtime }))
-const { load: orgLayout } = await import('../../routes/a/[org]/+layout.server')
-const { load: casebook } = await import('../../routes/a/[org]/+page.server')
-const { load: docketLayout } = await import('../../routes/a/[org]/d/[ws]/+layout.server')
-const { GET: proposalsApi } = await import('../../routes/api/o/[org]/w/[ws]/proposals/+server')
+const { load: orgLayout } = await import('../../routes/a/[acct]/+layout.server')
+const { load: casebook } = await import('../../routes/a/[acct]/+page.server')
+const { load: docketLayout } = await import('../../routes/a/[acct]/d/[docket]/+layout.server')
+const { GET: proposalsApi } = await import('../../routes/api/o/[acct]/w/[docket]/proposals/+server')
 const { inWorkspace } = await import('./workspace')
 const { orgAccess } = await import('./request')
 const { orgWorkspaces } = await import('./ask-runtime')
@@ -48,7 +48,7 @@ describe.skipIf(!TEST_PG_URL)('namespace access in the web app', () => {
     const path = ws ? `/a/${slug}/d/${ws}` : `/a/${slug}`
     const url = new URL(`https://docket.example${path}`)
     return {
-      params: { org: slug, ...(ws ? { ws } : {}) },
+      params: { acct: slug, ...(ws ? { docket: ws } : {}) },
       locals: { user: { ...users[name]!, name: null, avatarUrl: null, emails: [], allowlisted: false }, startedAt: performance.now(), requestId: randomUUID() },
       url,
       request: new Request(url),

@@ -61,7 +61,7 @@ function post(address: string, query = '', options: { org?: string; bearer?: str
   const url = new URL(`https://docket.example/mcp/${org}/main${query}`)
   return {
     url,
-    params: { org, ws: 'main' },
+    params: { acct: org, docket: 'main' },
     request: new Request(url, {
       method: 'POST',
       headers: { authorization: `Bearer ${options.bearer ?? `dkt_live_${Math.random()}`}` },

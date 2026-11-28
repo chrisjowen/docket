@@ -62,7 +62,7 @@ describe.skipIf(!TEST_PG_URL)('org admin keys move to database accounts (platfor
   async function call(method: string, path: string, body?: unknown) {
     const url = new URL(`https://docket.example/api/admin/o/o-${org.orgId}/${path}`)
     const event = {
-      params: { org: `o-${org.orgId}`, path }, url,
+      params: { acct: `o-${org.orgId}`, path }, url,
       request: new Request(url, { method, headers: { authorization: `Bearer ${master.key}`, 'content-type': 'application/json' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }),
       locals: { requestId: randomUUID(), startedAt: performance.now() }, getClientAddress: () => '192.0.2.1',
     } as unknown as RequestEvent

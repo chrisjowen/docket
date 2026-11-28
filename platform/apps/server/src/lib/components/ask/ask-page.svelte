@@ -31,7 +31,7 @@
   import { typeCode } from '$lib/docket'
   import { layoutCards } from '$lib/graph/cards'
 
-  import type { ActionData, PageData } from '../../../routes/a/[org]/ask/$types'
+  import type { ActionData, PageData } from '../../../routes/a/[acct]/ask/$types'
 
   /**
    * The Ask page, shared by the casebook's Ask and a docket's Chat tab: the
@@ -42,7 +42,7 @@
 
   /** This page's address: the docket's Chat tab, or the casebook's Ask. */
   const base = $derived(
-    data.docket ? resolve('/a/[org]/d/[ws]/ask', { org: data.org.slug, ws: data.docket.slug }) : resolve('/a/[org]/ask', { org: data.org.slug }),
+    data.docket ? resolve('/a/[acct]/d/[docket]/ask', { acct: data.org.slug, docket: data.docket.slug }) : resolve('/a/[acct]/ask', { acct: data.org.slug }),
   )
 
   const me = $derived((page.data.user as { login: string; name: string | null } | null) ?? null)
@@ -172,7 +172,7 @@
       pending = null
     }
     try {
-      const response = await fetch(resolve('/a/[org]/ask/stream', { org: data.org.slug }), {
+      const response = await fetch(resolve('/a/[acct]/ask/stream', { acct: data.org.slug }), {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-csrf-token': data.csrf ?? '' },
         body: JSON.stringify({ question: text, chat: form.get('chat') ?? '', ws: form.getAll('ws') }),
@@ -318,7 +318,7 @@
     <div class="scope" data-testid="scope" data-kind="one">
       <input type="hidden" name="ws" value={data.docket.slug} />
       <span class="scope-chip fixed">asking <b>{data.docket.name}</b> only</span>
-      <a class="widen" href="{resolve('/a/[org]/ask', { org: data.org.slug })}?ws={encodeURIComponent(data.docket.slug)}" data-testid="widen">Chat across dockets</a>
+      <a class="widen" href="{resolve('/a/[acct]/ask', { acct: data.org.slug })}?ws={encodeURIComponent(data.docket.slug)}" data-testid="widen">Chat across dockets</a>
     </div>
   {:else}
     <details class="scope" data-testid="scope" data-kind={kind} bind:open={picking} bind:this={picker}>
@@ -390,7 +390,7 @@
       <b>{pickedNode.node.title}</b>
       <span class="mono muted">{pickedNode.node.id}</span>
       <span class="muted">{pickedNode.match ? 'matches the search' : 'linked to a match'} · {pickedNode.workspace.name}</span>
-      <a href="{resolve('/a/[org]/d/[ws]/graph', { org: data.org.slug, ws: pickedNode.workspace.slug })}?focus={encodeURIComponent(pickedNode.node.id)}"
+      <a href="{resolve('/a/[acct]/d/[docket]/graph', { acct: data.org.slug, docket: pickedNode.workspace.slug })}?focus={encodeURIComponent(pickedNode.node.id)}"
         >Open the case file <ArrowRight size={13} aria-hidden="true" /></a
       >
     </p>
@@ -651,7 +651,7 @@
                   class:lit={lit === `${source.workspace}/${source.id}`}
                   class:dim={lit !== null && lit !== `${source.workspace}/${source.id}`}
                   style="--c: {colourOf(source.workspace, source.type)}"
-                  href="{resolve('/a/[org]/d/[ws]/graph', { org: data.org.slug, ws: source.workspace })}?focus={encodeURIComponent(source.id)}"
+                  href="{resolve('/a/[acct]/d/[docket]/graph', { acct: data.org.slug, docket: source.workspace })}?focus={encodeURIComponent(source.id)}"
                   onmouseenter={() => (lit = `${source.workspace}/${source.id}`)}
                   onmouseleave={() => (lit = null)}
                 >

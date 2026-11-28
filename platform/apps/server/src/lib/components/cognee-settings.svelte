@@ -16,7 +16,7 @@
     }
     csrf: string | null
     canManage: boolean
-    ws: { org: string; ws: string }
+    ws: { acct: string; docket: string }
     problem?: string | undefined
     flash?: string | undefined
   }
@@ -31,7 +31,7 @@
     <a href="https://www.cognee.ai/" rel="noreferrer" target="_blank">cognee</a>, which cognifies it into a knowledge graph
     of its own, and search asks it alongside the others. Cognify runs the org's AI over every new or changed resource, so it
     spends from this setting's own monthly limit inside the org's cap; when either is spent, cognee waits and says so on the
-    <a href={resolve('/a/[org]/d/[ws]/settings/sync', ws)}>Sync</a> tab, and writes and search carry on without it. Search keeps
+    <a href={resolve('/a/[acct]/d/[docket]/settings/sync', ws)}>Sync</a> tab, and writes and search carry on without it. Search keeps
     only what cognee finds at least as similar to the question as the floor, so it can answer with nothing.
   </p>
 

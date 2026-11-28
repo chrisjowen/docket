@@ -9,23 +9,23 @@ export interface Crumb {
 
 /** What org-level pages read as in the breadcrumbs, by route. */
 const ORG_PAGES: Record<string, string> = {
-  '/a/[org]/ask': 'Chat',
-  '/a/[org]/members': 'Users',
-  '/a/[org]/tokens': 'Your tokens & connections',
-  '/a/[org]/audit': 'Audit log',
-  '/a/[org]/settings': 'Settings',
-  '/a/[org]/settings/system-accounts': 'System accounts',
-  '/a/[org]/settings/system-accounts/[id]': 'System account',
-  '/a/[org]/dockets/new': 'New docket',
-  '/a/[org]/spaces/new': 'New space',
+  '/a/[acct]/ask': 'Chat',
+  '/a/[acct]/members': 'Users',
+  '/a/[acct]/tokens': 'Your tokens & connections',
+  '/a/[acct]/audit': 'Audit log',
+  '/a/[acct]/settings': 'Settings',
+  '/a/[acct]/settings/system-accounts': 'System accounts',
+  '/a/[acct]/settings/system-accounts/[id]': 'System account',
+  '/a/[acct]/dockets/new': 'New docket',
+  '/a/[acct]/spaces/new': 'New space',
 }
 
 /** A space's pages, by route: its own page carries no label of its own. */
 const SPACE_PAGES: Record<string, string | null> = {
-  '/a/[org]/s/[space]': null,
-  '/a/[org]/s/[space]/access': 'Users & system accounts',
-  '/a/[org]/s/[space]/new': 'New docket',
-  '/a/[org]/s/[space]/settings': 'Settings',
+  '/a/[acct]/s/[space]': null,
+  '/a/[acct]/s/[space]/access': 'Users & system accounts',
+  '/a/[acct]/s/[space]/new': 'New docket',
+  '/a/[acct]/s/[space]/settings': 'Settings',
 }
 
 /** Pages outside any casebook. */

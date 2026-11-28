@@ -7,9 +7,9 @@
 
 /** A workspace's Settings pages, as tabs under the Settings heading. */
 export const SETTINGS_TABS = [
-  { key: 'general', label: 'General', route: '/a/[org]/d/[ws]/settings' },
-  { key: 'sync', label: 'Sync', route: '/a/[org]/d/[ws]/settings/sync' },
-  { key: 'queries', label: 'Queries', route: '/a/[org]/d/[ws]/settings/queries' },
+  { key: 'general', label: 'General', route: '/a/[acct]/d/[docket]/settings' },
+  { key: 'sync', label: 'Sync', route: '/a/[acct]/d/[docket]/settings/sync' },
+  { key: 'queries', label: 'Queries', route: '/a/[acct]/d/[docket]/settings/queries' },
 ] as const
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number]['key']

@@ -27,7 +27,7 @@
     class:card
     class:on={key !== null && ctx.lit.key === key}
     style="--c: {ctx.colourOf(source.workspace, source.type)}"
-    href="{resolve('/a/[org]/d/[ws]/graph', { org: ctx.org, ws: source.workspace })}?focus={encodeURIComponent(source.id)}"
+    href="{resolve('/a/[acct]/d/[docket]/graph', { acct: ctx.org, docket: source.workspace })}?focus={encodeURIComponent(source.id)}"
     data-testid="answer-record"
     data-id={source.id}
     data-workspace={source.workspace}

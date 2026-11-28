@@ -11,12 +11,12 @@ import { compatible, routePattern, webUi } from './serve.js'
 
 describe('the web UI as a server serves it', () => {
   it('reads route ids as address patterns', () => {
-    const access = routePattern('/a/[org]/d/[ws]/access')
+    const access = routePattern('/a/[acct]/d/[docket]/access')
     expect(access.test('/a/acme/d/platform/access')).toBe(true)
     expect(access.test('/a/acme/d/platform/access/')).toBe(true)
     expect(access.test('/a/acme/d/platform/overview')).toBe(false)
     expect(access.test('/a/acme/d/platform/access/more')).toBe(false)
-    expect(routePattern('/a/[org]/d/[ws]/documents/[...path]').test('/a/a/d/b/documents/x/y.md')).toBe(true)
+    expect(routePattern('/a/[acct]/d/[docket]/documents/[...path]').test('/a/a/d/b/documents/x/y.md')).toBe(true)
   })
 
   it('fits a UI to an API of the same major version and no older minor', () => {
@@ -40,7 +40,7 @@ describe('the web UI as a server serves it', () => {
       writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Docket</title>')
       writeFileSync(join(dir, 'favicon.svg'), '<svg/>')
       writeFileSync(join(dir, '_ui', 'immutable', 'app.js'), 'export {}')
-      writeFileSync(join(dir, '_ui', 'manifest.json'), JSON.stringify({ name: '@docket/cloud-ui', version: '0.1.0', api: '1.0', routes: ['/a/[org]/d/[ws]/access'] }))
+      writeFileSync(join(dir, '_ui', 'manifest.json'), JSON.stringify({ name: '@docket/cloud-ui', version: '0.1.0', api: '1.0', routes: ['/a/[acct]/d/[docket]/access'] }))
       writeFileSync(join(outer, 'secret.txt'), 'not the UI')
       const web = webUi(dir, { frameAncestors: 'http://localhost:4310' })
       if (!web) throw new Error('no UI')

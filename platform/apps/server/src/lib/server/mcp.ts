@@ -95,8 +95,8 @@ export function outcomeOf(response: JsonRpcResponse | null): Outcome {
 
 export async function handleMcp(event: RequestEvent): Promise<Response> {
   const runtime = getRuntime()
-  const orgSlug = event.params.org ?? ''
-  const workspaceSlug = event.params.ws ?? ''
+  const orgSlug = event.params.acct ?? ''
+  const workspaceSlug = event.params.docket ?? ''
   const resourceUrl = mcpResourceUrl(runtime.origin, orgSlug, workspaceSlug)
   const base = {
     ip: clientAddress(event),

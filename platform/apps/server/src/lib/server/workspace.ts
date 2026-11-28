@@ -38,7 +38,7 @@ export async function inWorkspace<T>(
 ): Promise<T> {
   const org = await orgAccess(event, options)
   return inOrg(org, async (ctx) => {
-    const workspace = await workspaceBySlug(ctx.tx, event.params.ws ?? '')
+    const workspace = await workspaceBySlug(ctx.tx, event.params.docket ?? '')
     if (!workspace) error(404, 'Not found')
     return fn({ access: namespaceAccess(org, workspace), workspace, ctx })
   })

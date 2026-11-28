@@ -21,7 +21,7 @@
   }
 
   let { data, children }: Props = $props()
-  const ws = $derived({ org: data.org.slug, ws: data.workspace.slug })
+  const ws = $derived({ acct: data.org.slug, docket: data.workspace.slug })
   const active = $derived(activeTab(page.url.pathname, data.org.slug, data.workspace.slug))
   const docketNo = $derived(data.dockets.find((entry) => entry.slug === data.workspace.slug)?.docketNo ?? '')
   const opened = $derived(new Date(data.workspace.openedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))
@@ -47,15 +47,15 @@
     <span class="docket-no" data-testid="docket-no">{docketNo}</span>
     <span class="label">Opened {opened}</span>
     <span class="label" aria-hidden="true">·</span>
-    <a class="label" href={resolve('/a/[org]/d/[ws]/ontology', ws)} data-testid="head">
+    <a class="label" href={resolve('/a/[acct]/d/[docket]/ontology', ws)} data-testid="head">
       {data.workspace.head ? `Schema v${data.workspace.head.number}` : 'No schema yet'}
     </a>
     {#if data.workspace.drafts > 0}
       <span class="label" aria-hidden="true">·</span>
-      <a class="label" href={resolve('/a/[org]/d/[ws]/ontology', ws)}>{data.workspace.drafts} open {data.workspace.drafts === 1 ? 'draft' : 'drafts'}</a>
+      <a class="label" href={resolve('/a/[acct]/d/[docket]/ontology', ws)}>{data.workspace.drafts} open {data.workspace.drafts === 1 ? 'draft' : 'drafts'}</a>
     {/if}
     <span class="label" aria-hidden="true">·</span>
-    <a class="label" href={resolve('/a/[org]/d/[ws]/documents', ws)} data-testid="documents">
+    <a class="label" href={resolve('/a/[acct]/d/[docket]/documents', ws)} data-testid="documents">
       {data.workspace.documents} {data.workspace.documents === 1 ? 'document' : 'documents'}
     </a>
   </p>

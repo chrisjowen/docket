@@ -59,7 +59,7 @@ test('G1: create an org, invite a writer who can write but not publish', async (
   for (const action of ['org.provision', 'members.invite', 'members.invite.accept']) {
     await expect(alice.getByRole('cell', { name: action, exact: true }).first()).toBeVisible()
   }
-  await expect(alice.getByRole('cell', { name: 'POST /a/[org]/members?/invite' }).first()).toBeVisible()
+  await expect(alice.getByRole('cell', { name: 'POST /a/[acct]/members?/invite' }).first()).toBeVisible()
 
   // Bob sees only his own entries.
   await bobPage.goto(`/a/${slug}/audit`)

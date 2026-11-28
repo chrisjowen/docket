@@ -47,45 +47,45 @@
   let problem = $state<string | null>(null)
 
   const docketNos = $derived(new Map(dockets.map((docket) => [docket.slug, docket.docketNo])))
-  const graph = (ws: string) => resolve('/a/[org]/d/[ws]/graph', { org: org.slug, ws })
+  const graph = (ws: string) => resolve('/a/[acct]/d/[docket]/graph', { acct: org.slug, docket: ws })
   const focus = (id: string) => `focus=${encodeURIComponent(id)}`
 
   const pages = $derived.by((): Item[] => {
     const list: Item[] = [
-      { group: 'Pages', label: 'Home', meta: '', href: resolve('/a/[org]', { org: org.slug }), icon: FolderOpen },
+      { group: 'Pages', label: 'Home', meta: '', href: resolve('/a/[acct]', { acct: org.slug }), icon: FolderOpen },
       {
         group: 'Pages',
         label: 'Chat',
         meta: '/',
-        href: `${resolve('/a/[org]/ask', { org: org.slug })}${workspace ? `?ws=${encodeURIComponent(workspace.slug)}` : ''}`,
+        href: `${resolve('/a/[acct]/ask', { acct: org.slug })}${workspace ? `?ws=${encodeURIComponent(workspace.slug)}` : ''}`,
         icon: MessageSquareText,
       },
     ]
     if (workspace) {
       const ws = workspace.slug
       list.push(
-        { group: 'Pages', label: `${workspace.name} overview`, meta: docketNos.get(ws) ?? '', href: resolve('/a/[org]/d/[ws]/overview', { org: org.slug, ws }) },
+        { group: 'Pages', label: `${workspace.name} overview`, meta: docketNos.get(ws) ?? '', href: resolve('/a/[acct]/d/[docket]/overview', { acct: org.slug, docket: ws }) },
         { group: 'Pages', label: 'Record · network', meta: '', href: graph(ws) },
         { group: 'Pages', label: 'Record · facts', meta: '', href: `${graph(ws)}?view=facts` },
         { group: 'Pages', label: 'Record · docket sheet', meta: '', href: `${graph(ws)}?view=timeline` },
         { group: 'Pages', label: 'Record · exhibits', meta: '', href: `${graph(ws)}?view=evidence` },
-        { group: 'Pages', label: `Chat · ${workspace.name} only`, meta: '', href: resolve('/a/[org]/d/[ws]/ask', { org: org.slug, ws }), icon: MessageSquareText },
-        { group: 'Pages', label: 'Documents', meta: '', href: resolve('/a/[org]/d/[ws]/documents', { org: org.slug, ws }) },
-        { group: 'Pages', label: 'Schema', meta: '', href: resolve('/a/[org]/d/[ws]/ontology', { org: org.slug, ws }) },
-        { group: 'Pages', label: 'Activity', meta: '', href: resolve('/a/[org]/d/[ws]/activity', { org: org.slug, ws }) },
-        { group: 'Pages', label: 'Docket settings', meta: '', href: resolve('/a/[org]/d/[ws]/settings', { org: org.slug, ws }) },
+        { group: 'Pages', label: `Chat · ${workspace.name} only`, meta: '', href: resolve('/a/[acct]/d/[docket]/ask', { acct: org.slug, docket: ws }), icon: MessageSquareText },
+        { group: 'Pages', label: 'Documents', meta: '', href: resolve('/a/[acct]/d/[docket]/documents', { acct: org.slug, docket: ws }) },
+        { group: 'Pages', label: 'Schema', meta: '', href: resolve('/a/[acct]/d/[docket]/ontology', { acct: org.slug, docket: ws }) },
+        { group: 'Pages', label: 'Activity', meta: '', href: resolve('/a/[acct]/d/[docket]/activity', { acct: org.slug, docket: ws }) },
+        { group: 'Pages', label: 'Docket settings', meta: '', href: resolve('/a/[acct]/d/[docket]/settings', { acct: org.slug, docket: ws }) },
       )
     }
     list.push(
-      { group: 'Pages', label: 'Users', meta: '', href: resolve('/a/[org]/members', { org: org.slug }) },
-      { group: 'Pages', label: 'Your tokens & connections', meta: '', href: resolve('/a/[org]/tokens', { org: org.slug }) },
-      { group: 'Pages', label: 'Audit log', meta: '', href: resolve('/a/[org]/audit', { org: org.slug }) },
+      { group: 'Pages', label: 'Users', meta: '', href: resolve('/a/[acct]/members', { acct: org.slug }) },
+      { group: 'Pages', label: 'Your tokens & connections', meta: '', href: resolve('/a/[acct]/tokens', { acct: org.slug }) },
+      { group: 'Pages', label: 'Audit log', meta: '', href: resolve('/a/[acct]/audit', { acct: org.slug }) },
     )
-    if (canAdminister) list.push({ group: 'Pages', label: 'Account settings', meta: '', href: resolve('/a/[org]/settings', { org: org.slug }) })
-    if (canManageAccess) list.push({ group: 'Pages', label: 'System accounts', meta: '', href: resolve('/a/[org]/settings/system-accounts', { org: org.slug }) })
+    if (canAdminister) list.push({ group: 'Pages', label: 'Account settings', meta: '', href: resolve('/a/[acct]/settings', { acct: org.slug }) })
+    if (canManageAccess) list.push({ group: 'Pages', label: 'System accounts', meta: '', href: resolve('/a/[acct]/settings/system-accounts', { acct: org.slug }) })
     for (const docket of dockets) {
       if (docket.slug !== workspace?.slug) {
-        list.push({ group: 'Dockets', label: docket.name, meta: docket.docketNo, href: resolve('/a/[org]/d/[ws]/overview', { org: org.slug, ws: docket.slug }), icon: FolderOpen })
+        list.push({ group: 'Dockets', label: docket.name, meta: docket.docketNo, href: resolve('/a/[acct]/d/[docket]/overview', { acct: org.slug, docket: docket.slug }), icon: FolderOpen })
       }
     }
     return list
@@ -128,7 +128,7 @@
         })
       }
     }
-    const ask = resolve('/a/[org]/ask', { org: org.slug })
+    const ask = resolve('/a/[acct]/ask', { acct: org.slug })
     const scope = workspace ? `&ws=${encodeURIComponent(workspace.slug)}` : ''
     listed.push(
       { group: 'Chat', label: `Search everything for “${wanted}”`, meta: 'no AI', href: `${ask}?mode=search&q=${encodeURIComponent(wanted)}${scope}`, icon: Search },

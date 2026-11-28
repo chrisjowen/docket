@@ -7,7 +7,7 @@ describe('docket tabs', () => {
   it('lists the sections in order, opening on the overview', () => {
     expect(WORKSPACE_TABS.map((tab) => tab.label)).toEqual(['Overview', 'Record', 'Chat', 'Proposals', 'Documents', 'Schema', 'Activity', 'Access', 'MCP', 'Repos', 'Settings'])
     expect(HOME_TAB).toBe('overview')
-    for (const tab of WORKSPACE_TABS) expect(tab.route).toBe(`/a/[org]/d/[ws]/${tab.key}`)
+    for (const tab of WORKSPACE_TABS) expect(tab.route).toBe(`/a/[acct]/d/[docket]/${tab.key}`)
   })
 
   it('marks the tab a path belongs to, nested pages included', () => {

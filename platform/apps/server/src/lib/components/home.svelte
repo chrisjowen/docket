@@ -68,7 +68,7 @@
       <ul class="cards">
         {#each data.orgs as org (org.slug)}
           <li>
-            <a class="card org" href={resolve('/a/[org]', { org: org.slug })}>
+            <a class="card org" href={resolve('/a/[acct]', { acct: org.slug })}>
               <span class="org-mark">{org.name.slice(0, 2).toUpperCase()}</span>
               <strong class="grow">{org.name}</strong>
               <span class="badge" class:owner={org.role === 'owner'}>{org.role}</span>

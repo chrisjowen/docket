@@ -201,7 +201,7 @@ const truthy = (value: string | null) => value === '1' || value === 'true'
 
 export async function handleAccountMcp(event: RequestEvent): Promise<Response> {
   const runtime = getRuntime()
-  const orgSlug = event.params.org ?? ''
+  const orgSlug = event.params.acct ?? ''
   const resourceUrl = accountMcpUrl(runtime.origin, orgSlug)
   const base = { ip: clientAddress(event), userAgent: event.request.headers.get('user-agent'), requestId: event.locals.requestId }
   const latency = () => performance.now() - event.locals.startedAt

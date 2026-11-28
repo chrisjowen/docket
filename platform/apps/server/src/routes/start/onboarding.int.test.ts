@@ -15,11 +15,11 @@ import type { Runtime } from '$lib/server/runtime'
 let runtime: Runtime
 vi.mock('$lib/server/runtime', () => ({ getRuntime: () => runtime }))
 const start = await import('./+page.server')
-const space = await import('../a/[org]/start/space/+page.server')
-const docket = await import('../a/[org]/start/docket/+page.server')
-const newDocket = await import('../a/[org]/s/[space]/new/+page.server')
-const connect = await import('../a/[org]/start/connect/+page.server')
-const invite = await import('../a/[org]/start/invite/+page.server')
+const space = await import('../a/[acct]/start/space/+page.server')
+const docket = await import('../a/[acct]/start/docket/+page.server')
+const newDocket = await import('../a/[acct]/s/[space]/new/+page.server')
+const connect = await import('../a/[acct]/start/connect/+page.server')
+const invite = await import('../a/[acct]/start/invite/+page.server')
 const invitePage = await import('../invite/[link]/+page.server')
 
 // Signing up (tenancy v2 §6) against real Postgres, step by step: account, General and more spaces, the
@@ -50,7 +50,7 @@ describe.skipIf(!TEST_PG_URL)('signing up', () => {
     const user = name ? { ...users[name]!, name: null, avatarUrl: null } : null
     const cookies = new Map<string, string>()
     return {
-      params: { org: slug, ...options.params },
+      params: { acct: slug, ...options.params },
       locals: { user, startedAt: performance.now(), requestId: randomUUID(), csrf: null },
       url,
       request: body ? new Request(url, { method: 'POST', body }) : new Request(url),

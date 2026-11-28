@@ -65,7 +65,7 @@ test('the server serves the web UI for its pages, and the Access tab works throu
   const page = await alice.request.get(`/a/${org}/d/acme/access`)
   expect(page.status()).toBe(200)
   expect(await page.text()).toContain('/_ui/immutable/')
-  expect(manifest.routes).toContain('/a/[org]/d/[ws]/access')
+  expect(manifest.routes).toContain('/a/[acct]/d/[docket]/access')
   expect((await alice.request.get('/_ui/manifest.json')).status()).toBe(200)
   expect((await alice.request.post(`/a/${org}/d/acme/access`, { data: {} })).status()).toBe(405)
 

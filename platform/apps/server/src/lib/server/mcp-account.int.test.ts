@@ -108,7 +108,7 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
     const url = new URL(`https://docket.example/mcp/${slug()}${query}`)
     const event = {
       url,
-      params: { org: slug() },
+      params: { acct: slug() },
       request: new Request(url, {
         method: 'POST',
         headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' },
@@ -327,7 +327,7 @@ describe.skipIf(!TEST_PG_URL)("an account's MCP address", () => {
       const url = new URL(`https://docket.example/mcp/${slug()}/${ws}`)
       const event = {
         url,
-        params: { org: slug(), ws },
+        params: { acct: slug(), docket: ws },
         request: new Request(url, { method: 'POST', headers: { authorization: `Bearer ${connected}`, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) }),
         locals: { requestId: randomUUID(), startedAt: performance.now() },
         getClientAddress: () => '192.0.2.30',

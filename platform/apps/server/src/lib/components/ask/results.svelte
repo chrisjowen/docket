@@ -98,7 +98,7 @@
         <section class="rgroup" data-testid="group-notes">
           <div class="label">Notes · {groups.notes.length}</div>
           {#each shown(groups.notes) as note (`${note.workspace.slug}/${note.no}`)}
-            <a class="hit" href="{resolve('/a/[org]/d/[ws]/graph', { org, ws: note.workspace.slug })}?view=facts&open={note.no}" data-testid="note-hit">
+            <a class="hit" href="{resolve('/a/[acct]/d/[docket]/graph', { acct: org, docket: note.workspace.slug })}?view=facts&open={note.no}" data-testid="note-hit">
               <span class="hk"><FileText size={14} aria-hidden="true" /> Note</span>
               <span class="body">
                 <span class="docket-no">{note.no}</span> <b>{@render mark(note.title)}</b>
@@ -114,7 +114,7 @@
         <section class="rgroup" data-testid="group-memory">
           <div class="label">Memory · {groups.memory.length}</div>
           {#each shown(groups.memory) as memory (`${memory.workspace.slug}/${memory.id}`)}
-            <a class="hit" href="{resolve('/a/[org]/d/[ws]/graph', { org, ws: memory.workspace.slug })}?{focus(memory.id)}" data-testid="memory-hit">
+            <a class="hit" href="{resolve('/a/[acct]/d/[docket]/graph', { acct: org, docket: memory.workspace.slug })}?{focus(memory.id)}" data-testid="memory-hit">
               <span class="hk"><Waypoints size={14} aria-hidden="true" /> Memory</span>
               <span class="body">
                 <span class="mono muted">{memory.id} · mem0</span>
@@ -134,7 +134,7 @@
             {@render recordsBody()}
           {:else}
             {#each shown(hits) as hit (`${hit.workspace.slug}/${hit.id}`)}
-              <a class="hit" href="{resolve('/a/[org]/d/[ws]/graph', { org, ws: hit.workspace.slug })}?{focus(hit.id)}" data-testid="search-hit" data-workspace={hit.workspace.slug} data-id={hit.id}>
+              <a class="hit" href="{resolve('/a/[acct]/d/[docket]/graph', { acct: org, docket: hit.workspace.slug })}?{focus(hit.id)}" data-testid="search-hit" data-workspace={hit.workspace.slug} data-id={hit.id}>
                 <span class="hk"><span class="code" style="--c: {colourOf(hit.workspace.slug, hit.type)}">{typeCode(hit.type)}</span></span>
                 <span class="body">
                   <span class="mono muted">{hit.id}</span> <b>{@render mark(hit.title)}</b>
@@ -161,9 +161,9 @@
                 <b>{@render mark(exhibit.text)}</b>
                 {@render docket(exhibit.workspace.slug, exhibit.workspace.name)}
                 {#if exhibit.location || exhibit.source}<span class="snip mono">{[exhibit.source, exhibit.location].filter(Boolean).join(' · ')}</span>{/if}
-                <a class="snip" href="{resolve('/a/[org]/d/[ws]/graph', { org, ws: exhibit.workspace.slug })}?view=evidence&doc={encodeURIComponent(exhibit.path)}">In {exhibit.path}</a>
+                <a class="snip" href="{resolve('/a/[acct]/d/[docket]/graph', { acct: org, docket: exhibit.workspace.slug })}?view=evidence&doc={encodeURIComponent(exhibit.path)}">In {exhibit.path}</a>
               </span>
-              <a class="rec" href="{resolve('/a/[org]/d/[ws]/graph', { org, ws: exhibit.workspace.slug })}?{focus(exhibit.entity)}">{exhibit.entityTitle}</a>
+              <a class="rec" href="{resolve('/a/[acct]/d/[docket]/graph', { acct: org, docket: exhibit.workspace.slug })}?{focus(exhibit.entity)}">{exhibit.entityTitle}</a>
             </div>
           {/each}
           {@render more('exhibits', groups.exhibits.length)}
@@ -172,7 +172,7 @@
         <section class="rgroup" data-testid="group-entries">
           <div class="label">Docket entries · {groups.entries.length}</div>
           {#each shown(groups.entries) as entry (`${entry.workspace.slug}/${entry.no}`)}
-            <a class="hit" href="{resolve('/a/[org]/d/[ws]/graph', { org, ws: entry.workspace.slug })}?view=timeline{entry.entity ? `&${focus(entry.entity)}` : ''}" data-testid="entry-hit">
+            <a class="hit" href="{resolve('/a/[acct]/d/[docket]/graph', { acct: org, docket: entry.workspace.slug })}?view=timeline{entry.entity ? `&${focus(entry.entity)}` : ''}" data-testid="entry-hit">
               <span class="hk mono">#{String(entry.no).padStart(3, '0')}</span>
               <span class="body">
                 <b class="kind {entry.kind}">{SHEET_KINDS[entry.kind].toUpperCase()}</b>

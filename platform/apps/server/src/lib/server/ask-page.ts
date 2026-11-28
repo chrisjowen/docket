@@ -22,7 +22,7 @@ import { formText, inOrg } from '$lib/server/workspace'
  */
 
 /** The docket a Chat tab is fixed to, from its route; null in the casebook. */
-const docketOf = (event: RequestEvent) => event.params.ws ?? null
+const docketOf = (event: RequestEvent) => event.params.docket ?? null
 
 /** The page's address with `params`: the docket's Chat tab, or the casebook's Ask. */
 const page = (org: string, docket: string | null, params: Record<string, string | string[]> = {}) => {
