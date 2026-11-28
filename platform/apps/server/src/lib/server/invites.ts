@@ -11,7 +11,7 @@ import { getRuntime } from './runtime'
  * place, lasts 7 days and works once, by link and by email. The link is
  * shown once to whoever invites, and emailed to the address the invite is
  * for, or to the address of the person a GitHub-login invite is for when they
- * have signed in here before.
+ * have signed in here before; that address is never shown to whoever invites.
  */
 
 /** Where an invite's link opens: its own page, which signs them in and asks them to accept. */
@@ -42,18 +42,19 @@ export function inviteEmail(input: { to: string; accountName: string; gives: str
   }
 }
 
-/** What happened to an invite once it was made: its link, and where it was emailed, if anywhere. */
+/** What happened to an invite once it was made: its link, and whether its email was delivered. */
 export interface SentInvite {
   link: string
-  /** The address it was emailed to; null when there was none, or sending failed. */
+  /** Whether its email was delivered: only when the server's mailer really delivers (`DOCKET_MAIL`), and there was an address. */
+  emailed: boolean
+  /** The address the invite was made for, once emailed; null for a GitHub-login invite, whose address on file is never shown. */
   emailedTo: string | null
-  /** Whether the server's mailer really delivers (`DOCKET_MAIL`): if not, the link must be passed on by hand. */
-  delivers: boolean
 }
 
 /**
  * Sends an invite's email, once the invite is saved. Sending never undoes
  * the invite: a failure is logged, and the page shows the link to pass on.
+ * An invite counts as emailed only when the mailer really delivers.
  */
 export async function sendInvite(
   invite: IssuedInvite,
@@ -61,21 +62,23 @@ export async function sendInvite(
 ): Promise<SentInvite> {
   const { router, origin, mailer } = getRuntime()
   const link = inviteLink(origin, invite.linkSecret)
+  const notSent: SentInvite = { link, emailed: false, emailedTo: null }
   const to = await router.withPlatform((tx) => inviteEmailAddress(tx, invite))
-  if (!to) return { link, emailedTo: null, delivers: mailer.delivers }
+  if (!to) return notSent
   try {
     await mailer.send(inviteEmail({ to, accountName: context.accountName, gives: inviteGives(invite, context.placeName), invitedBy: context.invitedBy, link, expiresAt: invite.expiresAt }))
-    await router.withPlatform((tx) => markInviteEmailed(tx, { inviteId: invite.id, to }))
-    return { link, emailedTo: to, delivers: mailer.delivers }
   } catch (cause) {
     console.error(`[${context.requestId ?? '-'}] invite email for ${invite.id}: ${cause instanceof Error ? cause.message : String(cause)}`)
-    return { link, emailedTo: null, delivers: mailer.delivers }
+    return notSent
   }
+  if (!mailer.delivers) return notSent
+  await router.withPlatform((tx) => markInviteEmailed(tx, { inviteId: invite.id }))
+  return { link, emailed: true, emailedTo: invite.email?.toLowerCase() ?? null }
 }
 
-/** How a page says where an invite went. */
-export function sentNote(sent: SentInvite): string {
-  if (sent.emailedTo && sent.delivers) return `We emailed the link to ${sent.emailedTo}; you can also pass it on yourself.`
+/** How a page says where an invite went: the address it was made for, or a login's address on file. */
+export function sentNote(invite: Pick<IssuedInvite, 'githubLogin'>, sent: SentInvite): string {
+  if (sent.emailed) return `We emailed the link to ${sent.emailedTo ?? `@${invite.githubLogin}'s address on file`}; you can also pass it on yourself.`
   return 'Pass the link on to them: it works once, for 7 days.'
 }
 
@@ -88,8 +91,9 @@ export async function invitedView(event: RequestEvent, accountName: string, invi
   const sent = await sendInvite(invite, { accountName, placeName, invitedBy, requestId: event.locals.requestId })
   const gives = inviteGives(invite, placeName)
   const to = inviteeOf(invite)
+  const note = sentNote(invite, sent)
   return {
-    flash: `Invited ${to} as ${gives}. ${sentNote(sent)}`,
-    invited: { to, gives, link: sent.link, emailedTo: sent.emailedTo, note: sentNote(sent) },
+    flash: `Invited ${to} as ${gives}. ${note}`,
+    invited: { to, gives, link: sent.link, emailed: sent.emailed, emailedTo: sent.emailedTo, note },
   }
 }

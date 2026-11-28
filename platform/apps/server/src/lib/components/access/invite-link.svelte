@@ -3,7 +3,7 @@
   import { Check, Copy, Link } from '@lucide/svelte'
 
   /** A new invite's link, shown once, right after it is made or sent again (tenancy v2 §6). */
-  let { invited }: { invited: { to: string; gives: string; link: string; emailedTo: string | null; note: string } } = $props()
+  let { invited }: { invited: { to: string; gives: string; link: string; emailed: boolean; emailedTo: string | null; note: string } } = $props()
 
   let copied = $state(false)
   async function copy() {

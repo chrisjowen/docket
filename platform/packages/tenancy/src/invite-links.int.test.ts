@@ -122,7 +122,7 @@ describe.skipIf(!TEST_PG_URL)('invite links', () => {
     const owner = await human('again-owner')
     const acme = await account(owner)
     const made = await invite(acme.id, owner, 'sam@example.com')
-    await router.withPlatform((tx) => markInviteEmailed(tx, { inviteId: made.id, to: 'Sam@Example.com' }))
+    await router.withPlatform((tx) => markInviteEmailed(tx, { inviteId: made.id }))
     expect((await router.withPlatform((tx) => openInvitesOf(tx, acme.id)))[0]).toMatchObject({ emailedTo: 'sam@example.com' })
     await db.admin.query("UPDATE platform.invites SET expires_at = now() + interval '1 day' WHERE id = $1", [made.id])
 
@@ -163,5 +163,14 @@ describe.skipIf(!TEST_PG_URL)('invite links', () => {
     expect(await router.withPlatform((tx) => inviteEmailAddress(tx, toAddress))).toBe('addr@example.com')
     expect(await router.withPlatform((tx) => inviteEmailAddress(tx, toKnown))).toBe('known@example.com')
     expect(await router.withPlatform((tx) => inviteEmailAddress(tx, toUnknown))).toBeNull()
+
+    // Once emailed, an invite keeps only the address it was made for, never a login's address on file.
+    await router.withPlatform(async (tx) => {
+      await markInviteEmailed(tx, { inviteId: toAddress.id })
+      await markInviteEmailed(tx, { inviteId: toKnown.id })
+    })
+    const open = await router.withPlatform((tx) => openInvitesOf(tx, acme.id))
+    expect(open.find((each) => each.id === toAddress.id)).toMatchObject({ emailedTo: 'addr@example.com', emailedAt: expect.any(Date) })
+    expect(open.find((each) => each.id === toKnown.id)).toMatchObject({ emailedTo: null, emailedAt: expect.any(Date) })
   })
 })

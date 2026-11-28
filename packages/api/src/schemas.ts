@@ -130,7 +130,9 @@ export const Invite = z.object({
   invited_by: z.string(),
   created_at: timestamp,
   expires_at: timestamp,
-  /** Where its email went; null when none was sent, or it was sent again since. */
+  /** Whether its email was delivered; false when none was, or it was sent again since. */
+  emailed: z.boolean(),
+  /** The address it was emailed to, when it was made for one; null for a GitHub login, whose address on file is never shown. */
   emailed_to: z.string().nullable(),
 })
 

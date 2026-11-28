@@ -324,7 +324,7 @@ async function issuedInviteView(call: ApiCall, acct: AccountCaller, invite: Issu
     invitedBy: call.caller.user.login,
     requestId: call.meta.requestId,
   })
-  return { ...inviteView({ ...invite, emailedTo: sent.emailedTo, emailedAt: sent.emailedTo ? new Date() : null }, names, acct.org), link: sent.link }
+  return { ...inviteView({ ...invite, emailedTo: sent.emailedTo, emailedAt: sent.emailed ? new Date() : null }, names, acct.org), link: sent.link }
 }
 
 export const HANDLERS: Record<string, Handler> = {

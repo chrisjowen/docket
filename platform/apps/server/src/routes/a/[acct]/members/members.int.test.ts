@@ -85,4 +85,21 @@ describe.skipIf(!TEST_PG_URL)('Users page', () => {
     expect(asOwner.invites.map((invite) => invite.githubLogin).sort()).toEqual(['alpha-target', 'wide-target'])
     expect(asOwner.people.find((person) => person.login === users.carol!.login)?.email).toBe('carol@example.com')
   })
+
+  it("never shows the address on file of someone invited by GitHub login, and shows an invite's own address", async () => {
+    const login = `outsider-${org.orgId.slice(0, 4)}`
+    const secret = `outsider-${org.orgId.slice(0, 4)}@private.example`
+    await org.router.withPlatform((tx) => upsertGitHubUser(tx, { id: randomInt(1, 2 ** 31), login, name: null, avatarUrl: null, emails: [secret] }))
+
+    const byLogin = (await page.actions.invite!(event('lead', { who: login, role: 'reader', place: `docket:${alpha}` }) as never)) as Record<string, unknown>
+    expect(mailer.sent.at(-1)).toMatchObject({ to: secret })
+    expect(JSON.stringify(byLogin)).not.toContain(secret)
+    expect(byLogin).toMatchObject({ invited: { to: `@${login}`, emailed: true, emailedTo: null, note: expect.stringContaining(`@${login}'s address on file`) } })
+    await page.actions.invite!(event('lead', { who: 'shown@example.com', role: 'reader', place: `docket:${alpha}` }) as never)
+
+    const asLead = (await page.load(event('lead') as never)) as { invites: { githubLogin: string | null; email: string | null; emailed: boolean; emailedTo: string | null }[] }
+    expect(JSON.stringify(asLead)).not.toContain(secret)
+    expect(asLead.invites.find((invite) => invite.githubLogin === login)).toMatchObject({ emailed: true, emailedTo: null })
+    expect(asLead.invites.find((invite) => invite.email === 'shown@example.com')).toMatchObject({ emailed: true, emailedTo: 'shown@example.com' })
+  })
 })

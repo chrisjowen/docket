@@ -98,6 +98,7 @@ export const load: PageServerLoad = async (event) => {
       invitedByLogin: invite.invitedByLogin,
       createdAt: iso(invite.createdAt),
       expiresAt: iso(invite.expiresAt),
+      emailed: invite.emailedAt !== null,
       emailedTo: invite.emailedTo,
     })),
     accountPlace: placeKey(ACCOUNT),

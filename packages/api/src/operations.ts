@@ -48,7 +48,7 @@ import {
  * Every `/api/v1` answer carries it (`X-Docket-Api-Version`), as does the OpenAPI document; a client built for
  * another major, or a newer minor, says so rather than call what is not there.
  */
-export const API_VERSION = '1.1'
+export const API_VERSION = '1.2'
 
 /** Whether a client built for API `wanted` can use a server answering `served`: the same major, and no newer minor. */
 export function compatible(wanted: string, served: string): boolean {

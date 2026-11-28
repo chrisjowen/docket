@@ -170,6 +170,7 @@ export interface Invited {
   to: string
   gives: string
   link: string
+  emailed: boolean
   emailedTo: string | null
   note: string
 }

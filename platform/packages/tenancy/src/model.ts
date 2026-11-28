@@ -72,8 +72,9 @@ export interface Invite {
   invitedByLogin: string
   createdAt: Date
   expiresAt: Date
-  /** Where its email went, and when; null when none was sent (or since it was sent again). */
+  /** The address it was made for, once its email was delivered; null for a GitHub-login invite, whose address is never shown. */
   emailedTo: string | null
+  /** When its email was delivered; null when none was (or since it was sent again). */
   emailedAt: Date | null
 }
 
@@ -1135,9 +1136,13 @@ export async function reissueInvite(
   return { ...fresh, linkSecret: link.secret }
 }
 
-/** Records where an invite's email went. */
-export async function markInviteEmailed(tx: Tx, input: { inviteId: string; to: string }): Promise<void> {
-  await tx.query('UPDATE platform.invites SET emailed_to = $2, emailed_at = now() WHERE id = $1', [input.inviteId, input.to.toLowerCase()])
+/**
+ * Records that an invite's email was delivered. Only the address the invite
+ * was made for is kept: the address on file of a GitHub-login invitee is
+ * never stored here, nor shown to whoever invited them.
+ */
+export async function markInviteEmailed(tx: Tx, input: { inviteId: string }): Promise<void> {
+  await tx.query('UPDATE platform.invites SET emailed_to = lower(email), emailed_at = now() WHERE id = $1', [input.inviteId])
 }
 
 /**

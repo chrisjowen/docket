@@ -173,7 +173,7 @@
           <span class="badge">{invite.role}</span>
           <span class="small">on {invite.place}{invite.guest ? ', as a guest' : ''}</span>
           <span class="muted small grow">invited by @{invite.invitedByLogin} · {day(invite.createdAt)}</span>
-          <span class="muted small">{invite.emailedTo ? `emailed to ${invite.emailedTo} · ` : ''}expires in {daysLeft(invite.expiresAt)} days</span>
+          <span class="muted small">{invite.emailed ? `emailed to ${invite.emailedTo ?? `@${invite.githubLogin}'s address on file`} · ` : ''}expires in {daysLeft(invite.expiresAt)} days</span>
           <form method="POST" action="?/resendInvite">
             <Csrf token={data.csrf} />
             <input type="hidden" name="invite" value={invite.id} />

@@ -72,7 +72,10 @@ An invite is a link that works once, for 7 days (`/invite/dki_…`). Making
 one (`POST …/invites`) or sending it again (`POST …/invites/{id}/resend`,
 which makes a new link and ends the old one) returns its `link` that once,
 and emails it to the invite's address, or to a GitHub login's address when
-that person has signed in before (`emailed_to`). Whoever holds the link to
+that person has signed in before. `emailed` says whether the email was
+delivered (never when `DOCKET_MAIL` is `log` or `none`); `emailed_to` is the
+address the invite was made for, and is null for an invite to a GitHub login:
+that person's address on file is never shown to whoever invites them. Whoever holds the link to
 an invite by email may sign in and accept it; an invite to a GitHub login
 only that login may. `admin_invite` over MCP never returns the link.
 

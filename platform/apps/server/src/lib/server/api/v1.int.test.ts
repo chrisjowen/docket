@@ -12,7 +12,7 @@ import { TEST_PG_URL } from '@docket/platform-tenancy/testing'
 import type { RequestEvent } from '@sveltejs/kit'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { memoryMailer } from '../mail'
+import { logMailer, memoryMailer } from '../mail'
 import { rateLimiter as addressLimiter } from '../rate-limit'
 import type { Runtime } from '../runtime'
 
@@ -400,6 +400,46 @@ describe.skipIf(!TEST_PG_URL)('the /api/v1 contract, by browser session and by b
     expect((await api(asToken('writer'), 'GET', `/api/v1/accounts/${slug()}/audit`)).status).toBe(403)
     const usage = await api(owner, 'GET', `/api/v1/accounts/${slug()}/usage`)
     conforms('usage.get', usage.body)
+  })
+
+  it("emails a GitHub-login invite to that person's address on file without ever showing it, and counts only a delivered email as sent", async () => {
+    const secret = `known-${org.orgId.slice(0, 6)}@private.example`
+    const known = `known${org.orgId.slice(0, 6)}`
+    await org.router.withPlatform((tx) => upsertGitHubUser(tx, { id: randomInt(1, 2 ** 31), login: known, name: null, avatarUrl: null, emails: [secret] }))
+
+    const sent = mailer.sent.length
+    const byLogin = await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: known, place: 'space:eng', role: 'reader' })
+    expect(byLogin.status).toBe(201)
+    conforms('invites.create', byLogin.body)
+    expect(mailer.sent.slice(sent)).toEqual([expect.objectContaining({ to: secret })])
+    expect(byLogin.body).toMatchObject({ to: known, emailed: true, emailed_to: null })
+    expect(JSON.stringify(byLogin.body)).not.toContain(secret)
+    const resent = await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites/${byLogin.body?.id}/resend`)
+    expect(resent.body).toMatchObject({ emailed: true, emailed_to: null })
+    expect(JSON.stringify(resent.body)).not.toContain(secret)
+
+    const byEmail = await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: 'shown@example.com', place: 'space:eng', role: 'reader' })
+    expect(byEmail.body).toMatchObject({ emailed: true, emailed_to: 'shown@example.com' })
+
+    const listed = await api(asSession('engAdmin'), 'GET', `/api/v1/accounts/${slug()}/invites`)
+    conforms('invites.list', listed.body)
+    expect(JSON.stringify(listed.body)).not.toContain(secret)
+    const each = listed.body?.invites as { id: string; emailed: boolean; emailed_to: string | null }[]
+    expect(each.find((invite) => invite.id === byLogin.body?.id)).toMatchObject({ emailed: true, emailed_to: null })
+    expect(each.find((invite) => invite.id === byEmail.body?.id)).toMatchObject({ emailed: true, emailed_to: 'shown@example.com' })
+
+    // With DOCKET_MAIL=log nothing leaves the server, so nothing reads as emailed.
+    const logged: string[] = []
+    runtime.mailer = logMailer((line) => logged.push(line))
+    try {
+      const notSent = await api(asSession('engAdmin'), 'POST', `/api/v1/accounts/${slug()}/invites`, { to: 'unsent@example.com', place: 'space:eng', role: 'reader' })
+      expect(logged).toHaveLength(1)
+      expect(notSent.body).toMatchObject({ emailed: false, emailed_to: null })
+      const again = await api(asSession('engAdmin'), 'GET', `/api/v1/accounts/${slug()}/invites`)
+      expect((again.body?.invites as { id: string }[]).find((invite) => invite.id === notSent.body?.id)).toMatchObject({ emailed: false, emailed_to: null })
+    } finally {
+      runtime.mailer = mailer
+    }
   })
 
   it('lists users and system accounts, keeps the user list from guests, and leaves ownership to owners', async () => {
