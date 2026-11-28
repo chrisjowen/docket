@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createMcpServer, InvalidArgumentsError, type CanonicalSource, type Tool, type ToolRegistry, type ToolResult } from '@chrisjowen/docket'
 import { operation, type OperationId } from '@docket/api'
+import { docketCapScope } from '@docket/platform-ai'
 import { audit, type AuditEventInput } from '@docket/platform-audit'
 import { accountMcpUrl, actsFor, principalLabel, scopesOn, type AccountPrincipal, type Principal, type Scope } from '@docket/platform-auth'
 import { listSpaces, listWorkspaces, type StoreContext, type Writer } from '@docket/platform-canonical-store'
@@ -294,7 +295,8 @@ export async function handleAccountMcp(event: RequestEvent): Promise<Response> {
       ontologyHistory: new URL(`/o/${orgSlug}/w/${docket.slug}/ontology/history`, runtime.origin).toString(),
       inTenant,
       query: runtime.query,
-      assertWithinCap: () => runtime.caps.assertWithinCap(principal.orgId),
+      assertWithinCap: async () =>
+        runtime.caps.assertWithinCap(principal.orgId, await runtime.router.withPlatform((tx) => docketCapScope(tx, principal.orgId, docket.id))),
       actor: principal.actor,
       userId: principal.userId,
       writer: async () => ({ workspaceId: docket.id, actor: principal.actor, channel: 'mcp' as const, requestId: base.requestId, ...(await writerOf()) }),
